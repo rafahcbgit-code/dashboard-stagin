@@ -1,0 +1,1 @@
+import{r}from"./app-43851608.js";function c(){const t=r(!1),e=r(null);function n(l){t.value=!0,e.value=l}async function a(l){try{t.value=!1,await l(e.value)}catch{}e.value=null}return{isOpenAlert:t,selectedItem:e,openAlert:n,confirmAlert:a}}export{c as u};
