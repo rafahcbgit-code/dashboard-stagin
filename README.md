@@ -1,66 +1,142 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# Chatberry Dashboard - Developer Documentation
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Welcome to the Chatberry Dashboard development guide! This document provides all the necessary instructions for setting up your local development environment, understanding the tech stack, and contributing to the project.
 
-## About Laravel
+## Table of Contents
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+- [Prerequisites](#prerequisites)
+- [Local Development Setup](#local-development-setup)
+- [Running the Application](#running-the-application)
+- [Architecture Overview](#architecture-overview)
+- [Technology Stack](#technology-stack)
+- [Coding Standards](#coding-standards)
+- [Testing](#testing)
+- [Database](#database)
+- [Key Third-Party Services](#key-third-party-services)
+- [Contributing](#contributing)
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## Prerequisites
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+Before you begin, ensure you have the following installed on your local machine:
 
-## Learning Laravel
+- **PHP**: `^8.2` (as specified in `composer.json`)
+- **Composer**: For managing PHP dependencies.
+- **Node.js**: LTS version recommended.
+- **NPM** or **Yarn**: For managing JavaScript dependencies.
+- **A local database server**: e.g., MySQL, PostgreSQL, or MariaDB.
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+## Local Development Setup
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+Follow these steps to get the project running on your local machine.
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains over 2000 video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+1.  **Clone the repository:**
+    ```bash
+    git clone <repository-url>
+    cd chatberry-dashbaord
+    ```
 
-## Laravel Sponsors
+2.  **Install PHP Dependencies:**
+    Use Composer to install the required PHP packages.
+    ```bash
+    composer install
+    ```
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the Laravel [Patreon page](https://patreon.com/taylorotwell).
+3.  **Install JavaScript Dependencies:**
+    Use NPM or Yarn to install the required Node.js packages.
+    ```bash
+    # Using NPM
+    npm install
 
-### Premium Partners
+    # Or using Yarn
+    yarn install
+    ```
 
-- **[Vehikl](https://vehikl.com/)**
-- **[Tighten Co.](https://tighten.co)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Cubet Techno Labs](https://cubettech.com)**
-- **[Cyber-Duck](https://cyber-duck.co.uk)**
-- **[Many](https://www.many.co.uk)**
-- **[Webdock, Fast VPS Hosting](https://www.webdock.io/en)**
-- **[DevSquad](https://devsquad.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel/)**
-- **[OP.GG](https://op.gg)**
-- **[WebReinvent](https://webreinvent.com/?utm_source=laravel&utm_medium=github&utm_campaign=patreon-sponsors)**
-- **[Lendio](https://lendio.com)**
+4.  **Create Environment File:**
+    The project uses a `.env` file for environment-specific configuration. Copy the example file to create your own local configuration.
+    ```bash
+    cp .env.example .env
+    ```
 
-## Contributing
+5.  **Generate Application Key:**
+    Laravel requires an application key for securing session data and encryption.
+    ```bash
+    php artisan key:generate
+    ```
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+6.  **Configure Environment Variables:**
+    Open the `.env` file and configure your local settings. Pay close attention to:
+    - `DB_*` variables for your local database connection.
+    - `APP_URL` to match your local development URL (e.g., `http://localhost:8000`).
+    - Keys for any external services you need to test (e.g., `PUSHER_*`, `STRIPE_*`, `RESEND_API_KEY`).
 
-## Code of Conduct
+7.  **Run Database Migrations:**
+    Set up your database schema by running the Laravel migrations.
+    ```bash
+    php artisan migrate
+    ```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+8.  **Seed the Database (Optional):**
+    If database seeders are available, you can populate your database with initial data.
+    ```bash
+    php artisan db:seed
+    ```
 
-## Security Vulnerabilities
+## Running the Application
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+The application consists of a PHP backend and a JavaScript frontend, which need to be run concurrently in two separate terminal windows during development.
 
-## License
+### Backend Server (Laravel)
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+Start the PHP development server using Artisan:
+```bash
+php artisan serve
+```
+By default, this will serve the application at `http://localhost:8000`.
+
+### Frontend Development Server (Vite)
+
+The frontend assets are managed by Vite. Run the following command in a **separate terminal** to compile assets and enable Hot Module Replacement (HMR) for a smooth development experience.
+
+```bash
+# Run Vite's development server
+npm run dev
+```
+
+Now you can access the application in your browser at the URL provided by `php artisan serve`.
+
+## Technology Stack
+
+### Backend
+
+- **Framework**: Laravel 10
+- **Language**: PHP 8.2
+- **API/UI Layer**: Inertia.js (`inertiajs/inertia-laravel`)
+- **Authentication**: Laravel Sanctum
+- **Real-time Events**: Pusher (`pusher/pusher-php-server`)
+- **Database ORM**: Eloquent
+
+### Frontend
+
+- **Framework**: Vue.js 3
+- **Language**: JavaScript / TypeScript
+- **Bundler**: Vite (`laravel-vite-plugin`)
+- **Styling**: Tailwind CSS
+- **UI Components**: Headless UI, Heroicons, Radix Vue
+- **Client-side Routing**: Inertia.js (`@inertiajs/vue3`)
+- **Internationalization**: `vue-i18n`
+
+## Coding Standards
+
+### PHP
+
+We use **Laravel Pint** for enforcing a consistent code style. Before committing your changes, please run Pint to format your code.
+```bash
+./vendor/bin/pint
+```
+
+### JavaScript/Vue
+
+Please adhere to the existing code style. Consider using a code formatter like Prettier with the recommended settings for the project.
+
+
+```

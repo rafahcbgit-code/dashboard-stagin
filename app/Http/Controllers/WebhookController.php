@@ -37,8 +37,6 @@ class WebhookController extends BaseController
 
     public function __construct()
     {
-        logger()->info('This is an webhook informational message.');
-
         $this->paymentPlatformResolver = new PaymentPlatformResolver();
 
         Config::set('broadcasting.connections.pusher', [
