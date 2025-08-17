@@ -4,11 +4,11 @@
             <div class="md:w-[30%] md:flex flex-col h-full bg-white border-r border-l" :class="group ? 'hidden' : ''">
                 <div class="px-4 pt-4">
                     <div class="flex justify-between mt-2">
-                        <div class="flex space-x-1 text-xl">
+                        <div class="flex space-s-1 text-xl">
                             <h2>{{ $t('Groups') }}</h2>
                             <span class="text-slate-500 ">{{ props.rowCount }}</span>
                         </div>
-                        <div class="flex space-x-2 items-center">
+                        <div class="flex space-s-2 items-center">
                             <span @click="openModal()" class="cursor-pointer" title="Add Contact">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24"><g fill="currentColor" fill-rule="evenodd" clip-rule="evenodd"><path d="M2 12C2 6.477 6.477 2 12 2s10 4.477 10 10s-4.477 10-10 10S2 17.523 2 12Zm10-8a8 8 0 1 0 0 16a8 8 0 0 0 0-16Z"/><path d="M13 7a1 1 0 1 0-2 0v4H7a1 1 0 1 0 0 2h4v4a1 1 0 1 0 2 0v-4h4a1 1 0 1 0 0-2h-4V7Z"/></g></svg>
                             </span>
@@ -31,7 +31,7 @@
                         <div class="flex justify-center">
                             <div class="border-r border-slate-500 h-10"></div>
                         </div>
-                        <div class="flex justify-center space-x-4 mt-6">
+                        <div class="flex justify-center space-s-4 mt-6">
                             <button @click="openModal()" class="bg-primary rounded-lg text-sm text-white p-2 px-8 text-center capitalize">{{ $t('Add group') }}</button>
                             <button @click="isOpenModal = true" class="bg-primary rounded-lg text-sm text-white p-2 px-8 text-center">{{ $t('Bulk upload') }}</button>
                         </div>

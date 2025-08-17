@@ -39,11 +39,11 @@
                                 <div>{{ $t('Number status') }}</div>
                                 <div class="bg-slate-50 py-1 px-2 rounded-md w-[fit-content] text-xs">{{ settings.whatsapp?.number_status }}</div>
                             </div>
-                            <button v-if="refreshLoading === false" @click="refreshData()" class="flex items-center absolute right-0 top-0 text-xs mr-1 space-x-2 p-1 px-2 bg-slate-50 rounded-xl">
+                            <button v-if="refreshLoading === false" @click="refreshData()" class="flex items-center absolute right-0 top-0 text-xs mr-1 space-s-2 p-1 px-2 bg-slate-50 rounded-xl">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="currentColor" d="M12.079 2.25c-4.794 0-8.734 3.663-9.118 8.333H2a.75.75 0 0 0-.528 1.283l1.68 1.666a.75.75 0 0 0 1.056 0l1.68-1.666a.75.75 0 0 0-.528-1.283h-.893c.38-3.831 3.638-6.833 7.612-6.833a7.658 7.658 0 0 1 6.537 3.643a.75.75 0 1 0 1.277-.786A9.158 9.158 0 0 0 12.08 2.25m8.761 8.217a.75.75 0 0 0-1.054 0L18.1 12.133a.75.75 0 0 0 .527 1.284h.899c-.382 3.83-3.651 6.833-7.644 6.833a7.697 7.697 0 0 1-6.565-3.644a.75.75 0 1 0-1.277.788a9.197 9.197 0 0 0 7.842 4.356c4.808 0 8.765-3.66 9.15-8.333H22a.75.75 0 0 0 .527-1.284z"/></svg>
                                 <span>{{ $t('Refresh') }}</span>
                             </button>
-                            <button v-else class="flex items-center absolute right-0 top-0 text-xs mr-1 space-x-2 p-1 px-2 bg-slate-50 rounded-xl">
+                            <button v-else class="flex items-center absolute right-0 top-0 text-xs mr-1 space-s-2 p-1 px-2 bg-slate-50 rounded-xl">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2A10 10 0 1 0 22 12A10 10 0 0 0 12 2Zm0 18a8 8 0 1 1 8-8A8 8 0 0 1 12 20Z" opacity=".5"/><path fill="currentColor" d="M20 12h2A10 10 0 0 0 12 2V4A8 8 0 0 1 20 12Z"><animateTransform attributeName="transform" dur="1s" from="0 12 12" repeatCount="indefinite" to="360 12 12" type="rotate"/></path></svg>
                             </button>
                         </div>
@@ -82,7 +82,7 @@
                                 </button>
                             </div>
                         </div>
-                        <div class="flex space-x-10 border-b w-full px-4 py-6">
+                        <div class="flex space-s-10 border-b w-full px-4 py-6">
                             <div class="w-[40%]">
                                 <span class="text-slate-600">{{ $t('Whatsapp profile picture') }}</span>
                                 <div class="text-xs text-slate-700 flex items-center">
@@ -96,7 +96,7 @@
                                 <div class="ml-6">{{ $t('Minimum dimensions: 192x192 pixels.') }}</div>
                             </div>
                         </div>
-                        <div class="flex space-x-10 border-b w-full px-4 py-6">
+                        <div class="flex space-s-10 border-b w-full px-4 py-6">
                             <div class="w-[40%]">
                                 <span class="text-slate-600">{{ $t('Business address') }}</span>
                                 <div class="text-xs text-slate-700 flex items-center">
@@ -108,7 +108,7 @@
                                 <FormInput v-model="form2.address" :error="form2.errors.address" :name="''" :type="'text'" :class="'col-span-4'"/>
                             </div>
                         </div>
-                        <div class="flex space-x-10 border-b w-full px-4 py-6">
+                        <div class="flex space-s-10 border-b w-full px-4 py-6">
                             <div class="w-[40%]">
                                 <span class="text-slate-600">{{ $t('Business email') }}</span>
                                 <div class="text-xs text-slate-700 flex items-center">
@@ -120,7 +120,7 @@
                                 <FormInput v-model="form2.email" :error="form2.errors.email" :name="''" :type="'email'" :class="'col-span-4'"/>
                             </div>
                         </div>
-                        <div class="flex space-x-10 border-b w-full px-4 py-6">
+                        <div class="flex space-s-10 border-b w-full px-4 py-6">
                             <div class="w-[40%]">
                                 <span class="text-slate-600">{{ $t('Business description') }}</span>
                                 <div class="text-xs text-slate-700 flex items-center">
@@ -132,7 +132,7 @@
                                 <FormTextArea v-model="form2.description" :error="form2.errors.description" :name="''" :type="'text'" :class="'col-span-4'"/>
                             </div>
                         </div>
-                        <div class="flex space-x-10 w-full px-4 py-6">
+                        <div class="flex space-s-10 w-full px-4 py-6">
                             <div class="w-[40%]">
                                 <span class="text-slate-600">{{ $t('Business industry') }}</span>
                                 <div class="text-xs text-slate-700 flex items-center">
@@ -162,7 +162,7 @@
                                 {{ $t('Add these webhook settings to your facebook developer account') }}
                             </span>
                         </div>
-                        <div class="flex space-x-10 border-b w-full px-4 py-4">
+                        <div class="flex space-s-10 border-b w-full px-4 py-4">
                             <div class="w-[40%]">
                                 <span class="text-slate-600">{{ $t('Webhook url') }}</span>
                             </div>
@@ -170,7 +170,7 @@
                                 <span class="w-48 break-all">{{ currentURL + '/webhook/whatsapp/' +props.settings.identifier }}</span>
                             </div>
                         </div>
-                        <div class="flex space-x-10 w-full px-4 py-4">
+                        <div class="flex space-s-10 w-full px-4 py-4">
                             <div class="w-[40%]">
                                 <span class="text-slate-600">{{ $t('Verify token') }}</span>
                             </div>

@@ -69,7 +69,7 @@
                             <div class="bg-slate-100 rounded-lg p-2">
                                 <draggable tag="div" :list="form.options" class="mt-2 w-full" handle=".handle" item-key="id">
                                     <template #item="{ element, index }">
-                                        <div class="flex items-center w-full space-x-4">
+                                        <div class="flex items-center w-full space-s-4">
                                             <span class="handle">
                                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M9 19.23q-.508 0-.87-.36q-.36-.362-.36-.87t.36-.87t.87-.36t.87.36q.36.362.36.87t-.36.87t-.87.36m6 0q-.508 0-.87-.36q-.36-.362-.36-.87t.36-.87t.87-.36t.87.36q.36.362.36.87t-.36.87t-.87.36m-6-6q-.508 0-.87-.36q-.36-.362-.36-.87t.36-.87t.87-.36t.87.36q.36.362.36.87t-.36.87t-.87.36m6 0q-.508 0-.87-.36q-.36-.362-.36-.87t.36-.87t.87-.36t.87.36q.36.362.36.87t-.36.87t-.87.36m-6-6q-.508 0-.87-.36q-.36-.362-.36-.87t.36-.87t.87-.36t.87.36q.36.362.36.87t-.36.87t-.87.36m6 0q-.508 0-.87-.36q-.36-.362-.36-.87t.36-.87t.87-.36t.87.36q.36.362.36.87t-.36.87t-.87.36"/></svg>
                                             </span>
@@ -87,7 +87,7 @@
                                 </draggable>
                             </div>
                         </div>
-                        <div class="flex space-x-4 py-3" :class="'col-span-6'">
+                        <div class="flex space-s-4 py-3" :class="'col-span-6'">
                             <span class="text-sm">{{ $t('Is required') }}</span>
                             <div class="w-12 h-6 flex items-center bg-gray-300 rounded-full p-1" :class="{ 'bg-primary': form.required != 0}" @click="toggleRequiredInput()">
                                 <div class="bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out" :class="{ 'translate-x-6': form.required != 0}"></div>

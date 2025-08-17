@@ -8,7 +8,7 @@
                         <span class="ml-1 mt-1">{{ $t('Ref') }}: {{ props.campaign.uuid }}</span>
                     </p>
                 </div>
-                <div class="space-x-2">
+                <div class="space-s-2">
                     <a :href="'/campaigns/export/' + props.campaign.uuid" class="rounded-md bg-secondary px-3 py-2 text-sm text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
                         {{ $t('Export as CSV') }}
                     </a>
@@ -19,7 +19,7 @@
                 </div>
             </div>
 
-            <div class="md:flex md:space-x-4">
+            <div class="md:flex md:space-s-4">
                 <div class="md:w-[70%] capitalize">
                     <div class="flex w-[100%] mb-8 rounded-lg">
                         <div class="w-full rounded-tl-lg rounded-bl-lg text-center bg-white py-8 border">

@@ -19,8 +19,8 @@
                     </p>
                 </div>
             </div>
-            <div v-if="!subscriptionIsActive" class="bg-red-500 p-5 w-100 mb-4 rounded-[0.5rem] flex justify-between items-center space-x-4 text-white">
-                <div class="flex items-center space-x-4">
+            <div v-if="!subscriptionIsActive" class="bg-red-500 p-5 w-100 mb-4 rounded-[0.5rem] flex justify-between items-center space-s-4 text-white">
+                <div class="flex items-center space-s-4">
                     <span>
                         <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 56 56"><path fill="currentColor" d="M9.965 50.207h36.07c3.985 0 6.469-2.86 6.469-6.469c0-1.078-.281-2.18-.867-3.187L33.567 9.074c-1.22-2.133-3.352-3.281-5.555-3.281c-2.18 0-4.336 1.148-5.579 3.281l-18.07 31.5a6.253 6.253 0 0 0-.867 3.164c0 3.61 2.508 6.469 6.469 6.469m.047-3.68c-1.641 0-2.72-1.336-2.72-2.789c0-.422.071-.914.306-1.406l18.046-31.477c.516-.89 1.454-1.312 2.368-1.312c.914 0 1.804.398 2.32 1.312l18.047 31.5c.234.47.351.961.351 1.383c0 1.453-1.125 2.79-2.742 2.79Zm18-12.117c1.125 0 1.78-.656 1.804-1.875l.328-12.351c.024-1.196-.914-2.086-2.156-2.086c-1.265 0-2.156.867-2.133 2.062l.305 12.375c.023 1.196.68 1.875 1.852 1.875m0 7.617c1.359 0 2.53-1.078 2.53-2.437c0-1.383-1.148-2.438-2.53-2.438c-1.383 0-2.532 1.078-2.532 2.438c0 1.336 1.172 2.437 2.532 2.437"/></svg>
                     </span>
@@ -55,7 +55,7 @@
                             <span class="text-sm">{{ props.subscriptionDetails?.accountBalance }}</span>
                         </div>
                     </div>
-                    <div v-if="props.subscription?.status === 'trial'" class="flex space-x-6">
+                    <div v-if="props.subscription?.status === 'trial'" class="flex space-s-6">
                         <div>
                             <h2 class="text-sm text-gray-500 tracking-[0px]">{{ $t('Trial expires on') }}</h2>
                             <span class="text-sm">{{ props.subscription?.valid_until }}</span>
@@ -111,11 +111,11 @@
                         :class="['inline-flex justify-center rounded-md border border-transparent bg-primary px-4 py-2 text-sm text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2', { 'opacity-50': isLoading }]"
                         :disabled="isLoading"
                     >
-                        <span v-if="isLoading" class="flex space-x-1">
+                        <span v-if="isLoading" class="flex space-s-1">
                             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2A10 10 0 1 0 22 12A10 10 0 0 0 12 2Zm0 18a8 8 0 1 1 8-8A8 8 0 0 1 12 20Z" opacity=".5"/><path fill="currentColor" d="M20 12h2A10 10 0 0 0 12 2V4A8 8 0 0 1 20 12Z"><animateTransform attributeName="transform" dur="1s" from="0 12 12" repeatCount="indefinite" to="360 12 12" type="rotate"/></path></svg>
                             <span>{{ $t('Processing') }}</span>
                         </span>
-                        <span v-else class="flex space-x-1">
+                        <span v-else class="flex space-s-1">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" d="M12 13a1.49 1.49 0 0 0-1 2.61V17a1 1 0 0 0 2 0v-1.39A1.49 1.49 0 0 0 12 13m5-4V7A5 5 0 0 0 7 7v2a3 3 0 0 0-3 3v7a3 3 0 0 0 3 3h10a3 3 0 0 0 3-3v-7a3 3 0 0 0-3-3M9 7a3 3 0 0 1 6 0v2H9Zm9 12a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1v-7a1 1 0 0 1 1-1h10a1 1 0 0 1 1 1Z"/></svg>
                             <span>{{ $t('Continue') }}</span>
                         </span>

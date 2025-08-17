@@ -9,7 +9,7 @@
                     </p>
                 </div>
             </div>
-            <div class="flex space-x-2 mb-8 text-xs md:text-sm">
+            <div class="flex space-s-2 mb-8 text-xs md:text-sm">
                 <Link href="/contacts/add" class="bg-primary py-2 px-3 rounded-lg text-white">{{ $t('Add contact') }}</Link>
                 <Link href="/campaigns/create" class="bg-primary py-2 px-3 rounded-lg text-white">{{ $t('Create campaign') }}</Link>
                 <Link href="/templates/create" class="bg-primary py-2 px-3 rounded-lg text-white">{{ $t('Create template') }}</Link>
@@ -27,8 +27,8 @@
                             </span>
                         </div>
                     </div>
-                    <div class="text-sm space-x-1 md:block hidden">
-                        <Link href="/contacts" class="flex items-center space-x-1 underline">
+                    <div class="text-sm space-s-1 md:block hidden">
+                        <Link href="/contacts" class="flex items-center space-s-1 underline">
                             <span>{{ $t('View contacts') }}</span>
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m8 16l8-8m0 0h-6m6 0v6"></path></svg>
                         </Link>
@@ -46,8 +46,8 @@
                             </span>
                         </div>
                     </div>
-                    <div class="text-sm space-x-1 md:block hidden">
-                        <Link href="/campaigns" class="flex items-center space-x-1 underline">
+                    <div class="text-sm space-s-1 md:block hidden">
+                        <Link href="/campaigns" class="flex items-center space-s-1 underline">
                             <span>{{ $t('View campaigns') }}</span>
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m8 16l8-8m0 0h-6m6 0v6"></path></svg>
                         </Link>
@@ -65,8 +65,8 @@
                             </span>
                         </div>
                     </div>
-                    <div class="text-sm space-x-1 md:block hidden">
-                        <Link href="/templates" class="flex items-center space-x-1 underline">
+                    <div class="text-sm space-s-1 md:block hidden">
+                        <Link href="/templates" class="flex items-center space-s-1 underline">
                             <span>{{ $t('View templates') }}</span>
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m8 16l8-8m0 0h-6m6 0v6"></path></svg>
                         </Link>
@@ -84,8 +84,8 @@
                             </span>
                         </div>
                     </div>
-                    <div class="text-sm space-x-1 md:block hidden">
-                        <Link href="/chats" class="flex items-center space-x-1 underline">
+                    <div class="text-sm space-s-1 md:block hidden">
+                        <Link href="/chats" class="flex items-center space-s-1 underline">
                             <span>{{ $t('View chats') }}</span>
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m8 16l8-8m0 0h-6m6 0v6"></path></svg>
                         </Link>
@@ -155,7 +155,7 @@
                                 </span>
                             </div>
                         </div>
-                        <div class="flex justify-between space-x-3">
+                        <div class="flex justify-between space-s-3">
                             <Link href="team" class="bg-[#ffe5b4] p-2 rounded-lg text-sm flex px-3 capitalize">
                                 {{ $t('Add users') }}
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20"><g fill="currentColor" fill-rule="evenodd" clip-rule="evenodd"><g opacity=".2"><path d="M12.206 5.848a1.5 1.5 0 0 1 2.113.192l3.333 4a1.5 1.5 0 1 1-2.304 1.92l-3.334-4a1.5 1.5 0 0 1 .192-2.112Z"/><path d="M12.206 16.152a1.5 1.5 0 0 1-.192-2.112l3.334-4a1.5 1.5 0 0 1 2.304 1.92l-3.333 4a1.5 1.5 0 0 1-2.113.192Z"/><path d="M16 11a1.5 1.5 0 0 1-1.5 1.5h-8a1.5 1.5 0 0 1 0-3h8A1.5 1.5 0 0 1 16 11Z"/></g><path d="M11.347 5.616a.5.5 0 0 1 .704.064l3.333 4a.5.5 0 0 1-.768.64l-3.333-4a.5.5 0 0 1 .064-.704Z"/><path d="M11.347 14.384a.5.5 0 0 1-.064-.704l3.333-4a.5.5 0 0 1 .768.64l-3.333 4a.5.5 0 0 1-.704.064Z"/><path d="M15.5 10a.5.5 0 0 1-.5.5H5a.5.5 0 0 1 0-1h20a.5.5 0 0 1 .5.5Z"/></g></svg>
@@ -184,7 +184,7 @@
                                         <span class="bg-[#ffe5b4] p-1 rounded-md text-xs px-2 capitalize">{{ item.status }}</span>
                                     </div>
                                 </div>
-                                <Link href="/campaigns" class="flex items-center space-x-1 underline pt-3 text-sm">
+                                <Link href="/campaigns" class="flex items-center space-s-1 underline pt-3 text-sm">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 5H8.2c-1.12 0-1.68 0-2.108.218a1.999 1.999 0 0 0-.874.874C5 6.52 5 7.08 5 8.2v7.6c0 1.12 0 1.68.218 2.108a2 2 0 0 0 .874.874c.427.218.987.218 2.105.218h7.606c1.118 0 1.677 0 2.104-.218c.377-.192.683-.498.875-.874c.218-.428.218-.987.218-2.105V14m1-5V4m0 0h-5m5 0l-7 7"/></svg>
                                     <span>{{ $t('View more campaigns') }}</span>
                                 </Link>

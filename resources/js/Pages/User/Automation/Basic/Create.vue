@@ -10,7 +10,7 @@
                     </p>
                 </div>
                 <div>
-                    <Link href="/automation/basic" class="flex items-center space-x-4 rounded-md bg-indigo-600 px-3 py-2 text-sm text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
+                    <Link href="/automation/basic" class="flex items-center space-s-4 rounded-md bg-indigo-600 px-3 py-2 text-sm text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><path fill="currentColor" fill-rule="evenodd" d="M5.841 5.28a.75.75 0 0 0-1.06-1.06L1.53 7.47L1 8l.53.53l3.25 3.25a.75.75 0 0 0 1.061-1.06l-1.97-1.97H24.25a.75.75 0 0 0 0-1.5H3.871l1.97-1.97Z" clip-rule="evenodd"/></svg>
                         {{ $t('Back') }}
                     </Link>
@@ -21,7 +21,7 @@
                     <div class="w-[40%] mb-1">
                         <h2 class="text-sm text-gray-500 tracking-[0px]">{{ $t('Name') }}</h2>
                     </div>
-                    <div class="w-[60%] flex space-x-6">
+                    <div class="w-[60%] flex space-s-6">
                         <div class="w-[80%]">
                             <FormInput v-model="form.name" :type="'text'" :error="form.errors.name" :class="'w-full'" :labelClass="'mb-0'"/>
                         </div>
@@ -35,7 +35,7 @@
                             {{ $t('Add the string of text responsible for triggering the response') }}
                         </span>
                     </div>
-                    <div class="w-[60%] flex space-x-6">
+                    <div class="w-[60%] flex space-s-6">
                         <div class="w-[80%]">
                             <FormTextArea v-model="form.trigger" :type="'text'" :error="form.errors.trigger" :textAreaRows="3" :class="'sm:col-span-6 mb-10'"/>
                         </div>
@@ -49,7 +49,7 @@
                             {{ $t('Select the criteria for matching the trigger text above') }}
                         </span>
                     </div>
-                    <div class="w-[60%] flex space-x-6">
+                    <div class="w-[60%] flex space-s-6">
                         <div class="w-[80%]">
                             <FormSelect v-model="form.match_criteria" :options="criteriaOptions" :error="form.errors.match_criteria" :class="'sm:col-span-6'" :placeholder="$t('Select criteria')"/>
                         </div>
@@ -59,7 +59,7 @@
                     <div class="w-[40%] mb-1">
                         <h2 class="text-sm text-gray-500 tracking-[0px]">{{ $t('Response type') }}</h2>
                     </div>
-                    <div class="w-[60%] flex space-x-6">
+                    <div class="w-[60%] flex space-s-6">
                         <div class="w-[80%]">
                             <FormSelect v-model="form.response_type" @update:modelValue="clearResponse" :options="responseOptions" :error="form.errors.response_type" :class="'sm:col-span-6'" :placeholder="'Select Type'"/>
                         </div>
@@ -69,7 +69,7 @@
                     <div class="w-[40%] mb-1">
                         <h2 class="text-sm text-gray-500 tracking-[0px]">{{ $t('Text response') }}</h2>
                     </div>
-                    <div class="w-[60%] flex space-x-6">
+                    <div class="w-[60%] flex space-s-6">
                         <div class="w-[80%]">
                             <div>
                                 <div :class="'sm:col-span-6 mb-2'">
@@ -110,7 +110,7 @@
                                     </div>
                                 </div>
                             </div>
-                            <button type="submit" class="float-right flex items-center space-x-4 rounded-md bg-black px-3 py-2 text-sm text-white shadow-sm hover:bg-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
+                            <button type="submit" class="float-right flex items-center space-s-4 rounded-md bg-black px-3 py-2 text-sm text-white shadow-sm hover:bg-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
                                 {{ $t('Save') }}
                             </button>
                         </div>
@@ -121,7 +121,7 @@
                         <h2 v-if="form.response_type === 'image'" class="text-sm text-gray-500 tracking-[0px]">{{ $t('Image response') }}</h2>
                         <h2 v-else class="text-sm text-gray-500 tracking-[0px]">{{ $t('Audio response') }}</h2>
                     </div>
-                    <div class="w-[60%] flex space-x-6">
+                    <div class="w-[60%] flex space-s-6">
                         <div class="w-[80%]">
                             <div 
                                 :class="form.errors.response ? 'border-[#b91c1c]' : 'border-gray-300'"
@@ -137,11 +137,11 @@
                                 <div class="text-center">
                                     <div>
                                         <div v-if="form.response" class="flex justify-center items-center">
-                                            <div class="flex justify-center items-center space-x-3 py-1 border bg-slate-100 rounded-lg mb-2 w-fit px-2">
+                                            <div class="flex justify-center items-center space-s-3 py-1 border bg-slate-100 rounded-lg mb-2 w-fit px-2">
                                                 <div>
                                                     <svg class="mx-auto h-6 w-6 text-gray-400 cursor-pointer" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M14 9a1.5 1.5 0 1 1 3 0a1.5 1.5 0 0 1-3 0Z"/><path fill="currentColor" fill-rule="evenodd" d="M7.268 4.658a54.647 54.647 0 0 1 9.465 0l1.51.132a3.138 3.138 0 0 1 2.831 2.66a30.604 30.604 0 0 1 0 9.1a3.138 3.138 0 0 1-2.831 2.66l-1.51.131c-3.15.274-6.316.274-9.465 0l-1.51-.131a3.138 3.138 0 0 1-2.832-2.66a30.601 30.601 0 0 1 0-9.1a3.138 3.138 0 0 1 2.831-2.66l1.51-.132Zm9.335 1.495a53.147 53.147 0 0 0-9.206 0l-1.51.131A1.638 1.638 0 0 0 4.41 7.672a29.101 29.101 0 0 0-.311 5.17L7.97 8.97a.75.75 0 0 1 1.09.032l3.672 4.13l2.53-.844a.75.75 0 0 1 .796.21l3.519 3.91a29.101 29.101 0 0 0 .014-8.736a1.638 1.638 0 0 0-1.478-1.388l-1.51-.131Zm2.017 11.435l-3.349-3.721l-2.534.844a.75.75 0 0 1-.798-.213l-3.471-3.905l-4.244 4.243c.049.498.11.996.185 1.491a1.638 1.638 0 0 0 1.478 1.389l1.51.131c3.063.266 6.143.266 9.206 0l1.51-.131c.178-.016.35-.06.507-.128Z" clip-rule="evenodd"/></svg>
                                                 </div>
-                                                <div class="flex items-center space-x-2">
+                                                <div class="flex items-center space-s-2">
                                                     <span class="text-sm">{{ form.response?.name ?? form.response }}</span>
                                                     <button type="button" @click= "clearResponse()">
                                                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M17.707 7.707a1 1 0 0 0-1.414-1.414L12 10.586L7.707 6.293a1 1 0 0 0-1.414 1.414L10.586 12l-4.293 4.293a1 1 0 1 0 1.414 1.414L12 13.414l4.293 4.293a1 1 0 1 0 1.414-1.414L13.414 12l4.293-4.293Z" clip-rule="evenodd"/></svg>
@@ -163,7 +163,7 @@
                                 </div>
                             </div>
                             <div v-if="form.errors.response" class="form-error text-[#b91c1c] text-xs">{{ form.errors.response }}</div>
-                            <button type="submit" class="mt-10 float-right flex items-center space-x-4 rounded-md bg-black px-3 py-2 text-sm text-white shadow-sm hover:bg-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
+                            <button type="submit" class="mt-10 float-right flex items-center space-s-4 rounded-md bg-black px-3 py-2 text-sm text-white shadow-sm hover:bg-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
                                 {{ $t('Save') }}
                             </button>
                         </div>

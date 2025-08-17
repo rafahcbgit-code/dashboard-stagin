@@ -10,14 +10,14 @@
                     </p>
                 </div>
                 <div>
-                    <Link href="/support" class="flex items-center space-x-4 rounded-md bg-indigo-600 px-3 py-2 text-sm text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
+                    <Link href="/support" class="flex items-center space-s-4 rounded-md bg-indigo-600 px-3 py-2 text-sm text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><path fill="currentColor" fill-rule="evenodd" d="M5.841 5.28a.75.75 0 0 0-1.06-1.06L1.53 7.47L1 8l.53.53l3.25 3.25a.75.75 0 0 0 1.061-1.06l-1.97-1.97H24.25a.75.75 0 0 0 0-1.5H3.871l1.97-1.97Z" clip-rule="evenodd"/></svg>
                         {{ $t('Back') }}
                     </Link>
                 </div>
             </div>
             <form @submit.prevent="submitForm()" class="bg-white md:border py-5 md:px-5 rounded-[0.5rem]">
-                <div class="mt-5 mb-5 grid grid-cols-2 space-x-4">
+                <div class="mt-5 mb-5 grid grid-cols-2 space-s-4">
                     <div class="">
                         <FormInput v-model="form.subject" :name="$t('Subject')" :type="'text'" :error="form.errors.subject" :class="'w-full'" :labelClass="'mb-0'"/>
                     </div>
@@ -29,7 +29,7 @@
                     <FormTextArea v-model="form.message" :name="$t('Description')" :type="'text'" :showLabel="true" :error="form.errors.message" :textAreaRows="5" :class="'sm:col-span-6 mb-10'"/>
                 </div>
                 <div class="flex justify-end py-2">
-                    <button type="submit" class="self-end flex items-center space-x-4 rounded-md bg-black px-3 py-2 text-sm text-white shadow-sm hover:bg-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
+                    <button type="submit" class="self-end flex items-center space-s-4 rounded-md bg-black px-3 py-2 text-sm text-white shadow-sm hover:bg-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
                         <span v-if="!isLoading">{{ $t('Create ticket') }}</span>
                         <svg v-else xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2A10 10 0 1 0 22 12A10 10 0 0 0 12 2Zm0 18a8 8 0 1 1 8-8A8 8 0 0 1 12 20Z" opacity=".5"/><path fill="currentColor" d="M20 12h2A10 10 0 0 0 12 2V4A8 8 0 0 1 20 12Z"><animateTransform attributeName="transform" dur="1s" from="0 12 12" repeatCount="indefinite" to="360 12 12" type="rotate"/></path></svg>
                     </button>

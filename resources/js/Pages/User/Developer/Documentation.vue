@@ -1,6 +1,6 @@
 <template>
     <TabGroup>
-        <TabList class="flex space-x-1 backdrop-blur-xl bg-white/20 p-1">
+        <TabList class="flex space-s-1 backdrop-blur-xl bg-white/20 p-1">
             <Tab as="template" v-slot="{ selected }">
                 <button :class="[
                     'w-full py-2.5 text-sm leading-5 text-[#ffffffcc]',

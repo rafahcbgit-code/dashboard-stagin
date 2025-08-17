@@ -31,7 +31,7 @@
                             <div class="w-5/5">
                                 <div class="grid grid-cols-2 gap-x-4">
                                     <div class="border rounded-xl p-4">
-                                        <div class="flex space-x-2">
+                                        <div class="flex space-s-2">
                                             <div>
                                                 <div class="flex mt-[1px]">
                                                     <label @click="toggleAutoAssignment(false)" for="myCheckbox" class="cursor-pointer">
@@ -50,7 +50,7 @@
                                         </div>
                                     </div>
                                     <div class="border rounded-xl p-4">
-                                        <div class="flex space-x-2">
+                                        <div class="flex space-s-2">
                                             <div>
                                                 <div class="flex mt-[1px]">
                                                     <label @click="toggleAutoAssignment(true)" for="myCheckbox" class="cursor-pointer">

@@ -13,7 +13,7 @@
                                 </span>
                             </div>
                         </div>
-                        <div class="flex space-x-10 border-b w-full px-4 py-6">
+                        <div class="flex space-s-10 border-b w-full px-4 py-6">
                             <div class="w-[40%]">
                                 <span class="text-slate-600">{{ $t('Organization name') }}</span>
                                 <div class="text-xs text-slate-700 flex items-center">
@@ -25,7 +25,7 @@
                                 <FormInput v-model="form2.organization_name" :error="form2.errors.organization_name" :name="''" :type="'text'" :class="'col-span-4'"/>
                             </div>
                         </div>
-                        <div class="flex space-x-10 w-full px-4 py-6">
+                        <div class="flex space-s-10 w-full px-4 py-6">
                             <div class="w-[40%]">
                                 <span class="text-slate-600">{{ $t('Address details') }}</span>
                                 <div class="text-xs text-slate-700 flex items-center">
@@ -65,7 +65,7 @@
                                 {{ $t('Configure notification settings for new message alerts') }}
                             </span>
                         </div>
-                        <div class="flex space-x-10 w-full px-4 py-6" :class="form2.enable_sound_notification === false ? '' : 'border-b'">
+                        <div class="flex space-s-10 w-full px-4 py-6" :class="form2.enable_sound_notification === false ? '' : 'border-b'">
                             <div class="w-[40%]">
                                 <span class="text-slate-600">{{ $t('Enable notification sound') }}</span>
                                 <div class="text-xs text-slate-700 flex items-center">
@@ -77,7 +77,7 @@
                                 <FormToggleSwitch v-model="form2.enable_sound_notification" />
                             </div>
                         </div>
-                        <div v-if="form2.enable_sound_notification === true" class="flex space-x-10 w-full px-4 py-6">
+                        <div v-if="form2.enable_sound_notification === true" class="flex space-s-10 w-full px-4 py-6">
                             <div class="w-[60%]">
                                 <span class="text-slate-600">{{ $t('New chat sound') }}</span>
                                 <div class="text-xs text-slate-700 flex items-center">
@@ -106,7 +106,7 @@
                                 {{ $t('Configure the intervals at which failed campaign messages will be retried.') }}
                             </span>
                         </div>
-                        <div class="flex space-x-10 w-full px-4 py-6" :class="form2.enable_campaign_resend === false ? '' : 'border-b'">
+                        <div class="flex space-s-10 w-full px-4 py-6" :class="form2.enable_campaign_resend === false ? '' : 'border-b'">
                             <div class="w-[80%]">
                                 <span class="text-slate-600">{{ $t('Enable campaign resend feature') }}</span>
                                 <div class="text-xs text-slate-700 flex items-center">
@@ -118,7 +118,7 @@
                                 <FormToggleSwitch v-model="form2.enable_campaign_resend" />
                             </div>
                         </div>
-                        <div v-if="form2.enable_campaign_resend === true" class="flex space-x-10 w-full px-4 py-6 border-b">
+                        <div v-if="form2.enable_campaign_resend === true" class="flex space-s-10 w-full px-4 py-6 border-b">
                             <div class="w-[60%]">
                                 <span class="text-slate-600">{{ $t('Retry Intervals (in hours)') }}</span>
                                 <div class="text-xs text-slate-700 flex items-center">
@@ -127,12 +127,12 @@
                                 </div>
                             </div>
                             <div class="w-[40%] justify-end">
-                                <div class="flex space-x-2">
+                                <div class="flex space-s-2">
                                     <FormInput v-for="(interval, index) in form2.resend_intervals" v-model.number="form2.resend_intervals[index]" :error="''" :name="''" :type="'number'" :min="'1'" :class="'w-24'"/>
                                 </div>
                             </div>
                         </div>
-                        <div v-if="form2.enable_campaign_resend === true" class="flex space-x-10 w-full px-4 py-6" :class="form2.move_failed_contacts_to_group === false ? '' : 'border-b'">
+                        <div v-if="form2.enable_campaign_resend === true" class="flex space-s-10 w-full px-4 py-6" :class="form2.move_failed_contacts_to_group === false ? '' : 'border-b'">
                             <div class="w-[80%]">
                                 <span class="text-slate-600">{{ $t('Move failed contacts to a group') }}</span>
                                 <div class="text-xs text-slate-700 flex items-center">
@@ -144,7 +144,7 @@
                                 <FormToggleSwitch v-model="form2.move_failed_contacts_to_group" />
                             </div>
                         </div>
-                        <div v-if="form2.enable_campaign_resend === true && form2.move_failed_contacts_to_group === true" class="flex space-x-10 w-full px-4 py-6">
+                        <div v-if="form2.enable_campaign_resend === true && form2.move_failed_contacts_to_group === true" class="flex space-s-10 w-full px-4 py-6">
                             <div class="w-[60%]">
                                 <span class="text-slate-600">{{ $t('Failed contacts groups') }}</span>
                                 <div class="text-xs text-slate-700 flex items-center">
