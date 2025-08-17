@@ -20,7 +20,7 @@
     import MobileSidebar from "./MobileSidebar.vue";
     import 'vue3-toastify/dist/index.css';
     import { getEchoInstance } from '../../../echo';
-    import { useRtl } from '@/composables/useRtl';
+    import { useRtl } from '@/Composables/useRtl';
 
     const { rtlClass, isRtl } = useRtl();
 

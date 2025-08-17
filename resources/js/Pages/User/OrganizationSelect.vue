@@ -42,7 +42,7 @@
     import { ref } from 'vue';
     import { Link, useForm } from "@inertiajs/vue3";
     import OrganizationModal from '@/Components/OrganizationModal.vue';
-    import { useRtl } from '@/composables/useRtl';
+    import { useRtl } from '@/Composables/useRtl';
 
     const { rtlClass, isRtl } = useRtl();
 

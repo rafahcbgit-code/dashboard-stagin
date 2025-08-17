@@ -60,7 +60,7 @@
     import { defineProps, ref, onMounted, onUnmounted, watch } from 'vue';
     import { useRecaptcha, unMountRecaptcha } from '../../Composables/ReCaptcha';
     import { toast } from 'vue3-toastify';
-    import { useRtl } from '@/composables/useRtl';
+    import { useRtl } from '@/Composables/useRtl';
 
     const { rtlClass, isRtl } = useRtl();
 

@@ -19,14 +19,14 @@
         <div class="flex-1">
             <ul class="pt-2 space-y-1 text-sm mb-2">
                 <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate" :class="$page.url.startsWith('/dashboard') ? 'bg-slate-50 text-black' : ''">
-                    <Link rel="noopener noreferrer" href="/dashboard" class="flex items-center p-2 space-x-3 rounded-md">
+                    <Link rel="noopener noreferrer" href="/dashboard" class="flex items-center p-2 space-s-3 rounded-md">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 11.452V16.8c0 1.12 0 1.68.218 2.109c.192.376.497.682.874.873c.427.218.987.218 2.105.218h9.606c1.118 0 1.677 0 2.104-.218a2 2 0 0 0 .875-.873c.218-.428.218-.987.218-2.105v-5.352c0-.534 0-.801-.065-1.05a1.998 1.998 0 0 0-.28-.617c-.145-.213-.345-.39-.748-.741l-4.8-4.2c-.746-.653-1.12-.98-1.54-1.104c-.37-.11-.764-.11-1.135 0c-.42.124-.792.45-1.538 1.102L5.093 9.044c-.402.352-.603.528-.747.74a2 2 0 0 0-.281.618C4 10.65 4 10.918 4 11.452Z"/></svg>
                         <span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Dashboard') }}</span>
                     </Link>
                 </li>
                 <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate" :class="$page.url.startsWith('/chats') ? 'bg-slate-50 text-black' : ''">
-                    <Link rel="noopener noreferrer" href="/chats" class="flex items-center justify-between p-2 space-x-3 rounded-md">
-                        <div class="flex items-center space-x-3">
+                    <Link rel="noopener noreferrer" href="/chats" class="flex items-center justify-between p-2 space-s-3 rounded-md">
+                        <div class="flex items-center space-s-3">
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m5.6 19.92l1.524-1.219l.01-.008c.318-.255.479-.383.658-.474c.16-.082.331-.142.508-.178c.199-.041.406-.041.822-.041h8.681c1.118 0 1.678 0 2.105-.218a2 2 0 0 0 .874-.874C21 16.48 21 15.92 21 14.804V7.197c0-1.118 0-1.678-.218-2.105a2.001 2.001 0 0 0-.875-.874C19.48 4 18.92 4 17.8 4H6.2c-1.12 0-1.68 0-2.108.218a1.999 1.999 0 0 0-.874.874C3 5.52 3 6.08 3 7.2v11.471c0 1.066 0 1.599.218 1.872a1 1 0 0 0 .783.377c.35 0 .766-.334 1.599-1Z"/></svg>
                             <span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Chats') }}</span>
                         </div>
@@ -34,25 +34,25 @@
                     </Link>
                 </li>
                 <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate" :class="$page.url.startsWith('/contact') ? 'bg-slate-50 text-black' : ''">
-                    <Link rel="noopener noreferrer" href="/contacts" class="flex items-center p-2 space-x-3 rounded-md">
+                    <Link rel="noopener noreferrer" href="/contacts" class="flex items-center p-2 space-s-3 rounded-md">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 4h-.8c-1.12 0-1.68 0-2.108.218a1.999 1.999 0 0 0-.874.874C4 5.52 4 6.08 4 7.2v9.6c0 1.12 0 1.68.218 2.108a2 2 0 0 0 .874.874c.427.218.987.218 2.105.218H8M8 4h8.8c1.12 0 1.68 0 2.107.218c.377.192.683.497.875.874c.218.427.218.987.218 2.105v9.607c0 1.118 0 1.677-.218 2.104a2.002 2.002 0 0 1-.875.874c-.427.218-.986.218-2.104.218H8M8 4v16m4-9h4m-4-3h4"/></svg>
                         <span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Contacts') }}</span>
                     </Link>
                 </li>
                 <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate" :class="$page.url.startsWith('/campaign') ? 'bg-slate-50 text-black' : ''">
-                    <Link rel="noopener noreferrer" href="/campaigns" class="flex items-center p-2 space-x-3 rounded-md">
+                    <Link rel="noopener noreferrer" href="/campaigns" class="flex items-center p-2 space-s-3 rounded-md">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 256 256"><path fill="currentColor" d="M216 80h-32V48a16 16 0 0 0-16-16H40a16 16 0 0 0-16 16v128a8 8 0 0 0 13 6.22L72 154v30a16 16 0 0 0 16 16h93.59L219 230.22a8 8 0 0 0 5 1.78a8 8 0 0 0 8-8V96a16 16 0 0 0-16-16M66.55 137.78L40 159.25V48h128v88H71.58a8 8 0 0 0-5.03 1.78M216 207.25l-26.55-21.47a8 8 0 0 0-5-1.78H88v-32h80a16 16 0 0 0 16-16V96h32Z"/></svg>
                         <span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Campaigns') }}</span>
                     </Link>
                 </li>
                 <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate" :class="$page.url.startsWith('/template') ? 'bg-slate-50 text-black' : ''">
-                    <Link rel="noopener noreferrer" href="/templates" class="flex items-center p-2 space-x-3 rounded-md">
+                    <Link rel="noopener noreferrer" href="/templates" class="flex items-center p-2 space-s-3 rounded-md">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 32 32"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2" d="M12 15h8m-8 4h8m8 5V11c0-1.105-.892-2-1.997-2H17c-2 0-2-3-5-3H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h20a2 2 0 0 0 2-2Z"/></svg>
                         <span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Message templates') }}</span>
                     </Link>
                 </li>
                 <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate" :class="$page.url.startsWith('/automation') ? 'bg-slate-50 text-black' : ''">
-                    <Link rel="noopener noreferrer" href="/automation/basic" class="flex items-center p-2 space-x-3 rounded-md">
+                    <Link rel="noopener noreferrer" href="/automation/basic" class="flex items-center p-2 space-s-3 rounded-md">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 32 32"><path fill="currentColor" d="M16 27c-3.6 0-7.1-1.8-9.2-5H12v-2H4v8h2v-3.7c2.5 3 6.1 4.7 10 4.7zm15-4v-2h-2.1c-.1-.6-.4-1.2-.7-1.8l1.5-1.5l-1.4-1.4l-1.5 1.5c-.5-.3-1.1-.6-1.8-.7V15h-2v2.1c-.6.1-1.2.4-1.8.7l-1.5-1.5l-1.4 1.4l1.5 1.5c-.3.5-.6 1.1-.7 1.8H17v2h2.1c.1.6.4 1.2.7 1.8l-1.5 1.5l1.4 1.4l1.5-1.5c.5.3 1.1.6 1.8.7V29h2v-2.1c.6-.1 1.2-.4 1.8-.7l1.5 1.5l1.4-1.4l-1.5-1.5c.3-.5.6-1.1.7-1.8zm-7 2c-1.7 0-3-1.3-3-3s1.3-3 3-3s3 1.3 3 3s-1.3 3-3 3m-4-15h5.2C21.9 4.9 15.1 3.5 10 6.8c-3.1 2-5 5.5-5 9.2H3C3 8.8 8.8 3 16 3c3.9 0 7.5 1.7 10 4.7V4h2v8h-8z"/></svg>
                         <span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Automation') }}</span>
                     </Link>
@@ -65,35 +65,35 @@
             
             <ul class="pb-4 space-y-1 text-sm mt-2">
                 <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate" :class="$page.url.startsWith('/team') ? 'bg-slate-50 text-black' : ''">
-                    <Link rel="noopener noreferrer" href="/team" class="flex items-center p-2 space-x-3 rounded-md">
+                    <Link rel="noopener noreferrer" href="/team" class="flex items-center p-2 space-s-3 rounded-md">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 20c0-1.657-2.239-3-5-3s-5 1.343-5 3m14-3c0-1.23-1.234-2.287-3-2.75M3 17c0-1.23 1.234-2.287 3-2.75m12-4.014a3 3 0 1 0-4-4.472m-8 4.472a3 3 0 0 1 4-4.472M12 14a3 3 0 1 1 0-6a3 3 0 0 1 0 6Z"/></svg>
                         <span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Team') }}</span>
                     </Link>
                 </li>
                 <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate" :class="$page.url.startsWith('/settings') ? 'bg-slate-50 text-black' : ''">
-                    <Link rel="noopener noreferrer" href="/settings" class="md:flex items-center p-2 space-x-3 rounded-md hidden">
+                    <Link rel="noopener noreferrer" href="/settings" class="md:flex items-center p-2 space-s-3 rounded-md hidden">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 16 16"><path fill="currentColor" fill-rule="evenodd" d="M3.5 2h-1v5h1zm6.1 5H6.4L6 6.45v-1L6.4 5h3.2l.4.5v1zm-5 3H1.4L1 9.5v-1l.4-.5h3.2l.4.5v1zm3.9-8h-1v2h1zm-1 6h1v6h-1zm-4 3h-1v3h1zm7.9 0h3.19l.4-.5v-.95l-.4-.5H11.4l-.4.5v.95zm2.1-9h-1v6h1zm-1 10h1v2h-1z" clip-rule="evenodd"/></svg>
                         <span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Settings') }}</span>
                     </Link>
-                    <Link rel="noopener noreferrer" href="/settings/m" class="flex items-center p-2 space-x-3 rounded-md md:hidden">
+                    <Link rel="noopener noreferrer" href="/settings/m" class="flex items-center p-2 space-s-3 rounded-md md:hidden">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 16 16"><path fill="currentColor" fill-rule="evenodd" d="M3.5 2h-1v5h1zm6.1 5H6.4L6 6.45v-1L6.4 5h3.2l.4.5v1zm-5 3H1.4L1 9.5v-1l.4-.5h3.2l.4.5v1zm3.9-8h-1v2h1zm-1 6h1v6h-1zm-4 3h-1v3h1zm7.9 0h3.19l.4-.5v-.95l-.4-.5H11.4l-.4.5v.95zm2.1-9h-1v6h1zm-1 10h1v2h-1z" clip-rule="evenodd"/></svg>
                         <span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Settings') }}</span>
                     </Link>
                 </li>
                 <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate" :class="$page.url.startsWith('/billing') || $page.url.startsWith('/subscription') ? 'bg-slate-50 text-black' : ''">
-                    <Link rel="noopener noreferrer" href="/billing" class="flex items-center p-2 space-x-3 rounded-md">
+                    <Link rel="noopener noreferrer" href="/billing" class="flex items-center p-2 space-s-3 rounded-md">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 11v4.8c0 1.12 0 1.68.218 2.108a2 2 0 0 0 .874.874c.427.218.987.218 2.105.218h11.606c1.118 0 1.677 0 2.104-.218c.377-.192.683-.498.875-.874c.218-.428.218-.986.218-2.104V11M3 11V9m0 2h18M3 9v-.8c0-1.12 0-1.68.218-2.108c.192-.377.497-.682.874-.874C4.52 5 5.08 5 6.2 5h11.6c1.12 0 1.68 0 2.107.218c.377.192.683.497.875.874c.218.427.218.987.218 2.105V9M3 9h18M7 15h4m10-4V9"/></svg>
                         <span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Billing and subscription') }}</span>
                     </Link>
                 </li>
                 <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate" :class="$page.url.startsWith('/support') ? 'bg-slate-50 text-black' : ''">
-                    <Link rel="noopener noreferrer" href="/support" class="flex items-center p-2 space-x-3 rounded-md">
+                    <Link rel="noopener noreferrer" href="/support" class="flex items-center p-2 space-s-3 rounded-md">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M12.26 21.997a10.276 10.276 0 0 1-.52 0a10.004 10.004 0 0 1-8.983-6.173a10.034 10.034 0 0 1 .017-7.69A10.015 10.015 0 0 1 4.908 4.95l.042-.042a10.015 10.015 0 0 1 3.167-2.126a10.034 10.034 0 0 1 7.753-.006a10.015 10.015 0 0 1 3.186 2.138l.03.03c.913.917 1.65 2.01 2.153 3.223a10.012 10.012 0 0 1 .76 3.985a10.004 10.004 0 0 1-6.226 9.112a10.013 10.013 0 0 1-3.512.733Zm1.772-6.55l2.874 2.873a8.004 8.004 0 0 1-9.812 0l2.874-2.874a4.007 4.007 0 0 0 4.064 0Zm-5.478-1.415L5.68 16.906a8.004 8.004 0 0 1 0-9.812l2.874 2.874a4.007 4.007 0 0 0 0 4.064Zm1.528-1.463a2.01 2.01 0 0 1-.014-1.087a1.99 1.99 0 0 1 .518-.896a1.99 1.99 0 0 1 1.932-.518c.328.088.639.26.896.518a1.99 1.99 0 0 1 .518 1.932c-.088.328-.26.639-.518.896a1.99 1.99 0 0 1-1.932.518a1.991 1.991 0 0 1-.896-.518a1.99 1.99 0 0 1-.504-.845Zm3.95-4.015a4.007 4.007 0 0 0-4.064 0L7.094 5.68a8.004 8.004 0 0 1 9.812 0l-2.874 2.874Zm4.288 8.352a8.004 8.004 0 0 0 0-9.812l-2.874 2.874a4.007 4.007 0 0 1 0 4.064l2.874 2.874Z" clip-rule="evenodd"/></svg>
                         <span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Support') }}</span>
                     </Link>
                 </li>
                 <li v-if="user.teams[0]['role'] === 'owner'" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate">
-                    <Link rel="noopener noreferrer" href="/developer-tools/access-tokens" class="flex items-center p-2 space-x-3 rounded-md">
+                    <Link rel="noopener noreferrer" href="/developer-tools/access-tokens" class="flex items-center p-2 space-s-3 rounded-md">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M7.312 9H5.688L3.5 15h1.607l.446-1.226h1.894L7.893 15H9.5Zm-1.394 3.774L6.5 11.18l.582 1.595ZM14.744 9h-3.5v6h1.5v-2h2a1.473 1.473 0 0 0 1.5-1.5v-1a1.473 1.473 0 0 0-1.5-1.5m0 2.5h-2v-1h2ZM18 9h1.5v6H18z"/><path fill="currentColor" d="M22 6v12H2V6zm0-2H2a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h20a2 2 0 0 0 2-2V6a2 2 0 0 0-2-2"/></svg>
                         <span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Developer Tools') }}</span>
                     </Link>
@@ -103,7 +103,7 @@
     </div>
 
     <div v-if="menuIconsOnly === false" @click="switchTeams()" class="border-2 border-primary text-sm rounded-[5px] mb-1 m-3 py-2 px-4 flex items-center justify-between cursor-pointer">
-        <div class="flex space-x-1">
+        <div class="flex space-s-1">
             <span>{{ $t('Team') }}:</span>
             <span class="text-ellipsis w-[120px] truncate">{{ props.organization.name }}</span>
         </div>
@@ -113,7 +113,7 @@
     </div>
     
     <div class="flex items-center m-3 p-2 rounded-xl h-14 py-1 md:py-1 mt-2 gap-x-4 bg-slate-50" :class="!menuIconsOnly ? 'justify-between' : 'justify-center'">
-        <div v-if="!menuIconsOnly" class="flex space-x-2">
+        <div v-if="!menuIconsOnly" class="flex space-s-2">
             <div class="rounded-xl p-1 bg-slate-200">
                 <img v-if="user.avatar" class="rounded-full w-9 h-9" :src="'/media/' + user.avatar">
                 <div v-else class="rounded-full w-9 h-9 flex justify-center items-center">
@@ -122,7 +122,7 @@
             </div>
             <div>
                 <h2 class="text-[15px] capitalize truncate w-[6em]"  :class="menuIconsOnly ? 'hidden' : ''">{{ user.first_name + ' ' + user.last_name }}</h2>
-                <span class="flex items-center space-x-1" :class="menuIconsOnly ? 'hidden' : ''">
+                <span class="flex items-center space-s-1" :class="menuIconsOnly ? 'hidden' : ''">
                     <span @click="openModal" class="text-sm hover:underline dark:text-gray-400 cursor-pointer">{{ $t('View profile') }}</span>
                 </span>
             </div>

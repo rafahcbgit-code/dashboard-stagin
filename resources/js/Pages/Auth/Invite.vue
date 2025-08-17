@@ -71,7 +71,7 @@
     import FormInput from '@/Components/FormInput.vue';
     import { defineProps, computed, ref, onMounted, onUnmounted } from 'vue';
     import { useRecaptcha, unMountRecaptcha } from '../../Composables/ReCaptcha';
-    import { useRtl } from '@/composables/useRtl';
+    import { useRtl } from '@/Composables/useRtl';
 
     const { rtlClass, isRtl } = useRtl();
 

@@ -18,4 +18,10 @@ export default defineConfig({
         }),
         i18n(),
     ],
+    resolve: {
+        alias: {
+            '@': path.resolve(__dirname, 'resources/js'),       // standard Laravel alias
+            '@modules': path.resolve(__dirname, 'modules'),     // 👈 add this
+        },
+    },
 });

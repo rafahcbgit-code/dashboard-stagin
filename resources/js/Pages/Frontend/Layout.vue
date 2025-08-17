@@ -120,7 +120,7 @@
     import { ref, onMounted, onBeforeUnmount } from 'vue';
     import { Link } from "@inertiajs/vue3";
     import LangToggle from '@/Components/LangToggle.vue';
-    import { useRtl } from '@/composables/useRtl'
+    import { useRtl } from '@/Composables/useRtl'
 
     const config = computed(() => usePage().props.config);
 

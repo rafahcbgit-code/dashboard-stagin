@@ -523,7 +523,7 @@
     import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
     import { Link } from "@inertiajs/vue3";
     import LangToggle from '@/Components/LangToggle.vue';
-    import { useRtl } from '@/composables/useRtl';
+    import { useRtl } from '@/Composables/useRtl';
 
     const props = defineProps(['addons', 'enable_ai_billing', 'faqs', 'plans', 'reviews', 'companyConfig', 'languages', 'currentLanguage', 'currency', 'pages']);
 

@@ -17,7 +17,7 @@
     import { ref, computed, onMounted, watch } from 'vue';
     import { toast } from 'vue3-toastify';
     import 'vue3-toastify/dist/index.css';
-    import { useRtl } from '@/composables/useRtl';
+    import { useRtl } from "@/Composables/useRtl";
 
     const { rtlClass, isRtl } = useRtl();
 
