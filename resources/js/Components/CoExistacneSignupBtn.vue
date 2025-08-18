@@ -1,0 +1,138 @@
+<script setup>
+import { ref, onMounted, onBeforeUnmount } from 'vue';
+import { router } from "@inertiajs/vue3";
+
+const props = defineProps({
+  appId: String,
+  configId: String,        // Coexistence flow config ID
+  graphAPIVersion: String, // e.g. "v21.0"
+});
+
+const isSetupLoading = ref(false);
+
+function initFacebookSDK() {
+  window.fbAsyncInit = function () {
+    FB.init({
+      appId: props.appId,
+      cookie: true,
+      xfbml: true,
+      version: props.graphAPIVersion,
+    });
+  };
+
+  (function (d, s, id) {
+    if (d.getElementById(id)) return;
+    const js = d.createElement(s);
+    js.id = id;
+    js.src = "https://connect.facebook.net/en_US/sdk.js";
+    const fjs = d.getElementsByTagName(s)[0];
+    fjs.parentNode.insertBefore(js, fjs);
+  }(document, 'script', 'facebook-jssdk'));
+}
+
+function sessionInfoListener(event) {
+  if (event.origin !== "https://www.facebook.com" && event.origin !== "https://web.facebook.com") {
+    return;
+  }
+
+  try {
+    const data = JSON.parse(event.data);
+    if (data.type === 'WA_EMBEDDED_SIGNUP') {
+      if (data.event === 'FINISH') {
+        const { phone_number_id, waba_id } = data.data;
+        console.log("✅ Coexistence finished:", { phone_number_id, waba_id });
+      } else {
+        console.log("⚠️ User cancelled at step:", data.data.current_step);
+      }
+    }
+  } catch {
+    // ignore non-JSON messages
+  }
+}
+
+function launchWhatsAppCoexistenceSignup() {
+  window.addEventListener("message", sessionInfoListener);
+
+  if (typeof fbq !== 'undefined') {
+    fbq('trackCustom', 'WhatsAppOnboardingStart', {
+      appId: props.appId,
+      feature: 'whatsapp_embedded_signup_coexistence'
+    });
+  }
+
+  FB.login(function (response) {
+    if (response.authResponse) {
+      isSetupLoading.value = true;
+
+      // send to backend for exchange
+      router.post(`/whatsapp/exchange-code`, {
+        token: response.authResponse.code,
+        coexistence: true, // 🚩 Important flag
+      }, {
+        preserveState: true,
+        onSuccess: () => {
+          router.visit('/settings/whatsapp', { preserveState: false });
+        },
+        onError: () => {
+          isSetupLoading.value = false;
+        }
+      });
+    } else {
+      isSetupLoading.value = false;
+      console.log('❌ User cancelled login or did not authorize.');
+    }
+  }, {
+    config_id: props.configId, 
+    response_type: 'code', 
+    override_default_response_type: true,
+    extras: {
+      setup: {},
+      featureType: 'whatsapp_business_app_onboarding',
+      sessionInfoVersion: '3'
+    }
+  });
+}
+
+onMounted(() => {
+  initFacebookSDK();
+});
+
+onBeforeUnmount(() => {
+  window.removeEventListener("message", sessionInfoListener);
+});
+</script>
+
+
+
+<template>
+    <div v-if="isSetupLoading" class="fixed inset-0 bg-black bg-opacity-40 flex items-center justify-center z-50">
+        <div class="bg-white p-6 rounded-lg shadow-lg text-center text-sm">
+            <div class="flex justify-center mb-4">
+                <!-- FIXED: Simple spinner SVG -->
+                <svg class="animate-spin h-12 w-12 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+            </div>
+            <p>{{ $t('Please wait for your whatsapp coexistence setup!') }}</p>
+        </div>
+    </div>
+
+
+    <button @click="launchWhatsAppCoexistenceSignup" class="bg-primary text-white p-2 rounded-lg text-sm mt-5 flex px-3 w-fit">
+        {{ $t('Setup WhatsApp Coexistence') }}
+        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20">
+            <g fill="currentColor" fill-rule="evenodd" clip-rule="evenodd">
+                <g opacity=".2">
+                    <path d="M12.206 5.848a1.5 1.5 0 0 1 2.113.192l3.333 4a1.5 1.5 0 1 1-2.304 1.92l-3.334-4a1.5 1.5 0 0 1 .192-2.112Z"/>
+                    <path d="M12.206 16.152a1.5 1.5 0 0 1-.192-2.112l3.334-4a1.5 1.5 0 0 1 2.304 1.92l-3.333 4a1.5 1.5 0 0 1-2.113.192Z"/>
+                    <path d="M16 11a1.5 1.5 0 0 1-1.5 1.5h-8a1.5 1.5 0 0 1 0-3h8A1.5 1.5 0 0 1 16 11Z"/>
+                </g>
+                <path d="M11.347 5.616a.5.5 0 0 1 .704.064l3.333 4a.5.5 0 0 1-.768.64l-3.333-4a.5.5 0 0 1 .064-.704Z"/>
+                <path d="M11.347 14.384a.5.5 0 0 1-.064-.704l3.333-4a.5.5 0 0 1 .768.64l-3.333 4a.5.5 0 0 1-.704.064Z"/>
+                <path d="M15.5 10a.5.5 0 0 1-.5.5H5a.5.5 0 0 1 0-1h10a.5.5 0 0 1 .5.5Z"/>
+            </g>
+        </svg>
+    </button>
+</template>
+
