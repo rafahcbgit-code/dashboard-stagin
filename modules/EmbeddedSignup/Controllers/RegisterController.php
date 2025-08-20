@@ -133,6 +133,34 @@ class RegisterController extends BaseController
             ]);
         }
 
+        // NEW: Additional setup for coexistence mode
+        if ($isCoexistence) {
+            // Set phone-level webhook for coexistence
+            $overridePhoneCallbackResponse = $this->overridePhoneCallbackUrl($accessToken, $phoneNumberId, $callbackUrl, $token);
+            if (!$overridePhoneCallbackResponse->success) {
+                Log::warning('Failed to set phone-level webhook for coexistence', [
+                    'phone_number_id' => $phoneNumberId,
+                    'error' => $overridePhoneCallbackResponse->data->error->message ?? 'Unknown error'
+                ]);
+            }
+
+            // Request history sync for coexistence (optional, may fail if not enabled)
+            $historySync = $this->requestHistorySync($accessToken, $wabaId);
+            if (!$historySync->success) {
+                Log::info('History sync request failed (may not be enabled)', [
+                    'waba_id' => $wabaId,
+                    'error' => $historySync->data->error->message ?? 'Unknown error'
+                ]);
+            }
+
+            // Verify coexistence setup
+            $coexistenceVerification = $this->verifyCoexistenceSetup($accessToken, $wabaId);
+            Log::info('Coexistence verification', [
+                'waba_id' => $wabaId,
+                'verification_data' => $coexistenceVerification
+            ]);
+        }
+
         // 9) Persist metadata (add is_coexistence without touching existing flags)
         $metadataArray = $organizationConfig->metadata ? json_decode($organizationConfig->metadata, true) : [];
         $metadataArray['whatsapp']['is_embedded_signup'] = 1; // keep your existing marker
@@ -172,6 +200,57 @@ class RegisterController extends BaseController
         ]);
     }
 
+    // Request history sync for coexistence
+    public function requestHistorySync($accessToken, $wabaId)
+    {
+        $responseObject = new \stdClass();
+
+        $response = Http::withHeaders([
+            'Authorization' => 'Bearer ' . $accessToken
+        ])->post("https://graph.facebook.com/{$this->apiVersion}/{$wabaId}/history_sync", [
+            'enable_history_sync' => true
+        ]);
+
+        if ($response->successful()) {
+            $response = $response->json();
+            $responseObject->success = true;
+            $responseObject->data = (object) $response;
+        } else {
+            $responseObject->success = false;
+            $responseObject->data = new \stdClass();
+            $responseObject->data->error = new \stdClass();
+            $responseObject->data->error->message = $response->body();
+            Log::info('History sync request failed: ' . $response->body());
+        }
+
+        return $responseObject;
+    }
+
+    // Verify coexistence setup
+    public function verifyCoexistenceSetup($accessToken, $wabaId)
+    {
+        try {
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer ' . $accessToken
+            ])->get("https://graph.facebook.com/{$this->apiVersion}/{$wabaId}", [
+                'fields' => 'is_business_app_setup,message_template_namespace'
+            ]);
+
+            if ($response->successful()) {
+                return $response->json();
+            } else {
+                Log::warning('Coexistence verification failed', [
+                    'response' => $response->body()
+                ]);
+                return null;
+            }
+        } catch (\Exception $e) {
+            Log::error('Coexistence verification error', [
+                'error' => $e->getMessage()
+            ]);
+            return null;
+        }
+    }
 
     public function getAccessToken($token){
         $settings = Setting::whereIn('key', ['whatsapp_client_id', 'whatsapp_client_secret'])->pluck('value', 'key');
