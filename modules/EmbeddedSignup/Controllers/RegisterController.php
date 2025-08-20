@@ -159,6 +159,10 @@ class RegisterController extends BaseController
                 'waba_id' => $wabaId,
                 'verification_data' => $coexistenceVerification
             ]);
+
+            // Verify webhook configurations after setup
+            $this->verifyPhoneNumberConnection($accessToken, $phoneNumberId);
+            $this->getWebhookSubscriptions($accessToken, $wabaId);
         }
 
         // 9) Persist metadata (add is_coexistence without touching existing flags)
@@ -246,6 +250,68 @@ class RegisterController extends BaseController
             }
         } catch (\Exception $e) {
             Log::error('Coexistence verification error', [
+                'error' => $e->getMessage()
+            ]);
+            return null;
+        }
+    }
+
+    // Verify phone number webhook configuration
+    public function verifyPhoneNumberConnection($accessToken, $phoneNumberId)
+    {
+        try {
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer ' . $accessToken
+            ])->get("https://graph.facebook.com/{$this->apiVersion}/{$phoneNumberId}", [
+                'fields' => 'webhook_configuration,status'
+            ]);
+
+            if ($response->successful()) {
+                Log::info('Phone number webhook config', [
+                    'phone_id' => $phoneNumberId,
+                    'config' => $response->json()
+                ]);
+                return $response->json();
+            } else {
+                Log::warning('Phone number verification failed', [
+                    'phone_id' => $phoneNumberId,
+                    'response' => $response->body()
+                ]);
+                return null;
+            }
+        } catch (\Exception $e) {
+            Log::error('Phone number verification error', [
+                'phone_id' => $phoneNumberId,
+                'error' => $e->getMessage()
+            ]);
+            return null;
+        }
+    }
+
+    // Get webhook subscriptions for debugging
+    public function getWebhookSubscriptions($accessToken, $wabaId)
+    {
+        try {
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer ' . $accessToken
+            ])->get("https://graph.facebook.com/{$this->apiVersion}/{$wabaId}/subscribed_apps");
+
+            if ($response->successful()) {
+                Log::info('Current webhook subscriptions', [
+                    'waba_id' => $wabaId,
+                    'subscriptions' => $response->json()
+                ]);
+                return $response->json();
+            } else {
+                Log::warning('Failed to get webhook subscriptions', [
+                    'waba_id' => $wabaId,
+                    'response' => $response->body()
+                ]);
+                return null;
+            }
+        } catch (\Exception $e) {
+            Log::error('Webhook subscriptions error', [
+                'waba_id' => $wabaId,
                 'error' => $e->getMessage()
             ]);
             return null;
