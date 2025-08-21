@@ -153,6 +153,12 @@ class RegisterController extends BaseController
                 ]);
             }
 
+            // 🔹 Sync contacts
+            $this->syncSmbAppData($accessToken, $phoneNumberId, "smb_app_state_sync");
+
+            // 🔹 Sync message history
+            $this->syncSmbAppData($accessToken, $phoneNumberId, "history");
+
             // Verify coexistence setup
             $coexistenceVerification = $this->verifyCoexistenceSetup($accessToken, $wabaId);
             Log::info('Coexistence verification', [
@@ -784,6 +790,41 @@ class RegisterController extends BaseController
         }
 
         return $responseObject;
+    }
+
+    /**
+     * Generic sync for WhatsApp SMB app data
+     *
+     * @param string $accessToken
+     * @param string $phoneNumberId
+     * @param string $type - "smb_app_state_sync" | "history"
+     */
+    private function syncSmbAppData($accessToken, $phoneNumberId, $type)
+    {
+        $url = "https://graph.facebook.com/{$this->apiVersion}/{$phoneNumberId}/smb_app_data";
+        $params = [
+            "messaging_product" => "whatsapp",
+            "sync_type" => $type
+        ];
+
+        Log::info("Initiating SMB sync [{$type}] for Phone ID: {$phoneNumberId}");
+        Log::info("URL: {$url}");
+        Log::info("Params: " . json_encode($params));
+
+        $response = Http::withHeaders([
+            'Authorization' => "Bearer " . $accessToken,
+            'Content-Type' => 'application/json'
+        ])->post($url, $params);
+
+        Log::info("SMB sync [{$type}] response status: " . $response->status());
+        Log::info("SMB sync [{$type}] response body: " . $response->body());
+
+        if ($response->successful()) {
+            return $response->json();
+        } else {
+            Log::error("Failed to initiate SMB sync [{$type}]. Status: " . $response->status() . " Body: " . $response->body());
+            return null;
+        }
     }
 
 }
