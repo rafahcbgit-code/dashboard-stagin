@@ -36,6 +36,7 @@
         zip: props.contact?.address ? getAddressDetail(props.contact?.address, 'zip') : null,
         country: props.contact?.address ? getAddressDetail(props.contact?.address, 'country') : null,
         metadata: props.contact?.metadata ? JSON.parse(props.contact?.metadata) : defaultFields,
+        is_subscribed: props.contact?.is_subscribed ?? 1
     });
 
     const contactGroupOptions = () => {
@@ -108,6 +109,16 @@
                 <FormInput v-model="form.last_name" :name="$t('Last name')" :error="form.errors.last_name" :type="'text'" :class="'sm:col-span-3'"/>
                 <FormPhoneInput v-model="form.phone" :name="$t('Phone')" :error="form.errors.phone" :type="'text'" :class="'sm:col-span-3'"/>
                 <FormInput v-model="form.email" :name="$t('Email')" :error="form.errors.email" :type="'text'" :class="'sm:col-span-3'"/>
+              
+                <FormSelect
+        v-model="form.is_subscribed"
+        :name="$t('Subscription Status')"
+        :options="[
+            { label: $t('Subscribed'), value: 1 },
+            { label: $t('Unsubscribed'), value: 0 }
+        ]"
+        :class="'sm:col-span-3'"
+    />
                 <FormSelect v-model="form.group" :name="$t('Group')" :error="form.errors.group" :options="contactGroupOptions()" :type="'text'" :class="'sm:col-span-6'" :multiple="true"/>
             </div>
             <div v-if="locationSettings === 'before' && props.fields.length > 0">
@@ -126,6 +137,10 @@
                 <FormInput v-model="form.state" :name="$t('State')" :error="form.errors.state" :type="'text'" :class="'sm:col-span-3'"/>
                 <FormInput v-model="form.zip" :name="$t('Zip code')" :error="form.errors.zip" :type="'text'" :class="'sm:col-span-3'"/>
                 <FormInput v-model="form.country" :name="$t('Country')" :error="form.errors.country" :type="'text'" :class="'sm:col-span-3'"/>
+
+  
+
+
             </div>
             <div v-if="locationSettings === 'after' && props.fields.length > 0">
                 <div class="grid gap-x-6 gap-y-4 sm:grid-cols-2 mb-8 pt-4 border-t">

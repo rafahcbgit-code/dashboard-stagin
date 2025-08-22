@@ -442,4 +442,46 @@ class SettingController extends BaseController
 
         return null;
     }
+    public function campaign(Request $request)
+    {
+        $currentOrganizationId = session()->get('current_organization');
+        $organizationConfig = Organization::findOrFail($currentOrganizationId);
+
+        // Decode metadata or set as empty array
+        $metadataArray = $organizationConfig->metadata
+            ? json_decode($organizationConfig->metadata, true)
+            : [];
+
+        // Ensure campaign_settings key exists
+        if (!isset($metadataArray['campaign_settings'])) {
+            $metadataArray['campaign_settings'] = [];
+        }
+
+        // Handle POST request (save settings)
+        if ($request->isMethod('post')) {
+            $input = $request->input('unsubscribe_trigger', 'stop');
+
+            // Normalize words (remove spaces around commas)
+            $words = preg_replace('/\s*,\s*/', ',', trim($input));
+            $metadataArray['campaign_settings']['unsubscribe_trigger'] = $words;
+
+            $organizationConfig->metadata = json_encode($metadataArray);
+            $organizationConfig->save();
+
+            return Inertia::render('User/Settings/Campaign', [
+                'settings' => $organizationConfig,
+            ]);
+        }
+
+        // Ensure unsubscribe_trigger has a default value
+        if (!isset($metadataArray['campaign_settings']['unsubscribe_trigger'])) {
+            $metadataArray['campaign_settings']['unsubscribe_trigger'] = 'stop';
+        }
+
+        $organizationConfig->metadata = json_encode($metadataArray);
+
+        return Inertia::render('User/Settings/Campaign', [
+            'settings' => $organizationConfig,
+        ]);
+    }
 }
