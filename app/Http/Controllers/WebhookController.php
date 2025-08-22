@@ -51,7 +51,11 @@ class WebhookController extends BaseController
     }
 
     public function whatsappWebhook(Request $request){
-        //Log::info($request);
+        
+        Log::channel('webhook')->info('Incoming webhook payload', [
+            'payload' => $request->all()
+        ]);
+
         $verifyToken = Setting::where('key', 'whatsapp_callback_token')->first()->value;
 
         $mode = $request->input('hub_mode');
@@ -67,7 +71,7 @@ class WebhookController extends BaseController
 
     public function handle(Request $request, $identifier = null)
     {
-        //Log::info('Webhook Handler: Start processing for identifier ' . $identifier);
+        Log::channel('webhook')->info('Webhook Handler: Start processing for identifier ' . $identifier);
         $organization = $this->getOrganizationByIdentifier($identifier);
 
         if (!$organization) {
@@ -147,7 +151,18 @@ class WebhookController extends BaseController
     {
         $res = $request->entry[0]['changes'][0];
 
-        //Log::info($request);
+        Log::channel('webhook')->info('handlePostRequest');
+        Log::channel('webhook')->info("Organization $organization->id");
+        try {
+            $decoded = json_decode($organization->metadata, true);
+            $isCoexistence = $decoded['is_coexistence'] ?? null;
+
+            Log::channel('webhook')->info('is_coexistence flag', [
+                'is_coexistence' => $isCoexistence
+            ]);
+        } catch (\Exception $e) {
+            
+        }
 
         if($res['field'] === 'messages'){
             $contacts = $res['value']['contacts'][0] ?? null;
@@ -298,7 +313,7 @@ class WebhookController extends BaseController
             }
         } 
         // NEW: Handle SMB Message Echoes for Coexistence Mode
-          else if($res['field'] === 'smb_message_echoes'){
+        else if($res['field'] === 'smb_message_echoes'){
                 $messageEchoes = $res['value']['message_echoes'] ?? null;
                 
                 Log::info('SMB Message Echoes received', ['echoes' => $messageEchoes, 'organization_id' => $organization->id]);
@@ -337,8 +352,8 @@ class WebhookController extends BaseController
                                     'email' => null,
                                     'phone' => $recipientPhone,
                                     'organization_id' => $organization->id,
-                                    'created_by' => 0, // System created from echo
-                                    'created_at' => $timestamp ? \Carbon\Carbon::parse($timestamp) : now(),
+                                    'created_by' => 0,
+                                    'created_at' => now(),
                                     'updated_at' => now(),
                                 ]);
                                 $isNewContact = true;
@@ -361,7 +376,7 @@ class WebhookController extends BaseController
                                 $chat->type = 'outbound'; // This is an outbound message from Business App
                                 $chat->metadata = json_encode($echo);
                                 $chat->status = 'sent'; // Message was sent via Business App
-                                $chat->created_at = $timestamp ? \Carbon\Carbon::parse($timestamp) : now();
+                                $chat->created_at = $timestamp ? \Carbon\Carbon::createFromTimestamp($timestamp) : now();
                                 $chat->save();
                                 
                                 // Handle media if present
@@ -397,7 +412,7 @@ class WebhookController extends BaseController
                                     'contact_id' => $contact->id,
                                     'entity_type' => 'chat',
                                     'entity_id' => $chat->id,
-                                    'created_at' => $timestamp ? \Carbon\Carbon::parse($timestamp) : now()
+                                    'created_at' => $timestamp ? \Carbon\Carbon::createFromTimestamp($timestamp) : now()
                                 ]);
                                 
                                 // Broadcast event for real-time updates
@@ -469,8 +484,8 @@ class WebhookController extends BaseController
                                         'email' => null,
                                         'phone' => $phone,
                                         'organization_id' => $organization->id,
-                                        'created_by' => 0, // System created from state sync
-                                        'created_at' => $timestamp ? \Carbon\Carbon::parse($timestamp) : now(),
+                                        'created_by' => 0,
+                                        'created_at' => now(),
                                         'updated_at' => now(),
                                     ]);
                                     
@@ -587,7 +602,7 @@ class WebhookController extends BaseController
                                     $chat->type = $isOutbound ? 'outbound' : 'inbound';
                                     $chat->metadata = json_encode($message);
                                     $chat->status = $status;
-                                    $chat->created_at = $timestamp ? \Carbon\Carbon::parse($timestamp) : now();
+                                    $chat->created_at = $timestamp ? \Carbon\Carbon::createFromTimestamp($timestamp) : now();
                                     $chat->save();
                                     
                                     // Create chat log
@@ -595,7 +610,7 @@ class WebhookController extends BaseController
                                         'contact_id' => $contact->id,
                                         'entity_type' => 'chat',
                                         'entity_id' => $chat->id,
-                                        'created_at' => $timestamp ? \Carbon\Carbon::parse($timestamp) : now()
+                                        'created_at' => $timestamp ? \Carbon\Carbon::createFromTimestamp($timestamp) : now()
                                     ]);
                                 }
                             }
@@ -616,7 +631,7 @@ class WebhookController extends BaseController
                 ], $organization->id);
             }
         }
-          else if($res['field'] === 'message_template_status_update'){
+        else if($res['field'] === 'message_template_status_update'){
             $response = $res['value'] ?? null;
             $template = Template::where('meta_id', $response['message_template_id'])->first();
 
@@ -624,7 +639,8 @@ class WebhookController extends BaseController
                 $template->status = $response['event'];
                 $template->save();
             }
-        } else if($res['field'] === 'account_review_update'){
+        } 
+        else if($res['field'] === 'account_review_update'){
             //Account Status
             $response = $res['value'] ?? null;
             $organizationConfig = Organization::where('id', $organization->id)->first();
@@ -635,7 +651,8 @@ class WebhookController extends BaseController
             $updatedMetadataJson = json_encode($metadataArray);
             $organizationConfig->metadata = $updatedMetadataJson;
             $organizationConfig->save();
-        } else if($res['field'] === 'phone_number_name_update'){
+        } 
+        else if($res['field'] === 'phone_number_name_update'){
             //Display Name
             $response = $res['value'] ?? null;
 
@@ -649,7 +666,8 @@ class WebhookController extends BaseController
                 $organizationConfig->metadata = $updatedMetadataJson;
                 $organizationConfig->save();
             }
-        } else if($res['field'] === 'phone_number_quality_update'){
+        } 
+        else if($res['field'] === 'phone_number_quality_update'){
             //messaging_tier_limit
             $response = $res['value'] ?? null;
             $organizationConfig = Organization::where('id', $organization->id)->first();
@@ -660,7 +678,8 @@ class WebhookController extends BaseController
             $updatedMetadataJson = json_encode($metadataArray);
             $organizationConfig->metadata = $updatedMetadataJson;
             $organizationConfig->save();
-        } else if($res['field'] === 'business_capability_update'){
+        } 
+        else if($res['field'] === 'business_capability_update'){
             //messaging_tier_limit
             $response = $res['value'] ?? null;
             $organizationConfig = Organization::where('id', $organization->id)->first();
