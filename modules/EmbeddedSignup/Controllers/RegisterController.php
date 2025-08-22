@@ -21,12 +21,23 @@ class RegisterController extends BaseController
     }
 
     public function handleSignup(Request $request){
+        
+        Log::info("Starting signup flow");
+
         $organizationId = session()->get('current_organization');
+
+        Log::info("Organization ID: {$organizationId}");
+
 
         // NEW: read coexistence + optionally exact ids from the UI
         $isCoexistence = (bool) $request->boolean('coexistence');
         $phoneNumberIdFromUI = $request->input('phone_number_id'); // may be null
         $wabaIdFromUI = $request->input('waba_id'); // may be null
+
+        Log::info("Coexistence: {$isCoexistence}");
+        Log::info("Phone number ID from UI: {$phoneNumberIdFromUI}");
+        Log::info("WABA ID from UI: {$wabaIdFromUI}");
+
 
         // 1) Exchange code for short-lived access token
         $accessTokenResponse = $this->getAccessToken($request->token);
@@ -136,35 +147,28 @@ class RegisterController extends BaseController
         // NEW: Additional setup for coexistence mode
         if ($isCoexistence) {
             // Set phone-level webhook for coexistence
-            $overridePhoneCallbackResponse = $this->overridePhoneCallbackUrl($accessToken, $phoneNumberId, $callbackUrl, $token);
+            /* $overridePhoneCallbackResponse = $this->overridePhoneCallbackUrl($accessToken, $phoneNumberId, $callbackUrl, $token);
             if (!$overridePhoneCallbackResponse->success) {
                 Log::warning('Failed to set phone-level webhook for coexistence', [
                     'phone_number_id' => $phoneNumberId,
                     'error' => $overridePhoneCallbackResponse->data->error->message ?? 'Unknown error'
                 ]);
-            }
+            } */
 
             // Request history sync for coexistence (optional, may fail if not enabled)
-            $historySync = $this->requestHistorySync($accessToken, $wabaId);
+            /* $historySync = $this->requestHistorySync($accessToken, $wabaId);
             if (!$historySync->success) {
                 Log::info('History sync request failed (may not be enabled)', [
                     'waba_id' => $wabaId,
                     'error' => $historySync->data->error->message ?? 'Unknown error'
                 ]);
-            }
+            } */
 
             // 🔹 Sync contacts
             $this->syncSmbAppData($accessToken, $phoneNumberId, "smb_app_state_sync");
 
             // 🔹 Sync message history
             $this->syncSmbAppData($accessToken, $phoneNumberId, "history");
-
-            // Verify coexistence setup
-            $coexistenceVerification = $this->verifyCoexistenceSetup($accessToken, $wabaId);
-            Log::info('Coexistence verification', [
-                'waba_id' => $wabaId,
-                'verification_data' => $coexistenceVerification
-            ]);
 
             // Verify webhook configurations after setup
             $this->verifyPhoneNumberConnection($accessToken, $phoneNumberId);
@@ -202,6 +206,7 @@ class RegisterController extends BaseController
         // 10) Sync templates (same for both)
         $this->syncTemplates($accessToken, $wabaId);
 
+        Log::info("\n----------End signup flow--------\n");
         return back()->with('status', [
             'type' => 'success',
             'message' => $isCoexistence
@@ -325,6 +330,8 @@ class RegisterController extends BaseController
     }
 
     public function getAccessToken($token){
+        Log::info("Getting access token");
+
         $settings = Setting::whereIn('key', ['whatsapp_client_id', 'whatsapp_client_secret'])->pluck('value', 'key');
         $clientId = $settings->get('whatsapp_client_id', null);
         $clientSecret = $settings->get('whatsapp_client_secret', null);
@@ -355,13 +362,15 @@ class RegisterController extends BaseController
             $responseObject->data = new \stdClass();
             $responseObject->data->error = new \stdClass();
             $responseObject->data->error->message = $response->body();
-            Log::info($response->body());
+            Log::error($response->body());
         }
 
         return $responseObject;
     }
 
     public function debugToken($token){
+        Log::info("Getting debug token");
+
         $accessToken = Setting::where('key', 'whatsapp_access_token')->value('value');
         $responseObject = new \stdClass();
 
@@ -405,13 +414,15 @@ class RegisterController extends BaseController
             $responseObject->data = new \stdClass();
             $responseObject->data->error = new \stdClass();
             $responseObject->data->error->message = $response->body();
-            Log::info($response->body());
+            Log::error($response->body());
         }
 
         return $responseObject;
     }
 
     public function getPhoneNumberId($accessToken, $wabaId){
+        Log::info("Getting phone number ID");
+
         $responseObject = new \stdClass();
 
         $fields = 'display_phone_number,certificate,name_status,new_certificate,new_name_status,verified_name,quality_rating,messaging_limit_tier';
@@ -439,13 +450,15 @@ class RegisterController extends BaseController
             $responseObject->data = new \stdClass();
             $responseObject->data->error = new \stdClass();
             $responseObject->data->error->message = $response->body();
-            Log::info($response->body());
+            Log::error($response->body());
         }
 
         return $responseObject;
     }
 
     public function getPhoneNumberStatus($accessToken, $phoneNumberId){
+        Log::info("Getting phone number status");
+
         $responseObject = new \stdClass();
 
         $response = Http::withHeaders([
@@ -472,13 +485,15 @@ class RegisterController extends BaseController
             $responseObject->data = new \stdClass();
             $responseObject->data->error = new \stdClass();
             $responseObject->data->error->message = $response->body();
-            Log::info($response->body());
+            Log::error($response->body());
         }
 
         return $responseObject;
     }
 
     public function getAccountReviewStatus($accessToken, $wabaId){
+        Log::info("Getting account review status");
+
         $responseObject = new \stdClass();
 
         $response = Http::withHeaders([
@@ -505,13 +520,15 @@ class RegisterController extends BaseController
             $responseObject->data = new \stdClass();
             $responseObject->data->error = new \stdClass();
             $responseObject->data->error->message = $response->body();
-            Log::info($response->body());
+            Log::error($response->body());
         }
 
         return $responseObject;
     }
 
     public function getBusinessProfile($accessToken, $phoneNumberId){
+        Log::info("Getting business profile");
+
         $responseObject = new \stdClass();
 
         $response = Http::withHeaders([
@@ -538,14 +555,15 @@ class RegisterController extends BaseController
             $responseObject->data = new \stdClass();
             $responseObject->data->error = new \stdClass();
             $responseObject->data->error->message = $response->body();
-            Log::info($response->body());
+            Log::error($response->body());
         }
 
         return $responseObject;
     }
 
-    function subscribeToWaba($accessToken, $wabaId)
-    {
+    function subscribeToWaba($accessToken, $wabaId){
+        Log::info("Subscribing to WABA");
+
         $responseObject = new \stdClass();
 
         $response = Http::withHeaders([
@@ -568,8 +586,9 @@ class RegisterController extends BaseController
         return $responseObject;
     }
 
-    function getWabaSubscriptions($accessToken, $wabaId)
-    {
+    function getWabaSubscriptions($accessToken, $wabaId){
+        Log::info("Getting WABA subscriptions");
+
         $responseObject = new \stdClass();
 
         $response = Http::withHeaders([
@@ -592,8 +611,9 @@ class RegisterController extends BaseController
         return $responseObject;
     }
 
-    public function overrideWabaCallbackUrl($accessToken, $wabaId, $callbackUrl, $verifyToken)
-    {
+    public function overrideWabaCallbackUrl($accessToken, $wabaId, $callbackUrl, $verifyToken){
+        Log::info("Overriding WABA callback URL");
+
         $responseObject = new \stdClass();
 
         $response = Http::withHeaders([
@@ -613,14 +633,15 @@ class RegisterController extends BaseController
             $responseObject->data = new \stdClass();
             $responseObject->data->error = new \stdClass();
             $responseObject->data->error->message = $response->body();
-            Log::info($response->body());
+            Log::error($response->body());
         }
 
         return $responseObject;
     }
 
-    function overridePhoneCallbackUrl($accessToken, $phoneId, $callbackUrl, $verifyToken)
-    {
+    function overridePhoneCallbackUrl($accessToken, $phoneId, $callbackUrl, $verifyToken){
+        Log::info("Overriding phone callback URL");
+
         $responseObject = new \stdClass();
 
         $response = Http::withHeaders([
@@ -642,14 +663,15 @@ class RegisterController extends BaseController
             $responseObject->data = new \stdClass();
             $responseObject->data->error = new \stdClass();
             $responseObject->data->error->message = $response->body();
-            Log::info($response->body());
+            Log::error($response->body());
         }
 
         return $responseObject;
     }
 
-    function unSubscribeToWaba($accessToken, $wabaId)
-    {
+    function unSubscribeToWaba($accessToken, $wabaId){
+        Log::info("Unsubscribing from WABA");
+
         $responseObject = new \stdClass();
 
         $response = Http::withHeaders([
@@ -666,14 +688,15 @@ class RegisterController extends BaseController
             $responseObject->data = new \stdClass();
             $responseObject->data->error = new \stdClass();
             $responseObject->data->error->message = $response->body();
-            Log::info($response->body());
+            Log::error($response->body());
         }
 
         return $responseObject;
     }
 
-    function registerNumber($accessToken, $phoneNumberID)
-    {
+    function registerNumber($accessToken, $phoneNumberID){
+        Log::info("Registering number");
+
         $responseObject = new \stdClass();
 
         $response = Http::withHeaders([
@@ -693,14 +716,15 @@ class RegisterController extends BaseController
             $responseObject->data = new \stdClass();
             $responseObject->data->error = new \stdClass();
             $responseObject->data->error->message = $response->body();
-            Log::info($response->body());
+            Log::error($response->body());
         }
 
         return $responseObject;
     }
 
-    function syncTemplates($accessToken, $wabaId)
-    {
+    function syncTemplates($accessToken, $wabaId){
+        Log::info("Syncing templates");
+
         $responseObject = new \stdClass();
 
         try {
@@ -753,8 +777,9 @@ class RegisterController extends BaseController
         return $responseObject;
     }
 
-    public function getPhoneNumberById($accessToken, $phoneNumberId)
-    {
+    public function getPhoneNumberById($accessToken, $phoneNumberId){
+        Log::info("Getting phone number by ID");
+
         $responseObject = new \stdClass();
 
         $fields = 'display_phone_number,certificate,name_status,new_certificate,new_name_status,verified_name,quality_rating,messaging_limit_tier';
@@ -786,7 +811,7 @@ class RegisterController extends BaseController
                     'message' => $response->body()
                 ]
             ];
-            Log::info($response->body());
+            Log::error($response->body());
         }
 
         return $responseObject;
@@ -799,8 +824,10 @@ class RegisterController extends BaseController
      * @param string $phoneNumberId
      * @param string $type - "smb_app_state_sync" | "history"
      */
-    private function syncSmbAppData($accessToken, $phoneNumberId, $type)
-    {
+    private function syncSmbAppData($accessToken, $phoneNumberId, $type){
+        
+        Log::info("Syncing SMB app data [{$type}] for Phone ID: {$phoneNumberId}");
+
         $url = "https://graph.facebook.com/{$this->apiVersion}/{$phoneNumberId}/smb_app_data";
         $params = [
             "messaging_product" => "whatsapp",
