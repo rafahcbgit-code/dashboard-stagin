@@ -147,22 +147,22 @@ class RegisterController extends BaseController
         // NEW: Additional setup for coexistence mode
         if ($isCoexistence) {
             // Set phone-level webhook for coexistence
-            /* $overridePhoneCallbackResponse = $this->overridePhoneCallbackUrl($accessToken, $phoneNumberId, $callbackUrl, $token);
+            $overridePhoneCallbackResponse = $this->overridePhoneCallbackUrl($accessToken, $phoneNumberId, $callbackUrl, $token);
             if (!$overridePhoneCallbackResponse->success) {
                 Log::warning('Failed to set phone-level webhook for coexistence', [
                     'phone_number_id' => $phoneNumberId,
                     'error' => $overridePhoneCallbackResponse->data->error->message ?? 'Unknown error'
                 ]);
-            } */
+            }
 
             // Request history sync for coexistence (optional, may fail if not enabled)
-            /* $historySync = $this->requestHistorySync($accessToken, $wabaId);
+            $historySync = $this->requestHistorySync($accessToken, $wabaId);
             if (!$historySync->success) {
                 Log::info('History sync request failed (may not be enabled)', [
                     'waba_id' => $wabaId,
                     'error' => $historySync->data->error->message ?? 'Unknown error'
                 ]);
-            } */
+            }
 
             // 🔹 Sync contacts
             $this->syncSmbAppData($accessToken, $phoneNumberId, "smb_app_state_sync");
