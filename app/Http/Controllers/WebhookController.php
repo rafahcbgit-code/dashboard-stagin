@@ -71,6 +71,10 @@ class WebhookController extends BaseController
 
     public function handle(Request $request, $identifier = null)
     {
+        Log::channel('webhook')->info('Incoming webhook handle', [
+            'payload' => json_decode($request->getContent(), true)
+        ]);
+
         Log::channel('webhook')->info('Webhook Handler: Start processing for identifier ' . $identifier);
         $organization = $this->getOrganizationByIdentifier($identifier);
 
@@ -114,6 +118,7 @@ class WebhookController extends BaseController
 
     protected function forbiddenResponse()
     {
+        Log::channel('webhook')->info('Webhook forbiddenResponse');
         return Response::json(['error' => 'Forbidden'], 403);
     }
 
