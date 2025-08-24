@@ -181,6 +181,49 @@
                         </div>
                     </div>
 
+                    <div v-if="settings?.whatsapp && settings?.whatsapp?.is_coexistence === 1" 
+                        class="bg-white border border-slate-200 rounded-lg py-2 text-sm mb-4"
+                    >
+                    <div class="flex items-center px-4 pt-2 pb-4">
+                        <div class="w-[60%]">
+                        <!-- optional description area -->
+                        </div>
+                        
+                        <div class="w-[40%] ml-auto space-x-2 flex justify-end">
+                            <!-- Sync Contacts -->
+                            <div 
+                                @click="updateCoExistenceSync({ 'sync_contacts': sync_contacts === 1 ? 0 : 1 })"
+                                    class="w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-300"
+                                    :class="sync_contacts === 1 ? 'bg-green-500' : 'bg-gray-300'"
+                                >
+                                <div
+                                    class="bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out"
+                                    :class="sync_contacts === 1 ? 'translate-x-6' : 'translate-x-0'"
+                                ></div>
+                            </div>
+                            <span class="ml-2 text-sm">
+                            {{ $t('Sync Contacts') }}
+                            </span>
+
+
+                            <!-- Sync History -->
+                            <div 
+                            @click="updateCoExistenceSync({ 'sync_history': sync_history === 1 ? 0 : 1 })"
+                            class="w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-300"
+                            :class="sync_history === 1 ? 'bg-green-500' : 'bg-gray-300'"
+                            >
+                            <div
+                                class="bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out"
+                                :class="sync_history === 1 ? 'translate-x-6' : 'translate-x-0'"
+                            ></div>
+                            </div>
+                            <span class="ml-2 text-sm">
+                            {{ $t('Sync History') }}
+                            </span>
+                        </div>
+                    </div>
+                    </div>
+
                     <div v-if="settings?.whatsapp" class="bg-white border border-slate-200 rounded-lg py-2 text-sm mb-20">
                         <div class="flex items-center px-4 pt-2 pb-4">
                             <div class="w-[60%]">
@@ -194,6 +237,7 @@
                             </div>
                         </div>
                     </div>
+                    
                 </div>
             </div>
         </div>
@@ -305,6 +349,9 @@
         { label: 'Other', value: 'OTHER' },
     ]
 
+    const sync_contacts = ref(settings?.value?.sync_contacts ? 1 : 0);
+    const sync_history = ref(settings?.value?.sync_history ? 1 : 0);
+
     function openModal() {
         isOpenFormModal.value = true;
     }
@@ -373,5 +420,27 @@
                 });
             },
         })
+    }
+
+    function updateCoExistenceSync(payload) {
+        if(payload.hasOwnProperty('sync_contacts')) {
+            console.log(payload, sync_contacts.value);
+            sync_contacts.value = sync_contacts.value ? 0 : 1;
+            console.log(payload, sync_contacts.value);
+        }
+        if(payload.hasOwnProperty('sync_history')) {
+            sync_history.value = sync_history.value ? 0 : 1;
+        }
+        router.post(`/settings/whatsapp/update-coexistence`, payload, {
+            preserveScroll: true,
+            onSuccess: () => {
+            console.log('Sync settings updated:', payload)
+            },
+            onError: (errors) => {
+            console.error('Failed to update:', errors)
+            }
+        })
+
+        
     }
 </script>

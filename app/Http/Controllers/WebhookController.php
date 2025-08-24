@@ -52,9 +52,9 @@ class WebhookController extends BaseController
 
     public function whatsappWebhook(Request $request){
         
-        Log::channel('webhook')->info('Incoming webhook payload', [
+        /* Log::channel('webhook')->info('Incoming webhook payload', [
             'payload' => $request->all()
-        ]);
+        ]); */
 
         $verifyToken = Setting::where('key', 'whatsapp_callback_token')->first()->value;
 
@@ -71,11 +71,6 @@ class WebhookController extends BaseController
 
     public function handle(Request $request, $identifier = null)
     {
-        Log::channel('webhook')->info('Incoming webhook handle', [
-            'payload' => json_decode($request->getContent(), true)
-        ]);
-
-        Log::channel('webhook')->info('Webhook Handler: Start processing for identifier ' . $identifier);
         $organization = $this->getOrganizationByIdentifier($identifier);
 
         if (!$organization) {
@@ -118,7 +113,6 @@ class WebhookController extends BaseController
 
     protected function forbiddenResponse()
     {
-        Log::channel('webhook')->info('Webhook forbiddenResponse');
         return Response::json(['error' => 'Forbidden'], 403);
     }
 
@@ -156,18 +150,7 @@ class WebhookController extends BaseController
     {
         $res = $request->entry[0]['changes'][0];
 
-        Log::channel('webhook')->info('handlePostRequest');
-        Log::channel('webhook')->info("Organization $organization->id");
-        try {
-            $decoded = json_decode($organization->metadata, true);
-            $isCoexistence = $decoded['is_coexistence'] ?? null;
-
-            Log::channel('webhook')->info('is_coexistence flag', [
-                'is_coexistence' => $isCoexistence
-            ]);
-        } catch (\Exception $e) {
-            
-        }
+        
 
         if($res['field'] === 'messages'){
             $contacts = $res['value']['contacts'][0] ?? null;
@@ -450,6 +433,16 @@ class WebhookController extends BaseController
         // NEW: Handle SMB App State Sync for Coexistence Mode
         else if($res['field'] === 'smb_app_state_sync'){
             $stateSync = $res['value']['state_sync'] ?? null;
+
+            try {
+                $decoded = json_decode($organization->metadata, true);
+                if($decoded['sync_contacts'] == 0){
+                    return Response::json(['status' => 'success'], 200);
+                }
+
+            } catch (\Exception $e) {
+            
+            }
             
             if($stateSync && is_array($stateSync)) {
                 foreach($stateSync as $syncItem) {
@@ -534,6 +527,17 @@ class WebhookController extends BaseController
         }
         // NEW: Handle History Webhook for Coexistence Mode
         else if($res['field'] === 'history'){
+
+            try {
+                $decoded = json_decode($organization->metadata, true);
+                if($decoded['sync_history'] == 0){
+                    return Response::json(['status' => 'success'], 200);
+                }
+
+            } catch (\Exception $e) {
+            
+            }
+
             $history = $res['value']['history'] ?? null;
             
             

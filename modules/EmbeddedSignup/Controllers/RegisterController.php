@@ -179,6 +179,8 @@ class RegisterController extends BaseController
         $metadataArray = $organizationConfig->metadata ? json_decode($organizationConfig->metadata, true) : [];
         $metadataArray['whatsapp']['is_embedded_signup'] = 1; // keep your existing marker
         $metadataArray['whatsapp']['is_coexistence'] = $isCoexistence ? 1 : 0; // NEW
+        $metadataArray['whatsapp']['sync_contacts'] = 1;
+        $metadataArray['whatsapp']['sync_history'] = 1;
         $metadataArray['whatsapp']['access_token'] = $accessToken;
         $metadataArray['whatsapp']['app_id'] = $debugTokenResponse->data->app_id;
         $metadataArray['whatsapp']['waba_id'] = $wabaId;

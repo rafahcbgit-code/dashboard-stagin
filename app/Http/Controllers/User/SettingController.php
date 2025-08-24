@@ -442,4 +442,47 @@ class SettingController extends BaseController
 
         return null;
     }
+
+    public function updateWhatsappForCoExistence(Request $request){
+        
+        $request->validate([
+            'sync_history'  => 'nullable|in:0,1',
+            'sync_contacts' => 'nullable|in:0,1',
+        ]);
+
+        // Ensure at least one field exists
+        if (!$request->has('sync_history') && !$request->has('sync_contacts')) {
+            return back()->withErrors([
+                'sync_settings' => 'At least one of sync_history or sync_contacts is required.'
+            ])->withInput();
+        }
+
+
+        $organizationId = session()->get('current_organization');
+        $organizationConfig = Organization::findOrFail($organizationId);
+
+        // decode metadata JSON or start with empty array
+        $metadataArray = $organizationConfig->metadata
+            ? json_decode($organizationConfig->metadata, true)
+            : [];
+
+        // Update only provided fields
+        if ($request->has('sync_history')) {
+            $metadataArray['sync_history'] = (int) $request->input('sync_history');
+        }
+
+        if ($request->has('sync_contacts')) {
+            $metadataArray['sync_contacts'] = (int) $request->input('sync_contacts');
+        }
+
+        // Save updated metadata
+        $organizationConfig->metadata = json_encode($metadataArray);
+        $organizationConfig->save();
+
+        return back()->with([
+            'type'    => 'success',
+            'message' => 'Sync settings updated successfully.',
+        ]);
+        
+    }
 }
