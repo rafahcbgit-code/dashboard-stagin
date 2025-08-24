@@ -50,6 +50,22 @@
                                 <span>{{ $t('Plugins') }}</span>
                             </Link>
                         </li>
+
+
+
+                        <li v-if="moduleActive('AI Assistant') || moduleActive('Flow builder')" 
+    class="hover:bg-slate-50 hover:text-black rounded-[5px] px-1 truncate cursor-pointer" 
+    :class="$page.url.startsWith('/settings/campaign') ? 'bg-slate-50 text-black' : ''">
+    <Link rel="noopener noreferrer" href="/settings/campaign" class="flex items-center p-2 space-s-3 rounded-md">
+        <!-- Speaker with X Icon -->
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
+            <path d="M3 9v6h4l5 5V4L7 9H3z"/>
+            <line x1="16" y1="8" x2="22" y2="14" stroke="currentColor" stroke-width="2"/>
+            <line x1="22" y1="8" x2="16" y2="14" stroke="currentColor" stroke-width="2"/>
+        </svg>
+        <span>{{ $t('Campaign Settings') }}</span>
+    </Link>
+</li>
                     </ul>
                 </div>
 
@@ -64,7 +80,7 @@
     import AppLayout from "./../Layout/App.vue";
     import { Link } from "@inertiajs/vue3";
 
-    const props = defineProps(['modules']);
+    const props = defineProps(['settings','modules']);
 
     const moduleActive = (moduleName) => {
         const module = props.modules.find((mod) => mod.name === moduleName);

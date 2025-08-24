@@ -37,6 +37,7 @@ class StoreContact extends FormRequest
                 new UniquePhone($this->organization, $uuid),
             ],
             'email' => 'nullable|email|max:255',
+            'is_subscribed' => 'required|in:0,1',
         ];
 
         if ($this->isMethod('post')) {

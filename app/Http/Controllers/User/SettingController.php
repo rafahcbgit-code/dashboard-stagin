@@ -38,6 +38,19 @@ class SettingController extends BaseController
             $contactModel = new Contact;
             $data['contactGroups'] = $contactModel->getAllContactGroups($organizationId);
 
+           /*  $metadata = $data['settings']->metadata 
+            ? json_decode($data['settings']->metadata, true) 
+            : [];
+        if (!isset($metadata['campaign_settings'])) {
+            $metadata['campaign_settings'] = [];
+        }
+
+        if (!isset($metadata['campaign_settings']['unsubscribe_trigger'])) {
+            $metadata['campaign_settings']['unsubscribe_trigger'] = 'stop';
+        }
+        $data['settings']->metadata = json_encode($metadata, JSON_UNESCAPED_UNICODE);
+        $data['settings']->save();*/
+
             return Inertia::render('User/Settings/General', $data);
         }
     }
@@ -125,41 +138,53 @@ class SettingController extends BaseController
             $config['whatsapp']['waba_id'] ?? null
         );
     }
+  
+public function campaign(Request $request)
+{
+    $currentOrganizationId = session()->get('current_organization');
+    $organizationConfig = Organization::findOrFail($currentOrganizationId);
 
-    public function contacts(Request $request){
-        if ($request->isMethod('get')) {
-            $contactFieldService = new ContactFieldService(session()->get('current_organization'));
-            $settings = Organization::where('id', session()->get('current_organization'))->first();
+    // Decode metadata or set as empty array
+    $metadataArray = $organizationConfig->metadata
+        ? json_decode($organizationConfig->metadata, true)
+        : [];
 
-            return Inertia::render('User/Settings/Contact', [
-                'title' => __('Settings'),
-                'filters' => $request->all(),
-                'rows' => $contactFieldService->get($request),
-                'settings' => $settings,
-                'modules' => Addon::get(),
-            ]);
-        } else if($request->isMethod('post')) {
-            $currentOrganizationId = session()->get('current_organization');
-            $organizationConfig = Organization::where('id', $currentOrganizationId)->first();
-    
-            $metadataArray = $organizationConfig->metadata ? json_decode($organizationConfig->metadata, true) : [];
-
-            $metadataArray['contacts']['location'] = $request->location;
-
-            $updatedMetadataJson = json_encode($metadataArray);
-
-            $organizationConfig->metadata = $updatedMetadataJson;
-            $organizationConfig->save();
-
-            return back()->with(
-                'status', [
-                    'type' => 'success', 
-                    'message' => __('Settings updated successfully')
-                ]
-            );
-        }
+    // Ensure campaign_settings key exists
+    if (!isset($metadataArray['campaign_settings'])) {
+        $metadataArray['campaign_settings'] = [];
     }
 
+    // Handle POST request (save settings)
+    if ($request->isMethod('post')) {
+        $input = $request->input('unsubscribe_trigger', 'stop');
+
+        // Normalize words (remove spaces around commas)
+        $words = preg_replace('/\s*,\s*/', ',', trim($input));
+        $metadataArray['campaign_settings']['unsubscribe_trigger'] = $words;
+
+        $organizationConfig->metadata = json_encode($metadataArray);
+        $organizationConfig->save();
+
+        return back()->with(
+            'status', [
+                'type' => 'success',
+                'message' => __('Campaign settings updated successfully'),
+            ]
+        );
+    }
+
+    // Ensure unsubscribe_trigger has a default value
+    if (!isset($metadataArray['campaign_settings']['unsubscribe_trigger'])) {
+        $metadataArray['campaign_settings']['unsubscribe_trigger'] = 'stop';
+    }
+
+    $organizationConfig->metadata = json_encode($metadataArray);
+
+    return Inertia::render('User/Settings/Campaign', [
+        'settings' => $organizationConfig,
+        'modules'  => Addon::get(), 
+    ]);
+}
     public function tickets(Request $request){
         if ($request->isMethod('get')) {
             $contactFieldService = new ContactFieldService(session()->get('current_organization'));

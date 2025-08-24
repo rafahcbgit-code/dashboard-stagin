@@ -18,6 +18,7 @@ use App\Resolvers\PaymentPlatformResolver;
 use App\Services\AutoReplyService;
 use App\Services\ChatService;
 use App\Services\PhoneService;
+use App\Services\UnsubscribeChecker;
 use App\Services\StripeService;
 use App\Services\SubscriptionService;
 use GuzzleHttp\Client;
@@ -35,7 +36,7 @@ class WebhookController extends BaseController
 {
     protected $paymentPlatformResolver;
 
-    public function __construct()
+    public function __construct(private UnsubscribeChecker $checker)
     {
         $this->paymentPlatformResolver = new PaymentPlatformResolver();
 
@@ -198,6 +199,10 @@ class WebhookController extends BaseController
                         //Check if contact exists in organization
                         $contact = Contact::where('organization_id', $organization->id)->where('phone', $phone)->whereNull('deleted_at')->first();
                         $isNewContact = false;
+
+                        //call to check the unsunscribe triggre keyword
+                        $messageText = $res['value']['messages'][0]['text']['body'];
+                        $this->checker->check($organization, $messageText);
 
                         if(!$contact){
                             //Create a contact
