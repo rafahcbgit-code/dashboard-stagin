@@ -13,6 +13,7 @@
                             </div>
                             <div class="ml-auto">
                                 <EmbeddedSignupBtn v-if="embeddedSignupActive == 1" :appId="props.appId" :configId="props.configId" :graphAPIVersion="props.graphAPIVersion"/>
+                                <CoExistacneSignupBtn v-if="embeddedSignupActive == 1" :appId="props.appId" :configId="props.configId" :graphAPIVersion="props.graphAPIVersion"/>
                                 <button v-else  @click="openModal()" class="bg-primary text-white p-2 rounded-lg text-sm mt-5 flex px-3 w-fit">
                                     {{ $t('Setup whatsapp') }}
                                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20"><g fill="currentColor" fill-rule="evenodd" clip-rule="evenodd"><g opacity=".2"><path d="M12.206 5.848a1.5 1.5 0 0 1 2.113.192l3.333 4a1.5 1.5 0 1 1-2.304 1.92l-3.334-4a1.5 1.5 0 0 1 .192-2.112Z"/><path d="M12.206 16.152a1.5 1.5 0 0 1-.192-2.112l3.334-4a1.5 1.5 0 0 1 2.304 1.92l-3.333 4a1.5 1.5 0 0 1-2.113.192Z"/><path d="M16 11a1.5 1.5 0 0 1-1.5 1.5h-8a1.5 1.5 0 0 1 0-3h8A1.5 1.5 0 0 1 16 11Z"/></g><path d="M11.347 5.616a.5.5 0 0 1 .704.064l3.333 4a.5.5 0 0 1-.768.64l-3.333-4a.5.5 0 0 1 .064-.704Z"/><path d="M11.347 14.384a.5.5 0 0 1-.064-.704l3.333-4a.5.5 0 0 1 .768.64l-3.333 4a.5.5 0 0 1-.704.064Z"/><path d="M15.5 10a.5.5 0 0 1-.5.5H5a.5.5 0 0 1 0-1h20a.5.5 0 0 1 .5.5Z"/></g></svg>
@@ -180,6 +181,49 @@
                         </div>
                     </div>
 
+                    <div v-if="settings?.whatsapp && settings?.whatsapp?.is_coexistence === 1" 
+                        class="bg-white border border-slate-200 rounded-lg py-2 text-sm mb-4"
+                    >
+                    <div class="flex items-center px-4 pt-2 pb-4">
+                        <div class="w-[60%]">
+                        <!-- optional description area -->
+                        </div>
+                        
+                        <div class="w-[40%] ml-auto space-x-2 flex justify-end">
+                            <!-- Sync Contacts -->
+                            <div 
+                                @click="updateCoExistenceSync({ 'sync_contacts': sync_contacts === 1 ? 0 : 1 })"
+                                    class="w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-300"
+                                    :class="sync_contacts === 1 ? 'bg-green-500' : 'bg-gray-300'"
+                                >
+                                <div
+                                    class="bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out"
+                                    :class="sync_contacts === 1 ? 'translate-x-6' : 'translate-x-0'"
+                                ></div>
+                            </div>
+                            <span class="ml-2 text-sm">
+                            {{ $t('Sync Contacts') }}
+                            </span>
+
+
+                            <!-- Sync History -->
+                            <div 
+                            @click="updateCoExistenceSync({ 'sync_history': sync_history === 1 ? 0 : 1 })"
+                            class="w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-300"
+                            :class="sync_history === 1 ? 'bg-green-500' : 'bg-gray-300'"
+                            >
+                            <div
+                                class="bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out"
+                                :class="sync_history === 1 ? 'translate-x-6' : 'translate-x-0'"
+                            ></div>
+                            </div>
+                            <span class="ml-2 text-sm">
+                            {{ $t('Sync History') }}
+                            </span>
+                        </div>
+                    </div>
+                    </div>
+
                     <div v-if="settings?.whatsapp" class="bg-white border border-slate-200 rounded-lg py-2 text-sm mb-20">
                         <div class="flex items-center px-4 pt-2 pb-4">
                             <div class="w-[60%]">
@@ -193,6 +237,7 @@
                             </div>
                         </div>
                     </div>
+                    
                 </div>
             </div>
         </div>
@@ -244,6 +289,7 @@
     import SettingLayout from "./Layout.vue";
     import { ref } from 'vue';
     import EmbeddedSignupBtn from '@/Components/EmbeddedSignupBtn.vue';
+    import CoExistacneSignupBtn from "../../../Components/CoExistacneSignupBtn.vue";
     import FormModal from '@/Components/FormModal.vue';
     import FormImageLogo from '@/Components/FormImageLogo.vue';
     import FormInput from '@/Components/FormInput.vue';
@@ -302,6 +348,9 @@
         { label: 'Undefined', value: 'UNDEFINED' },
         { label: 'Other', value: 'OTHER' },
     ]
+
+    const sync_contacts = ref(settings?.value?.sync_contacts ? 1 : 0);
+    const sync_history = ref(settings?.value?.sync_history ? 1 : 0);
 
     function openModal() {
         isOpenFormModal.value = true;
@@ -371,5 +420,27 @@
                 });
             },
         })
+    }
+
+    function updateCoExistenceSync(payload) {
+        if(payload.hasOwnProperty('sync_contacts')) {
+            console.log(payload, sync_contacts.value);
+            sync_contacts.value = sync_contacts.value ? 0 : 1;
+            console.log(payload, sync_contacts.value);
+        }
+        if(payload.hasOwnProperty('sync_history')) {
+            sync_history.value = sync_history.value ? 0 : 1;
+        }
+        router.post(`/settings/whatsapp/update-coexistence`, payload, {
+            preserveScroll: true,
+            onSuccess: () => {
+            console.log('Sync settings updated:', payload)
+            },
+            onError: (errors) => {
+            console.error('Failed to update:', errors)
+            }
+        })
+
+        
     }
 </script>
