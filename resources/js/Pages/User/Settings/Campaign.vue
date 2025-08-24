@@ -1,5 +1,5 @@
 <template>
-  <!-- <SettingLayout :modules="props.modules"> -->
+  <SettingLayout :modules="modules">
     <!-- Card -->
     <div class="bg-white border border-slate-200 rounded-lg py-2 text-sm mb-6 px-4">
       <div class="pt-2 pb-4">
@@ -47,7 +47,7 @@
         </button>
       </div>
     </div>
-  <!-- </SettingLayout> -->
+  </SettingLayout>
 </template>
 
 <script setup>
@@ -62,13 +62,6 @@ const settings = props.settings?.metadata ? JSON.parse(props.settings.metadata) 
 const form = useForm({
   unsubscribe_trigger: settings?.campaign_settings?.unsubscribe_trigger ?? 'stop'
 });
-
-const moduleActive = (moduleName) => {
-    if (!Array.isArray(props.modules)) return false;
-
-    const module = props.modules.find((mod) => mod.name === moduleName);
-    return module && module.status === 1;
-};
 
 const submitForm = () => {
   form.post('/settings/campaign', {
