@@ -21,6 +21,7 @@ use Validator;
 
 class SettingController extends BaseController
 {
+    protected $contactFieldService;
     public function __construct(ContactFieldService $contactFieldService)
     {
         $this->contactFieldService = $contactFieldService;
@@ -466,6 +467,40 @@ public function campaign(Request $request)
         }
 
         return null;
+    }
+
+   public function contacts(Request $request){
+        if ($request->isMethod('get')) {
+            $contactFieldService = new ContactFieldService(session()->get('current_organization'));
+            $settings = Organization::where('id', session()->get('current_organization'))->first();
+
+            return Inertia::render('User/Settings/Contact', [
+                'title' => __('Settings'),
+                'filters' => $request->all(),
+                'rows' => $contactFieldService->get($request),
+                'settings' => $settings,
+                'modules' => Addon::get(),
+            ]);
+        } else if($request->isMethod('post')) {
+            $currentOrganizationId = session()->get('current_organization');
+            $organizationConfig = Organization::where('id', $currentOrganizationId)->first();
+    
+            $metadataArray = $organizationConfig->metadata ? json_decode($organizationConfig->metadata, true) : [];
+
+            $metadataArray['contacts']['location'] = $request->location;
+
+            $updatedMetadataJson = json_encode($metadataArray);
+
+            $organizationConfig->metadata = $updatedMetadataJson;
+            $organizationConfig->save();
+
+            return back()->with(
+                'status', [
+                    'type' => 'success', 
+                    'message' => __('Settings updated successfully')
+                ]
+            );
+        }
     }
 
     public function updateWhatsappForCoExistence(Request $request){
