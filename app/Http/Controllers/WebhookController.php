@@ -30,14 +30,17 @@ use Illuminate\Support\Facades\Response;
 use Illuminate\Support\Facades\Storage;
 use Propaganistas\LaravelPhone\PhoneNumber;
 use Str;
+use App\Services\UnsubscribeChecker;
 
 class WebhookController extends BaseController
 {
     protected $paymentPlatformResolver;
+    protected $checker;
 
     public function __construct()
     {
         $this->paymentPlatformResolver = new PaymentPlatformResolver();
+        $this->checker = new UnsubscribeChecker();
 
         Config::set('broadcasting.connections.pusher', [
             'driver' => 'pusher',
@@ -227,6 +230,10 @@ class WebhookController extends BaseController
                                     'first_name' => $contactData['name'],
                                 ]);
                             }
+  
+                            //call check to comapre between message and triggers
+                            //The addition was made here to ensure that the contact exists
+                            $this->checker->check($organization, $messageText, $contact->id);
 
                             $chat = Chat::where('wam_id', $response['id'])->where('organization_id', $organization->id)->first();
 
