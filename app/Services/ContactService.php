@@ -25,7 +25,6 @@ class ContactService
         $contact->first_name = $request->first_name;
         $contact->last_name = $request->last_name;
         $contact->email = $request->email;
-        $contact->is_subscribed = $request->is_subscribed;
 
         $contact->phone = PhoneService::getE164Format($request->phone);
 
@@ -78,6 +77,26 @@ class ContactService
 
         // Trigger webhook
         WebhookHelper::triggerWebhookEvent($uuid === null ? 'contact.created' : 'contact.updated', $cleanContact, $this->organizationId);
+
+        return $contact;
+    }
+
+    //A new method was added because the store method requires sending all fields, whereas here only a single field is being updated
+    
+    public function updatePartial($uuid, array $data)
+    {
+        $contact = Contact::where('id', $uuid)->firstOrFail();
+
+        foreach ($data as $field => $value) {
+            if ($field === 'phone') {
+                $contact->phone = PhoneService::getE164Format($value);
+            } else {
+                $contact->{$field} = $value;
+            }
+        }
+
+        $contact->updated_at = now();
+        $contact->save();
 
         return $contact;
     }
