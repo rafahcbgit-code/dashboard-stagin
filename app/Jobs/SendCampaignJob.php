@@ -91,10 +91,12 @@ class SendCampaignJob implements ShouldQueue
     protected function getContactsForCampaign(Campaign $campaign)
     {
         if (empty($campaign->contact_group_id) || $campaign->contact_group_id === '0') {
-           return Contact::where('organization_id', $campaign->organization_id)
+           $contacts = Contact::where('organization_id', $campaign->organization_id)
             ->whereNull('deleted_at')
             ->where('is_subscribed', 1)
             ->get();
+            Log::info("contacts", $contacts->toArray());
+            return $contacts;
         }
 
         return Contact::whereHas('contactGroups', function ($query) use ($campaign) {
