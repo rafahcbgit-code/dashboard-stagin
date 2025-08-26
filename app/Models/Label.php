@@ -21,4 +21,9 @@ class Label extends Model {
     {
         return $this->belongsTo(Organization::class);
     }
+
+    public function contacts()
+    {
+        return $this->belongsToMany(Contact::class, 'contact_label');
+    }
 }

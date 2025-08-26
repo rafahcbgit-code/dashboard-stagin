@@ -306,4 +306,9 @@ class Contact extends Model {
             return chr(hexdec($matches[1]));
         }, $value);
     }
+
+    public function labels()
+    {
+        return $this->belongsToMany(Label::class, 'contact_label');
+    }
 }

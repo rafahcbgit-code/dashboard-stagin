@@ -334,4 +334,17 @@ class ContactController extends BaseController
             return null;
         }
     }
+
+    // TODO Label
+    public function updateLabels(Request $request, Contact $contact){
+        $validated = $request->validate([
+            'labels' => 'array',
+            'labels.*' => 'exists:labels,id',
+        ]);
+
+        // sync keeps only the selected labels (removes unselected ones)
+        $contact->labels()->sync($validated['labels'] ?? []);
+
+        return back()->with('success', 'Labels updated successfully.');
+    }
 }
