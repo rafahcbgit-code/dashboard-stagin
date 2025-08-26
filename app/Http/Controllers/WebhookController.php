@@ -203,7 +203,12 @@ class WebhookController extends BaseController
                         $isNewContact = false;
 
                         //call to check the unsunscribe triggre keyword
-                        $messageText = $res['value']['messages'][0]['text']['body'];
+                        $messageText = null;
+                        try {
+                            $messageText = $res['value']['messages'][0]['text']['body'];
+                        } catch (\Exception $e) {
+                            //throw $th;
+                        }
 
 
                         if(!$contact){
@@ -233,7 +238,9 @@ class WebhookController extends BaseController
   
                             //call check to comapre between message and triggers
                             //The addition was made here to ensure that the contact exists
-                            $this->checker->check($organization, $messageText, $contact->id);
+                            if($messageText) {
+                                $this->checker->check($organization, $messageText, $contact->id);
+                            }
 
                             $chat = Chat::where('wam_id', $response['id'])->where('organization_id', $organization->id)->first();
 
