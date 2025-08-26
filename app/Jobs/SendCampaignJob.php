@@ -101,7 +101,10 @@ class SendCampaignJob implements ShouldQueue
 
         return Contact::whereHas('contactGroups', function ($query) use ($campaign) {
             $query->where('contact_groups.id', $campaign->contact_group_id);
-        })->whereNull('deleted_at')->get();
+        })
+        ->whereNull('deleted_at')
+        ->where('is_subscribed', 1)
+        ->get();
     }
 
     protected function createCampaignLogs(Campaign $campaign, $contacts)
