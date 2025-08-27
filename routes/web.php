@@ -196,6 +196,10 @@ Route::middleware(['auth:user'])->group(function () {
                     Route::post('/settings/whatsapp/business-profile', [App\Http\Controllers\User\SettingController::class, 'whatsappBusinessProfileUpdate']);
                     Route::delete('/settings/whatsapp/business-profile', [App\Http\Controllers\User\SettingController::class, 'deleteWhatsappIntegration']);
                     Route::post('/settings/whatsapp/update-coexistence', [App\Http\Controllers\User\SettingController::class, 'updateWhatsappForCoExistence']);
+                    
+                    Route::get('/settings/global-reply', [App\Http\Controllers\User\SettingController::class, 'viewGlobalReplySettings']);
+                    Route::post('/settings/global-reply', [App\Http\Controllers\User\SettingController::class, 'updateGlobalReply']);
+
                     Route::match(['get', 'post'], '/settings/contacts', [App\Http\Controllers\User\SettingController::class, 'contacts']);
                     Route::match(['get', 'post'], '/settings/tickets', [App\Http\Controllers\User\SettingController::class, 'tickets']);
                     Route::match(['get', 'post'], '/settings/automation', [App\Http\Controllers\User\SettingController::class, 'automation']);
