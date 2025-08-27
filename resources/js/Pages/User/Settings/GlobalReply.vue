@@ -57,14 +57,21 @@
               <div v-if="form.errors.buttons" class="text-xs text-red-600 mb-2">{{ form.errors.buttons }}</div>
 
               <div v-for="(button, i) in form.buttons" :key="i" class="grid grid-cols-6 gap-3 mb-3 items-center">
-                <div class="col-span-3">
+                <div class="col-span-6">
                   <FormInput v-model="button.title" :error="form.errors[`buttons.${i}.title`]" :name="$t('Title')" :type="'text'"/>
                   <p class="text-[11px] text-slate-500 mt-1">{{ $t('Max 20 chars') }}</p>
                 </div>
-                <div class="col-span-3">
-                  <FormInput v-model="button.payload" :error="form.errors[`buttons.${i}.payload`]" :name="$t('Payload')" :type="'text'"/>
-                  <p class="text-[11px] text-slate-500 mt-1">{{ $t('Identifier you’ll receive on click') }}</p>
-                </div>
+
+                <!-- 
+                  🚫 Payload field hidden
+                  If you want to bring it back later, just UNCOMMENT this block
+                  
+                  <div class="col-span-3">
+                    <FormInput v-model="button.payload" :error="form.errors[`buttons.${i}.payload`]" :name="$t('Payload')" :type="'text'"/>
+                    <p class="text-[11px] text-slate-500 mt-1">{{ $t('Identifier you’ll receive on click') }}</p>
+                  </div>
+                -->
+
                 <div class="col-span-6 flex justify-end">
                   <button type="button" class="text-red-600 text-xs" @click="removeButton(i)">
                     {{ $t('Remove') }}
