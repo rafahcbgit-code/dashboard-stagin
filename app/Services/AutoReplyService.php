@@ -189,6 +189,10 @@ class AutoReplyService
         
         $receivedMessage = " " . $text;
 
+        Log::channel('webhook')->info('Incoming Message', [
+            'message' => $receivedMessage
+        ]);
+
         //Check basic reply flow
         $autoReplies = AutoReply::where('organization_id', $organizationId)
             ->where('deleted_at', null)
@@ -203,6 +207,11 @@ class AutoReplyService
                     return true;
                 }
             }
+        }
+
+        // NEW: Check for global reply if no auto-reply matched
+        if ($this->sendGlobalReply($chat)) {
+            return true;
         }
 
         return false; // No reply was sent
@@ -390,5 +399,59 @@ class AutoReplyService
             $key = $matches[1];
             return isset($mergedData[$key]) ? $mergedData[$key] : $matches[0];
         }, $message);
+    }
+
+    private function sendGlobalReply($chat)
+    {
+        $organizationId = $chat->organization_id;
+        
+        // Get organization settings
+        $organization = Organization::where('id', $organizationId)->first();
+        if (!$organization || !$organization->metadata) {
+            return false;
+        }
+        
+        $metadata = json_decode($organization->metadata, true);
+        
+        // Check if global reply is active
+        if (!isset($metadata['global_reply']) || 
+            !$metadata['global_reply']['active'] || 
+            empty($metadata['global_reply']['message'])) {
+            return false;
+        }
+        
+        $globalReply = $metadata['global_reply'];
+        $contact = Contact::where('id', $chat->contact_id)->first();
+        
+        if (!$contact) {
+            return false;
+        }
+        
+        // Send interactive message with buttons if buttons exist
+        if (!empty($globalReply['buttons'])) {
+            $buttons = [];
+            foreach ($globalReply['buttons'] as $button) {
+                $buttons[] = [
+                    'id' => $button['payload'],
+                    'title' => $button['title']
+                ];
+            }
+            
+            $this->initializeWhatsappService($organizationId)->sendMessage(
+                $contact->uuid, 
+                $globalReply['message'], 
+                null, 
+                'interactive buttons', 
+                $buttons
+            );
+        } else {
+            // Send simple text message
+            $this->initializeWhatsappService($organizationId)->sendMessage(
+                $contact->uuid, 
+                $globalReply['message']
+            );
+        }
+        
+        return true;
     }
 }
