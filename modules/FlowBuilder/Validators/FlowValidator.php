@@ -466,9 +466,9 @@ class FlowValidator
      * @param string $value
      * @return bool
      */
-    private function validateButtonValueLength(string $value): bool
+    private function validateButtonValueLength($value): bool
     {
-        $length = strlen(trim($value));
+        $length = mb_strlen($value, 'UTF-8');
         return $length >= 1 && $length <= 20;
     }
 }
