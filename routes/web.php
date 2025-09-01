@@ -227,6 +227,7 @@ Route::prefix('admin')->middleware(['auth:admin'])->group(function () {
     Route::get('/dashboard', [App\Http\Controllers\Admin\DashboardController::class, 'index']);
     Route::resource('users', App\Http\Controllers\Admin\UserController::class);
     Route::resource('organizations', App\Http\Controllers\Admin\OrganizationController::class);
+     Route::get('/organizations/{id}/login-as', [App\Http\Controllers\AuthController::class, 'loginAs']);
     /*Route::resource('blog/posts', App\Http\Controllers\Admin\BlogController::class);
     Route::resource('blog/categories', App\Http\Controllers\Admin\BlogCategoryController::class);
     Route::resource('blog/authors', App\Http\Controllers\Admin\BlogAuthorController::class);
