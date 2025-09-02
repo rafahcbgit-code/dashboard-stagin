@@ -335,8 +335,13 @@ class ContactController extends BaseController
         }
     }
 
-    // TODO Label
-    public function updateLabels(Request $request, Contact $contact){
+
+    public function updateLabels(Request $request, $uuid){
+                 
+        $contact = Contact::where('uuid', $uuid)
+            ->whereNull('deleted_at')
+            ->first();
+
         $validated = $request->validate([
             'labels' => 'array',
             'labels.*' => 'exists:labels,id',
@@ -346,5 +351,21 @@ class ContactController extends BaseController
         $contact->labels()->sync($validated['labels'] ?? []);
 
         return back()->with('success', 'Labels updated successfully.');
+    }
+
+    public function getLabels($uuid)
+    {
+        $contact = Contact::with('labels')->where('uuid', $uuid)
+            ->where('organization_id', session()->get('current_organization'))
+            ->firstOrFail();
+        
+        $availableLabels = \App\Models\Label::where('organization_id', session()->get('current_organization'))
+            ->orderBy('title')
+            ->get();
+        
+        return response()->json([
+            'availableLabels' => $availableLabels,
+            'contactLabels' => $contact->labels
+        ]);
     }
 }

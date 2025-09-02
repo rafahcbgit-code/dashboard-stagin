@@ -152,6 +152,8 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::delete('/contact-groups', [App\Http\Controllers\User\ContactGroupController::class, 'delete']);
 
                 Route::put('/contacts/{uuid}/labels', [App\Http\Controllers\User\ContactController::class, 'updateLabels'])->name('contacts.labels.update');
+                Route::get('/contacts/{uuid}/labels', [App\Http\Controllers\User\ContactController::class, 'getLabels']);
+
 
                 Route::get('/campaigns/{uuid?}', [App\Http\Controllers\User\CampaignController::class, 'index'])->name('campaigns');
                 Route::post('/campaigns', [App\Http\Controllers\User\CampaignController::class, 'store']);

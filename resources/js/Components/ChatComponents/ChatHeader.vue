@@ -19,6 +19,10 @@
     const displayContact = ref(props.displayContactInfo);
     const ticketState = ref(null);
     const isOpenModal = ref(false);
+    const isOpenLabelsModal = ref(false);
+    const availableLabels = ref([]);
+    const selectedLabels = ref([]);
+    const loadingLabels = ref(false);
     const user = ref({ 
         'label' : props.ticket?.user ? props.ticket?.user?.full_name  : trans('Unassigned'),
         'value' : props.ticket?.user ? props.ticket?.user?.id  : 0, 
@@ -62,6 +66,10 @@
         'ai_assistant': props.contact?.ai_assistance_enabled,
     });
 
+    const labelsForm = useForm({
+        'labels': []
+    });
+
     const changeTicketStatus = (value) => {
         router.put('/tickets/' + props.contact.uuid + '/update', {
             'status' : value
@@ -77,7 +85,7 @@
     function loadUsers(query, setOptions) {
         fetch("/team?search=" + query, {
                 headers: {
-                    'Accept': 'application/json' // Ensure that the request accepts JSON
+                    'Accept': 'application/json'
                 }
             })
             .then(response => response.json())
@@ -106,6 +114,44 @@
 
         form3.post('/automation/contact/' + props.contact.uuid, {
             preserveState: true,
+        });
+    }
+
+    const openLabelsModal = async () => {
+        loadingLabels.value = true;
+        isOpenLabelsModal.value = true;
+        
+        try {
+            // Fetch available labels and contact's current labels
+            const response = await axios.get(`/contacts/${props.contact.uuid}/labels`);
+            availableLabels.value = response.data.availableLabels;
+            selectedLabels.value = response.data.contactLabels.map(label => label.id);
+            labelsForm.labels = [...selectedLabels.value];
+        } catch (error) {
+            console.error('Error loading labels:', error);
+        } finally {
+            loadingLabels.value = false;
+        }
+    }
+
+    const toggleLabel = (labelId) => {
+        const index = labelsForm.labels.indexOf(labelId);
+        if (index > -1) {
+            labelsForm.labels.splice(index, 1);
+        } else {
+            labelsForm.labels.push(labelId);
+        }
+    }
+
+    const saveLabels = () => {
+        labelsForm.put(`/contacts/${props.contact.uuid}/labels`, {
+            onSuccess: () => {
+                isOpenLabelsModal.value = false;
+                // Optionally emit an event to refresh contact data
+            },
+            onError: (errors) => {
+                console.error('Error saving labels:', errors);
+            }
         });
     }
 </script>
@@ -145,6 +191,7 @@
                     <template #items>
                         <DropdownItemGroup>
                             <DropdownItem @click="isOpenModal = true;" as="button">{{ $t('Add notes') }}</DropdownItem>
+                            <DropdownItem @click="openLabelsModal" as="button">{{ $t('Manage labels') }}</DropdownItem>
                             <DropdownItem v-if="ticketState === 'open' && ticketingIsEnabled" @click="changeTicketStatus('closed')" as="button">{{ $t('Mark as closed') }}</DropdownItem>
                             <DropdownItem v-if="ticketState === 'closed' && ticketingIsEnabled" @click="changeTicketStatus('open')" as="button">{{ $t('Mark as open') }}</DropdownItem>
                             <DropdownItem @click="showAlert = true" as="button">{{ $t('Clear chat') }}</DropdownItem>
@@ -172,6 +219,7 @@
         </div>
     </div>
 
+    <!-- Add Note Modal -->
     <Modal :label="'Add Note'" :isOpen="isOpenModal">
         <div class="mt-5 grid grid-cols-1 gap-x-6 gap-y-4">
             <form @submit.prevent="submitForm()" class="">
@@ -187,6 +235,55 @@
                     </button>
                 </div>
             </form>
+        </div>
+    </Modal>
+
+    <!-- Manage Labels Modal -->
+    <Modal :label="'Manage Labels'" :isOpen="isOpenLabelsModal">
+        <div class="mt-5">
+            <div v-if="loadingLabels" class="flex justify-center py-4">
+                <svg class="animate-spin h-8 w-8 text-gray-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+            </div>
+            <div v-else>
+                <div v-if="availableLabels.length === 0" class="text-center text-gray-500 py-4">
+                    {{ $t('No labels available. Create labels in Settings first.') }}
+                </div>
+                <div v-else class="space-y-3 max-h-60 overflow-y-auto">
+                    <div v-for="label in availableLabels" :key="label.id" class="flex items-center space-x-3">
+                        <input 
+                            type="checkbox" 
+                            :id="`label-${label.id}`"
+                            :checked="labelsForm.labels.includes(label.id)"
+                            @change="toggleLabel(label.id)"
+                            class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2"
+                        />
+                        <label :for="`label-${label.id}`" class="flex items-center space-x-2 cursor-pointer flex-1">
+                            <!-- Tag Icon -->
+                            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24">
+                                <path fill="none" :stroke="label.color" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M20.59 13.41 12 22 4 14V4h10l8.59 8.59zM7 7h.01" />
+                            </svg>
+                            <span>{{ label.title }}</span>
+                        </label>
+                    </div>
+                </div>
+                <div class="mt-6 flex justify-end space-x-2">
+                    <button type="button" @click="isOpenLabelsModal = false" class="inline-flex justify-center rounded-md border border-transparent bg-slate-50 px-4 py-2 text-sm text-slate-500 hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
+                        {{ $t('Cancel') }}
+                    </button>
+                    <button 
+                        @click="saveLabels"
+                        :class="['inline-flex justify-center rounded-md border border-transparent bg-primary px-4 py-2 text-sm text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2', { 'opacity-50': labelsForm.processing }]"
+                        :disabled="labelsForm.processing"
+                    >
+                        <svg v-if="labelsForm.processing" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2A10 10 0 1 0 22 12A10 10 0 0 0 12 2Zm0 18a8 8 0 1 1 8-8A8 8 0 0 1 12 20Z" opacity=".5"/><path fill="currentColor" d="M20 12h2A10 10 0 0 0 12 2V4A8 8 0 0 1 20 12Z"><animateTransform attributeName="transform" dur="1s" from="0 12 12" repeatCount="indefinite" to="360 12 12" type="rotate"/></path></svg>
+                        <span v-else>{{ $t('Save Labels') }}</span>
+                    </button>
+                </div>
+            </div>
         </div>
     </Modal>
 
