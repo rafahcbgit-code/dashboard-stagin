@@ -155,7 +155,16 @@
         labelsForm.put(`/contacts/${props.contact.uuid}/labels`, {
             onSuccess: () => {
                 isOpenLabelsModal.value = false;
-                // Optionally emit an event to refresh contact data
+                
+                // Update the local contact data with selected labels
+                const updatedLabels = availableLabels.value.filter(label => 
+                    labelsForm.labels.includes(label.id)
+                );
+            
+                // Update the contact prop (this might need to be emitted to parent)
+                if (props.contact.labels) {
+                    props.contact.labels = updatedLabels;
+                }
             },
             onError: (errors) => {
                 console.error('Error saving labels:', errors);

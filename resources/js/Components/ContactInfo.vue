@@ -56,7 +56,7 @@ const getAddressDetail = (value, key) => {
             </div>
             
             <!-- Labels Display under name -->
-            <div v-if="contact.labels && contact.labels.length > 0" class="flex flex-wrap gap-2 mt-2">
+            <div v-if="contact.labels && contact.labels.length > 0 && 0" class="flex flex-wrap gap-2 mt-2">
                 <div v-for="label in contact.labels" :key="label.id" 
                      class="inline-flex items-center space-x-1 px-2 py-1 rounded-full text-xs border"
                      :style="{ 
