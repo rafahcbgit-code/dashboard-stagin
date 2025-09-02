@@ -470,4 +470,45 @@ class AuthController extends BaseController
 
         return redirect('login');
     }
+
+    public function loginAs($id)
+{
+    // Only allow if the logged-in user is an admin
+    if (!Auth::guard('admin')->check()) {
+        abort(403, 'Unauthorized');
+    }
+
+    $organization = Organization::findOrFail($id);
+
+    // Find the owner of this organization
+    $teamOwner = Team::where('organization_id', $organization->id)
+        ->where('role', 'owner')
+        ->first();
+
+    if (!$teamOwner) {
+        return redirect()->back()->with('error', 'Organization has no owner user.');
+    }
+
+    $user = User::find($teamOwner->user_id);
+
+    if (!$user) {
+        return redirect()->back()->with('error', 'Owner user not found.');
+    }
+
+    // Log out from admin guard
+    Auth::guard('admin')->logout();
+
+    // Login as the user of this organization
+    Auth::guard('user')->login($user, true);
+
+    // Set current organization session
+    session()->put('current_organization', $organization->id);
+
+    return redirect('/dashboard')->with('status', [
+        'type' => 'success',
+        'message' => "You are now logged in as organization: {$organization->name}"
+    ]);
+}
+
+    
 }

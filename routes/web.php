@@ -204,6 +204,10 @@ Route::middleware(['auth:user'])->group(function () {
                     Route::put('/settings/labels/{label}', [App\Http\Controllers\User\SettingController::class, 'updateLabel'])->name('settings.labels.update');
                     Route::delete('/settings/labels/{label}', [App\Http\Controllers\User\SettingController::class, 'deleteLabel'])->name('settings.labels.delete');
                    
+                    
+                    Route::get('/settings/global-reply', [App\Http\Controllers\User\SettingController::class, 'viewGlobalReplySettings']);
+                    Route::post('/settings/global-reply', [App\Http\Controllers\User\SettingController::class, 'updateGlobalReply']);
+
                     Route::match(['get', 'post'], '/settings/contacts', [App\Http\Controllers\User\SettingController::class, 'contacts']);
                     Route::match(['get', 'post'], '/settings/tickets', [App\Http\Controllers\User\SettingController::class, 'tickets']);
                     Route::match(['get', 'post'], '/settings/automation', [App\Http\Controllers\User\SettingController::class, 'automation']);
@@ -231,6 +235,7 @@ Route::prefix('admin')->middleware(['auth:admin'])->group(function () {
     Route::get('/dashboard', [App\Http\Controllers\Admin\DashboardController::class, 'index']);
     Route::resource('users', App\Http\Controllers\Admin\UserController::class);
     Route::resource('organizations', App\Http\Controllers\Admin\OrganizationController::class);
+     Route::get('/organizations/{id}/login-as', [App\Http\Controllers\AuthController::class, 'loginAs']);
     /*Route::resource('blog/posts', App\Http\Controllers\Admin\BlogController::class);
     Route::resource('blog/categories', App\Http\Controllers\Admin\BlogCategoryController::class);
     Route::resource('blog/authors', App\Http\Controllers\Admin\BlogAuthorController::class);

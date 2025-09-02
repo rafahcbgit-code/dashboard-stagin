@@ -3,3 +3,6 @@
 .env
 .idea
 .vscode
+
+lang/php_en.json
+public/hot
