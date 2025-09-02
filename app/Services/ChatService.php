@@ -120,7 +120,7 @@ class ChatService
             ->get();
 
         if ($uuid !== null) {
-            $contact = Contact::with(['lastChat', 'lastInboundChat', 'notes', 'contactGroups'])
+            $contact = Contact::with(['lastChat', 'lastInboundChat', 'notes', 'contactGroups', 'labels'])
                 ->where('uuid', $uuid)
                 ->first();
             
