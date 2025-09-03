@@ -322,7 +322,7 @@ class WebhookController extends BaseController
         else if($res['field'] === 'smb_message_echoes'){
                 $messageEchoes = $res['value']['message_echoes'] ?? null;
                 
-                Log::info('SMB Message Echoes received', ['echoes' => $messageEchoes, 'organization_id' => $organization->id]);
+                // Log::info('SMB Message Echoes received', ['echoes' => $messageEchoes, 'organization_id' => $organization->id]);
                 
                 if($messageEchoes) {
                     foreach($messageEchoes as $echo) {
