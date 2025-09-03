@@ -21,19 +21,11 @@ class UnsubscribeChecker
     {
         // If no organization is provided, stop execution without error
         if (!$organization) {
-            Log::warning('Unsubscribe check: organization not provided', [
-                'contact_id' => $contactId,
-                'message'    => $messageText,
-            ]);
             return false;
         }
 
         // Return false immediately if message is empty
         if (empty($messageText)) {
-            Log::info('Unsubscribe check: failed → message is empty', [
-                'organization_id' => $organization->id,
-                'contact_id'      => $contactId,
-            ]);
             return false;
         }
 
@@ -48,11 +40,6 @@ class UnsubscribeChecker
         $triggers = $metadataArray['campaign_settings']['unsubscribe_trigger'] ?? null;
 
         if (!$triggers) {
-            Log::info('Unsubscribe check: failed → no unsubscribe trigger words defined', [
-                'organization_id' => $organization->id,
-                'contact_id'      => $contactId,
-                'message'         => $messageText,
-            ]);
             return false;
         }
 
@@ -66,34 +53,16 @@ class UnsubscribeChecker
                 $contact = Contact::find($contactId);
                 if ($contact) {
                     $contactService->updatePartial($contactId, ['is_subscribed' => 0]);
-                    Log::info('Unsubscribe check: success → contact unsubscribed', [
-                        'organization_id' => $organization->id,
-                        'contact_id'      => $contactId,
-                        'trigger_word'    => $messageCleaned,
-                    ]);
                 } else {
-                    Log::warning('Unsubscribe check: contact not found despite matching trigger word', [
-                        'organization_id' => $organization->id,
-                        'contact_id'      => $contactId,
-                        'trigger_word'    => $messageCleaned,
-                    ]);
+
                 }
             } else {
-                Log::info('Unsubscribe check: success → trigger word matched but no contactId provided', [
-                    'organization_id' => $organization->id,
-                    'trigger_word'    => $messageCleaned,
-                ]);
+                
             }
             return true;
         }
 
-        // Return false if no match
-        Log::info('Unsubscribe check: failed → no match found', [
-            'organization_id' => $organization->id,
-            'contact_id'      => $contactId,
-            'message'         => $messageText,
-            'triggers'        => $triggerWords,
-        ]);
+        
         return false;
     }
 }
