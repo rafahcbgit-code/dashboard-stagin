@@ -54,6 +54,24 @@ const getAddressDetail = (value, key) => {
             <div class="text-slate-500 truncate flex items-center">
                 <span class="text-sm">{{ contact.formatted_phone_number }}</span>
             </div>
+            
+            <!-- Labels Display under name -->
+            <div v-if="contact.labels && contact.labels.length > 0 && 0" class="flex flex-wrap gap-2 mt-2">
+                <div v-for="label in contact.labels" :key="label.id" 
+                     class="inline-flex items-center space-x-1 px-2 py-1 rounded-full text-xs border"
+                     :style="{ 
+                        borderColor: label.color, 
+                        backgroundColor: label.color + '20',
+                        color: label.color
+                     }">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24">
+                        <path fill="none" :stroke="label.color" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M20.59 13.41 12 22 4 14V4h10l8.59 8.59zM7 7h.01" />
+                    </svg>
+                    <span class="font-medium">{{ label.title }}</span>
+                </div>
+            </div>
+            
             <div class="flex space-x-3 mt-4">
                 <button class="bg-gray-200 h-9 px-4 rounded-md flex items-center">
                     <Link :href="'/contacts/' + contact.uuid + '?edit=true'" class="text-[14px]">{{ $t('Edit') }}</Link>
@@ -107,10 +125,33 @@ const getAddressDetail = (value, key) => {
                     {{ contact.contact_groups?.length ? contact.contact_groups.map(group => group.name).join(', ') : $t('not set') }}
                 </span>
             </div>
+
+            <!-- Labels row in the details grid -->
+            <div class="text-right text-slate-500 pb-2">
+                <span>{{ $t('Labels') }}</span>
+            </div>
+            <div>
+                <div v-if="contact.labels && contact.labels.length > 0" class="flex flex-wrap gap-1">
+                    <div v-for="label in contact.labels" :key="label.id" 
+                         class="inline-flex items-center space-x-1 px-2 py-1 rounded-full text-xs border"
+                         :style="{ 
+                            borderColor: label.color, 
+                            backgroundColor: label.color + '15',
+                            color: label.color
+                         }">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24">
+                            <path fill="none" :stroke="label.color" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M20.59 13.41 12 22 4 14V4h10l8.59 8.59zM7 7h.01" />
+                        </svg>
+                        <span class="text-xs">{{ label.title }}</span>
+                    </div>
+                </div>
+                <span v-else class="text-gray-500 text-sm">{{ $t('not set') }}</span>
+            </div>
         </div>
     </div>
 
-    <!-- بيانات إضافية -->
+    <!-- Additional Data (Before location) -->
     <div v-if="locationSettings === 'before' && fields.length > 0" class="pr-20 border-gray-300 border-b py-4">
         <div v-for="(input, index) in props.fields" class="grid grid-cols-2 space-x-8 text-[14px]">
             <div class="text-right text-slate-500 pb-2">
@@ -123,7 +164,7 @@ const getAddressDetail = (value, key) => {
         </div>
     </div>
 
-    <!-- العنوان -->
+    <!-- Address -->
     <div class="pr-20 py-4">
         <div class="grid grid-cols-2 space-x-8 text-[14px]">
             <div class="text-right text-slate-500 pb-2">
@@ -159,6 +200,7 @@ const getAddressDetail = (value, key) => {
         </div>
     </div>
 
+    <!-- Additional Data (After location) -->
     <div v-if="locationSettings === 'after' && fields.length > 0" class="pr-20 border-gray-300 border-t py-4">
         <div v-for="(input, index) in props.fields" class="grid grid-cols-2 space-x-8 text-[14px]">
             <div class="text-right text-slate-500 pb-2">

@@ -102,7 +102,7 @@ class Contact extends Model {
         return $this->hasMany(ChatLog::class);
     }
 
-    public function contactsWithChats($organizationId, $searchTerm = null, $ticketingActive = false, $ticketState = null, $sortDirection = 'asc', $role = 'owner', $allowAgentsViewAllChats = true)
+    public function contactsWithChats($organizationId, $searchTerm = null, $ticketingActive = false, $ticketState = null, $sortDirection = 'asc', $role = 'owner', $allowAgentsViewAllChats = true, $labelFilters = [])
     {
         $query = $this->newQuery()
             ->where('contacts.organization_id', $organizationId)
@@ -118,6 +118,13 @@ class Contact extends Model {
                     ->where('chats.organization_id', $organizationId);
             }, 'last_chat_created_at');
 
+        // Apply label filtering
+        if (!empty($labelFilters)) {
+            $query->whereHas('labels', function($q) use ($labelFilters) {
+                $q->whereIn('labels.id', $labelFilters);
+            });
+        }
+            
         // Apply ticketing conditions if active
         if ($ticketingActive) {
             $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id');
@@ -203,7 +210,7 @@ class Contact extends Model {
         return $query->paginate(10);*/
     }
 
-    public function contactsWithChatsCount($organizationId, $searchTerm = null, $ticketingActive = false, $ticketState = null, $sortDirection = 'asc', $role = 'owner', $allowAgentsViewAllChats = true)
+    public function contactsWithChatsCount($organizationId, $searchTerm = null, $ticketingActive = false, $ticketState = null, $sortDirection = 'asc', $role = 'owner', $allowAgentsViewAllChats = true, $labelFilters = [])
     {
         $query = $this->newQuery()
             ->where('contacts.organization_id', $organizationId)
@@ -236,6 +243,13 @@ class Contact extends Model {
             $query->where(function($q) {
                 $q->whereNull('chat_tickets.assigned_to')
                   ->orWhere('chat_tickets.assigned_to', auth()->user()->id);
+            });
+        }
+
+        // Apply label filtering
+        if (!empty($labelFilters)) {
+            $query->whereHas('labels', function($q) use ($labelFilters) {
+                $q->whereIn('labels.id', $labelFilters);
             });
         }
 
@@ -305,5 +319,10 @@ class Contact extends Model {
         return preg_replace_callback('/\\\\x([0-9A-F]{2})/i', function ($matches) {
             return chr(hexdec($matches[1]));
         }, $value);
+    }
+
+    public function labels()
+    {
+        return $this->belongsToMany(Label::class, 'contact_label');
     }
 }

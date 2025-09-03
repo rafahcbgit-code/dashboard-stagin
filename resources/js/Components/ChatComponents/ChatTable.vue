@@ -1,6 +1,6 @@
 <script setup>
     import axios from 'axios';
-    import { ref, watch } from 'vue';
+    import { ref, watch, onMounted } from 'vue';
     import debounce from 'lodash/debounce';
     import { Link, router } from "@inertiajs/vue3";
     import Pagination from '@/Components/Pagination.vue';
@@ -32,6 +32,10 @@
 
     const isSearching = ref(false);
     const selectedContact = ref(null);
+    const availableLabels = ref([]);
+    const selectedLabels = ref([]);
+    const showLabelFilter = ref(false);
+    const loadingLabels = ref(false);
     const emit = defineEmits(['view']);
 
     function viewChat(contact) {
@@ -133,6 +137,7 @@
 
     const params = ref({
         search: props.filters.search,
+        labels: props.filters.labels,
     });
 
     const search = debounce(() => {
@@ -153,6 +158,63 @@
         params.value.search = null;
         runSearch();
     }
+
+    // Label filtering functions
+    const loadLabels = async () => {
+        if (availableLabels.value.length > 0) {
+            showLabelFilter.value = !showLabelFilter.value;
+            return;
+        }
+
+        loadingLabels.value = true;
+        try {
+            const response = await axios.get('/chats/labels/filter-data');
+            availableLabels.value = response.data;
+            showLabelFilter.value = true;
+        } catch (error) {
+            console.error('Error loading labels:', error);
+        } finally {
+            loadingLabels.value = false;
+        }
+    };
+
+    const toggleLabel = (labelId) => {
+        const index = selectedLabels.value.indexOf(labelId);
+        if (index > -1) {
+            selectedLabels.value.splice(index, 1);
+        } else {
+            selectedLabels.value.push(labelId);
+        }
+        
+        // Update params and trigger search
+        params.value.labels = selectedLabels.value.length > 0 ? selectedLabels.value.join(',') : null;
+        runSearch();
+    };
+
+    const clearLabelFilters = () => {
+        selectedLabels.value = [];
+        params.value.labels = null;
+        runSearch();
+    };
+
+    // Initialize selected labels from URL params
+    onMounted(() => {
+        if (props.filters.labels) {
+            selectedLabels.value = props.filters.labels.split(',').map(id => parseInt(id));
+        }
+        
+        // Add click outside listener
+        document.addEventListener('click', handleClickOutside);
+    });
+
+    // Handle click outside to close dropdown
+    const handleClickOutside = (event) => {
+        const labelFilterElement = event.target.closest('.label-filter-container');
+        if (!labelFilterElement && showLabelFilter.value) {
+            showLabelFilter.value = false;
+        }
+    };
+
 </script>
 <template>
     <div class="px-4 py-4 border-b">
@@ -174,6 +236,61 @@
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="3.5" r="1.5" fill="currentColor" opacity="0"><animateTransform attributeName="transform" calcMode="discrete" dur="2.4s" repeatCount="indefinite" type="rotate" values="0 12 12;90 12 12;180 12 12;270 12 12"/><animate attributeName="opacity" dur="0.6s" keyTimes="0;0.5;1" repeatCount="indefinite" values="1;1;0"/></circle><circle cx="12" cy="3.5" r="1.5" fill="currentColor" opacity="0"><animateTransform attributeName="transform" begin="0.2s" calcMode="discrete" dur="2.4s" repeatCount="indefinite" type="rotate" values="30 12 12;120 12 12;210 12 12;300 12 12"/><animate attributeName="opacity" begin="0.2s" dur="0.6s" keyTimes="0;0.5;1" repeatCount="indefinite" values="1;1;0"/></circle><circle cx="12" cy="3.5" r="1.5" fill="currentColor" opacity="0"><animateTransform attributeName="transform" begin="0.4s" calcMode="discrete" dur="2.4s" repeatCount="indefinite" type="rotate" values="60 12 12;150 12 12;240 12 12;330 12 12"/><animate attributeName="opacity" begin="0.4s" dur="0.6s" keyTimes="0;0.5;1" repeatCount="indefinite" values="1;1;0"/></circle></svg>
             </span>
         </div>
+
+        <!-- Label Filter Section -->
+        <div class="mt-3 relative label-filter-container">
+            <div class="flex items-center space-x-2">
+                <button @click="loadLabels" 
+                        :disabled="loadingLabels"
+                        class="flex items-center space-x-1 px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded-md text-sm transition-colors">
+                    <svg v-if="loadingLabels" class="animate-spin w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
+                        <path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                            d="M20.59 13.41 12 22 4 14V4h10l8.59 8.59zM7 7h.01" />
+                    </svg>
+                    <span>{{ $t('Filter by Labels') }}</span>
+                    <span v-if="selectedLabels.length > 0" class="bg-green-500 text-white text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                        {{ selectedLabels.length }}
+                    </span>
+                </button>
+                
+                <button v-if="selectedLabels.length > 0" @click="clearLabelFilters" 
+                        class="text-red-500 hover:text-red-700 text-sm">
+                    {{ $t('Clear filters') }}
+                </button>
+            </div>
+
+            <!-- Label Filter Dropdown -->
+            <div v-if="showLabelFilter && availableLabels.length > 0" 
+                 class="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-md shadow-lg z-10 max-h-60 overflow-y-auto">
+                <div class="p-2">
+                    <div class="text-sm font-medium text-gray-700 mb-2">{{ $t('Select Labels') }}</div>
+                    <div class="space-y-2">
+                        <div v-for="label in availableLabels" :key="label.id" 
+                             class="flex items-center space-x-2 hover:bg-gray-50 p-1 rounded">
+                            <input type="checkbox" 
+                                   :id="`filter-label-${label.id}`"
+                                   :checked="selectedLabels.includes(label.id)"
+                                   @change="toggleLabel(label.id)"
+                                   class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2">
+                            <label :for="`filter-label-${label.id}`" class="flex items-center space-x-2 cursor-pointer flex-1">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24">
+                                    <path fill="none" :stroke="label.color" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                        d="M20.59 13.41 12 22 4 14V4h10l8.59 8.59zM7 7h.01" />
+                                </svg>
+                                <span class="text-sm">{{ label.title }}</span>
+                                <span class="text-xs text-gray-500 ml-auto">({{ label.contacts_count }})</span>
+                            </label>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+
         <div v-if="ticketingIsEnabled" class="grid grid-cols-2 mt-4 items-center w-full">
             <TicketStatusToggle :status="status" :rowCount="rowCount"/>
             <div class="flex ml-auto gap-x-1">
@@ -254,4 +371,3 @@
         <Pagination class="mt-3" :pagination="rows.meta"/>
     </div>
 </template>
-  

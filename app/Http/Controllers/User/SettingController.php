@@ -3,21 +3,22 @@
 namespace App\Http\Controllers\User;
 
 use DB;
-use App\Http\Controllers\Controller as BaseController;
-use App\Http\Requests\StoreWhatsappSettings;
-use App\Helpers\CustomHelper;
-use App\Http\Requests\StoreWhatsappProfile;
+use Validator;
+use Inertia\Inertia;
 use App\Models\Addon;
+use App\Models\Label;
 use App\Models\Contact;
-use App\Models\Organization;
 use App\Models\Setting;
 use App\Models\Template;
-use App\Services\ContactFieldService;
-use App\Services\WhatsappService;
+use App\Models\Organization;
 use Illuminate\Http\Request;
+use App\Helpers\CustomHelper;
+use App\Services\WhatsappService;
 use Illuminate\Support\Facades\URL;
-use Inertia\Inertia;
-use Validator;
+use App\Services\ContactFieldService;
+use App\Http\Requests\StoreWhatsappProfile;
+use App\Http\Requests\StoreWhatsappSettings;
+use App\Http\Controllers\Controller as BaseController;
 
 class SettingController extends BaseController
 {
@@ -616,6 +617,69 @@ public function campaign(Request $request)
             [
                 'type'    => 'success',
                 'message' => __('Global reply settings updated successfully.'),
+            ]
+        );
+    }
+
+    public function labels(Request $request){
+        $organizationId = session()->get('current_organization');
+        $organization = Organization::findOrFail($organizationId);
+
+        if ($request->isMethod('get')) {
+
+            $labels = $organization->labels()->latest()->get();
+
+            return Inertia::render('User/Settings/Label', [
+                'title'        => __('Settings'),
+                'settings'     => $organization,
+                'labels'       => $labels,
+                'modules'      => Addon::get(),
+            ]);
+        }
+
+        if ($request->isMethod('post')) {
+            $request->validate([
+                'title' => 'required|string|max:255',
+                'color' => 'required|string|max:7',
+            ]);
+
+            $organization->labels()->create([
+                'title' => $request->title,
+                'color' => $request->color,
+            ]);
+
+            return back()->with(
+                'status', [
+                    'type'    => 'success',
+                    'message' => __('Label created successfully'),
+                ]
+            );
+        }
+    }
+
+    public function updateLabel(Request $request, Label $label){
+        $request->validate([
+            'title' => 'required|string|max:255',
+            'color' => 'required|string|max:7',
+        ]);
+
+        $label->update($request->only('title', 'color'));
+
+        return back()->with(
+            'status', [
+                'type'    => 'success',
+                'message' => __('Label updated successfully'),
+            ]
+        );
+    }
+
+    public function deleteLabel(Label $label){
+        $label->delete();
+
+        return back()->with(
+            'status', [
+                'type'    => 'success',
+                'message' => __('Label deleted successfully'),
             ]
         );
     }

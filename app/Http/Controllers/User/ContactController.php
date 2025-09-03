@@ -334,4 +334,38 @@ class ContactController extends BaseController
             return null;
         }
     }
+
+
+    public function updateLabels(Request $request, $uuid){
+                 
+        $contact = Contact::where('uuid', $uuid)
+            ->whereNull('deleted_at')
+            ->first();
+
+        $validated = $request->validate([
+            'labels' => 'array',
+            'labels.*' => 'exists:labels,id',
+        ]);
+
+        // sync keeps only the selected labels (removes unselected ones)
+        $contact->labels()->sync($validated['labels'] ?? []);
+
+        return back()->with('success', 'Labels updated successfully.');
+    }
+
+    public function getLabels($uuid)
+    {
+        $contact = Contact::with('labels')->where('uuid', $uuid)
+            ->where('organization_id', session()->get('current_organization'))
+            ->firstOrFail();
+        
+        $availableLabels = \App\Models\Label::where('organization_id', session()->get('current_organization'))
+            ->orderBy('title')
+            ->get();
+        
+        return response()->json([
+            'availableLabels' => $availableLabels,
+            'contactLabels' => $contact->labels
+        ]);
+    }
 }

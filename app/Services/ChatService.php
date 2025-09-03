@@ -74,6 +74,9 @@ class ChatService
         $allowAgentsToViewAllChats = true;
         $ticketingActive = false;
         $aimodule = CustomHelper::isModuleEnabled('AI Assistant');
+        
+        // Get label filters from request
+        $labelFilters = $request->query('labels') ? explode(',', $request->query('labels')) : [];
 
         //Check if tickets module has been enabled
         if($config->metadata != NULL){
@@ -101,9 +104,28 @@ class ChatService
             }
         }
 
-        // Retrieve the list of contacts with chats
-        $contacts = $contact->contactsWithChats($this->organizationId, $searchTerm, $ticketingActive, $ticketState, $sortDirection, $role, $allowAgentsToViewAllChats);
-        $rowCount = $contact->contactsWithChatsCount($this->organizationId, $searchTerm, $ticketingActive, $ticketState, $sortDirection, $role, $allowAgentsToViewAllChats);
+        // Retrieve the list of contacts with chats (now with label filtering)
+        $contacts = $contact->contactsWithChats(
+            $this->organizationId, 
+            $searchTerm, 
+            $ticketingActive, 
+            $ticketState, 
+            $sortDirection, 
+            $role, 
+            $allowAgentsToViewAllChats,
+            $labelFilters // Add label filters parameter
+        );
+        
+        $rowCount = $contact->contactsWithChatsCount(
+            $this->organizationId, 
+            $searchTerm, 
+            $ticketingActive, 
+            $ticketState, 
+            $sortDirection, 
+            $role, 
+            $allowAgentsToViewAllChats,
+            $labelFilters // Add label filters parameter
+        );
 
         $pusherSettings = Setting::whereIn('key', [
             'pusher_app_id',
@@ -120,7 +142,7 @@ class ChatService
             ->get();
 
         if ($uuid !== null) {
-            $contact = Contact::with(['lastChat', 'lastInboundChat', 'notes', 'contactGroups'])
+            $contact = Contact::with(['lastChat', 'lastInboundChat', 'notes', 'contactGroups', 'labels'])
                 ->where('uuid', $uuid)
                 ->first();
             

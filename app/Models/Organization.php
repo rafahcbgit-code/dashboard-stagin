@@ -47,4 +47,9 @@ class Organization extends Model {
     {
         return $this->belongsTo(Subscription::class, 'id', 'organization_id');
     }
+
+    public function labels()
+    {
+        return $this->hasMany(Label::class);
+    }
 }

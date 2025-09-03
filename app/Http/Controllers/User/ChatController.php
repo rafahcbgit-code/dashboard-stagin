@@ -2,16 +2,17 @@
 
 namespace App\Http\Controllers\User;
 
-use App\Http\Controllers\Controller as BaseController;
-use App\Models\AutoReply;
+use Redirect;
 use App\Models\Chat;
+use Inertia\Inertia;
+use App\Models\Label;
 use App\Models\Contact;
+use App\Models\AutoReply;
 use App\Models\Organization;
+use Illuminate\Http\Request;
 use App\Services\ChatService;
 use App\Services\WhatsappService;
-use Illuminate\Http\Request;
-use Inertia\Inertia;
-use Redirect;
+use App\Http\Controllers\Controller as BaseController;
 
 class ChatController extends BaseController
 {
@@ -68,5 +69,22 @@ class ChatController extends BaseController
         $messages = $this->chatService()->getChatMessages($contactId, $page);
         
         return response()->json($messages);
+    }
+
+    public function getLabelsForFilter()
+    {
+        $organizationId = session()->get('current_organization');
+        
+        // Get all labels with contact counts
+        $labels = Label::where('organization_id', $organizationId)
+            ->withCount(['contacts' => function($query) use ($organizationId) {
+                $query->where('organization_id', $organizationId)
+                    ->whereNull('deleted_at');
+            }])
+            ->having('contacts_count', '>', 0) // Only show labels that have contacts
+            ->orderBy('title')
+            ->get(['id', 'title', 'color']);
+
+        return response()->json($labels);
     }
 }
