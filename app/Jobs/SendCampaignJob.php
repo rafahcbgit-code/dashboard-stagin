@@ -276,7 +276,11 @@ class SendCampaignJob implements ShouldQueue
             
                     $template = $this->buildTemplateRequest($campaignLog->campaign_id, $campaignLog->contact);
                     $responseObject = $this->whatsappService->sendTemplateMessage($campaignLog->contact->uuid, $template, $campaign_user_id, $campaignLog->campaign_id);
-                    //Log::info(json_encode($responseObject));
+                    
+                    Log::channel('campaign')->info('Missing contact profile data', [
+                                        'payload' => json_encode($responseObject),
+                                    ]);
+
                     $this->updateCampaignLogStatus($campaignLog, $responseObject);
                 }
             }

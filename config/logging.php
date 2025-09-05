@@ -133,6 +133,13 @@ return [
             'level' => 'debug',
             'days' => 14, // keep logs for 14 days, adjust as needed
         ],
+
+        'campaign' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/campaign.log'),
+            'level' => 'debug',
+            'days' => 7,
+        ],
     ],
 
 ];
