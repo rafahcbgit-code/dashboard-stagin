@@ -229,11 +229,18 @@ class WebhookController extends BaseController
                         }
 
                         if($contact){
-                            if($contact->first_name == NULL){
-                                $contactData = $res['value']['contacts'][0]['profile'];
-                                $contact->update([
-                                    'first_name' => $contactData['name'],
-                                ]);
+                            if (empty($contact->first_name)) {
+                                $contactData = $res['value']['contacts'][0]['profile'] ?? null;
+
+                                if ($contactData && isset($contactData['name'])) {
+                                    $contact->update([
+                                        'first_name' => $contactData['name'],
+                                    ]);
+                                } else {
+                                    Log::channel('webhook')->info('Missing contact profile data', [
+                                        'payload' => $res,
+                                    ]);
+                                }
                             }
   
                             //call check to comapre between message and triggers
