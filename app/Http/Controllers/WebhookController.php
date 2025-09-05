@@ -160,6 +160,12 @@ class WebhookController extends BaseController
             $messages = $res['value']['messages'] ?? null;
             $statuses = $res['value']['statuses'] ?? null;
 
+            Log::channel('webhook')->info('Status Messages - webhook payload', [
+                "contacts" => $contacts,
+                "messages" => $messages,
+                "statuses" => $statuses
+            ]);
+
             if($statuses) {
                 //$response = $res['value']['statuses'][0];
                 foreach($statuses as $response){

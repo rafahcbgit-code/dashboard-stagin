@@ -189,9 +189,6 @@ class AutoReplyService
         
         $receivedMessage = " " . $text;
 
-        Log::channel('webhook')->info('Incoming Message', [
-            'message' => $receivedMessage
-        ]);
 
         //Check basic reply flow
         $autoReplies = AutoReply::where('organization_id', $organizationId)
