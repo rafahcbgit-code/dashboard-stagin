@@ -21,6 +21,11 @@ class Kernel extends ConsoleKernel
         $schedule->job(new ProcessCampaignMessagesJob(), 'campaign-messages')
             ->everyMinute()
             ->withoutOverlapping();
+        
+        $schedule->command('queue:work --queue=webhook --stop-when-empty --max-time=30')
+        ->everyMinute()
+        ->withoutOverlapping()
+        ->runInBackground();
 
         /*$schedule->command('queue:work --queue=campaign-messages,campaign-logs --stop-when-empty')
             ->everyMinute()

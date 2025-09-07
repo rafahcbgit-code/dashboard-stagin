@@ -170,15 +170,6 @@ class WebhookController extends BaseController
                                 ->where('organization_id', $organization->id)
                                 ->first();
 
-                    Log::channel('webhook')->info('Attempting to update chat', [
-                        'wam_id' => $chatWamId,
-                        'status_update' => $status,
-                        'organization_id' => $organization->id,
-                        'chat_found' => $chat ? true : false,
-                        'chat_id' => $chat?->id,
-                        'current_status' => $chat?->status
-                    ]);
-
                     if($chat){
                         $chat->status = $status;
                         $chat->save();
@@ -187,6 +178,13 @@ class WebhookController extends BaseController
                         $chatStatusLog->chat_id = $chat->id;
                         $chatStatusLog->metadata = json_encode($response);
                         $chatStatusLog->save();
+                    }else{
+                        \App\Jobs\UpdateChatStatusJob::dispatch(
+                                $chatWamId,
+                                $status,
+                                $organization->id,
+                                $response
+                        )->delay(now()->addSeconds(2)); // 2 second delay
                     }
                 }
 
