@@ -160,13 +160,10 @@ class WebhookController extends BaseController
             $messages = $res['value']['messages'] ?? null;
             $statuses = $res['value']['statuses'] ?? null;
 
-            Log::channel('webhook')->info('Status Messages - webhook payload', [
-                "contacts" => $contacts,
-                "messages" => $messages,
-                "statuses" => $statuses
-            ]);
-
             if($statuses) {
+                Log::channel('webhook')->info('Status Messages', [
+                            "statuses" =>  $statuses
+                        ]);
                 //$response = $res['value']['statuses'][0];
                 foreach($statuses as $response){
                     $chatWamId = $response['id'];
@@ -182,6 +179,12 @@ class WebhookController extends BaseController
                         $chatStatusLog->chat_id = $chat->id;
                         $chatStatusLog->metadata = json_encode($response);
                         $chatStatusLog->save();
+                    }else{
+                        Log::channel('webhook')->info('Status Messages - Update Fail', [
+                            "status" =>  $status,
+                            "chatWamId" => $chatWamId,
+                            "payload" => json_encode($response)
+                        ]);
                     }
                 }
 
