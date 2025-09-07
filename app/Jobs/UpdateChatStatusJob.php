@@ -16,7 +16,10 @@ class UpdateChatStatusJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public $timeout = 60;
-    public $tries = 3;
+    public $tries = 5;
+
+    public $backoff = [2, 5, 10]; // Progressive delay: 2s, 5s, 10s
+
 
     private $wamId;
     private $status;

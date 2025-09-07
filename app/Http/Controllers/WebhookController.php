@@ -184,7 +184,7 @@ class WebhookController extends BaseController
                                 $status,
                                 $organization->id,
                                 $response
-                        )->delay(now()->addSeconds(2)); // 2 second delay
+                        )->delay(now()->addSeconds(5)); // 2 second delay
                     }
                 }
 
