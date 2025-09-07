@@ -161,15 +161,33 @@ class WebhookController extends BaseController
             $statuses = $res['value']['statuses'] ?? null;
 
             if($statuses) {
-                Log::channel('webhook')->info('Status Messages', [
-                            "statuses" =>  $statuses
-                        ]);
                 //$response = $res['value']['statuses'][0];
                 foreach($statuses as $response){
                     $chatWamId = $response['id'];
                     $status = $response['status'];
 
-                    $chat = Chat::where('wam_id', $chatWamId)->first();
+                    Log::channel('webhook')->info('WAM ID Debug', [
+                        'wam_id_raw' => $chatWamId,
+                        'wam_id_length' => strlen($chatWamId),
+                        'wam_id_encoded' => base64_encode($chatWamId),
+                        'organization_id' => $organization->id
+                    ]);
+
+                    Log::info('Attempting to update chat', [
+                        'wam_id' => $chatWamId,
+                        'organization_id' => $organization->id,
+                        'status' => $status
+                    ]);
+
+                    $chat = Chat::where('wam_id', $chatWamId)
+                                ->where('organization_id', $organization->id)
+                                ->first();
+
+                    Log::info('Chat found result', [
+                        'chat_found' => $chat ? true : false,
+                        'chat_id' => $chat?->id,
+                        'current_status' => $chat?->status
+                    ]);
 
                     if($chat){
                         $chat->status = $status;
@@ -179,12 +197,6 @@ class WebhookController extends BaseController
                         $chatStatusLog->chat_id = $chat->id;
                         $chatStatusLog->metadata = json_encode($response);
                         $chatStatusLog->save();
-                    }else{
-                        Log::channel('webhook')->info('Status Messages - Update Fail', [
-                            "status" =>  $status,
-                            "chatWamId" => $chatWamId,
-                            "payload" => json_encode($response)
-                        ]);
                     }
                 }
 
