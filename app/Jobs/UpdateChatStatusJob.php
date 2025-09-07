@@ -18,8 +18,8 @@ class UpdateChatStatusJob implements ShouldQueue
     public $timeout = 60;
     public $tries = 5;
 
+    // Retry delays in seconds (3s, 6s, 12s, 24s)
     public $backoff = [3, 6, 12, 24];
-
 
     private $wamId;
     private $status;
@@ -57,18 +57,15 @@ class UpdateChatStatusJob implements ShouldQueue
                 'organization_id' => $this->organizationId
             ]);
         } else {
-            Log::channel('webhook')->warning('Chat still not found after delayed retry', [
+            Log::channel('webhook')->warning('Chat not found, will retry', [
                 'wam_id' => $this->wamId,
                 'status' => $this->status,
                 'organization_id' => $this->organizationId,
                 'attempt' => $this->attempts()
             ]);
 
-            // If this is not the last attempt, throw exception to retry
-            if ($this->attempts() < $this->tries) {
-               $this->release(3);
-               return ;
-            }
+            // Trigger retry by throwing exception
+            throw new \Exception('Chat not found yet');
         }
     }
 
