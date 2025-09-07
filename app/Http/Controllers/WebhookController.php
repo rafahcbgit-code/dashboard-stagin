@@ -189,7 +189,7 @@ class WebhookController extends BaseController
                                 $status,
                                 $organization->id,
                                 $response
-                        );
+                        )->onQueue('webhook');
                     }
                 }
 
