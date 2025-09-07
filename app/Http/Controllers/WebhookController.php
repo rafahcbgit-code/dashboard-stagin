@@ -166,24 +166,14 @@ class WebhookController extends BaseController
                     $chatWamId = $response['id'];
                     $status = $response['status'];
 
-                    Log::channel('webhook')->info('WAM ID Debug', [
-                        'wam_id_raw' => $chatWamId,
-                        'wam_id_length' => strlen($chatWamId),
-                        'wam_id_encoded' => base64_encode($chatWamId),
-                        'organization_id' => $organization->id
-                    ]);
-
-                    Log::info('Attempting to update chat', [
-                        'wam_id' => $chatWamId,
-                        'organization_id' => $organization->id,
-                        'status' => $status
-                    ]);
-
                     $chat = Chat::where('wam_id', $chatWamId)
                                 ->where('organization_id', $organization->id)
                                 ->first();
 
-                    Log::info('Chat found result', [
+                    Log::channel('webhook')->info('Attempting to update chat', [
+                        'wam_id' => $chatWamId,
+                        'status_update' => $status,
+                        'organization_id' => $organization->id,
                         'chat_found' => $chat ? true : false,
                         'chat_id' => $chat?->id,
                         'current_status' => $chat?->status
