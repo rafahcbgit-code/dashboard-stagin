@@ -166,6 +166,11 @@ class WebhookController extends BaseController
                     $chatWamId = $response['id'];
                     $status = $response['status'];
 
+                    Log::channel('webhook')->info('sendTemplateMessage::Created Chat', [
+                        'chatWamId' => $chatWamId,
+                        'status' => $status
+                    ]);
+
                     $chat = Chat::where('wam_id', $chatWamId)
                                 ->where('organization_id', $organization->id)
                                 ->first();

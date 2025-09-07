@@ -199,6 +199,13 @@ class WhatsappService
                 'created_at' => now()
             ]);
 
+            Log::channel('webhook')->info('sendTemplateMessage::Created Chat', [
+                'chat' => $chat->id,
+                'status' => $chat->status,
+                'created_at' => $chat->created_at,
+                'wam_id' => $chat->wam_id
+            ]);
+
 
 
             $responseObject->data->chat = $chat;
