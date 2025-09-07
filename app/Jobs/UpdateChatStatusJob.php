@@ -66,7 +66,8 @@ class UpdateChatStatusJob implements ShouldQueue
 
             // If this is not the last attempt, throw exception to retry
             if ($this->attempts() < $this->tries) {
-                throw new \Exception('Chat not found, will retry');
+               $this->release(3);
+               return ;
             }
         }
     }
