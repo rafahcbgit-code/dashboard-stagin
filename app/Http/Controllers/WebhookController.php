@@ -166,7 +166,7 @@ class WebhookController extends BaseController
                     $chatWamId = $response['id'];
                     $status = $response['status'];
 
-                    Log::channel('webhook')->info('sendTemplateMessage::Created Chat', [
+                    Log::channel('webhook')->info('webhook statuses', [
                         'chatWamId' => $chatWamId,
                         'status' => $status
                     ]);
