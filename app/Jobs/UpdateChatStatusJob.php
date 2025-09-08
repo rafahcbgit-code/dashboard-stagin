@@ -35,7 +35,7 @@ class UpdateChatStatusJob implements ShouldQueue
                     ->first();
 
         if (!$chat) {
-            Log::channel('webhook')->info('Chat Not Found', [ 'wam_id' => $this->wamId, 'status' => $this->status, 'organization_id' => $this->organizationId ]);
+            Log::channel('webhook')->info('Chat Not Found by the JOB', [ 'wam_id' => $this->wamId, 'status' => $this->status, 'organization_id' => $this->organizationId ]);
             return; // just exit silently if chat not found
         }
 
