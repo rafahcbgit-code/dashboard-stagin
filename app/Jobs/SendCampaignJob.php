@@ -277,9 +277,13 @@ class SendCampaignJob implements ShouldQueue
                     $template = $this->buildTemplateRequest($campaignLog->campaign_id, $campaignLog->contact);
                     $responseObject = $this->whatsappService->sendTemplateMessage($campaignLog->contact->uuid, $template, $campaign_user_id, $campaignLog->campaign_id);
                     
-                    Log::channel('campaign')->info('sendTemplateMessage data', [
-                                        'payload' => json_encode($responseObject),
+                    try {
+                        Log::channel('campaign')->info('Api Message Created', [
+                                        "wam_id" => $responseObject->wam_id,
+                                        "chat_id" => $responseObject->chat
                                     ]);
+                    } catch (\Exception $e) {
+                    }
 
                     $this->updateCampaignLogStatus($campaignLog, $responseObject);
                 }

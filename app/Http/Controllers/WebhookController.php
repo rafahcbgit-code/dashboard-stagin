@@ -166,15 +166,16 @@ class WebhookController extends BaseController
                     $chatWamId = $response['id'];
                     $status = $response['status'];
 
-                    Log::channel('webhook')->info('webhook statuses', [
-                        'chatWamId' => $chatWamId,
-                        'status' => $status
-                    ]);
-
                     $chat = Chat::where('wam_id', $chatWamId)
                                 ->where('organization_id', $organization->id)
                                 ->first();
 
+                    Log::channel('webhook')->info('webhook statuses', [
+                        'chatWamId' => $chatWamId,
+                        'status' => $status,
+                        "chat_id" => $chat ? $chat->id : null
+                    ]);
+                                
                     if($chat){
                         $chat->status = $status;
                         $chat->save();
