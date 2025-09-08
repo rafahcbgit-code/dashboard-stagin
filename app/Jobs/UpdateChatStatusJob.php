@@ -34,11 +34,11 @@ class UpdateChatStatusJob implements ShouldQueue
                     ->where('organization_id', $this->organizationId)
                     ->first();
 
-        if (!$chat) {
+        /* if (!$chat) {
             self::dispatch($this->wamId, $this->status, $this->organizationId, $this->webhookPayload)
                 ->delay(now()->addSeconds(5));
             return;
-        }
+        } */
 
         // Update chat
         $chat->update(['status' => $this->status]);
