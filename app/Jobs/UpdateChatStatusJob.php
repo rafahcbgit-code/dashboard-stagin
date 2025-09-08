@@ -34,25 +34,28 @@ class UpdateChatStatusJob implements ShouldQueue
                     ->where('organization_id', $this->organizationId)
                     ->first();
 
-        if (!$chat) {
-            /* self::dispatch($this->wamId, $this->status, $this->organizationId, $this->webhookPayload)
-                ->delay(now()->addSeconds(5)); */
-            return;
-        }
-
-        // Update chat
-        $chat->update(['status' => $this->status]);
-
         Log::channel('webhook')->info('JOB webhook statuses', [
             'chatWamId' => $this->wamId,
             'status' => $this->status,
             "chat_id" => $chat ? $chat->id : null
         ]);
 
-        // Log status
-        ChatStatusLog::create([
-            'chat_id'   => $chat->id,
-            'metadata'  => json_encode($this->webhookPayload),
-        ]);
+        if (!$chat) {
+            self::dispatch($this->wamId, $this->status, $this->organizationId, $this->webhookPayload)
+                ->delay(now()->addSeconds(5));
+            return;
+        }
+
+        if(!in_array($this->status, ['delivered', 'read'])) {
+            // Update chat
+            $chat->update(['status' => $this->status]);
+
+
+            // Log status
+            ChatStatusLog::create([
+                'chat_id'   => $chat->id,
+                'metadata'  => json_encode($this->webhookPayload),
+            ]);
+        }
     }
 }
