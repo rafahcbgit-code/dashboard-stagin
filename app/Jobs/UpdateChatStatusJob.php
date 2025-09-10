@@ -41,8 +41,8 @@ class UpdateChatStatusJob implements ShouldQueue
         ]);
 
         if (!$chat) {
-            self::dispatch($this->wamId, $this->status, $this->organizationId, $this->webhookPayload)
-                ->delay(now()->addSeconds(5));
+           /*  self::dispatch($this->wamId, $this->status, $this->organizationId, $this->webhookPayload)
+                ->delay(now()->addSeconds(5)); */
             return;
         }
 
