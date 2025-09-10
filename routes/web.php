@@ -204,9 +204,9 @@ Route::middleware(['auth:user'])->group(function () {
                    
                     Route::get('/settings/labels', [App\Http\Controllers\User\SettingController::class, 'labels'])->name('settings.labels');
                     Route::post('/settings/labels', [App\Http\Controllers\User\SettingController::class, 'labels']);
+                    Route::post('/settings/labels/create-group', [App\Http\Controllers\User\SettingController::class, 'createGroupFromLabel']);
                     Route::put('/settings/labels/{label}', [App\Http\Controllers\User\SettingController::class, 'updateLabel'])->name('settings.labels.update');
                     Route::delete('/settings/labels/{label}', [App\Http\Controllers\User\SettingController::class, 'deleteLabel'])->name('settings.labels.delete');
-                   
                     
                     Route::get('/settings/global-reply', [App\Http\Controllers\User\SettingController::class, 'viewGlobalReplySettings']);
                     Route::post('/settings/global-reply', [App\Http\Controllers\User\SettingController::class, 'updateGlobalReply']);

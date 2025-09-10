@@ -21,11 +21,26 @@
                                 <path fill="none" :stroke="label.color" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
                                     d="M20.59 13.41 12 22 4 14V4h10l8.59 8.59zM7 7h.01" />
                                 </svg>
-                                <span>{{ label.title }}</span>
+                                <div>
+                                    <span>{{ label.title }}</span>
+                                    <div class="text-xs text-gray-500">
+                                        {{ label.contact_count || 0 }} {{ $t('contacts') }}
+                                    </div>
+                                </div>
                             </div>
 
                             <!-- Actions -->
                             <div class="flex items-center space-x-3">
+                                <!-- Create Group Icon -->
+                                <button @click="openCreateGroupModal(label)" 
+                                    class="text-green-500 hover:text-green-700"
+                                    :title="$t('Create Group from Label')">
+                                    <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none"
+                                        viewBox="0 0 24 24" stroke="currentColor">
+                                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M12 4v16m8-8H4" />
+                                    </svg>
+                                </button>
                                 <!-- Edit Icon (Pencil) -->
                                 <button @click="editLabel(label)" class="text-black-500 hover:text-blue-700">
                                     <svg xmlns="http://www.w3.org/2000/svg" class="w-5 h-5" fill="none"
@@ -49,7 +64,7 @@
             </div>
         </div>
 
-        <!-- Modal -->
+        <!-- Add/Edit Label Modal -->
         <Modal :label="modalTitle" :isOpen="isOpen">
             <form @submit.prevent="submit" class="space-y-4">
                 <FormInput v-model="form.title" :name="$t('Title')" :error="form.errors.title" />
@@ -68,6 +83,32 @@
                 </div>
             </form>
         </Modal>
+
+        <!-- Create Group Modal -->
+        <Modal :label="`${$t('Create Group from Label')}: ${selectedLabel?.title}`" :isOpen="isCreateGroupOpen">
+            <form @submit.prevent="submitCreateGroup" class="space-y-4">
+                <div class="mb-4 p-3 bg-gray-50 rounded-md">
+                    <div class="flex items-center space-x-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24">
+                            <path fill="none" :stroke="selectedLabel?.color" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M20.59 13.41 12 22 4 14V4h10l8.59 8.59zM7 7h.01" />
+                        </svg>
+                        <span class="font-medium">{{ selectedLabel?.title }}</span>
+                        <span class="text-sm text-gray-500">({{ selectedLabel?.contact_count || 0 }} {{ $t('contacts') }})</span>
+                    </div>
+                </div>
+                <FormInput v-model="createGroupForm.name" :name="$t('Group Name')" :error="createGroupForm.errors.name" />
+                <div class="flex justify-end space-x-2 mt-4">
+                    <button type="button" @click="isCreateGroupOpen = false" class="px-4 py-2 border rounded">
+                        {{ $t('Cancel') }}
+                    </button>
+                    <button type="submit" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+                        :disabled="createGroupForm.processing">
+                        {{ $t('Create Group') }}
+                    </button>
+                </div>
+            </form>
+        </Modal>
     </SettingLayout>
 </template>
 
@@ -81,12 +122,19 @@ import { ref } from "vue";
 const props = defineProps(['labels', 'settings', 'modules']);
 
 const isOpen = ref(false);
+const isCreateGroupOpen = ref(false);
 const modalTitle = ref("Add Label");
+const selectedLabel = ref(null);
 
 const form = useForm({
     id: null,
     title: "",
     color: "#000000"
+});
+
+const createGroupForm = useForm({
+    name: "",
+    label_id: ""
 });
 
 const openModal = () => {
@@ -104,12 +152,28 @@ const editLabel = (label) => {
     isOpen.value = true;
 };
 
+const openCreateGroupModal = (label) => {
+    createGroupForm.reset();
+    createGroupForm.label_id = label.id;
+    selectedLabel.value = label;
+    isCreateGroupOpen.value = true;
+};
+
 const submit = () => {
     if (form.id) {
         form.put(`/settings/labels/${form.id}`, { onSuccess: () => isOpen.value = false });
     } else {
         form.post("/settings/labels", { onSuccess: () => isOpen.value = false });
     }
+};
+
+const submitCreateGroup = () => {
+    createGroupForm.post("/settings/labels/create-group", { 
+        onSuccess: () => {
+            isCreateGroupOpen.value = false;
+            createGroupForm.reset();
+        }
+    });
 };
 
 const destroy = (id) => {

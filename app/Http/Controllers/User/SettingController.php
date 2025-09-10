@@ -10,10 +10,12 @@ use App\Models\Label;
 use App\Models\Contact;
 use App\Models\Setting;
 use App\Models\Template;
+use App\Models\ContactGroup;
 use App\Models\Organization;
 use Illuminate\Http\Request;
 use App\Helpers\CustomHelper;
 use App\Services\WhatsappService;
+use App\Models\ContactContactGroup;
 use Illuminate\Support\Facades\URL;
 use App\Services\ContactFieldService;
 use App\Http\Requests\StoreWhatsappProfile;
@@ -626,8 +628,16 @@ public function campaign(Request $request)
         $organization = Organization::findOrFail($organizationId);
 
         if ($request->isMethod('get')) {
-
             $labels = $organization->labels()->latest()->get();
+            
+            // Add contact count for each label
+            $labels->each(function($label) use ($organizationId) {
+                $label->contact_count = Contact::where('organization_id', $organizationId)
+                    ->whereHas('labels', function($query) use ($label) {
+                        $query->where('labels.id', $label->id);
+                    })
+                    ->count();
+            });
 
             return Inertia::render('User/Settings/Label', [
                 'title'        => __('Settings'),
@@ -682,5 +692,45 @@ public function campaign(Request $request)
                 'message' => __('Label deleted successfully'),
             ]
         );
+    }
+
+    public function createGroupFromLabel(Request $request){
+        $request->validate([
+            'name' => 'required|string|max:255',
+            'label_id' => 'required|exists:labels,id',
+        ]);
+
+        $organizationId = session()->get('current_organization');
+
+        $label = Label::where('id', $request->label_id)
+        ->where('organization_id', $organizationId)
+        ->firstOrFail();
+
+        $contactGroup = ContactGroup::create([
+            'name' => $request->name,
+            'organization_id' => $organizationId,
+            'created_by' => auth()->user()->id,
+        ]);
+
+        // Get all contacts that have this label
+        $contactsWithLabel = Contact::where('organization_id', $organizationId)
+        ->whereHas('labels', function($query) use ($request) {
+            $query->where('labels.id', $request->label_id);
+        })
+        ->get();
+
+        // Add these contacts to the new group
+        foreach ($contactsWithLabel as $contact) {
+            ContactContactGroup::create([
+                'contact_id' => $contact->id,
+                'contact_group_id' => $contactGroup->id,
+            ]);
+        }
+
+        return back()->with(
+            'status', [
+                'type' => 'success',
+                'message' => __('Contact group created successfully with :count contacts', ['count' => $contactsWithLabel->count()])
+            ]);
     }
 }
