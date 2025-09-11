@@ -20,6 +20,10 @@ class UpdateChatStatusJob implements ShouldQueue
     private $organizationId;
     private $webhookPayload;
 
+    public $tries = 5; // Maximum retry attempts
+    public $timeout = 60; // Job timeout
+    public $backoff = [10, 30, 60, 120, 300]; // Exponential backoff in seconds
+
     public function __construct($wamId, $status, $organizationId, $webhookPayload)
     {
         $this->wamId = $wamId;
@@ -37,25 +41,35 @@ class UpdateChatStatusJob implements ShouldQueue
         Log::channel('webhook')->info('JOB webhook statuses', [
             'chatWamId' => $this->wamId,
             'status' => $this->status,
-            "chat_id" => $chat ? $chat->id : null
+            'chat_id' => $chat ? $chat->id : null,
+            'attempt' => $this->attempts()
         ]);
 
         if (!$chat) {
-           /*  self::dispatch($this->wamId, $this->status, $this->organizationId, $this->webhookPayload)
-                ->delay(now()->addSeconds(5)); */
-            return;
+            // Throw an exception to trigger Laravel's retry mechanism
+            throw new \Exception("Chat not found for wam_id: {$this->wamId}");
         }
 
-        if(!in_array($this->status, ['delivered', 'read'])) {
+        if (!in_array($this->status, ['delivered', 'read'])) {
             // Update chat
             $chat->update(['status' => $this->status]);
 
-
             // Log status
             ChatStatusLog::create([
-                'chat_id'   => $chat->id,
-                'metadata'  => json_encode($this->webhookPayload),
+                'chat_id' => $chat->id,
+                'metadata' => json_encode($this->webhookPayload),
             ]);
         }
+    }
+
+    public function failed(\Throwable $exception)
+    {
+        Log::channel('webhook')->error('UpdateChatStatusJob failed permanently', [
+            'wam_id' => $this->wamId,
+            'status' => $this->status,
+            'organization_id' => $this->organizationId,
+            'error' => $exception->getMessage(),
+            'attempts' => $this->attempts()
+        ]);
     }
 }
