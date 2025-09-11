@@ -46,7 +46,7 @@ class OrganizationService
      */
     public function getByUuid($request, $uuid = null)
     {
-        $result['plans'] = SubscriptionPlan::all();
+        $result['plans'] = SubscriptionPlan::whereNull('deleted_at')->get();
 
         if ($uuid === null) {
             $result['organization'] = null;
