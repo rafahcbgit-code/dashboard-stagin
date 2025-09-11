@@ -193,7 +193,7 @@ class WebhookController extends BaseController
                                 $response
                         )->delay(now()->addSeconds(10))->onQueue('webhook');
                     }
-                    return Response::json(['error' => 'chat not found'], 404);
+                    // return Response::json(['error' => 'chat not found'], 404);
                 }
 
                 // Trigger webhook
