@@ -347,10 +347,12 @@
                             </div>
                             <div v-for="(value, key) in item.parameters" :key="key" class="flex items-center space-x-4">
                                 <div class="w-full">
-                                    <FormSelect :model-value="value.type = item.type === 'QUICK_REPLY' ? 'static' : 'dynamic'" @update:modelValue="val => value.type = val":name="$t('Button type')":options="variableOptions"class="sm:col-span-6"disabled />
+                                    <FormSelect v-model="value.type" :name="$t('Button type')" :options="variableOptions" :class="'sm:col-span-6'"/>
                                 </div>
                                 <div class="w-full">
-                                     <FormSelect v-if="value.type === 'dynamic'" v-model="value.value" :name="$t('Value')" :required="true" :error="form.errors['buttons.'+ index +'.parameters.0.value']" :options="dynamicOptions" :class="'sm:col-span-6'"/>
+                                    <FormInput v-if="value.type === 'static'" v-model="value.value" :name="$t('Value')" :required="true" :error="form.errors['buttons.'+ index +'.parameters.0.value']" :type="'text'" :class="'sm:col-span-6'"/>
+                                    <FormSelect v-if="value.type === 'dynamic'" v-model="value.value" :name="$t('Value')" :required="true" :error="form.errors['buttons.'+ index +'.parameters.0.value']" :options="dynamicOptions" :class="'sm:col-span-6'"/>
+                                    
                                 </div>
                             </div>
                         </div>
