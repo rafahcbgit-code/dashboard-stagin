@@ -311,7 +311,12 @@ class Contact extends Model {
     public function getFormattedPhoneNumberAttribute($value)
     {
         // Use the phone() helper function to format the phone number to international format
-        return phone($this->phone)->formatInternational();
+        try {
+            return phone($this->phone)->formatInternational();
+        } catch (\Exception $e) {
+            return $this->phone;
+        }
+        
     }
 
     protected function decodeUnicodeBytes($value)
