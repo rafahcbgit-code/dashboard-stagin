@@ -329,7 +329,6 @@
                         </div>
                     </div>
                 </div>
-              
                 <div v-if="form.buttons.length > 0" class="bg-slate-100 p-3 mt-1 text-sm">
                     <h2 class="flex items-center justify-between space-x-2 pb-2 border-b">
                         <div class="flex items-center space-x-2">
@@ -352,7 +351,6 @@
                                 <div class="w-full">
                                     <FormInput v-if="value.type === 'static'" v-model="value.value" :name="$t('Value')" :required="true" :error="form.errors['buttons.'+ index +'.parameters.0.value']" :type="'text'" :class="'sm:col-span-6'"/>
                                     <FormSelect v-if="value.type === 'dynamic'" v-model="value.value" :name="$t('Value')" :required="true" :error="form.errors['buttons.'+ index +'.parameters.0.value']" :options="dynamicOptions" :class="'sm:col-span-6'"/>
-                                    
                                 </div>
                             </div>
                         </div>
