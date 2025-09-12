@@ -46,20 +46,20 @@ class OrganizationService
      */
     public function getByUuid($request, $uuid = null)
     {
-        $result['plans'] = SubscriptionPlan::all();
+        $result['plans'] = SubscriptionPlan::whereNull('deleted_at')->get();
 
         if ($uuid === null) {
             $result['organization'] = null;
             $result['billing'] = null;
             $result['users'] = null;
-    
+
             return $result;
         }
 
         $organization = Organization::with('subscription.plan')->where('uuid', $uuid)->first();
         $users = (new User)->listAll('user', $request->query('search'), $organization->id);
         $billing = (new BillingTransaction)->listAll($request->query('search'), $organization->id);
-        
+
         $result['organization'] = $organization;
         $result['billing'] = BillingResource::collection($billing);
         $result['users'] = UserResource::collection($users);
@@ -75,7 +75,7 @@ class OrganizationService
     public function store(Object $request)
     {
         return DB::transaction(function () use ($request) {
-            if($request->input('create_user') == 1){
+            if ($request->input('create_user') == 1) {
                 //Create and attach user to organization
                 $user = User::create([
                     'first_name' => $request->input('first_name'),
@@ -163,14 +163,15 @@ class OrganizationService
         $subscription = Subscription::where('organization_id', $organization->id)->first();
         $plan = SubscriptionPlan::where('uuid', $request->plan)->first();
 
-        if($subscription){
+        if ($subscription) {
             $subscription->update([
-                'plan_id' => $plan->id
+                'plan_id' => $plan->id,
+                'status'  => 'active',
             ]);
         } else {
             $config = Setting::where('key', 'trial_period')->first();
             $has_trial = isset($config->value) && $config->value > 0 ? true : false;
-            
+
             Subscription::create([
                 'organization_id' => $organization->id,
                 'status' => $has_trial ? 'trial' : 'active',
@@ -183,10 +184,11 @@ class OrganizationService
         return $organization;
     }
 
-    public function storeTransaction($request, $uuid){
+    public function storeTransaction($request, $uuid)
+    {
         return DB::transaction(function () use ($request, $uuid) {
             $organization = Organization::where('uuid', $uuid)->firstOrFail();
-    
+
             $modelClass = match ($request->type) {
                 'credit' => BillingCredit::class,
                 'debit' => BillingDebit::class,
@@ -197,17 +199,17 @@ class OrganizationService
                 'organization_id' => $organization->id,
                 'amount' => $request->amount,
             ];
-            
+
             if (in_array($type, ['credit', 'debit'])) {
                 $entryData['description'] = $request->description;
             }
-            
+
             if ($type === 'payment') {
                 $entryData['processor'] = $request->method;
             }
-    
+
             $entry = $modelClass::create($entryData);
-    
+
             $transaction = BillingTransaction::create([
                 'organization_id' => $organization->id,
                 'entity_type' => $request->type,
@@ -216,19 +218,20 @@ class OrganizationService
                 'amount' => $request->amount,
                 'created_by' => auth()->user()->id
             ]);
-    
+
             return $transaction;
         });
     }
 
-    public function destroy($uuid){
+    public function destroy($uuid)
+    {
         // Find the organization by its UUID
         $organization = Organization::where('uuid', $uuid)->first();
 
         if ($organization) {
             // Delete all teams associated with the organization
             Team::where('organization_id', $organization->id)->delete();
-            
+
             // Delete the organization
             $organization->delete();
 
