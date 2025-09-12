@@ -102,7 +102,6 @@ class CampaignController extends BaseController
     }
 
     public function store(StoreCampaign $request){
-        dd("ddd");
         $this->campaignService->store($request);
 
         return Redirect::route('campaigns')->with(

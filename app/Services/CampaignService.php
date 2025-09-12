@@ -27,8 +27,6 @@ class CampaignService
     use TemplateTrait;
 
     public function store(object $request){
-        Log::warning("Campaign", [$request]);
-        dd("dd");
         $organizationId = session()->get('current_organization');
 
         $timezone = Setting::where('key', 'timezone')->value('value');
