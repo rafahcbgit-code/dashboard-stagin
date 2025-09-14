@@ -20,7 +20,6 @@ use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Support\Facades\DB;
 use Session;
 
 class WhatsappService
@@ -216,74 +215,6 @@ class WhatsappService
             ]);
 
             event(new NewChatEvent($chatArray, $contact->organization_id));
-        }
-
-        // Trigger webhook
-        WebhookHelper::triggerWebhookEvent('message.sent', [
-            'data' => $responseObject,
-        ], $contact->organization_id);
-
-        return $responseObject;
-    }
-
-    public function sendTemplateMessage2($contactUuId, $templateContent, $userId = NULL, $campaignId = NULL, $mediaId = NULL)
-    {
-        $contact = Contact::where('uuid', $contactUuId)->first();
-        $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}/messages";
-        
-        $headers = $this->setHeaders();
-
-        $requestData['messaging_product'] = 'whatsapp';
-        $requestData['recipient_type'] = 'individual';
-        $requestData['to'] = $contact->phone;
-        $requestData['type'] = 'template';
-        $requestData['template'] = $templateContent;
-
-        $responseObject = $this->sendHttpRequest('POST', $url, $requestData, $headers);
-
-        if($responseObject->success === true){
-            // Use a database transaction to ensure atomicity
-            DB::transaction(function() use ($responseObject, $contact, $userId, $campaignId, $templateContent) {
-                if($campaignId != NULL){
-                    $campaign = Campaign::where('id', $campaignId)->first();
-                    $templateMetadata = json_decode($campaign->metadata);
-                }
-
-                $chat = Chat::create([
-                    'organization_id' => $contact->organization_id,
-                    'wam_id' => $responseObject->data->messages[0]->id,
-                    'contact_id' => $contact->id,
-                    'type' => 'outbound',
-                    'user_id' => $userId,
-                    'metadata' => $campaignId != NULL ? $this->buildCampaignTemplateChatMessage($templateMetadata, $contact->uuid) : $this->buildTemplateChatMessage($templateContent, $contact),
-                    'media_id' => $campaignId != NULL ? $this->getMediaIdFromCampaign($campaignId) : $mediaId,
-                    'status' => isset($responseObject->data->messages[0]->message_status) ? $responseObject->data->messages[0]->message_status : 'sent',
-                    'created_at' => now()
-                ]);
-
-                // Ensure the chat is saved and get fresh instance
-                $chat->refresh();
-                $responseObject->data->chat = $chat;
-
-                $chatlogId = ChatLog::insertGetId([
-                    'contact_id' => $contact->id,
-                    'entity_type' => 'chat',
-                    'entity_id' => $chat->id,
-                    'created_at' => now()
-                ]);
-
-                $chatLogArray = ChatLog::where('id', $chatlogId)->where('deleted_at', null)->first();
-                $chatArray = array([
-                    'type' => 'chat',
-                    'value' => $chatLogArray->relatedEntities
-                ]);
-
-                event(new NewChatEvent($chatArray, $contact->organization_id));
-            });
-
-            // Add a small delay to ensure database commit is complete
-            // before WhatsApp webhook can arrive
-            usleep(50000); // 50ms delay
         }
 
         // Trigger webhook

@@ -161,49 +161,39 @@ class WebhookController extends BaseController
             $statuses = $res['value']['statuses'] ?? null;
 
             if($statuses) {
+                //$response = $res['value']['statuses'][0];
                 foreach($statuses as $response){
                     $chatWamId = $response['id'];
                     $status = $response['status'];
 
-                    // Try multiple times with exponential backoff
-                    $maxAttempts = 3;
-                    $attempt = 0;
-                    $chat = null;
+                    $chat = Chat::where('wam_id', $chatWamId)
+                                ->where('organization_id', $organization->id)
+                                ->first();
 
-                    while ($attempt < $maxAttempts && !$chat) {
-                        $chat = Chat::where('wam_id', $chatWamId)
-                                    ->where('organization_id', $organization->id)
-                                    ->first();
-
-                        if (!$chat) {
-                            $attempt++;
-                            if ($attempt < $maxAttempts) {
-                                // Exponential backoff: 100ms, 300ms, 900ms
-                                usleep(100000 * pow(3, $attempt - 1));
-                            }
-                        }
-                    }
-
+                    /* Log::channel('webhook')->info('webhook statuses', [
+                        'chatWamId' => $chatWamId,
+                        'status' => $status,
+                        "chat_id" => $chat ? $chat->id : null
+                    ]); */
+                                
                     if($chat){
-                        // Only update status if it's a meaningful change
-                        if (in_array($status, ['sent', 'delivered', 'read', 'failed']) && $chat->status !== $status) {
-                            $chat->status = $status;
-                            $chat->save();
+                        $chat->status = $status;
+                        $chat->save();
 
-                            $chatStatusLog = new ChatStatusLog;
-                            $chatStatusLog->chat_id = $chat->id;
-                            $chatStatusLog->metadata = json_encode($response);
-                            $chatStatusLog->save();
-                        }
-                    } else {
-                        // Log the issue but don't create a job
-                        Log::channel('webhook')->warning('Chat not found after retries', [
-                            'chatWamId' => $chatWamId,
-                            'status' => $status,
-                            'organization_id' => $organization->id,
-                            'attempts' => $maxAttempts
-                        ]);
-                    }
+                        $chatStatusLog = new ChatStatusLog;
+                        $chatStatusLog->chat_id = $chat->id;
+                        $chatStatusLog->metadata = json_encode($response);
+                        $chatStatusLog->save();
+                    }/* else{
+                        Log::channel('webhook')->info('adding webhook in job');
+                        \App\Jobs\UpdateChatStatusJob::dispatch(
+                                $chatWamId,
+                                $status,
+                                $organization->id,
+                                $response
+                        )->delay(now()->addSeconds(10))->onQueue('webhook');
+                    } */
+                    // return Response::json(['error' => 'chat not found'], 404);
                 }
 
                 // Trigger webhook
