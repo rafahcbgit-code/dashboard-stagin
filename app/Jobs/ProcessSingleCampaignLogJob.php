@@ -37,7 +37,7 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
     public function handle()
     {
         try {
-            DB::transaction(function() {
+            //DB::transaction(function() {
                 // Lock the log for update to prevent duplicate processing
                 $lockedLog = CampaignLog::where('id', $this->campaignLog->id)
                     ->whereIn('status', ['pending', 'failed'])
@@ -62,7 +62,7 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
 
                     $this->updateLogStatus($lockedLog, $responseObject);
                 }
-            });
+            //});
         } catch (\Exception $e) {
             Log::error('Error processing campaign log ' . $this->campaignLog->id . ': ' . $e->getMessage());
             throw $e;

@@ -184,7 +184,7 @@ class WebhookController extends BaseController
                         $chatStatusLog->chat_id = $chat->id;
                         $chatStatusLog->metadata = json_encode($response);
                         $chatStatusLog->save();
-                    }else{
+                    }/* else{
                         Log::channel('webhook')->info('adding webhook in job');
                         \App\Jobs\UpdateChatStatusJob::dispatch(
                                 $chatWamId,
@@ -192,7 +192,7 @@ class WebhookController extends BaseController
                                 $organization->id,
                                 $response
                         )->delay(now()->addSeconds(10))->onQueue('webhook');
-                    }
+                    } */
                     // return Response::json(['error' => 'chat not found'], 404);
                 }
 
