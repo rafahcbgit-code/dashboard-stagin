@@ -124,7 +124,7 @@
         <div class="max-w-md w-full space-y-8">
             <div class="mt-8 space-y-2">
                 
-                <div v-if="messageStatus === 'success' || messageStatus === 'read' || messageStatus === 'delivered'" v-for="(log, index) in logs" class="text-sm border-b pb-2">
+                <div v-if="messageStatus === 'success' || messageStatus === 'sent' || messageStatus === 'read' || messageStatus === 'delivered'" v-for="(log, index) in logs" class="text-sm border-b pb-2">
                     <div class="flex items-center capitalize">
                         <svg class="mr-1" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 16 16"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="m1.75 9.75l2.5 2.5m3.5-4l2.5-2.5m-4.5 4l2.5 2.5l6-6.5"/></svg>
                         <span>{{ $t(getStatus(log.metadata)) }}</span>
