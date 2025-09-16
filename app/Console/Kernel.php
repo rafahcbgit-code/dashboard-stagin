@@ -49,12 +49,18 @@ class Kernel extends ConsoleKernel
             '--model' => [\App\Models\CampaignLog::class],
             '--hours' => 72,
         ])->daily();
-
-        // Clean old processed missed status updates (keep for 7 days)
+        
+        // // Clean old processed missed status updates (keep for 7 days)
         $schedule->command('model:prune', [
             '--model' => [\App\Models\MissedChatStatusUpdate::class],
             '--hours' => 168, // 7 days
-        ])->daily()->onlyProcessed();
+        ])->daily()
+        ->when(function () {
+            // Only run if there are processed records older than 7 days
+            return \App\Models\MissedChatStatusUpdate::where('state', 'processed')
+                ->where('created_at', '<', now()->subDays(7))
+                ->exists();
+        });
 
         // Monitor queue size
         //$schedule->command('monitor:queue-size')->everyFiveMinutes();
