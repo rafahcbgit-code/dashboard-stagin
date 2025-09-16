@@ -87,7 +87,6 @@ class ProcessSingleMissedStatusJob implements ShouldQueue
             $chatStatusLog->chat_id = $chat->id;
             $chatStatusLog->metadata = $missedUpdate->payload;
             $chatStatusLog->created_at = $missedUpdate->created_at;
-            $chatStatusLog->updated_at = now();
             $chatStatusLog->save();
 
         } catch (\Exception $e) {
