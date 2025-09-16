@@ -2,35 +2,36 @@
 
 namespace App\Http\Controllers;
 
-use App\Events\NewChatEvent;
-use App\Helpers\WebhookHelper;
-use App\Http\Controllers\Controller as BaseController;
-use App\Models\AutoReply;
-use App\Models\Contact;
+use Str;
 use App\Models\Chat;
+use GuzzleHttp\Client;
 use App\Models\ChatLog;
-use App\Models\ChatStatusLog;
-use App\Models\ChatMedia;
-use App\Models\Organization;
+use App\Models\Contact;
 use App\Models\Setting;
 use App\Models\Template;
-use App\Resolvers\PaymentPlatformResolver;
-use App\Services\AutoReplyService;
+use App\Models\AutoReply;
+use App\Models\ChatMedia;
+use App\Events\NewChatEvent;
+use App\Models\Organization;
+use Illuminate\Http\Request;
+use App\Models\ChatStatusLog;
 use App\Services\ChatService;
+use App\Helpers\WebhookHelper;
 use App\Services\PhoneService;
 use App\Services\StripeService;
-use App\Services\SubscriptionService;
-use GuzzleHttp\Client;
-use GuzzleHttp\Exception\ConnectException;
-use GuzzleHttp\Exception\GuzzleException;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Config;
+use App\Services\AutoReplyService;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Response;
-use Illuminate\Support\Facades\Storage;
-use Propaganistas\LaravelPhone\PhoneNumber;
-use Str;
 use App\Services\UnsubscribeChecker;
+use App\Services\SubscriptionService;
+use App\Models\MissedChatStatusUpdate;
+use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Response;
+use GuzzleHttp\Exception\GuzzleException;
+use App\Resolvers\PaymentPlatformResolver;
+use GuzzleHttp\Exception\ConnectException;
+use Propaganistas\LaravelPhone\PhoneNumber;
+use App\Http\Controllers\Controller as BaseController;
 
 class WebhookController extends BaseController
 {
@@ -184,15 +185,16 @@ class WebhookController extends BaseController
                         $chatStatusLog->chat_id = $chat->id;
                         $chatStatusLog->metadata = json_encode($response);
                         $chatStatusLog->save();
-                    }/* else{
-                        Log::channel('webhook')->info('adding webhook in job');
-                        \App\Jobs\UpdateChatStatusJob::dispatch(
-                                $chatWamId,
-                                $status,
-                                $organization->id,
-                                $response
-                        )->delay(now()->addSeconds(10))->onQueue('webhook');
-                    } */
+                    }else{
+                        MissedChatStatusUpdate::create([
+                            'wam_id' => $chatWamId,
+                            'organization_id' => $organization->id,
+                            'payload' => json_encode($response),
+                            'status' => $status,
+                            'state' => MissedChatStatusUpdate::STATE_NOT_PROCESSED,
+                            'created_at' => now()
+                        ]);
+                    }
                     // return Response::json(['error' => 'chat not found'], 404);
                 }
 
