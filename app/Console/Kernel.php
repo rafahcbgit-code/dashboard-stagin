@@ -21,6 +21,11 @@ class Kernel extends ConsoleKernel
         $schedule->job(new ProcessCampaignMessagesJob(), 'campaign-messages')
             ->everyMinute()
             ->withoutOverlapping();
+
+        // Process missed status updates every 3 minutes
+        $schedule->job(new \App\Jobs\ProcessMissedStatusUpdatesJob(), 'webhook-status')
+            ->everyThreeMinutes()
+            ->withoutOverlapping();
         
 
         /*$schedule->command('queue:work --queue=campaign-messages,campaign-logs --stop-when-empty')
@@ -41,9 +46,21 @@ class Kernel extends ConsoleKernel
             ->daily();
         
         $schedule->command('model:prune', [
-            '--model' => [CampaignLog::class],
+            '--model' => [\App\Models\CampaignLog::class],
             '--hours' => 72,
         ])->daily();
+        
+        // // Clean old processed missed status updates (keep for 7 days)
+        $schedule->command('model:prune', [
+            '--model' => [\App\Models\MissedChatStatusUpdate::class],
+            '--hours' => 168, // 7 days
+        ])->daily()
+        ->when(function () {
+            // Only run if there are processed records older than 7 days
+            return \App\Models\MissedChatStatusUpdate::where('state', 'processed')
+                ->where('created_at', '<', now()->subDays(7))
+                ->exists();
+        });
 
         // Monitor queue size
         //$schedule->command('monitor:queue-size')->everyFiveMinutes();
