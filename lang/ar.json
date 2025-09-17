@@ -821,5 +821,11 @@
     "Enter your extended license or the addon license to install": "أدخل رخصتك الموسعة أو رخصة الإضافة للتثبيت",
     "Envato purchase code": "رمز شراء Envato",
     "Not installed": "غير مثبت",
-    "Search": "بحث"
+    "Search": "بحث",
+     "Manage labels": "إدارة العلامات",
+    "Save Labels": "حفظ العلامة",
+    "Total selected": "الإجمالي المحدد",
+    "Filter by Labels": "فلترة باستخدام العلامة",
+    "No labels available. Create labels in Settings first.": "لا توجد علامات متاحة. قم بإنشاء علامة من الإعدادات أولاً",
+    "Clear filters": "حذف الفلترة"
 }
