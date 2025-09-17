@@ -1,6 +1,6 @@
 <template>
     <AppLayout v-slot:default="slotProps">
-        <div class="md:flex md:flex-grow md:overflow-hidden">
+        <div class="md:flex md:flex-grow md:overflow-visible">
             <div class="md:w-[30%] md:flex flex-col h-full bg-white border-r border-l" :class="contact ? 'hidden' : ''">
                 <ChatTable :rows="rows" :filters="props.filters" :rowCount="props.rowCount" :ticketingIsEnabled="ticketingIsEnabled" :status="props?.status" :chatSortDirection="props.chat_sort_direction"/>
             </div>
@@ -12,6 +12,7 @@
                     :displayContactInfo="displayContactInfo" 
                     :ticket="ticket" 
                     :addon="addon" 
+                    :teamRole="props.teamRole"
                     @toggleView="toggleContactView" 
                     @deleteThread="deleteThread" 
                     @closeThread="closeThread"
@@ -100,7 +101,8 @@
         templates: Array,
         fields: Array,
         locationSettings: Object,
-        simpleForm: Boolean
+        simpleForm: Boolean,
+        teamRole: String
     });
 
     const rows = ref(props.rows);

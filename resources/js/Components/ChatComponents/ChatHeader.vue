@@ -1,5 +1,5 @@
 <script setup>
-    import { ref, watchEffect, computed } from 'vue';
+    import { ref, watchEffect, computed, onMounted, onUnmounted } from 'vue';
     import axios from 'axios';
     import { router, useForm, Link, usePage } from '@inertiajs/vue3'
     import AlertModal from '@/Components/AlertModal.vue';
@@ -12,7 +12,7 @@
     import Modal from '@/Components/Modal.vue';
     import { trans } from 'laravel-vue-i18n';
 
-    const props = defineProps(['contact', 'displayContactInfo', 'ticketingIsEnabled', 'ticket', 'addon']);
+    const props = defineProps(['contact', 'displayContactInfo', 'ticketingIsEnabled', 'ticket', 'addon', 'teamRole']);
 
     const accountUser = computed(() => usePage().props.auth.user);
     const showAlert = ref(false);
@@ -171,9 +171,34 @@
             }
         });
     }
+
+    const showDropdown = ref(false);
+
+    const toggleDropdown = () => {
+        showDropdown.value = !showDropdown.value;
+    }
+
+    const closeDropdown = () => {
+        showDropdown.value = false;
+    }
+
+    const handleClickOutside = (event) => {
+        const dropdown = document.querySelector('.dropdown-container');
+        if (dropdown && !dropdown.contains(event.target)) {
+            closeDropdown();
+        }
+    }
+
+    onMounted(() => {
+        document.addEventListener('click', handleClickOutside);
+    });
+
+    onUnmounted(() => {
+        document.removeEventListener('click', handleClickOutside);
+    });
 </script>
 <template>
-    <div class="h-20 bg-white border-b border-1 flex items-center justify-between px-4 md:px-4">
+    <div class="h-20 bg-white border-b border-1 flex items-center justify-between px-4 md:px-4 header-container">
         <div class="flex items-center gap-x-4 cursor-pointer w-3/4">
             <Link href="/chats" class="sm:block md:hidden">
                 <svg xmlns="http://www.w3.org/2000/svg" width="2em" height="2em" viewBox="0 0 24 24"><path fill="currentColor" d="M19 11H7.14l3.63-4.36a1 1 0 1 0-1.54-1.28l-5 6a1.19 1.19 0 0 0-.09.15c0 .05 0 .08-.07.13A1 1 0 0 0 4 12a1 1 0 0 0 .07.36c0 .05 0 .08.07.13a1.19 1.19 0 0 0 .09.15l5 6A1 1 0 0 0 10 19a1 1 0 0 0 .64-.23a1 1 0 0 0 .13-1.41L7.14 13H19a1 1 0 0 0 0-2"/></svg>
@@ -194,27 +219,81 @@
                 <FormSelectCombo v-if="ticketingIsEnabled && accountUser.teams[0]['role'] != 'agent'" v-model="user" :name="''" :loadOptions="loadUsers" :class="'col-span-1 md:block hidden'" :placeholder="'Select Agent'" @update:modelValue="changeTicketAgent()"/>
             </div>
         </div>
-        <div>
+        <div class="relative">
             <div class="flex items-center space-x-4">
                 <button v-if="ticketState === 'open' && ticketingIsEnabled" @click="changeTicketStatus('closed')" class="text-sm md:inline-flex hidden justify-center rounded-md border border-transparent bg-red-800 px-4 py-1 text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">{{ $t('Mark as closed') }}</button>
                 <button v-if="ticketState === 'closed' && ticketingIsEnabled" @click="changeTicketStatus('open')" class="text-sm md:inline-flex hidden justify-center rounded-md border border-transparent bg-primary px-4 py-1 text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">{{ $t('Mark as open') }}</button>
 
-                <Dropdown v-if="!displayContact">
-                    <button type="button" class="inline-flex w-full justify-center items-center rounded-md text-sm font-medium text-black hover:bg-opacity-30 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-opacity-75">
-                        <span class="bg-slate-200 p-1 rounded-full cursor-pointer flex items-center justify-center">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6.75a.75.75 0 1 1 0-1.5a.75.75 0 0 1 0 1.5Zm0 6a.75.75 0 1 1 0-1.5a.75.75 0 0 1 0 1.5Zm0 6a.75.75 0 1 1 0-1.5a.75.75 0 0 1 0 1.5Z"/></svg>
-                        </span>
-                    </button>
-                    <template #items>
-                        <DropdownItemGroup>
-                            <DropdownItem @click="isOpenModal = true;" as="button">{{ $t('Add notes') }}</DropdownItem>
-                            <DropdownItem @click="openLabelsModal" as="button">{{ $t('Manage labels') }}</DropdownItem>
-                            <DropdownItem v-if="ticketState === 'open' && ticketingIsEnabled" @click="changeTicketStatus('closed')" as="button">{{ $t('Mark as closed') }}</DropdownItem>
-                            <DropdownItem v-if="ticketState === 'closed' && ticketingIsEnabled" @click="changeTicketStatus('open')" as="button">{{ $t('Mark as open') }}</DropdownItem>
-                            <DropdownItem @click="showAlert = true" as="button">{{ $t('Clear chat') }}</DropdownItem>
-                        </DropdownItemGroup>
-                    </template>
-                </Dropdown>
+                <div v-if="!displayContact" class="dropdown-container relative">
+                    <!-- Custom Dropdown -->
+                    <div class="relative">
+                        <button 
+                            type="button" 
+                            @click="toggleDropdown"
+                            class="inline-flex w-full justify-center items-center rounded-md text-sm font-medium text-black hover:bg-opacity-30 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-opacity-75"
+                        >
+                            <span class="bg-slate-200 p-1 rounded-full cursor-pointer flex items-center justify-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+                                    <path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 6.75a.75.75 0 1 1 0-1.5a.75.75 0 0 1 0 1.5Zm0 6a.75.75 0 1 1 0-1.5a.75.75 0 0 1 0 1.5Zm0 6a.75.75 0 1 1 0-1.5a.75.75 0 0 1 0 1.5Z"/>
+                                </svg>
+                            </span>
+                        </button>
+                        
+                        <!-- Dropdown Menu -->
+                            <div 
+                            v-if="showDropdown"
+                            :class="[
+                                'absolute mt-2 w-56 bg-white border border-gray-200 rounded-md shadow-lg z-[99999]',
+                                $i18n.locale === 'ar' ? 'left-0 origin-top-left' : 'right-0 origin-top-right'
+                            ]"
+                            >
+                            <div class="py-1" role="menu">
+                                <button 
+                                    @click="isOpenModal = true; closeDropdown()" 
+                                    class="group flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+                                    role="menuitem"
+                                >
+                                    {{ $t('Add notes') }}
+                                </button>
+                                
+                                <button 
+                                    @click="openLabelsModal(); closeDropdown()" 
+                                    class="group flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+                                    role="menuitem"
+                                >
+                                    {{ $t('Manage labels') }}
+                                </button>
+                                
+                                <button 
+                                    v-if="ticketState === 'open' && ticketingIsEnabled"
+                                    @click="changeTicketStatus('closed'); closeDropdown()" 
+                                    class="group flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+                                    role="menuitem"
+                                >
+                                    {{ $t('Mark as closed') }}
+                                </button>
+                                
+                                <button 
+                                    v-if="ticketState === 'closed' && ticketingIsEnabled"
+                                    @click="changeTicketStatus('open'); closeDropdown()" 
+                                    class="group flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+                                    role="menuitem"
+                                >
+                                    {{ $t('Mark as open') }}
+                                </button>
+                                
+                                <button 
+                                    v-if="teamRole !== 'agent'"
+                                    @click="showAlert = true; closeDropdown()" 
+                                    class="group flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+                                    role="menuitem"
+                                >
+                                    {{ $t('Clear chat') }}
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
                 <div v-else @click="toggleView" class="bg-slate-200 p-2 rounded-lg text-sm cursor-pointer">
                     <span>{{ $t('Back') }}</span>
                 </div>
@@ -256,7 +335,7 @@
     </Modal>
 
     <!-- Manage Labels Modal -->
-    <Modal :label="'Manage Labels'" :isOpen="isOpenLabelsModal">
+    <Modal :label="$t('Manage labels')"  :isOpen="isOpenLabelsModal">
         <div class="mt-5">
             <div v-if="loadingLabels" class="flex justify-center py-4">
                 <svg class="animate-spin h-8 w-8 text-gray-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">

@@ -141,6 +141,10 @@ class ChatService
             ->where('status', 'APPROVED')
             ->get();
 
+            $team = Team::where('organization_id', $this->organizationId)
+                            ->where('user_id', auth()->user()->id)
+                ->first();
+
         if ($uuid !== null) {
             $contact = Contact::with(['lastChat', 'lastInboundChat', 'notes', 'contactGroups', 'labels'])
                 ->where('uuid', $uuid)
@@ -197,7 +201,8 @@ class ChatService
                     'addon' => $aimodule,
                     'chat_sort_direction' => $sortDirection,
                     'unreadMessages' => $unreadMessages,
-                    'isChatLimitReached' => SubscriptionService::isSubscriptionFeatureLimitReached($this->organizationId, 'message_limit')
+                    'isChatLimitReached' => SubscriptionService::isSubscriptionFeatureLimitReached($this->organizationId, 'message_limit'),
+                    'teamRole' => $team?->role  
                 ]);
             }
         }
@@ -225,7 +230,8 @@ class ChatService
                 'addon' => $aimodule,
                 'ticket' => array(),
                 'chat_sort_direction' => $sortDirection,
-                'isChatLimitReached' => SubscriptionService::isSubscriptionFeatureLimitReached($this->organizationId, 'message_limit')
+                'isChatLimitReached' => SubscriptionService::isSubscriptionFeatureLimitReached($this->organizationId, 'message_limit'),
+                'teamRole' => $team?->role  
             ]);
         }
     }
