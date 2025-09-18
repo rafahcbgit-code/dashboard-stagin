@@ -578,7 +578,7 @@ public function campaign(Request $request)
             'message'                => ['required_if:active,1', 'nullable', 'string', 'max:1000'],
             'buttons'                => ['required_if:active,1', 'array', 'min:1', 'max:3'],
             'buttons.*.title'        => ['required', 'string', 'max:20'],
-            'buttons.*.payload'      => ['required', 'string', 'max:256'],
+            //  'buttons.*.payload'      => ['required', 'string', 'max:256'],
         ];
 
         $messages = [
@@ -599,7 +599,7 @@ public function campaign(Request $request)
             ->map(function ($btn) {
                 return [
                     'title'   => trim(mb_substr((string)($btn['title'] ?? ''), 0, 20)),
-                    'payload' => trim(mb_substr((string)($btn['payload'] ?? ''), 0, 256)),
+                    'payload' => trim(mb_substr((string)($btn['title'] ?? ''), 0, 256)),
                 ];
             })
             ->values()
