@@ -155,6 +155,7 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::put('/contacts/{uuid}/labels', [App\Http\Controllers\User\ContactController::class, 'updateLabels'])->name('contacts.labels.update');
                 Route::get('/contacts/{uuid}/labels', [App\Http\Controllers\User\ContactController::class, 'getLabels']);
 
+                Route::put('/contacts/{uuid}/bot-toggle', [App\Http\Controllers\User\ContactController::class, 'toggleBot'])->name('contacts.bot.toggle');
 
                 Route::get('/campaigns/{uuid?}', [App\Http\Controllers\User\CampaignController::class, 'index'])->name('campaigns');
                 Route::post('/campaigns', [App\Http\Controllers\User\CampaignController::class, 'store']);

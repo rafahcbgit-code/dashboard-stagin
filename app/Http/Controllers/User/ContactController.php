@@ -368,4 +368,30 @@ class ContactController extends BaseController
             'contactLabels' => $contact->labels
         ]);
     }
+
+    public function toggleBot(Request $request, $uuid)
+    {
+        $organizationId = $this->getCurrentOrganizationId();
+        
+        // Validate the request
+        $validated = $request->validate([
+            'bot_enable' => 'required|boolean'
+        ]);
+
+        // Find the contact
+        $contact = Contact::where('uuid', $uuid)
+            ->where('organization_id', $organizationId)
+            ->whereNull('deleted_at')
+            ->firstOrFail();
+
+        // Update the bot_enable field
+        $contact->bot_enable = $validated['bot_enable'];
+        $contact->updated_at = now();
+        $contact->save();
+
+        return back()->with('status', [
+            'type' => 'success', 
+            'message' => __('Bot status updated successfully!')
+        ]);
+    }
 }

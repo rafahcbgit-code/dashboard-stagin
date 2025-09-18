@@ -66,6 +66,10 @@
         'ai_assistant': props.contact?.ai_assistance_enabled,
     });
 
+    const form4 = useForm({
+        'bot_enable': props.contact?.bot_enable,
+    });
+
     const labelsForm = useForm({
         'labels': []
     });
@@ -189,6 +193,23 @@
         }
     }
 
+    const toggleBot = () => {
+        form4.bot_enable = !form4.bot_enable;
+
+        form4.put('/contacts/' + props.contact.uuid + '/bot-toggle', {
+            preserveState: true,
+            onSuccess: () => {
+                // Update local contact data
+                props.contact.bot_enable = form4.bot_enable;
+            },
+            onError: (errors) => {
+                // Revert on error
+                form4.bot_enable = !form4.bot_enable;
+                console.error('Error toggling bot:', errors);
+            }
+        });
+    }
+
     onMounted(() => {
         document.addEventListener('click', handleClickOutside);
     });
@@ -280,6 +301,15 @@
                                     role="menuitem"
                                 >
                                     {{ $t('Mark as open') }}
+                                </button>
+
+                                <button 
+                                    @click="toggleBot(); closeDropdown()" 
+                                    class="group flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900"
+                                    role="menuitem"
+                                >
+                                {{ form4.bot_enable ? $t('Disable Chatbot') : $t('Enable Chatbot') }}
+   
                                 </button>
                                 
                                 <button 

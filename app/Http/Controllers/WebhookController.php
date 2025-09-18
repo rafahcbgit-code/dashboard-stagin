@@ -328,7 +328,7 @@ class WebhookController extends BaseController
 
                                 $isMessageLimitReached = SubscriptionService::isSubscriptionFeatureLimitReached($organization->id, 'message_limit');
 
-                                if(!$isMessageLimitReached){
+                                if(!$isMessageLimitReached && $contact->bot_enable){
                                     if($response['type'] === 'text' || $response['type'] === 'button'|| $response['type'] === 'audio'|| $response['type'] === 'interactive'){
                                         (new AutoReplyService)->checkAutoReply($chat, $isNewContact);
                                     }
