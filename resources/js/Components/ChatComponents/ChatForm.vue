@@ -359,7 +359,7 @@
                     <div class="text-sm">{{ $t('Whatsapp does not allow sending messages 24 hours after they last messaged you. However, you can send them a template message') }}</div>
                 </div>
             </div>
-            <button @click="viewTemplate()" class="rounded-md bg-primary px-3 py-1 text-sm text-white shadow-sm w-[25%]">Send Template</button>
+            <button @click="viewTemplate()" class="rounded-md bg-primary px-3 py-1 text-sm text-white shadow-sm w-[25%]">{{ $t('Send Template') }}</button>
         </div>
     </div>
     <form v-if="simpleForm && isInboundChatWithin24Hours && !props.chatLimitReached" @submit.prevent="sendMessage()" class="flex items-center px-2 md:px-10 space-x-2">

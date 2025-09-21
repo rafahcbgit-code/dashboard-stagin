@@ -19,7 +19,7 @@
                             <div>
                                 <span class="mb-2 flex items-center text-slate-700">
                                     <svg class="mr-2" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11v5m0 5a9 9 0 1 1 0-18a9 9 0 0 1 0 18Zm.05-13v.1h-.1V8h.1Z"></path></svg>
-                                    Drag to reorder
+                                   {{ $t('Drag to reorder') }}
                                 </span>
                                 <draggable :list="form.response_sequence" class="mt-2" @end="submitForm()">
                                     <template #item="{ index, element }">
@@ -56,7 +56,7 @@
     };
 
     const draggableList = ref([
-        "Basic Replies",
+        'Basic Replies',
         moduleActive('Flow builder') ? "Automated Flows" : null,
         moduleActive('AI Assistant') ? "AI Reply Assistant" : null,
     ].filter(item => item !== null));
