@@ -11,7 +11,9 @@
     import FormToggleSwitch from '@/Components/FormToggleSwitch.vue';
     import Modal from '@/Components/Modal.vue';
     import { trans } from 'laravel-vue-i18n';
+    import { useI18n } from 'vue-i18n';
 
+    const { t } = useI18n();
     const props = defineProps(['contact', 'displayContactInfo', 'ticketingIsEnabled', 'ticket', 'addon', 'teamRole']);
 
     const accountUser = computed(() => usePage().props.auth.user);
@@ -24,7 +26,7 @@
     const selectedLabels = ref([]);
     const loadingLabels = ref(false);
     const user = ref({ 
-        'label' : props.ticket?.user ? props.ticket?.user?.full_name  : trans('Unassigned'),
+        'label' : props.ticket?.user ? props.ticket?.user?.full_name  : t('Unassigned'),
         'value' : props.ticket?.user ? props.ticket?.user?.id  : 0, 
     });
 

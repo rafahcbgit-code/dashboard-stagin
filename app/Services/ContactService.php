@@ -67,6 +67,11 @@ class ContactService
         $contact->updated_at = now();
         $contact->save();
 
+        $groups = $request->input('group', []);
+        if (empty($groups)) {
+            $contact->contactGroups()->detach();
+        }
+
         if($request->group){
             $groupUuids = array_map('trim', $request->group);
             $groupIds = ContactGroup::whereIn('uuid', $groupUuids)->pluck('id')->toArray();
