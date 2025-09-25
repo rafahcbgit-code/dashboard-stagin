@@ -118,6 +118,7 @@ import Modal from '@/Components/Modal.vue';
 import FormInput from '@/Components/FormInput.vue';
 import { useForm, router } from "@inertiajs/vue3";
 import { ref } from "vue";
+import { useI18n } from 'vue-i18n';
 
 const props = defineProps(['labels', 'settings', 'modules']);
 
@@ -143,12 +144,12 @@ const openModal = () => {
     modalTitle.value = "Add Label";
     isOpen.value = true;
 };
-
+const { t } = useI18n() 
 const editLabel = (label) => {
     form.id = label.id;
     form.title = label.title;
     form.color = label.color;
-    modalTitle.value = "Edit Label";
+    modalTitle.value = t("Edit Label");
     isOpen.value = true;
 };
 
