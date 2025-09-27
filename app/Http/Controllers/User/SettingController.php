@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers\User;
 
-use DB;
+use Illuminate\Support\Facades\DB;
 use Validator;
 use Inertia\Inertia;
 use App\Models\Addon;
@@ -193,15 +193,25 @@ public function campaign(Request $request)
         if ($request->isMethod('get')) {
             $contactFieldService = new ContactFieldService(session()->get('current_organization'));
             $settings = Organization::where('id', session()->get('current_organization'))->first();
-
+            
+            $agents = DB::table('users')
+                ->join('teams', 'users.id', '=', 'teams.user_id')
+                ->where('teams.organization_id', '=', session()->get('current_organization'))
+                ->where('teams.role', '=', 'agent')
+                ->whereNull('teams.deleted_at')
+                ->select('users.*')
+                ->get();
+//dd($agents);
             return Inertia::render('User/Settings/Ticket', [
                 'title' => __('Settings'),
                 'filters' => $request->all(),
                 'rows' => $contactFieldService->get($request),
                 'settings' => $settings,
                 'modules' => Addon::get(),
+                'agents' => $agents
             ]);
         } else if($request->isMethod('post')) {
+            //dd($request);
             $currentOrganizationId = session()->get('current_organization');
             $organizationConfig = Organization::where('id', $currentOrganizationId)->first();
     
@@ -211,11 +221,27 @@ public function campaign(Request $request)
             $metadataArray['tickets']['auto_assignment'] = $request->auto_assignment;
             $metadataArray['tickets']['reassign_reopened_chats'] = $request->reassign_reopened_chats;
             $metadataArray['tickets']['allow_agents_to_view_all_chats'] = $request->allow_agents_to_view_all_chats;
+            $metadataArray['tickets']['assigned_to_specific_agents'] = $request->assigned_to_specific_agents;
 
             $updatedMetadataJson = json_encode($metadataArray);
 
             $organizationConfig->metadata = $updatedMetadataJson;
             $organizationConfig->save();
+
+            if (!empty($request->selected_agents) && is_array($request->selected_agents)) {
+    foreach ($request->selected_agents as $userId) {
+        DB::table('assigned_agents')->updateOrInsert(
+            [
+                'organization_id' => $currentOrganizationId,
+                'user_id' => $userId
+            ],
+            [
+                'updated_at' => now(),
+                'created_at' => now() // إذا لم يكن موجودًا سيتم إنشاء السطر
+            ]
+        );
+    }
+}
 
             /*return back()->with(
                 'status', [
