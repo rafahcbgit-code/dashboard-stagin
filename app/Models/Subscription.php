@@ -46,20 +46,16 @@ class Subscription extends Model {
         return null;
     }
 
-    // لو عندك حقل valid_until جاهز، نرجعه مباشرة
     if ($this->valid_until) {
         return Carbon::parse($this->valid_until)->toDateTimeString();
     }
 
-    // fallback: احسب بناءً على start_date + period
     if ($this->start_date) {
         $start = Carbon::parse($this->start_date);
 
         $next = match ($this->plan->period) {
             'monthly' => $start->copy()->addMonth(),
             'yearly'  => $start->copy()->addYear(),
-            'weekly'  => $start->copy()->addWeek(),
-            default   => null,
         };
 
         return $next ? $next->toDateTimeString() : null;
