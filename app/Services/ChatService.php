@@ -2,10 +2,8 @@
 
 namespace App\Services;
 
-use App\Events\NewChatEvent;
 use App\Http\Resources\ContactResource;
 use App\Helpers\CustomHelper;
-use App\Models\Addon;
 use App\Models\Chat;
 use App\Models\ChatLog;
 use App\Models\ChatMedia;
@@ -13,7 +11,6 @@ use App\Models\ChatTicket;
 use App\Models\ChatTicketLog;
 use App\Models\Contact;
 use App\Models\ContactField;
-use App\Models\ContactGroup;
 use App\Models\Organization;
 use App\Models\Setting;
 use App\Models\Team;
@@ -21,16 +18,11 @@ use App\Models\Template;
 use App\Services\SubscriptionService;
 use App\Services\WhatsappService;
 use App\Traits\TemplateTrait;
-use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
-use Validator;
-use Illuminate\Pagination\Paginator;
-use Illuminate\Pagination\LengthAwarePaginator;
 
 class ChatService
 {
@@ -236,92 +228,151 @@ class ChatService
         }
     }
 
-    public function handleTicketAssignment($contactId){
-        $organizationId = $this->organizationId;
-        $settings = Organization::where('id', $this->organizationId)->first();
-        $settings = json_decode($settings->metadata);
+    public function handleTicketAssignment($contactId)
+        {
+            $organizationId = $this->organizationId;
+            // Get organization settings
+            $settings = Organization::where('id', $organizationId)->first();
+            $settings = json_decode($settings->metadata);
+            $isSpecificAgentEnabled = isset($settings->tickets) && $settings->tickets->assigned_to_specific_agents === true;
 
-        // Check if ticket functionality is active
-        if(isset($settings->tickets) && $settings->tickets->active === true){
-            $autoassignment = $settings->tickets->auto_assignment;
-            $reassignOnReopen = $settings->tickets->reassign_reopened_chats;
+            // Case 1: Assign tickets to specific agents in a round-robin style
+            if ($isSpecificAgentEnabled) {
+                $this->assignTicketToSpecificAgent($contactId, $organizationId);
+                 return ;
+            }
 
-            // Check if a ticket already exists for the contact
-            $ticket = ChatTicket::where('contact_id', $contactId)->first();
+            // Case 2: Auto-assignment logic if active
+            if (isset($settings->tickets) && $settings->tickets->active === true) {
+                $autoassignment    = $settings->tickets->auto_assignment;
+                $reassignOnReopen  = $settings->tickets->reassign_reopened_chats;
 
-            DB::transaction(function () use ($reassignOnReopen, $autoassignment, $ticket, $contactId, $organizationId) {
-                if(!$ticket){
-                    // Create a new ticket if it doesn't exist
-                    $ticket = New ChatTicket;
-                    $ticket->contact_id = $contactId;
-                    $ticket->status = 'open';
-                    $ticket->updated_at = now();
+                $ticket = ChatTicket::where('contact_id', $contactId)->first();
 
-                    // Perform auto-assignment if enabled
-                    if($autoassignment){
-                        // Find an agent with the least number of assigned tickets
-                        $agent = Team::where('organization_id', $organizationId)
-                            ->withCount('tickets')
-                            ->whereNull('deleted_at')
-                            ->orderBy('tickets_count')->first();
+                DB::transaction(function () use ($reassignOnReopen, $autoassignment, $ticket, $contactId, $organizationId, $isSpecificAgentEnabled) {
+                    if (!$ticket) {
+                        // Create a new ticket if none exists
+                        $ticket = new ChatTicket();
+                        $ticket->contact_id = $contactId;
+                        $ticket->status = 'open';
+                        $ticket->updated_at = now();
 
-                        // Assign the ticket to the agent with the least number of assigned tickets
-                        $ticket->assigned_to = $agent->user_id;
-                    } else {
-                        $ticket->assigned_to = NULL;
-                    }
+                        if ($autoassignment) {
+                            // Find the agent with the least number of assigned tickets
+                            $agent = Team::where('organization_id', $organizationId)
+                                ->withCount('tickets')
+                                ->whereNull('deleted_at')
+                                ->orderBy('tickets_count')
+                                ->first();
 
-                    $ticket->save();
-
-                    $ticketId = ChatTicketLog::insertGetId([
-                        'contact_id' => $contactId,
-                        'description' => 'Conversation was opened',
-                        'created_at' => now()
-                    ]);
-
-                    ChatLog::insert([
-                        'contact_id' => $contactId,
-                        'entity_type' => 'ticket',
-                        'entity_id' => $ticketId,
-                        'created_at' => now()
-                    ]);
-                } else {
-                    // Reopen the ticket if it's closed and reassignment on reopen is enabled
-                    if($ticket->status === 'closed'){
-                        if($reassignOnReopen){
-                            if($autoassignment){
-                                $agent = Team::where('organization_id', $organizationId)
-                                    ->withCount('tickets')
-                                    ->whereNull('deleted_at')
-                                    ->orderBy('tickets_count')
-                                    ->first();
-
+                            // Assign the ticket to the agent
+                            if ($agent) {
                                 $ticket->assigned_to = $agent->user_id;
-                            } else {
-                                $ticket->assigned_to = NULL;
-                            }
+                                } else {
+                                    $ticket->assigned_to = null;
+                                }
+                        } else {
+                            $ticket->assigned_to = null;
                         }
 
-                        $ticket->status = 'open';
                         $ticket->save();
 
                         $ticketId = ChatTicketLog::insertGetId([
                             'contact_id' => $contactId,
-                            'description' => 'Conversation was moved from closed to open',
+                            'description' => 'Conversation was opened',
                             'created_at' => now()
                         ]);
-    
+
                         ChatLog::insert([
                             'contact_id' => $contactId,
                             'entity_type' => 'ticket',
                             'entity_id' => $ticketId,
                             'created_at' => now()
                         ]);
+                    } else {
+                        // Reopen the ticket if closed and reassignment is enabled
+                        if ($ticket->status === 'closed') {
+                           if($isSpecificAgentEnabled){
+                                 $this->assignTicketToSpecificAgent($contactId, $organizationId);
+                                 return ;
+                            }
+                           elseif ($reassignOnReopen) {
+                                if ($autoassignment) {
+                                    $agent = Team::where('organization_id', $organizationId)
+                                        ->withCount('tickets')
+                                        ->whereNull('deleted_at')
+                                        ->orderBy('tickets_count')
+                                        ->first();
+
+                                    $ticket->assigned_to = $agent->user_id;
+                                } else {
+                                    $ticket->assigned_to = null;
+                                }
+                            }
+
+                            $ticket->status = 'open';
+                            $ticket->save();
+
+                            $ticketId = ChatTicketLog::insertGetId([
+                                'contact_id' => $contactId,
+                                'description' => 'Conversation was moved from closed to open',
+                                'created_at' => now()
+                            ]);
+
+                            ChatLog::insert([
+                                'contact_id' => $contactId,
+                                'entity_type' => 'ticket',
+                                'entity_id' => $ticketId,
+                                'created_at' => now()
+                            ]);
+                        }
                     }
-                }
-            });
+                });
+            }
         }
-    }
+        
+
+    private function assignTicketToSpecificAgent($contactId, $organizationId)
+        {
+            $ticket = ChatTicket::where('contact_id', $contactId)->first();
+
+            if (!$ticket) {
+                // Create a new ticket
+                $ticket = new ChatTicket();
+                $ticket->contact_id = $contactId;
+                $ticket->status = 'open';
+                $ticket->created_at = now();
+            }
+
+            // 1. Get the list of agents assigned to this organization
+            $agents = DB::table('assigned_agents')
+                ->where('organization_id', $organizationId)
+                ->orderBy('id')
+                ->pluck('user_id')
+                ->toArray();
+
+            if (!empty($agents)) {
+                // 2. Find the last ticket assigned among these agents
+                $lastTicket = ChatTicket::whereIn('assigned_to', $agents)
+                    ->latest()
+                    ->first();
+
+                if ($lastTicket) {
+                    $lastIndex = array_search($lastTicket->assigned_to, $agents);
+                    $nextIndex = ($lastIndex === false) ? 0 : ($lastIndex + 1) % count($agents);
+                } else {
+                    $nextIndex = 0;
+                }
+
+                // 3. Assign the next agent in sequence
+                $ticket->assigned_to = $agents[$nextIndex];
+            }
+
+            $ticket->updated_at = now();
+            $ticket->save();
+
+            return $ticket;
+        }
 
     public function sendMessage(object $request)
     {

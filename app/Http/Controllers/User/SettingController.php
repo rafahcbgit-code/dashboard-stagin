@@ -201,14 +201,20 @@ public function campaign(Request $request)
                 ->whereNull('teams.deleted_at')
                 ->select('users.*')
                 ->get();
-//dd($agents);
+
+            $oldSelectedAgents = DB::table('assigned_agents')
+                ->where('organization_id', session()->get('current_organization'))
+                ->pluck('user_id')
+                ->toArray();
+
             return Inertia::render('User/Settings/Ticket', [
                 'title' => __('Settings'),
                 'filters' => $request->all(),
                 'rows' => $contactFieldService->get($request),
                 'settings' => $settings,
                 'modules' => Addon::get(),
-                'agents' => $agents
+                'agents' => $agents,
+                'oldSelectedAgents' => $oldSelectedAgents
             ]);
         } else if($request->isMethod('post')) {
             //dd($request);
@@ -228,21 +234,9 @@ public function campaign(Request $request)
             $organizationConfig->metadata = $updatedMetadataJson;
             $organizationConfig->save();
 
-            if (!empty($request->selected_agents) && is_array($request->selected_agents)) {
-    foreach ($request->selected_agents as $userId) {
-        DB::table('assigned_agents')->updateOrInsert(
-            [
-                'organization_id' => $currentOrganizationId,
-                'user_id' => $userId
-            ],
-            [
-                'updated_at' => now(),
-                'created_at' => now() // إذا لم يكن موجودًا سيتم إنشاء السطر
-            ]
-        );
-    }
-}
-
+    if (is_array($request->selected_agents)) {
+            $this->syncAssignedAgents($currentOrganizationId, $request->selected_agents);
+        }
             /*return back()->with(
                 'status', [
                     'type' => 'success', 
@@ -758,5 +752,28 @@ public function campaign(Request $request)
                 'type' => 'success',
                 'message' => __('Contact group created successfully with :count contacts', ['count' => $contactsWithLabel->count()])
             ]);
+    }
+
+    private function syncAssignedAgents($organizationId, array $selectedAgents)
+    {
+        DB::table('assigned_agents')
+            ->where('organization_id', $organizationId)
+            ->delete();
+
+        $data = [];
+        $now = now();
+
+        foreach ($selectedAgents as $userId) {
+            $data[] = [
+                'organization_id' => $organizationId,
+                'user_id'        => $userId,
+                'created_at'     => $now,
+                'updated_at'     => $now,
+            ];
+        }
+
+        if (!empty($data)) {
+            DB::table('assigned_agents')->insert($data);
+        }
     }
 }

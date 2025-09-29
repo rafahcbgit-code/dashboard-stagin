@@ -19,6 +19,7 @@ return new class extends Migration
 
             $table->foreign('organization_id')->references('id')->on('organizations');
             $table->foreign('user_id')->references('id')->on('users');
+            $table->index(['organization_id', 'user_id'], 'idx_assigned_agents_org_user');
         });
     }
 

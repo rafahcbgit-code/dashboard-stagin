@@ -92,6 +92,8 @@
                     <span>{{ $t('Seats') }}</span>
                 </TableHeaderRowItem>
                 <TableHeaderRowItem class="hidden sm:table-cell">{{ $t('Plan') }}</TableHeaderRowItem>
+                <TableHeaderRowItem class="hidden sm:table-cell">{{ $t('Start Date') }}</TableHeaderRowItem>
+                <TableHeaderRowItem class="hidden sm:table-cell">{{ $t('Valid Until') }}</TableHeaderRowItem>
                 <TableHeaderRowItem class="hidden sm:table-cell">{{ $t('Next billing date') }}</TableHeaderRowItem>
                 <TableHeaderRowItem class="hidden sm:table-cell">
                     <span class="float-right">{{ $t('Last updated') }}</span>
@@ -112,9 +114,23 @@
                         {{ item.subscription?.plan?.name ?? $t('Not set') }}
                     </span>
                 </TableBodyRowItem>
-                <TableBodyRowItem class="capitalize">
-                    <span class="py-1 rounded-[5px] text-xs px-3 bg-[#ddebf7] text-slate-700">{{ item.subscription?.next_billing_date ?? 'Not Set' }}</span>
+
+                  <TableBodyRowItem class="hidden sm:table-cell">
+                    <span class="py-1 rounded-[5px] text-xs px-3 bg-[#ddebf7] text-slate-700">
+                        {{ item.subscription?.start_date ?? $t('Not set') }}
+                    </span>
                 </TableBodyRowItem>
+                <TableBodyRowItem class="hidden sm:table-cell">
+                    <span class="py-1 rounded-[5px] text-xs px-3 bg-[#ddebf7] text-slate-700">
+                        {{ item.subscription?.valid_until ?? $t('Not set') }}
+                    </span>
+                </TableBodyRowItem>
+
+                <TableBodyRowItem class="capitalize">
+                    <span class="py-1 rounded-[5px] text-xs px-3 bg-[#ddebf7] text-slate-700">{{  item.subscription?.next_billing_date ?? $t('Not set') }}</span>
+                </TableBodyRowItem>
+
+
                 <TableBodyRowItem class="hidden sm:table-cell">
                     <span class="float-right">{{ item.updated_at }}</span>
                 </TableBodyRowItem>
