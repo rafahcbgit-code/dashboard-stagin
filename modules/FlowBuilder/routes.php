@@ -11,6 +11,7 @@ Route::middleware(['auth:user'])->group(function () {
         Route::post('/upload-media/{uuid}/{stepId}', [Modules\FlowBuilder\Controllers\FlowController::class, 'uploadMedia']);                     
         Route::put('/{flow}', [Modules\FlowBuilder\Controllers\FlowController::class, 'update']);               // Update a flow
         Route::delete('/{flow}', [Modules\FlowBuilder\Controllers\FlowController::class, 'destroy']);           // Delete a flow
+        Route::get('/debug/{uuid}',[Modules\FlowBuilder\Controllers\FlowController::class, 'debug']);
     });
 });
 

@@ -251,4 +251,170 @@ class FlowService
         // Return null if there are no more steps
         return null;
     }
+
+    /**
+     * Get simplified flow metadata with only essential data
+     */
+    public function getSimplifiedFlow($flowMetadata)
+    {
+        if (is_string($flowMetadata)) {
+            $flowMetadata = json_decode($flowMetadata, true);
+        }
+        
+        $simplified = [
+            'nodes' => [],
+            'edges' => []
+        ];
+        
+        // Simplify nodes
+        foreach ($flowMetadata['nodes'] ?? [] as $node) {
+            $simpleNode = [
+                'id' => $node['id'] ?? null,
+                'type' => $node['type'] ?? null,
+            ];
+            
+            // Add essential data based on node type
+            if (isset($node['data'])) {
+                $simpleNode['data'] = [];
+                
+                // For start nodes
+                if ($node['type'] === 'start') {
+                    $simpleNode['data']['metadata'] = [
+                        'fields' => [
+                            'type' => $node['data']['metadata']['fields']['type'] ?? null,
+                            'keywords' => $node['data']['metadata']['fields']['keywords'] ?? null
+                        ]
+                    ];
+                }
+                // For message nodes (text, buttons, etc.)
+                elseif (in_array($node['type'], ['text', 'buttons'])) {
+                    $fields = $node['data']['metadata']['fields'] ?? [];
+                    $simpleNode['data']['metadata'] = [
+                        'fields' => [
+                            'type' => $fields['type'] ?? null,
+                            'body' => $fields['body'] ?? null,
+                            'buttonType' => $fields['buttonType'] ?? null,
+                            'buttons' => $fields['buttons'] ?? null,
+                            'sections' => $fields['sections'] ?? null,
+                            'headerType' => $fields['headerType'] ?? null,
+                            'headerText' => $fields['headerText'] ?? null,
+                            'footer' => $fields['footer'] ?? null,
+                            'mediaType' => $fields['mediaType'] ?? null,
+                            'media' => $fields['media'] ?? null,
+                            'caption' => $fields['caption'] ?? null
+                        ]
+                    ];
+                }
+                // For action nodes
+                elseif ($node['type'] === 'action') {
+                    $simpleNode['data'] = [
+                        'actionType' => $node['data']['actionType'] ?? null,
+                        'config' => $node['data']['config'] ?? null,
+                        'is_active' => $node['data']['is_active'] ?? true
+                    ];
+                }
+            }
+            
+            $simplified['nodes'][] = $simpleNode;
+        }
+        
+        // Simplify edges
+        foreach ($flowMetadata['edges'] ?? [] as $edge) {
+            $simpleEdge = [
+                'source' => $edge['source'] ?? null,
+                'target' => $edge['target'] ?? null,
+                'sourceHandle' => $edge['sourceHandle'] ?? null
+            ];
+            
+            // Add minimal sourceNode info for message derivation
+            if (isset($edge['sourceNode'])) {
+                $simpleEdge['sourceNode'] = [
+                    'id' => $edge['sourceNode']['id'] ?? null,
+                    'type' => $edge['sourceNode']['type'] ?? null,
+                    'data' => [
+                        'metadata' => [
+                            'fields' => [
+                                'type' => $edge['sourceNode']['data']['metadata']['fields']['type'] ?? null,
+                                'buttons' => $edge['sourceNode']['data']['metadata']['fields']['buttons'] ?? null,
+                                'sections' => $edge['sourceNode']['data']['metadata']['fields']['sections'] ?? null
+                            ]
+                        ]
+                    ]
+                ];
+            }
+            
+            // Add minimal targetNode info
+            if (isset($edge['targetNode'])) {
+                $simpleEdge['targetNode'] = [
+                    'id' => $edge['targetNode']['id'] ?? null,
+                    'type' => $edge['targetNode']['type'] ?? null
+                ];
+            }
+            
+            $simplified['edges'][] = $simpleEdge;
+        }
+        
+        return $simplified;
+    }
+
+    /**
+     * Get even more compact version - just structure overview
+     */
+    public function getFlowOverview($flowMetadata)
+    {
+        if (is_string($flowMetadata)) {
+            $flowMetadata = json_decode($flowMetadata, true);
+        }
+        
+        $overview = [
+            'node_count' => count($flowMetadata['nodes'] ?? []),
+            'edge_count' => count($flowMetadata['edges'] ?? []),
+            'nodes_by_type' => [],
+            'structure' => []
+        ];
+        
+        // Count nodes by type
+        foreach ($flowMetadata['nodes'] ?? [] as $node) {
+            $type = $node['type'] ?? 'unknown';
+            $overview['nodes_by_type'][$type] = ($overview['nodes_by_type'][$type] ?? 0) + 1;
+            
+            // Add to structure
+            $overview['structure'][$node['id']] = [
+                'type' => $type,
+                'outgoing_edges' => 0
+            ];
+        }
+        
+        // Count outgoing edges
+        foreach ($flowMetadata['edges'] ?? [] as $edge) {
+            $source = $edge['source'] ?? null;
+            if ($source && isset($overview['structure'][$source])) {
+                $overview['structure'][$source]['outgoing_edges']++;
+            }
+        }
+        
+        return $overview;
+    }
+
+    /**
+     * Usage examples:
+     */
+    public function debugFlow($uuid)
+    {
+        $flow = Flow::where('uuid', $uuid)->first();
+        if (!$flow) {
+            return null;
+        }
+        
+        $simplified = $this->getSimplifiedFlow($flow->metadata);
+        $overview = $this->getFlowOverview($flow->metadata);
+        
+        return [
+            'overview' => $overview,
+            'simplified' => $simplified,
+            'original_size' => strlen(json_encode($flow->metadata)),
+            'simplified_size' => strlen(json_encode($simplified)),
+            'reduction_percent' => round((1 - (strlen(json_encode($simplified)) / strlen(json_encode($flow->metadata)))) * 100, 2)
+        ];
+    }
 }

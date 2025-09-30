@@ -341,7 +341,7 @@ class FlowExecutionService
 
         if($response){
             // Update to the next step
-            $this->proceedToNextStep($flowData, $contactId);
+            $this->proceedToNextStep($flowData, $contactId, $metadataArray);
             
             if(isset($response->data->chat->id)){
                 FlowLog::create([
@@ -467,7 +467,7 @@ class FlowExecutionService
     /**
      * Proceed to the next step in the flow
      */
-    private function proceedToNextStep($flowData, $contactId)
+    private function proceedToNextStep($flowData, $contactId, $currentMetadataArray = null )
     {
         $flow = Flow::find($flowData->flow_id);
         if (!$flow || empty($flow->metadata)) {
@@ -493,6 +493,9 @@ class FlowExecutionService
 
         if (!empty($nextNodes)) {
             $nextStep = $nextNodes[0];
+            if(!empty($currentMetadataArray) && isset($currentMetadataArray['id'])){
+                $nextStep = $currentMetadataArray['id'] ?? $nextStep;
+            }
             FlowUserData::where('contact_id', $contactId)->update(['current_step' => $nextStep]);
         } else {
             Log::warning("DELETION POINT 6: No next step found for current_step {$flowData->current_step}, ending flow");
