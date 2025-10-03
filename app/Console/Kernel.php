@@ -24,7 +24,7 @@ class Kernel extends ConsoleKernel
 
         // Process missed status updates every 3 minutes
         $schedule->job(new \App\Jobs\ProcessMissedStatusUpdatesJob(), 'webhook-status')
-            ->everyThreeMinutes()
+            ->everyTenMinutes()
             ->withoutOverlapping();
         
 
