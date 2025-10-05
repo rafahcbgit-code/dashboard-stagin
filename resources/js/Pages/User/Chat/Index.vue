@@ -124,7 +124,7 @@
     let updateDebounceTimer = null;
     let pendingChats = [];
     let isRequestInFlight = ref(false);
-    const DEBOUNCE_DELAY = 500;
+    const DEBOUNCE_DELAY = 1000;
     const BROADCAST_CHANNEL_NAME = `chat-sync-${props.organizationId}`;
     let broadcastChannel = null;
 
@@ -173,17 +173,22 @@
     const updateSidePanelDebounced = async() => {
     if (updateDebounceTimer) {
         clearTimeout(updateDebounceTimer);
+        console.log('⏱️ Timer reset - debouncing active');
     }
 
     updateDebounceTimer = setTimeout(async () => {
+        console.log('🚀 Making API call after debounce delay');
         if (isRequestInFlight.value) {
+            console.log('⚠️ Request already in flight, skipping');
             return;
         }
 
         isRequestInFlight.value = true;
+        console.log('🔒 Request locked');
 
         try {
             const response = await axios.get('/chats');
+            console.log('✅ API call successful', response.data);
             if (response?.data?.result) {
                 rows.value = response.data.result;
                 
@@ -193,23 +198,27 @@
                         data: response.data.result,
                         timestamp: Date.now()
                     });
+                    console.log('📢 Broadcasted to other tabs');
                 }
             }
         } catch (error) {
-            console.error('Error updating side panel:', error);
+            console.error('❌ Error updating side panel:', error);
         } finally {
             isRequestInFlight.value = false;
+            console.log('🔓 Request unlocked');
             pendingChats = [];
         }
     }, DEBOUNCE_DELAY);
 }
 
     const updateSidePanel = async(chat) => {
+        console.log('📨 New chat event received', chat[0]?.value);
         if(contact.value && contact.value.id == chat[0].value.contact_id){
             updateChatThread(chat);
         }
 
         pendingChats.push(chat);
+        console.log('📋 Pending chats:', pendingChats.length);
         updateSidePanelDebounced();
     }
 
@@ -220,16 +229,22 @@
     const setupBroadcastChannel = () => {
         if ('BroadcastChannel' in window) {
             broadcastChannel = new BroadcastChannel(BROADCAST_CHANNEL_NAME);
-            
+            console.log('📡 BroadcastChannel created:', BROADCAST_CHANNEL_NAME);
             broadcastChannel.onmessage = (event) => {
                 const { type, data, timestamp } = event.data;
+                console.log('📥 Message received from another tab:', type);
                 
                 if (Date.now() - timestamp < 2000) {
                     if (type === 'ROWS_UPDATED') {
                         rows.value = data;
+                        console.log('✨ Rows updated from broadcast');
                     }
+                }else{
+                    console.log('⏰ Message too old, ignoring');
                 }
             };
+        }else{
+            console.warn('⚠️ BroadcastChannel not supported in this browser');
         }
     }
 
