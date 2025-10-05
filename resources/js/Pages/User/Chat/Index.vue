@@ -127,6 +127,56 @@
     const DEBOUNCE_DELAY = 1000;
     const BROADCAST_CHANNEL_NAME = `chat-sync-${props.organizationId}`;
     let broadcastChannel = null;
+    let isLeaderTab = ref(false);
+    let leaderCheckInterval = null;
+    const LEADER_KEY = `chat-leader-${props.organizationId}`;
+    const LEADER_HEARTBEAT = 2000; // 2 seconds
+
+    const becomeLeader = () => {
+        isLeaderTab.value = true;
+        localStorage.setItem(LEADER_KEY, Date.now().toString());
+        console.log('👑 This tab is now the LEADER');
+    }
+
+    const checkLeadership = () => {
+        const leaderTimestamp = localStorage.getItem(LEADER_KEY);
+        
+        if (!leaderTimestamp) {
+            // No leader exists, become leader
+            becomeLeader();
+            return;
+        }
+        
+        const timeSinceLastHeartbeat = Date.now() - parseInt(leaderTimestamp);
+        
+        if (timeSinceLastHeartbeat > LEADER_HEARTBEAT * 2) {
+            // Leader is dead, take over
+            console.log('💀 Previous leader died, taking over');
+            becomeLeader();
+        } else if (isLeaderTab.value) {
+            // Update heartbeat if we're the leader
+            localStorage.setItem(LEADER_KEY, Date.now().toString());
+        }
+    }
+
+    const setupLeaderElection = () => {
+        checkLeadership();
+        
+        // Check leadership every 2 seconds
+        leaderCheckInterval = setInterval(checkLeadership, LEADER_HEARTBEAT);
+        
+        // Listen for storage changes (other tabs becoming leader)
+        window.addEventListener('storage', (e) => {
+            if (e.key === LEADER_KEY) {
+                const wasLeader = isLeaderTab.value;
+                checkLeadership();
+                
+                if (wasLeader && !isLeaderTab.value) {
+                    console.log('👋 Lost leadership to another tab');
+                }
+            }
+        });
+    }
 
     watch(() => props.rows, (newRows) => {
         rows.value = newRows;
@@ -177,6 +227,11 @@
     }
 
     updateDebounceTimer = setTimeout(async () => {
+        if (!isLeaderTab.value) {
+            console.log('⏭️ Not leader tab, skipping API call');
+            pendingChats = []; // Clear pending
+            return;
+        }
         console.log('🚀 Making API call after debounce delay');
         if (isRequestInFlight.value) {
             console.log('⚠️ Request already in flight, skipping');
@@ -230,26 +285,32 @@
         if ('BroadcastChannel' in window) {
             broadcastChannel = new BroadcastChannel(BROADCAST_CHANNEL_NAME);
             console.log('📡 BroadcastChannel created:', BROADCAST_CHANNEL_NAME);
+            
             broadcastChannel.onmessage = (event) => {
                 const { type, data, timestamp } = event.data;
-                console.log('📥 Message received from another tab:', type);
+                
+                // Non-leader tabs should always listen
+                if (!isLeaderTab.value) {
+                    console.log('📥 Message received from LEADER tab:', type);
+                }
                 
                 if (Date.now() - timestamp < 2000) {
                     if (type === 'ROWS_UPDATED') {
                         rows.value = data;
                         console.log('✨ Rows updated from broadcast');
                     }
-                }else{
+                } else {
                     console.log('⏰ Message too old, ignoring');
                 }
             };
-        }else{
-            console.warn('⚠️ BroadcastChannel not supported in this browser');
+        } else {
+            console.warn('⚠️ BroadcastChannel not supported');
         }
     }
 
     onMounted(() => {
-
+        // Setup leader election FIRST
+        setupLeaderElection();
         // Setup cross-tab communication
         setupBroadcastChannel();
 
@@ -267,9 +328,18 @@
     });
 
     onUnmounted(() => {
-        // Cleanup
         if (updateDebounceTimer) {
             clearTimeout(updateDebounceTimer);
+        }
+        
+        if (leaderCheckInterval) {
+            clearInterval(leaderCheckInterval);
+        }
+        
+        // If we're the leader, clear the flag so another tab can take over
+        if (isLeaderTab.value) {
+            localStorage.removeItem(LEADER_KEY);
+            console.log('👋 Leader tab closed, releasing leadership');
         }
         
         if (broadcastChannel) {
