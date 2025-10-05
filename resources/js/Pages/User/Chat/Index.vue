@@ -175,7 +175,7 @@
         clearTimeout(updateDebounceTimer);
     }
 
-    const updateDebounceTimer = setTimeout(async () => {
+    updateDebounceTimer = setTimeout(async () => {
         if (isRequestInFlight.value) {
             return;
         }
