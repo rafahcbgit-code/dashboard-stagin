@@ -69,7 +69,7 @@
     import AppLayout from "./../Layout/App.vue";
     import { default as axios } from 'axios';
     import { router, useForm } from '@inertiajs/vue3';
-    import { defineEmits, ref, onMounted, watch } from 'vue';
+    import { defineEmits, ref, onMounted, watch, onUnmounted } from 'vue';
     import CampaignForm from '@/Components/CampaignForm.vue';
     import ChatForm from '@/Components/ChatComponents/ChatForm.vue';
     import ChatHeader from '@/Components/ChatComponents/ChatHeader.vue';
@@ -120,6 +120,14 @@
     const chatThread = ref(props.chatThread);
     const contact = ref(props.contact);
 
+    /* For Chat Optimizations */
+    let updateDebounceTimer = null;
+    let pendingChats = [];
+    let isRequestInFlight = ref(false);
+    const DEBOUNCE_DELAY = 500;
+    const BROADCAST_CHANNEL_NAME = `chat-sync-${props.organizationId}`;
+    let broadcastChannel = null;
+
     watch(() => props.rows, (newRows) => {
         rows.value = newRows;
     });
@@ -162,26 +170,74 @@
         }
     }
 
-    const updateSidePanel = async(chat) => {
-        if(contact.value && contact.value.id == chat[0].value.contact_id){
-            updateChatThread(chat);
+    const updateSidePanelDebounced = async() => {
+    if (updateDebounceTimer) {
+        clearTimeout(updateDebounceTimer);
+    }
+
+    const updateDebounceTimer = setTimeout(async () => {
+        if (isRequestInFlight.value) {
+            return;
         }
+
+        isRequestInFlight.value = true;
 
         try {
             const response = await axios.get('/chats');
             if (response?.data?.result) {
                 rows.value = response.data.result;
+                
+                if (broadcastChannel) {
+                    broadcastChannel.postMessage({
+                        type: 'ROWS_UPDATED',
+                        data: response.data.result,
+                        timestamp: Date.now()
+                    });
+                }
             }
         } catch (error) {
             console.error('Error updating side panel:', error);
+        } finally {
+            isRequestInFlight.value = false;
+            pendingChats = [];
         }
+    }, DEBOUNCE_DELAY);
+}
+
+    const updateSidePanel = async(chat) => {
+        if(contact.value && contact.value.id == chat[0].value.contact_id){
+            updateChatThread(chat);
+        }
+
+        pendingChats.push(chat);
+        updateSidePanelDebounced();
     }
 
     const onCloseDemoModal = () => {
         isDemoModalOpen.value = false;
     }
 
+    const setupBroadcastChannel = () => {
+        if ('BroadcastChannel' in window) {
+            broadcastChannel = new BroadcastChannel(BROADCAST_CHANNEL_NAME);
+            
+            broadcastChannel.onmessage = (event) => {
+                const { type, data, timestamp } = event.data;
+                
+                if (Date.now() - timestamp < 2000) {
+                    if (type === 'ROWS_UPDATED') {
+                        rows.value = data;
+                    }
+                }
+            };
+        }
+    }
+
     onMounted(() => {
+
+        // Setup cross-tab communication
+        setupBroadcastChannel();
+
         const echo = getEchoInstance(
             props.pusherSettings['pusher_app_key'],
             props.pusherSettings['pusher_app_cluster']
@@ -193,5 +249,16 @@
             });
 
         scrollToBottom();
+    });
+
+    onUnmounted(() => {
+        // Cleanup
+        if (updateDebounceTimer) {
+            clearTimeout(updateDebounceTimer);
+        }
+        
+        if (broadcastChannel) {
+            broadcastChannel.close();
+        }
     });
 </script>
