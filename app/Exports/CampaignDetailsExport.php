@@ -28,6 +28,14 @@ class CampaignDetailsExport implements FromCollection, WithHeadings
             ->get();
 
         $logs = $campaignLogs->map(function ($log) use ($campaign) {
+           
+            $info = "";
+            try {
+                $metadata = json_decode($log->chat->logs[0]->metadata, true);
+                $info = $metadata['errors'][0]['message'];
+            } catch (\Exception $ex) {
+                
+            }
             return [
                 'campaign_name' => $campaign->name,
                 'template_name' => $campaign->template->name,
@@ -35,7 +43,8 @@ class CampaignDetailsExport implements FromCollection, WithHeadings
                 'last_name' => $log->contact?->last_name ?? '',
                 'phone' => $log->contact?->formatted_phone_number ?? '',
                 'updated_at' => $log->updated_at,
-                'status' => $log->status == 'success' ? $log->chat->status : $log->status
+                'status' => $log->status == 'success' ? $log->chat->status : $log->status,
+                'info' => $info
             ];
         });
 
@@ -52,7 +61,8 @@ class CampaignDetailsExport implements FromCollection, WithHeadings
             'Last Name',
             'Phone Number',
             'Last Updated',
-            'Status'
+            'Status',
+            'Info'
         ];
     }
 }
