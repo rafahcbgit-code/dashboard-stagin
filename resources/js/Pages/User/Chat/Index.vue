@@ -304,7 +304,11 @@
             debugLog('Request locked');
 
             try {
-                const response = await axios.get('/chats');
+                const response = await axios.get('/chats',{
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
                 debugLog('API call successful', response.data);
 
                 // Check if server says to wait
