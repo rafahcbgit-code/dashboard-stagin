@@ -2,34 +2,35 @@
 
 namespace App\Services;
 
-use App\Events\NewChatEvent;
-use App\Http\Resources\ContactResource;
-use App\Helpers\CustomHelper;
-use App\Models\Addon;
+use Validator;
 use App\Models\Chat;
+use App\Models\Team;
+use Inertia\Inertia;
+use App\Models\Addon;
 use App\Models\ChatLog;
+use App\Models\Contact;
+use App\Models\Setting;
+use App\Models\Template;
 use App\Models\ChatMedia;
 use App\Models\ChatTicket;
-use App\Models\ChatTicketLog;
-use App\Models\Contact;
+use App\Events\NewChatEvent;
 use App\Models\ContactField;
 use App\Models\ContactGroup;
 use App\Models\Organization;
-use App\Models\Setting;
-use App\Models\Team;
-use App\Models\Template;
-use App\Services\SubscriptionService;
-use App\Services\WhatsappService;
-use App\Traits\TemplateTrait;
 use Illuminate\Http\Request;
+use App\Helpers\CustomHelper;
+use App\Models\ChatTicketLog;
+use App\Traits\TemplateTrait;
+use App\Services\WhatsappService;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Pagination\Paginator;
+use Illuminate\Support\Facades\Http;
+use App\Services\SubscriptionService;
+use Illuminate\Support\Facades\Cache;
+use App\Http\Resources\ContactResource;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
-use Inertia\Inertia;
-use Validator;
-use Illuminate\Pagination\Paginator;
 use Illuminate\Pagination\LengthAwarePaginator;
 
 class ChatService
@@ -38,6 +39,10 @@ class ChatService
 
     private $whatsappService;
     private $organizationId;
+
+    private $throttleSeconds = 15;  // Request throttle window
+    private $cacheTtl = 300;        // Cache duration in seconds (5 minutes)
+
 
     public function __construct($organizationId)
     {
@@ -59,24 +64,76 @@ class ChatService
         $this->whatsappService = new WhatsappService($accessToken, $apiVersion, $appId, $phoneNumberId, $wabaId, $this->organizationId);
     }
 
+    private function shouldThrottle($cacheKey)
+    {
+        $throttleKey = $cacheKey . ':throttle';
+        $lastRequest = Cache::get($throttleKey);
+        
+        if ($lastRequest) {
+            $elapsed = time() - $lastRequest;
+            if ($elapsed < $this->throttleSeconds) {
+                return [
+                    'throttled' => true,
+                    'wait' => $this->throttleSeconds - $elapsed,
+                    'data' => Cache::get($cacheKey)
+                ];
+            }
+        }
+        
+        return ['throttled' => false];
+    }
+
+    private function markRequestProcessed($cacheKey)
+    {
+        $throttleKey = $cacheKey . ':throttle';
+        Cache::put($throttleKey, time(), $this->throttleSeconds);
+    }
+
     public function getChatList($request, $uuid = null, $searchTerm = null)
     {
         $role = auth()->user()->teams[0]->role;
         $contact = new Contact;
-        $unassigned = ChatTicket::where('assigned_to', NULL)->count();
-        $closedCount = ChatTicket::where('status', 'closed')->count();
-        $closedCount = ChatTicket::where('status', 'open')->count();
-        $allCount = ChatTicket::count();
-        $config = Organization::where('id', $this->organizationId)->first();
-        $agents = Team::where('organization_id', $this->organizationId)->get();
         $ticketState = $request->status == null ? 'all' : $request->status;
         $sortDirection = $request->session()->get('chat_sort_direction') ?? 'desc';
-        $allowAgentsToViewAllChats = true;
-        $ticketingActive = false;
-        $aimodule = CustomHelper::isModuleEnabled('AI Assistant');
         
         // Get label filters from request
         $labelFilters = $request->query('labels') ? explode(',', $request->query('labels')) : [];
+
+        // Generate unique cache key
+        $labelKey = !empty($labelFilters) ? md5(json_encode($labelFilters)) : 'none';
+        $searchKey = $searchTerm ? md5($searchTerm) : 'none';
+        $cacheKey = sprintf(
+            'chat_list:%d:%s:%s:%s:%s:%s',
+            $this->organizationId,
+            $ticketState,
+            $searchKey,
+            $labelKey,
+            $sortDirection,
+            $role
+        );
+        
+        // Check throttle for AJAX requests only
+        if (request()->expectsJson() && $uuid === null) {
+            $throttleCheck = $this->shouldThrottle($cacheKey);
+            
+            if ($throttleCheck['throttled']) {
+                return response()->json([
+                    'status' => 'wait',
+                    'wait_seconds' => $throttleCheck['wait'],
+                    'message' => 'Please wait before refreshing'
+                ], 200);
+            }
+        }
+
+        $unassigned = ChatTicket::where('assigned_to', NULL)->count();
+        $closedCount = ChatTicket::where('status', 'closed')->count();
+        $openCount = ChatTicket::where('status', 'open')->count();
+        $allCount = ChatTicket::count();
+        $config = Organization::where('id', $this->organizationId)->first();
+        $agents = Team::where('organization_id', $this->organizationId)->get();
+        $allowAgentsToViewAllChats = true;
+        $ticketingActive = false;
+        $aimodule = CustomHelper::isModuleEnabled('AI Assistant');
 
         //Check if tickets module has been enabled
         if($config->metadata != NULL){
@@ -88,9 +145,9 @@ class ChatService
                 //Check for chats that don't have corresponding chat ticket rows
                 $contacts = $contact->contactsWithChats($this->organizationId, NULL);
                 
-                foreach($contacts as $contact){
+                foreach($contacts as $contactItem){
                     ChatTicket::firstOrCreate(
-                        ['contact_id' => $contact->id],
+                        ['contact_id' => $contactItem->id],
                         [
                             'assigned_to' => null,
                             'status' => 'open',
@@ -104,28 +161,47 @@ class ChatService
             }
         }
 
-        // Retrieve the list of contacts with chats (now with label filtering)
-        $contacts = $contact->contactsWithChats(
-            $this->organizationId, 
+        // Get or cache the contact list - NOW USING $this->cacheTtl
+        $cachedData = Cache::remember($cacheKey, $this->cacheTtl, function() use (
+            $contact, 
             $searchTerm, 
             $ticketingActive, 
             $ticketState, 
             $sortDirection, 
             $role, 
-            $allowAgentsToViewAllChats,
-            $labelFilters // Add label filters parameter
-        );
-        
-        $rowCount = $contact->contactsWithChatsCount(
-            $this->organizationId, 
-            $searchTerm, 
-            $ticketingActive, 
-            $ticketState, 
-            $sortDirection, 
-            $role, 
-            $allowAgentsToViewAllChats,
-            $labelFilters // Add label filters parameter
-        );
+            $allowAgentsToViewAllChats, 
+            $labelFilters
+        ) {
+            $contacts = $contact->contactsWithChats(
+                $this->organizationId, 
+                $searchTerm, 
+                $ticketingActive, 
+                $ticketState, 
+                $sortDirection, 
+                $role, 
+                $allowAgentsToViewAllChats,
+                $labelFilters
+            );
+            
+            $rowCount = $contact->contactsWithChatsCount(
+                $this->organizationId, 
+                $searchTerm, 
+                $ticketingActive, 
+                $ticketState, 
+                $sortDirection, 
+                $role, 
+                $allowAgentsToViewAllChats,
+                $labelFilters
+            );
+
+            return [
+                'contacts' => $contacts,
+                'rowCount' => $rowCount
+            ];
+        });
+
+        $contacts = $cachedData['contacts'];
+        $rowCount = $cachedData['rowCount'];
 
         $pusherSettings = Setting::whereIn('key', [
             'pusher_app_id',
@@ -141,9 +217,9 @@ class ChatService
             ->where('status', 'APPROVED')
             ->get();
 
-            $team = Team::where('organization_id', $this->organizationId)
-                            ->where('user_id', auth()->user()->id)
-                ->first();
+        $team = Team::where('organization_id', $this->organizationId)
+            ->where('user_id', auth()->user()->id)
+            ->first();
 
         if ($uuid !== null) {
             $contact = Contact::with(['lastChat', 'lastInboundChat', 'notes', 'contactGroups', 'labels'])
@@ -205,6 +281,11 @@ class ChatService
                     'teamRole' => $team?->role  
                 ]);
             }
+        }
+
+        // Mark this request as processed (for throttling)
+        if (request()->expectsJson()) {
+            $this->markRequestProcessed($cacheKey);
         }
 
         if (request()->expectsJson()) {

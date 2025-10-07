@@ -124,7 +124,7 @@
     let updateDebounceTimer = null;
     let pendingChats = [];
     let isRequestInFlight = ref(false);
-    const DEBOUNCE_DELAY = 1000;
+    const DEBOUNCE_DELAY = 1000 * 30;
     const BROADCAST_CHANNEL_NAME = `chat-sync-${props.organizationId}`;
     let broadcastChannel = null;
     let isLeaderTab = ref(false);
@@ -306,6 +306,13 @@
             try {
                 const response = await axios.get('/chats');
                 debugLog('API call successful', response.data);
+
+                // Check if server says to wait
+                if (response.data.status === 'wait') {
+                    debugLog('Server throttled request, waiting', response.data.wait_seconds);
+                    // Do nothing - just skip the update
+                    return;
+                }
                 
                 if (response?.data?.result) {
                     rows.value = response.data.result;
@@ -406,6 +413,7 @@
             });
 
         scrollToBottom();
+
     });
 
     onUnmounted(() => {
