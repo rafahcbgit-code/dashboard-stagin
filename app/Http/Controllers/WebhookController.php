@@ -241,6 +241,7 @@ class WebhookController extends BaseController
                                 'created_by' => 0,
                                 'created_at' => now(),
                                 'updated_at' => now(),
+                                'bot_enable' => 1
                             ]);
                             $isNewContact = true;
                         }
@@ -386,6 +387,7 @@ class WebhookController extends BaseController
                                     'created_by' => 0,
                                     'created_at' => now(),
                                     'updated_at' => now(),
+                                    'bot_enable' => 1
                                 ]);
                                 $isNewContact = true;
                                 
@@ -528,6 +530,7 @@ class WebhookController extends BaseController
                                         'created_by' => 0,
                                         'created_at' => now(),
                                         'updated_at' => now(),
+                                        'bot_enable' => 1
                                     ]);
                                     
                                     // Handle ticket assignment
@@ -621,6 +624,7 @@ class WebhookController extends BaseController
                                     'created_by' => 0,
                                     'created_at' => now(),
                                     'updated_at' => now(),
+                                    'bot_enable' => 1,
                                 ]);
                                 
                                 (new ChatService($organization->id))->handleTicketAssignment($contact->id);

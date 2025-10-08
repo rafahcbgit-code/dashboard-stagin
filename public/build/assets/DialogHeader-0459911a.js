@@ -1,0 +1,5 @@
+<<<<<<<< HEAD:public/build/assets/DialogHeader-864349fe.js
+import{c as t}from"./utils-3f044a58.js";import{D as o,c as r,J as c,n as l,u as n,o as p}from"./app-a22831f2.js";const u=o({__name:"DialogHeader",props:{class:{}},setup(e){const s=e;return(a,f)=>(p(),r("div",{class:l(n(t)("flex flex-col space-y-2 text-center sm:text-left",s.class))},[c(a.$slots,"default")],2))}});export{u as default};
+========
+import{c as t}from"./utils-3f044a58.js";import{D as o,c as r,J as c,n as l,u as n,o as p}from"./app-5cdbedeb.js";const u=o({__name:"DialogHeader",props:{class:{}},setup(e){const s=e;return(a,f)=>(p(),r("div",{class:l(n(t)("flex flex-col space-y-2 text-center sm:text-left",s.class))},[c(a.$slots,"default")],2))}});export{u as default};
+>>>>>>>> f36c63ac421de9826d571c3e6a2573165098637a:public/build/assets/DialogHeader-0459911a.js
