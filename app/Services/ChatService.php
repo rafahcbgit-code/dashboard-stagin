@@ -99,14 +99,12 @@ class ChatService
         // Get label filters from request
         $labelFilters = $request->query('labels') ? explode(',', $request->query('labels')) : [];
 
+        // Generate unique cache key - now including page number
         $page = $request->get('page', 1);
-
-
-        // Generate unique cache key
         $labelKey = !empty($labelFilters) ? md5(json_encode($labelFilters)) : 'none';
         $searchKey = $searchTerm ? md5($searchTerm) : 'none';
         $cacheKey = sprintf(
-            'chat_list:%d:%s:%s:%s:%s:%s',
+            'chat_list:%d:%s:%s:%s:%s:%s:%d',
             $this->organizationId,
             $ticketState,
             $searchKey,
@@ -147,9 +145,9 @@ class ChatService
                 $ticketingActive = true;
 
                 //Check for chats that don't have corresponding chat ticket rows
-                $contacts = $contact->contactsWithChats($this->organizationId, NULL);
+                $allContactsForTickets = $contact->contactsWithChats($this->organizationId, NULL);
                 
-                foreach($contacts as $contactItem){
+                foreach($allContactsForTickets as $contactItem){
                     ChatTicket::firstOrCreate(
                         ['contact_id' => $contactItem->id],
                         [
@@ -165,7 +163,7 @@ class ChatService
             }
         }
 
-        // Get or cache the contact list - NOW USING $this->cacheTtl
+        // Get or cache the contact list for THIS specific page
         $cachedData = Cache::remember($cacheKey, $this->cacheTtl, function() use (
             $contact, 
             $searchTerm, 
@@ -215,7 +213,7 @@ class ChatService
         ])->pluck('value', 'key')->toArray();
 
         $perPage = 10; // Number of items per page
-        $totalContacts = count($contacts); // Total number of contacts
+        $totalContacts = $rowCount; // Total number of contacts
         $messageTemplates = Template::where('organization_id', $this->organizationId)
             ->where('deleted_at', null)
             ->where('status', 'APPROVED')
