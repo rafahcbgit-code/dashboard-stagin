@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\File;
 | be assigned to the "web" middleware group. Make something great!
 |
 */
+Route::post('/webhook/{organization}', [App\Http\Controllers\WebhookController::class, 'handlePostRequest']);
 
 //Installer routes
 Route::get('/install/{step?}', [App\Http\Controllers\InstallerController::class, 'index'])->name('install');
