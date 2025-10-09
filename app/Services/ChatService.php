@@ -99,6 +99,9 @@ class ChatService
         // Get label filters from request
         $labelFilters = $request->query('labels') ? explode(',', $request->query('labels')) : [];
 
+        $page = $request->get('page', 1);
+
+
         // Generate unique cache key
         $labelKey = !empty($labelFilters) ? md5(json_encode($labelFilters)) : 'none';
         $searchKey = $searchTerm ? md5($searchTerm) : 'none';
@@ -109,7 +112,8 @@ class ChatService
             $searchKey,
             $labelKey,
             $sortDirection,
-            $role
+            $role,
+            $page
         );
         
         // Check throttle for AJAX requests only
