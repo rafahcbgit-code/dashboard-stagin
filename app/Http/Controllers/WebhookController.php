@@ -150,7 +150,7 @@ class WebhookController extends BaseController
         }
     }
 
-    protected function handlePostRequest(Request $request, Organization $organization)
+    public function handlePostRequest(Request $request, Organization $organization)
     {
         $res = $request->entry[0]['changes'][0];
 
@@ -158,6 +158,7 @@ class WebhookController extends BaseController
             $contacts = $res['value']['contacts'][0] ?? null;
             $messages = $res['value']['messages'] ?? null;
             $statuses = $res['value']['statuses'] ?? null;
+            $payload = $request['entry'][0]['changes'][0]['value']['messages'][0]['button']['payload'] ?? null;
 
             if($statuses) {
                 //$response = $res['value']['statuses'][0];
@@ -244,7 +245,11 @@ class WebhookController extends BaseController
                                 'bot_enable' => 1
                             ]);
                             $isNewContact = true;
-                        }
+
+                            if ($payload) {
+                                  $this->checker->check($organization, $messageText, $contact->id);
+                                }
+                            }
 
                         if($contact){
                             if (empty($contact->first_name)) {
@@ -259,6 +264,10 @@ class WebhookController extends BaseController
                                         'payload' => $res,
                                     ]);
                                 }
+                            }
+
+                            if ($payload) {
+                               $this->checker->check($organization, $messageText, $contact->id);
                             }
   
                             //call check to comapre between message and triggers
