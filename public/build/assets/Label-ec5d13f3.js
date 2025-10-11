@@ -1,5 +1,0 @@
-<<<<<<<< HEAD:public/build/assets/Label-ec5d13f3.js
-import{V as o}from"./index-966efdb1.js";import{c as r}from"./utils-3f044a58.js";import{D as c,f as l,g as n,L as p,u as t,o as f,J as m}from"./app-a22831f2.js";const h=c({__name:"Label",props:{for:{},asChild:{type:Boolean},as:{},class:{}},setup(a){const s=a;return(e,i)=>(f(),l(t(o),p(s,{class:t(r)("block text-sm tracking-tight text-left",s.class)}),{default:n(()=>[m(e.$slots,"default")]),_:3},16,["class"]))}});export{h as default};
-========
-import{V as o}from"./index-7d63d92b.js";import{c as r}from"./utils-3f044a58.js";import{D as c,f as l,g as n,L as p,u as t,o as f,J as m}from"./app-5cdbedeb.js";const h=c({__name:"Label",props:{for:{},asChild:{type:Boolean},as:{},class:{}},setup(a){const s=a;return(e,i)=>(f(),l(t(o),p(s,{class:t(r)("block text-sm tracking-tight text-left",s.class)}),{default:n(()=>[m(e.$slots,"default")]),_:3},16,["class"]))}});export{h as default};
->>>>>>>> f36c63ac421de9826d571c3e6a2573165098637a:public/build/assets/Label-fcdde9ab.js

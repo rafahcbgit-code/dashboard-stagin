@@ -1,5 +1,0 @@
-<<<<<<<< HEAD:public/build/assets/ToastDescription.vue_vue_type_script_setup_true_lang-6393a471.js
-import{ac as t}from"./index-966efdb1.js";import{c as r}from"./utils-3f044a58.js";import{D as c,f as n,g as p,L as l,u as a,o as m,J as i}from"./app-a22831f2.js";const g=c({__name:"ToastDescription",props:{asChild:{type:Boolean},as:{},class:{}},setup(o){const s=o;return(e,f)=>(m(),n(a(t),l({class:a(r)("text-sm opacity-90",s.class)},s),{default:p(()=>[i(e.$slots,"default")]),_:3},16,["class"]))}});export{g as _};
-========
-import{ac as t}from"./index-7d63d92b.js";import{c as r}from"./utils-3f044a58.js";import{D as c,f as n,g as p,L as l,u as a,o as m,J as i}from"./app-5cdbedeb.js";const g=c({__name:"ToastDescription",props:{asChild:{type:Boolean},as:{},class:{}},setup(o){const s=o;return(e,f)=>(m(),n(a(t),l({class:a(r)("text-sm opacity-90",s.class)},s),{default:p(()=>[i(e.$slots,"default")]),_:3},16,["class"]))}});export{g as _};
->>>>>>>> f36c63ac421de9826d571c3e6a2573165098637a:public/build/assets/ToastDescription.vue_vue_type_script_setup_true_lang-72049559.js
