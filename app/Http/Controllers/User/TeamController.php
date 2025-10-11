@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\User;
 
-use DB;
 use App\Http\Controllers\Controller as BaseController;
 use App\Http\Requests\StoreTeam;
 use App\Http\Resources\TeamResource;
@@ -11,6 +10,7 @@ use App\Services\TeamService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redirect;
 use Inertia\Inertia;
+use Illuminate\Support\Facades\DB;
 
 class TeamController extends BaseController
 {

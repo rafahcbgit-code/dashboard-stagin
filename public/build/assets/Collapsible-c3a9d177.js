@@ -1,1 +1,5 @@
+<<<<<<<< HEAD:public/build/assets/Collapsible-b95eb77d.js
+import{T as r,a as l}from"./index-966efdb1.js";import{D as i,f as d,g as m,a9 as u,aa as c,u as e,o as f,J as B}from"./app-a22831f2.js";const h=i({__name:"Collapsible",props:{defaultOpen:{type:Boolean},open:{type:Boolean},disabled:{type:Boolean},asChild:{type:Boolean},as:{}},emits:["update:open"],setup(a,{emit:o}){const s=a,t=o;return(n,_)=>(f(),d(e(l),u(c({...s,...e(r)(t)})),{default:m(({open:p})=>[B(n.$slots,"default",{open:p})]),_:3},16))}});export{h as default};
+========
 import{T as r,a as l}from"./index-7d63d92b.js";import{D as i,f as d,g as m,a9 as u,aa as c,u as e,o as f,J as B}from"./app-5cdbedeb.js";const h=i({__name:"Collapsible",props:{defaultOpen:{type:Boolean},open:{type:Boolean},disabled:{type:Boolean},asChild:{type:Boolean},as:{}},emits:["update:open"],setup(a,{emit:o}){const s=a,t=o;return(n,_)=>(f(),d(e(l),u(c({...s,...e(r)(t)})),{default:m(({open:p})=>[B(n.$slots,"default",{open:p})]),_:3},16))}});export{h as default};
+>>>>>>>> f36c63ac421de9826d571c3e6a2573165098637a:public/build/assets/Collapsible-c3a9d177.js

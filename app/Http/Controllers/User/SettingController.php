@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers\User;
 
-use DB;
+use Illuminate\Support\Facades\DB;
 use Validator;
 use Inertia\Inertia;
 use App\Models\Addon;
@@ -193,6 +193,19 @@ public function campaign(Request $request)
         if ($request->isMethod('get')) {
             $contactFieldService = new ContactFieldService(session()->get('current_organization'));
             $settings = Organization::where('id', session()->get('current_organization'))->first();
+            
+            $agents = DB::table('users')
+                ->join('teams', 'users.id', '=', 'teams.user_id')
+                ->where('teams.organization_id', '=', session()->get('current_organization'))
+                ->where('teams.role', '=', 'agent')
+                ->whereNull('teams.deleted_at')
+                ->select('users.*')
+                ->get();
+
+            $oldSelectedAgents = DB::table('assigned_agents')
+                ->where('organization_id', session()->get('current_organization'))
+                ->pluck('user_id')
+                ->toArray();
 
             return Inertia::render('User/Settings/Ticket', [
                 'title' => __('Settings'),
@@ -200,8 +213,11 @@ public function campaign(Request $request)
                 'rows' => $contactFieldService->get($request),
                 'settings' => $settings,
                 'modules' => Addon::get(),
+                'agents' => $agents,
+                'oldSelectedAgents' => $oldSelectedAgents
             ]);
         } else if($request->isMethod('post')) {
+            //dd($request);
             $currentOrganizationId = session()->get('current_organization');
             $organizationConfig = Organization::where('id', $currentOrganizationId)->first();
     
@@ -211,12 +227,16 @@ public function campaign(Request $request)
             $metadataArray['tickets']['auto_assignment'] = $request->auto_assignment;
             $metadataArray['tickets']['reassign_reopened_chats'] = $request->reassign_reopened_chats;
             $metadataArray['tickets']['allow_agents_to_view_all_chats'] = $request->allow_agents_to_view_all_chats;
+            $metadataArray['tickets']['assigned_to_specific_agents'] = $request->assigned_to_specific_agents;
 
             $updatedMetadataJson = json_encode($metadataArray);
 
             $organizationConfig->metadata = $updatedMetadataJson;
             $organizationConfig->save();
 
+    if (is_array($request->selected_agents)) {
+            $this->syncAssignedAgents($currentOrganizationId, $request->selected_agents);
+        }
             /*return back()->with(
                 'status', [
                     'type' => 'success', 
@@ -732,5 +752,28 @@ public function campaign(Request $request)
                 'type' => 'success',
                 'message' => __('Contact group created successfully with :count contacts', ['count' => $contactsWithLabel->count()])
             ]);
+    }
+
+    private function syncAssignedAgents($organizationId, array $selectedAgents)
+    {
+        DB::table('assigned_agents')
+            ->where('organization_id', $organizationId)
+            ->delete();
+
+        $data = [];
+        $now = now();
+
+        foreach ($selectedAgents as $userId) {
+            $data[] = [
+                'organization_id' => $organizationId,
+                'user_id'        => $userId,
+                'created_at'     => $now,
+                'updated_at'     => $now,
+            ];
+        }
+
+        if (!empty($data)) {
+            DB::table('assigned_agents')->insert($data);
+        }
     }
 }

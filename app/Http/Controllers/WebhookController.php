@@ -154,8 +154,6 @@ class WebhookController extends BaseController
     {
         $res = $request->entry[0]['changes'][0];
 
-        
-
         if($res['field'] === 'messages'){
             $contacts = $res['value']['contacts'][0] ?? null;
             $messages = $res['value']['messages'] ?? null;
@@ -267,6 +265,7 @@ class WebhookController extends BaseController
                             //The addition was made here to ensure that the contact exists
                             if($messageText) {
                                 $this->checker->check($organization, $messageText, $contact->id);
+                                (new ChatService($organization->id))->handleTicketAssignment($contact->id); 
                             }
 
                             $chat = Chat::where('wam_id', $response['id'])->where('organization_id', $organization->id)->first();

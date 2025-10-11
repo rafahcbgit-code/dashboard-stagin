@@ -12,7 +12,7 @@ use Inertia\Inertia;
 
 class SubscriptionPlanController extends BaseController
 {
-    private $SubscriptionPlanService;
+    private $subscriptionPlanService;
 
     /**
      * SubscriptionController constructor.
