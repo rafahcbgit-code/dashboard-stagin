@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers\User;
 
-use DB;
 use App\Http\Controllers\Controller as BaseController;
 use App\Models\Contact;
 use App\Models\ContactField;
@@ -17,6 +16,8 @@ use App\Services\ContactService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Excel;
 use Validator;
@@ -223,59 +224,59 @@ class ContactController extends BaseController
         // Return the file as download
         return response()->download($tempFile, 'contacts_template.csv')->deleteFileAfterSend(true);
     }
-
     public function import(Request $request) {
-        // Initialize the import process
-        $import = new ContactsImport();
 
-        // Handle file import
-        Excel::import($import, $request->file);
+            try {
+            set_time_limit(0); 
+            ini_set('memory_limit', '2048M'); // 2GB RAM
+            ini_set('max_execution_time', 0);
+            
+            // Disable MySQL strict mode temporarily for better performance
+            DB::statement("SET SESSION sql_mode=''");
+            // Initialize the import process
+            $import = new ContactsImport();
 
-        // Get the count of successful imports
-        $successfulImports = $import->getsuccessfulImports();
-        $totalImports = $import->getTotalImportsCount();
-        $failedImports = $totalImports - $successfulImports;
+            // Handle file import
+            Excel::import($import, $request->file);
 
-        // Prepare status message based on the import outcome
-        if ($successfulImports === 0) {
-            $statusType = 'error';
-            $statusMessage = __('All rows failed to import. Please check the data format or duplicates.');
-        } elseif ($failedImports === 0) {
-            $statusType = 'success';
-            $statusMessage = __('All rows have been imported successfully!');
-        } elseif ($successfulImports > 0 && $failedImports > 0) {
-            $statusType = 'warning';
-            $statusMessage = __('Some rows have been imported successfully, while others failed. Please check the error logs for details.');
+            // Get the count of successful imports
+            $successfulImports = $import->getsuccessfulImports();
+            $totalImports = $import->getTotalImportsCount();
+            $failedImports = $totalImports - $successfulImports;
+
+            // Prepare status message based on the import outcome
+            if ($successfulImports === 0) {
+                $statusType = 'error';
+                $statusMessage = __('There are no new contacts');
+            } elseif ($failedImports === 0) {
+                $statusType = 'success';
+                $statusMessage = __('All rows have been imported successfully!');
+            } elseif ($successfulImports > 0 && $failedImports > 0) {
+                $statusType = 'warning';
+                $statusMessage = __('Some rows have been imported successfully, while others failed. Please check the error logs for details.');
+            }
+
+            return redirect('/contacts')->with(
+                'status', [
+                    'type' => $statusType, 
+                    'message' => $statusMessage,
+                    'import_summary' => array(
+                        'total_imports' => $totalImports,
+                        'successful_imports' => $successfulImports,
+                        'failed_imports' => $failedImports,
+                        'duplicate_entries'  => $import->getFailedImportsDueToDuplicatesCount(),
+                        'invalid_format_entries' => $import->getFailedImportsDueToFormat(),
+                        'failed_rows_details' => $import->getFailedImports(),
+                        'failed_limit_entries'  => $import->getFailedImportsDueToLimit(),
+                    ),
+                ]
+            );
+
+            } catch (\Exception $e) {
+            Log::error('Import Error: ' . $e->getMessage());
         }
-
-        return redirect('/contacts')->with(
-            'status', [
-                'type' => $statusType, 
-                'message' => $statusMessage,
-                'import_summary' => array(
-                    'total_imports' => $totalImports,
-                    'successful_imports' => $successfulImports,
-                    'failed_imports' => $failedImports,
-                    'duplicate_entries'  => $import->getFailedImportsDueToDuplicatesCount(),
-                    'invalid_format_entries' => $import->getFailedImportsDueToFormat(),
-                    'failed_rows_details' => $import->getFailedImports(),
-                    'failed_limit_entries'  => $import->getFailedImportsDueToLimit(),
-                ),
-            ]
-        );
-    }
-
-    public function store(StoreContact $request){
-        $contact = $this->contactService()->store($request);
+        }
         
-        return redirect('/contacts?id=' . $contact->uuid)->with(
-            'status', [
-                'type' => 'success', 
-                'message' => __('Contact added successfully!')
-            ]
-        );
-    }
-
     public function update(StoreContact $request, $uuid)
     {
         $contact = $this->contactService()->store($request, $uuid);
