@@ -150,7 +150,7 @@ class WebhookController extends BaseController
         }
     }
 
-    public function handlePostRequest(Request $request, Organization $organization)
+    protected function handlePostRequest(Request $request, Organization $organization)
     {
         $res = $request->entry[0]['changes'][0];
 
