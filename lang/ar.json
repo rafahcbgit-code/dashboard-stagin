@@ -882,6 +882,8 @@
     "Select Agents": "اختر الوكلاء",
     "Save Selected Agents": "احفظ الوكلاء المحددين",
     "Global Reply Settings": "إعدادات الردود العامة",
+    
+    "There are no new contacts": "ليس هناك جهات اتصال جديدة",
     "Create Group from Label": "إنشاء غروب اعتمادا على العلامة",
     "Enable this option to allow assigning conversations only to specific agents.": "قم بتفعيل هذا الخيار للسماح بتعيين المحادثات لوكلاء محددين فقط",
     "Enable or disable plugins to enhance your business operations.": "فعّل أو عطل الإضافات لتعزيز عمليات عملك",
