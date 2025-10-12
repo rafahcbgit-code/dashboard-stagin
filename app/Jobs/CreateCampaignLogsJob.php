@@ -96,16 +96,16 @@ class CreateCampaignLogsJob implements ShouldQueue
         $campaignLogs = $newContacts->map(function ($contactId) use ($campaign) {
             return [
                 'campaign_id' => $campaign->id,
-                'contact_id' => $contactId,
-                'status' => 'pending',
-                'created_at' => now(),
-                'updated_at' => now(),
+                'contact_id'  => $contactId,
+                'status'      => 'pending',
+                'created_at'  => now(),
+                'updated_at'  => now(),
             ];
         })->toArray();
 
         // Insert new logs if any
-        if (!empty($campaignLogs)) {
-            return CampaignLog::insert($campaignLogs);
+        foreach (array_chunk($campaignLogs, 1000) as $chunk) {
+            CampaignLog::insert($chunk);
         }
 
         return false;
