@@ -158,7 +158,8 @@ class WebhookController extends BaseController
             $contacts = $res['value']['contacts'][0] ?? null;
             $messages = $res['value']['messages'] ?? null;
             $statuses = $res['value']['statuses'] ?? null;
-
+            $payload = data_get($request, 'entry.0.changes.0.value.messages.0.button.payload');
+           
             if($statuses) {
                 //$response = $res['value']['statuses'][0];
                 foreach($statuses as $response){
@@ -205,6 +206,7 @@ class WebhookController extends BaseController
                 //Log::info($messages);
 
                 if(!$isLimitReached){
+                
                     foreach($messages as $response){
                         $phone = $response['from'];
 
@@ -244,7 +246,11 @@ class WebhookController extends BaseController
                                 'bot_enable' => 1
                             ]);
                             $isNewContact = true;
-                        }
+
+                            if ($payload) {
+                                  $this->checker->check($organization, $payload, $contact->id);
+                                }
+                            }
 
                         if($contact){
                             if (empty($contact->first_name)) {
@@ -259,6 +265,11 @@ class WebhookController extends BaseController
                                         'payload' => $res,
                                     ]);
                                 }
+                            }
+
+                            //call check to comapre between message button and triggers
+                            if ($payload) {
+                               $this->checker->check($organization, $payload, $contact->id);
                             }
   
                             //call check to comapre between message and triggers
