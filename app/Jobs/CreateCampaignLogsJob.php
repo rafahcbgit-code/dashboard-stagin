@@ -59,6 +59,9 @@ class CreateCampaignLogsJob implements ShouldQueue
         
         if ($this->createCampaignLogs($campaign, $contacts)) {
             Campaign::where('uuid', $campaign->uuid)->update(['status' => 'ongoing']);
+            Log::info("Campaign {$campaign->uuid} marked ongoing.");
+        }else{
+            Log::info("Campaign {$campaign->uuid} not marked ongoing.");
         }
     }
 
