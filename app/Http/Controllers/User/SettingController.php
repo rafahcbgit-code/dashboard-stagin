@@ -89,7 +89,7 @@ class SettingController extends BaseController
             'modules' => Addon::get(),
             'title' => __('Settings'),
         ];
-
+//dd($data);
         return Inertia::render('User/Settings/Whatsapp', $data);
     }
 
@@ -384,7 +384,7 @@ public function campaign(Request $request)
         $whatsappService = new WhatsappService($accessToken, $apiVersion, $appId, $phoneNumberId, $wabaId, $organizationId);
 
         $phoneNumberResponse = $whatsappService->getPhoneNumberId($accessToken, $wabaId);
-        
+     
         if(!$phoneNumberResponse->success){
             return back()->with(
                 'status', [
@@ -396,7 +396,7 @@ public function campaign(Request $request)
 
         //Get Phone Number Status
         $phoneNumberStatusResponse = $whatsappService->getPhoneNumberStatus($accessToken, $phoneNumberResponse->data->id); 
-        
+          // dd($phoneNumberStatusResponse->data->whatsapp_business_manager_messaging_limit);
         if(!$phoneNumberStatusResponse->success){
             return back()->with(
                 'status', [
@@ -429,9 +429,8 @@ public function campaign(Request $request)
                 ]
             );
         }
-
         $organizationConfig = Organization::where('id', $organizationId)->first();
-        
+        //dd($phoneNumberStatusResponse->data->whatsapp_business_manager_messaging_limit);
         $metadataArray = $organizationConfig->metadata ? json_decode($organizationConfig->metadata, true) : [];
         $metadataArray['whatsapp']['is_embedded_signup'] = $metadataArray['whatsapp']['is_embedded_signup'] ?? 0;
         $metadataArray['whatsapp']['access_token'] = $accessToken;
@@ -445,6 +444,7 @@ public function campaign(Request $request)
         $metadataArray['whatsapp']['messaging_limit_tier'] = $phoneNumberResponse->data->messaging_limit_tier ?? NULL;
         $metadataArray['whatsapp']['max_daily_conversation_per_phone'] = NULL;
         $metadataArray['whatsapp']['max_phone_numbers_per_business'] = NULL;
+        $metadataArray['whatsapp']['whatsapp_business_manager_messaging_limit'] = $phoneNumberStatusResponse->data->whatsapp_business_manager_messaging_limit ?? NULL;
         $metadataArray['whatsapp']['number_status'] = $phoneNumberStatusResponse->data->status;
         $metadataArray['whatsapp']['code_verification_status'] = $phoneNumberStatusResponse->data->code_verification_status;
         $metadataArray['whatsapp']['business_verification'] = '';
@@ -457,7 +457,7 @@ public function campaign(Request $request)
 
         $updatedMetadataJson = json_encode($metadataArray);
         $organizationConfig->metadata = $updatedMetadataJson;
-
+$organizationConfig->save();
         if($organizationConfig->save()){
             $whatsappService->syncTemplates($accessToken, $wabaId);
 

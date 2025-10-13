@@ -58,6 +58,10 @@
                                 <div class="bg-slate-50 py-1 px-2 rounded-md w-[fit-content] text-xs">{{ settings.whatsapp?.code_verification_status }}</div>
                             </div>
                             <div class="border-r">
+                                <div>{{ $t('Message limits New') }}</div>
+                                <div>{{ settings.whatsapp?.whatsapp_business_manager_messaging_limit ? settings.whatsapp?.whatsapp_business_manager_messaging_limit : 'N/A' }}</div>
+                            </div>
+                            <div class="border-r">
                                 <div>{{ $t('Quality rating') }}</div>
                                 <div class="bg-slate-50 py-1 px-2 rounded-md w-[fit-content] text-xs">{{ settings.whatsapp?.quality_rating }}</div>
                             </div>
