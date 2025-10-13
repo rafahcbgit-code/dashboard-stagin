@@ -1407,7 +1407,7 @@ class WhatsappService
         $responseObject = new \stdClass();
 
         try {
-            $fields = 'display_phone_number,certificate,name_status,new_certificate,new_name_status,verified_name,quality_rating,messaging_limit_tier,business_capability_update';
+            $fields = 'display_phone_number,certificate,name_status,new_certificate,new_name_status,verified_name,quality_rating,messaging_limit_tier';
 
             $response = Http::get("https://graph.facebook.com/{$this->apiVersion}/{$this->wabaId}/phone_numbers", [
                 'fields' => $fields,

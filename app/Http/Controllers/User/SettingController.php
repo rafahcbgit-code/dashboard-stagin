@@ -89,7 +89,7 @@ class SettingController extends BaseController
             'modules' => Addon::get(),
             'title' => __('Settings'),
         ];
-//dd($data);
+
         return Inertia::render('User/Settings/Whatsapp', $data);
     }
 
@@ -217,7 +217,6 @@ public function campaign(Request $request)
                 'oldSelectedAgents' => $oldSelectedAgents
             ]);
         } else if($request->isMethod('post')) {
-            //dd($request);
             $currentOrganizationId = session()->get('current_organization');
             $organizationConfig = Organization::where('id', $currentOrganizationId)->first();
     
@@ -457,7 +456,7 @@ public function campaign(Request $request)
 
         $updatedMetadataJson = json_encode($metadataArray);
         $organizationConfig->metadata = $updatedMetadataJson;
-//$organizationConfig->save();
+
         if($organizationConfig->save()){
             $whatsappService->syncTemplates($accessToken, $wabaId);
 
