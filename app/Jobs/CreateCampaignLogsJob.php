@@ -92,6 +92,10 @@ class CreateCampaignLogsJob implements ShouldQueue
         // Filter out contacts that already have logs
         $newContacts = $contactIds->diff($existingLogs);
 
+        if ($newContacts->isEmpty()) {
+            return false; // nothing new
+        }
+
         // Prepare new campaign logs
         $campaignLogs = $newContacts->map(function ($contactId) use ($campaign) {
             return [
@@ -103,11 +107,12 @@ class CreateCampaignLogsJob implements ShouldQueue
             ];
         })->toArray();
 
-        // Insert new logs if any
+        // Insert new logs in chunks
         foreach (array_chunk($campaignLogs, 1000) as $chunk) {
             CampaignLog::insert($chunk);
         }
 
-        return false;
+        return true;
     }
+
 }
