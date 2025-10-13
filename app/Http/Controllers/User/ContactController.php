@@ -276,6 +276,17 @@ class ContactController extends BaseController
             Log::error('Import Error: ' . $e->getMessage());
         }
         }
+
+    public function store(StoreContact $request){
+        $contact = $this->contactService()->store($request);
+        
+        return redirect('/contacts?id=' . $contact->uuid)->with(
+            'status', [
+                'type' => 'success', 
+                'message' => __('Contact added successfully!')
+            ]
+        );
+    }
         
     public function update(StoreContact $request, $uuid)
     {
