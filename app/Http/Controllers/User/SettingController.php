@@ -396,7 +396,7 @@ public function campaign(Request $request)
 
         //Get Phone Number Status
         $phoneNumberStatusResponse = $whatsappService->getPhoneNumberStatus($accessToken, $phoneNumberResponse->data->id); 
-          // dd($phoneNumberStatusResponse->data->whatsapp_business_manager_messaging_limit);
+        
         if(!$phoneNumberStatusResponse->success){
             return back()->with(
                 'status', [
@@ -430,7 +430,7 @@ public function campaign(Request $request)
             );
         }
         $organizationConfig = Organization::where('id', $organizationId)->first();
-        //dd($phoneNumberStatusResponse->data->whatsapp_business_manager_messaging_limit);
+        
         $metadataArray = $organizationConfig->metadata ? json_decode($organizationConfig->metadata, true) : [];
         $metadataArray['whatsapp']['is_embedded_signup'] = $metadataArray['whatsapp']['is_embedded_signup'] ?? 0;
         $metadataArray['whatsapp']['access_token'] = $accessToken;
@@ -457,7 +457,7 @@ public function campaign(Request $request)
 
         $updatedMetadataJson = json_encode($metadataArray);
         $organizationConfig->metadata = $updatedMetadataJson;
-$organizationConfig->save();
+//$organizationConfig->save();
         if($organizationConfig->save()){
             $whatsappService->syncTemplates($accessToken, $wabaId);
 

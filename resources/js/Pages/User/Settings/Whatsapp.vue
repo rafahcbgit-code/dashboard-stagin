@@ -34,7 +34,7 @@
                             </div>
                             <div class="border-r">
                                 <div>{{ $t('Message limits') }}</div>
-                                <div>{{ settings.whatsapp?.messaging_limit_tier ? settings.whatsapp?.messaging_limit_tier : 'N/A' }}</div>
+                                <div>{{ settings.whatsapp?.whatsapp_business_manager_messaging_limit ? settings.whatsapp?.whatsapp_business_manager_messaging_limit : 'N/A' }}</div>
                             </div>
                             <div>
                                 <div>{{ $t('Number status') }}</div>
@@ -56,10 +56,6 @@
                             <div v-if="settings.whatsapp?.is_embedded_signup == 1" class="border-r">
                                 <div>{{ $t('Phone verification status') }}</div>
                                 <div class="bg-slate-50 py-1 px-2 rounded-md w-[fit-content] text-xs">{{ settings.whatsapp?.code_verification_status }}</div>
-                            </div>
-                            <div class="border-r">
-                                <div>{{ $t('Message limits New') }}</div>
-                                <div>{{ settings.whatsapp?.whatsapp_business_manager_messaging_limit ? settings.whatsapp?.whatsapp_business_manager_messaging_limit : 'N/A' }}</div>
                             </div>
                             <div class="border-r">
                                 <div>{{ $t('Quality rating') }}</div>
