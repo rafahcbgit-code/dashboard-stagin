@@ -315,18 +315,20 @@ class ChatService
 
     public function handleTicketAssignment($contactId)
         {
+
             try{
                 $organizationId = $this->organizationId;
                 // Get organization settings
                 $settings = Organization::where('id', $organizationId)->first();
                 $settings = json_decode($settings->metadata);
-                $isSpecificAgentEnabled = isset($settings->tickets) && $settings->tickets->assigned_to_specific_agents === true;
+               $isSpecificAgentEnabled = !empty($settings->tickets->assigned_to_specific_agents ?? false);
 
                 // Case 1: Assign tickets to specific agents in a round-robin style
                 if ($isSpecificAgentEnabled) {
                     $this->assignTicketToSpecificAgent($contactId, $organizationId);
                     return ;
                 }
+
 
                 // Case 2: Auto-assignment logic if active
                 if (isset($settings->tickets) && $settings->tickets->active === true) {

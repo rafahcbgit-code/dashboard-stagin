@@ -754,7 +754,8 @@ class WebhookController extends BaseController
 
             $metadataArray['whatsapp']['max_daily_conversation_per_phone'] = $response['max_daily_conversation_per_phone'] ?? NULL;
             $metadataArray['whatsapp']['max_phone_numbers_per_business'] = $response['max_phone_numbers_per_business'] ?? NULL;
-
+            $metadataArray['whatsapp']['whatsapp_business_manager_messaging_limit'] = $response['whatsapp_business_manager_messaging_limit'] ?? NULL;
+           
             $updatedMetadataJson = json_encode($metadataArray);
             $organizationConfig->metadata = $updatedMetadataJson;
             $organizationConfig->save();

@@ -137,21 +137,23 @@
                     </div> 
 
                     <!-- Allow agents to view all chats -->
-                    <div v-if="form.active" class="bg-white border border-slate-200 rounded-lg pt-2 text-sm mb-4 px-4 mb-12">
+                    <div v-if="form.active" class="bg-white border border-slate-200 rounded-lg pt-2 text-sm mb-4 px-4 mb-32">
                         <div class="w-full py-2 mb-4 mt-2">
-                            <div class="flex w-full">
-                                <div class="w-3/4 text-md">
-                                    <h4 class="text-[16px]">{{ $t('Grant agents access to view all chats not assigned to them') }}</h4>
-                                    <div class="mb-1 text-slate-500">
+                            <div class="flex w-full items-start gap-4">
+                                <div class="flex-1 text-md">
+                                    <h4 class="text-[16px] leading-relaxed">
+                                        {{ $t('Grant agents access to view all chats not assigned to them') }}
+                                    </h4>
+                                    <div class="mb-1 text-slate-500 mt-1">
                                         {{ $t('Disable this option, if you want live chat agents to have access only to new conversations.') }}
                                     </div>
                                 </div>
-                                <div class="w-1/4">
-                                    <div class="ml-auto w-12 h-6 flex items-center bg-gray-300 rounded-full p-1"
-                                         :class="{ 'bg-primary': form.allow_agents_to_view_all_chats}" 
-                                         @click="toggleState3">
+                                <div class="flex-shrink-0">
+                                    <div class="w-12 h-6 flex items-center bg-gray-300 rounded-full p-1"
+                                        :class="{ 'bg-primary': form.allow_agents_to_view_all_chats}" 
+                                        @click="toggleState3">
                                         <div class="bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out"
-                                             :class="{ 'translate-x-6': form.allow_agents_to_view_all_chats}"></div>
+                                            :class="{ 'translate-x-6': form.allow_agents_to_view_all_chats}"></div>
                                     </div>
                                 </div>
                             </div>
