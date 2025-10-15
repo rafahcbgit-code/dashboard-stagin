@@ -23,47 +23,52 @@ class ProcessCampaignMessagesJob implements ShouldQueue
     public function handle()
     {
         try {
+            // Track campaigns to check completion later
+            $campaignsProcessed = [];
+
             // Process logs in chunks to avoid memory issues
             CampaignLog::with(['campaign.organization', 'contact'])
                 ->whereIn('status', ['pending', 'failed'])
                 ->whereHas('campaign', function ($query) {
                     $query->where('status', 'ongoing');
                 })
-                ->chunk(1000, function ($logs) {
+                ->chunk(500, function ($logs) use (&$campaignsProcessed) {
                     $jobs = [];
-                    $campaignsProcessed = [];
 
-                    // Process logs and collect jobs
                     foreach ($logs as $log) {
                         $orgMetadata = json_decode($log->campaign->organization->metadata ?? '{}', true);
-                        $retryEnabled = $orgMetadata['campaigns']['enable_resend'] ?? [];
+                        $retryEnabled = $orgMetadata['campaigns']['enable_resend'] ?? false;
                         $retryIntervals = $orgMetadata['campaigns']['resend_intervals'] ?? [];
                         $maxRetries = count($retryIntervals);
 
-                        // Filter the logs based on the status and retry logic
-                        if ($log->status === 'pending' || ($log->status === 'failed' && $log->retry_count < $maxRetries && $retryEnabled === true)) {
+                        // Get actual retry count from database relationship
+                        $retryCount = $log->retries()->count();
+
+                        // Add job if pending or failed with retries remaining
+                        if ($log->status === 'pending' || 
+                            ($log->status === 'failed' && $retryEnabled && $retryCount < $maxRetries)) {
                             $jobs[] = new ProcessSingleCampaignLogJob($log);
                         }
 
-                        // Track which campaigns have been processed
+                        // Track campaign IDs
                         if (!in_array($log->campaign_id, $campaignsProcessed)) {
                             $campaignsProcessed[] = $log->campaign_id;
                         }
                     }
 
-                    // Dispatch jobs in batches
+                    // Dispatch jobs to queue
                     if (!empty($jobs)) {
                         Bus::batch($jobs)
                             ->allowFailures()
                             ->onQueue('campaign-messages')
                             ->dispatch();
                     }
-
-                    // After processing logs, mark campaigns as completed if needed
-                    foreach ($campaignsProcessed as $campaignId) {
-                        $this->markCampaignAsCompleted($campaignId);
-                    }
                 });
+
+            foreach ($campaignsProcessed as $campaignId) {
+                $this->markCampaignAsCompleted($campaignId);
+            }
+
         } catch (\Exception $e) {
             Log::error('Error in ProcessCampaignMessagesJob: ' . $e->getMessage());
             throw $e;
@@ -73,41 +78,44 @@ class ProcessCampaignMessagesJob implements ShouldQueue
     private function markCampaignAsCompleted($campaignId)
     {
         $campaign = Campaign::with('organization')->find($campaignId);
+        
+        if (!$campaign || $campaign->status !== 'ongoing') {
+            return;
+        }
+
         $orgMetadata = json_decode($campaign->organization->metadata ?? '{}', true);
-        $retryEnabled = $orgMetadata['campaigns']['enable_resend'] ?? [];
+        $retryEnabled = $orgMetadata['campaigns']['enable_resend'] ?? false;
         $retryIntervals = $orgMetadata['campaigns']['resend_intervals'] ?? [];
         $maxRetries = count($retryIntervals);
 
-        // Check if there are any pending logs left for this campaign
-        $failedLogsExists = false;
+        $pendingOrOngoingExists = CampaignLog::where('campaign_id', $campaignId)
+            ->whereIn('status', ['pending', 'ongoing'])
+            ->exists();
 
-        if($retryEnabled){
-            // Check if there are any failed logs left for this campaign that have not reached max retry attempts
+        if ($pendingOrOngoingExists) {
+            return; // Still processing
+        }
+
+        $failedLogsCanRetry = false;
+
+        if ($retryEnabled) {
             $failedLogs = CampaignLog::where('campaign_id', $campaignId)
                 ->where('status', 'failed')
-                ->where(function ($query) use ($maxRetries) {
-                    // Check if the campaign is ongoing
-                    $query->whereHas('campaign', function ($subQuery) {
-                        $subQuery->where('status', 'ongoing');
-                    });
-                })
                 ->get();
 
             foreach ($failedLogs as $log) {
-                if($log->retries->count() < $maxRetries){
-                    $failedLogsExists = true;
+                $retryCount = $log->retries()->count();
+                if ($retryCount < $maxRetries) {
+                    $failedLogsCanRetry = true;
                     break;
                 }
             }
         }
 
-        if (!$failedLogsExists) {
-            // No more pending/failed logs, mark the campaign as completed
-            $campaign = Campaign::find($campaignId);
-            if ($campaign && $campaign->status === 'ongoing') {
-                $campaign->status = 'completed';
-                $campaign->save();
-            }
+        if (!$failedLogsCanRetry) {
+            $campaign->status = 'completed';
+            $campaign->save();
+            Log::info("Campaign {$campaignId} marked as completed.");
         }
     }
 }
