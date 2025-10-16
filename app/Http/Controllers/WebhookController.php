@@ -246,7 +246,7 @@ class WebhookController extends BaseController
                             ]);
                             $isNewContact = true;
 
-                            $this->messageIsUnSubscribe($request, $organization, $contact, $response);
+                            $this->messageIsUnSubscribe($request, $organization, $contact);
                             }
 
                         if($contact){
@@ -264,7 +264,7 @@ class WebhookController extends BaseController
                                 }
                             }
 
-                             $this->messageIsUnSubscribe($request, $organization, $contact, $response);
+                             $this->messageIsUnSubscribe($request, $organization, $contact);
 
                             //call check to comapre between message and triggers
                             //The addition was made here to ensure that the contact exists
@@ -824,21 +824,15 @@ class WebhookController extends BaseController
         return $filename;
     }
 
-    private function messageIsUnSubscribe($request, $organization, $contact, $response)
+    private function messageIsUnSubscribe($request, $organization, $contact)
     {
         try {
-         $payload = data_get($request, 'entry.0.changes.0.value.messages.0.button.payload');
+         $payload = data_get($request, 'entry.0.changes.0.value.messages.0.button.text');
 
         if ($payload) {
             $this->checker->check($organization, $payload, $contact->id);
         }
-  
-        $title = data_get($response, 'interactive.button_reply.title')
-            ?: data_get($response, 'interactive.list_reply.title');
-                            
-        if ($title) {
-            $this->checker->check($organization, $title, $contact->id);
-        } 
+
     } catch (\Exception $e) {}
 
     }
