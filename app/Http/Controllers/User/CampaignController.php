@@ -56,7 +56,7 @@ class CampaignController extends BaseController
                 ->where('status', 'APPROVED')
                 ->get();
 
-                      $contactFieldService = new ContactFieldService(session()->get('current_organization'));
+            $contactFieldService = new ContactFieldService(session()->get('current_organization'));
             $data['contactFields'] = $contactFieldService->get($request);
 
             $data['contactGroups'] = ContactGroup::where('organization_id', $organizationId)

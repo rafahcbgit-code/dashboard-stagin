@@ -56,7 +56,6 @@
         { value: 'phone', label: trans('contact phone') },
         { value: 'email', label: trans('contact email') },
     ];
- {{ props.contactFields }}
     const dynamicOptions = computed(() => {
         let options = [...baseDynamicOptions];
 
@@ -407,7 +406,7 @@
                                         :error="form.errors['buttons.'+ index +'.parameters.0.value']" 
                                         :type="'text'" 
                                         :class="'sm:col-span-6'"
-                                    />
+                                    /> 
                                     <FormSelect v-if="value.type === 'dynamic'" v-model="value.value" :name="$t('Value')" :required="true" :error="form.errors['buttons.'+ index +'.parameters.0.value']" :options="dynamicOptions" :class="'sm:col-span-6'"/>
                                 </div>
                             </div>
