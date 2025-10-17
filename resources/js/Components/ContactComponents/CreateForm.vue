@@ -121,7 +121,7 @@
                 <FormSelect v-model="form.is_subscribed" :name="$t('Subscription Status')":options="[{ label: $t('Subscribed'), value: 1 },{ label: $t('Unsubscribed'), value: 0 }]":class="'sm:col-span-3'"/>
                 <FormSelect v-model="form.group" :name="$t('Group')" :error="form.errors.group" :options="contactGroupOptions()" :type="'text'" :class="'sm:col-span-6'" :multiple="true"@change="onGroupChange"/>
  </div>
-            <div v-if="locationSettings === 'before' && props.fields.length > 0">
+            <div v-if="props.fields.length > 0">
                 <div class="grid gap-x-6 gap-y-4 sm:grid-cols-2 mt-4 pb-6 border-b">
                     <div v-for="(input, index) in props.fields" :key="index" :class="input.type != 'input' ? 'sm:col-span-2' : 'sm:col-span-1'">
                         <FormInput v-if="input.type === 'input'" v-model="form.metadata[input.name]" :name="input.name" :label="$t(input.name)" :type="input.value" :class="'sm:col-span-2'" :required="input.required === 1 ? true : false"/>
@@ -138,7 +138,7 @@
                 <FormInput v-model="form.zip" :name="$t('Zip code')" :error="form.errors.zip" :type="'text'" :class="'sm:col-span-3'"/>
                 <FormInput v-model="form.country" :name="$t('Country')" :error="form.errors.country" :type="'text'" :class="'sm:col-span-3'"/>
             </div>
-            <div v-if="locationSettings === 'after' && props.fields.length > 0">
+            <div v-if="props.fields.length > 0">
                 <div class="grid gap-x-6 gap-y-4 sm:grid-cols-2 mb-8 pt-4 border-t">
                     <div v-for="(input, index) in props.fields" :key="index" :class="input.type != 'input' ? 'sm:col-span-2' : 'sm:col-span-1'">
                         <FormInput v-if="input.type === 'input'" v-model="form.metadata[input.name]" :name="input.name" :label="$t(input.name)" :type="input.value" :class="'sm:col-span-2'" :required="input.required === 1 ? true : false"/>

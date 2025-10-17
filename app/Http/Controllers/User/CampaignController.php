@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redirect;
 use Inertia\Inertia;
 use Maatwebsite\Excel\Facades\Excel;
+use App\Services\ContactFieldService;
 
 class CampaignController extends BaseController
 {
@@ -54,6 +55,9 @@ class CampaignController extends BaseController
                 ->where('deleted_at', null)
                 ->where('status', 'APPROVED')
                 ->get();
+
+                      $contactFieldService = new ContactFieldService(session()->get('current_organization'));
+            $data['contactFields'] = $contactFieldService->get($request);
 
             $data['contactGroups'] = ContactGroup::where('organization_id', $organizationId)
                 ->where('deleted_at', null)

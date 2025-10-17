@@ -152,7 +152,7 @@ const getAddressDetail = (value, key) => {
     </div>
 
     <!-- Additional Data (Before location) -->
-    <div v-if="locationSettings === 'before' && fields.length > 0" class="pr-20 border-gray-300 border-b py-4">
+    <div v-if="fields.length > 0" class="pr-20 border-gray-300 border-b py-4">
         <div v-for="(input, index) in props.fields" class="grid grid-cols-2 space-x-8 text-[14px]">
             <div class="text-right text-slate-500 pb-2">
                 <span>{{ $t(input.name) }}</span>

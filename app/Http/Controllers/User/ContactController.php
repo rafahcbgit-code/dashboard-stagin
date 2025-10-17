@@ -54,7 +54,6 @@ class ContactController extends BaseController
             $contact = Contact::with('contactGroups')->where('uuid', $uuid)->where('deleted_at', null)->first();
             $contactFields = ContactField::where('organization_id', $organizationId)->where('deleted_at', null)->get();
 
-            //dd($contact);
             return Inertia::render('User/Contact/Index', [
                 'title' => __('Contacts'),
                 'rows' => ContactResource::collection($contacts),
@@ -335,7 +334,7 @@ class ContactController extends BaseController
 
             if (isset($metadata['contacts'])) {
                 // If the 'contacts' key exists, retrieve the 'location' value
-                $location = $metadata['contacts']['location'];
+                $location = $metadata['contacts']['location'] ?? 'after';
 
                 // Now, you have the location value available
                 return $location;

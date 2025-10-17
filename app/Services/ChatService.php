@@ -121,10 +121,6 @@ class ChatService
             }
         }
 
-        $unassigned = ChatTicket::where('assigned_to', NULL)->count();
-        $closedCount = ChatTicket::where('status', 'closed')->count();
-        $openCount = ChatTicket::where('status', 'open')->count();
-        $allCount = ChatTicket::count();
         $config = Organization::where('id', $this->organizationId)->first();
         $agents = Team::where('organization_id', $this->organizationId)->get();
         $allowAgentsToViewAllChats = true;
