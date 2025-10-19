@@ -138,7 +138,7 @@
                 <FormInput v-model="form.zip" :name="$t('Zip code')" :error="form.errors.zip" :type="'text'" :class="'sm:col-span-3'"/>
                 <FormInput v-model="form.country" :name="$t('Country')" :error="form.errors.country" :type="'text'" :class="'sm:col-span-3'"/>
             </div>
-            <div v-if="locationSettings === 'after' && props.fields.length > 0">
+            <div v-if="props.fields.length > 0">
                 <div class="grid gap-x-6 gap-y-4 sm:grid-cols-2 mb-8 pt-4 border-t">
                     <div v-for="(input, index) in props.fields" :key="index" :class="input.type != 'input' ? 'sm:col-span-2' : 'sm:col-span-1'">
                         <FormInput v-if="input.type === 'input'" v-model="form.metadata[input.name]" :name="input.name" :label="$t(input.name)" :type="input.value" :class="'sm:col-span-2'" :required="input.required === 1 ? true : false"/>

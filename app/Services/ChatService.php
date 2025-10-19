@@ -121,10 +121,6 @@ class ChatService
             }
         }
 
-        $unassigned = ChatTicket::where('assigned_to', NULL)->count();
-        $closedCount = ChatTicket::where('status', 'closed')->count();
-        $openCount = ChatTicket::where('status', 'open')->count();
-        $allCount = ChatTicket::count();
         $config = Organization::where('id', $this->organizationId)->first();
         $agents = Team::where('organization_id', $this->organizationId)->get();
         $allowAgentsToViewAllChats = true;
@@ -249,6 +245,9 @@ class ChatService
                     ->where('is_read', 0)
                     ->count();
 
+                     $contactFieldService = new ContactFieldService(session()->get('current_organization'));
+                    $contactFields= $contactFieldService->get($request);
+
                 return Inertia::render('User/Chat/Index', [
                     'title' => 'Chats',
                     'rows' => ContactResource::collection($contacts),
@@ -273,6 +272,7 @@ class ChatService
                     'addon' => $aimodule,
                     'chat_sort_direction' => $sortDirection,
                     'unreadMessages' => $unreadMessages,
+                    'contactFields' => $contactFields,
                     'isChatLimitReached' => SubscriptionService::isSubscriptionFeatureLimitReached($this->organizationId, 'message_limit'),
                     'teamRole' => $team?->role  
                 ]);

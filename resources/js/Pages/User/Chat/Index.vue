@@ -55,6 +55,7 @@
                         :scheduleTemplate="false" 
                         :sendText="'Send Message'" 
                         @viewTemplate="displayTemplate = false;"
+                        :contactFields="contactFields"
                     />
                 </div>
             </div>
@@ -99,6 +100,7 @@
         fields: Array,
         locationSettings: Object,
         simpleForm: Boolean,
+        contactFields: Array,
         teamRole: String
     });
 
@@ -116,6 +118,8 @@
     const ticketingIsEnabled = ref(settings.value?.tickets?.active ?? false);
     const chatThread = ref(props.chatThread);
     const contact = ref(props.contact);
+    const contactFields = ref(props.contactFields);
+    
 
     /* Chat Optimization Configuration */
     const DEBUG_MODE = true; // Set to false for production
