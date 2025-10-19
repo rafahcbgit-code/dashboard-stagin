@@ -12,7 +12,6 @@
         templates: Object,
         contactGroups: Object,
         settings: Array,
-        contactFields: Array,
         contact: {
             type: String,
             default: null
@@ -32,14 +31,13 @@
         sendText: {
             type: String,
             default: 'Save'
-        }
+        },
+        contactFields: Array,
     });
-    
     const isLoading = ref(false);
     const contactGroupOptions = ref([
         { value: 'all', label: trans('all contacts') },
     ]);
-
     const templateOptions = ref([]);
     const config = ref(props.settings?.metadata);
     const settings = ref(config.value ? JSON.parse(config.value) : null);
@@ -49,16 +47,16 @@
         { value: 'dynamic', label: trans('dynamic') }
     ]);
 
-    const baseDynamicOptions = [
+  const baseDynamicOptions = [
         { value: 'first name', label: trans('contact first name') },
         { value: 'last name', label: trans('contact last name') },
         { value: 'name', label: trans('contact full name') },
         { value: 'phone', label: trans('contact phone') },
         { value: 'email', label: trans('contact email') },
     ];
+
     const dynamicOptions = computed(() => {
         let options = [...baseDynamicOptions];
-
         if (props.contactFields) {
             let fieldsArray = [];
             
@@ -84,10 +82,9 @@
                 options = [...options, ...customFields];
             }
         }
-
         return options;
     });
-
+    
     const form = useForm({
         name: null,
         template: null,
@@ -137,6 +134,8 @@
                     form.header.parameters = [];
                 }
 
+                //console.log(metadata);
+                
                 form.body.text = extractComponent(metadata, 'BODY', 'text');
                 const bodyExamples = extractComponent(metadata, 'BODY', 'example');
                 if (bodyExamples) {
@@ -157,19 +156,18 @@
                         type: item.type,
                         text: item.text,
                         value: item[item.type.toLowerCase()] ?? null,
-                        parameters: (() => {
-                            if (item.type === 'QUICK_REPLY') {
-                                return [{ type: 'static', value: item.text }];
-                            } else if (item.type === 'URL') {
-                                return [{ type: 'dynamic', value: null }];
-                            } else {
-                                return [{ type: 'static', value: item.text }];
-                            }
-                        })(),
+                        parameters: (item.type === 'QUICK_REPLY')
+                            ? [{ type: 'static', value: null }]
+                            : (item.example
+                                ? item.example.map(param => ({ type: 'dynamic', value: param }))
+                                : []
+                            ),
                     }));
                 } else {
                     form.buttons = [];
                 }
+
+                //console.log(form.buttons)
             }
         } catch (error) {
             //console.error('Error fetching data:', error);
@@ -181,7 +179,9 @@
         const file = event.target.files[0];
 
         if (file && file.size > fileSizeLimit) {
+            // Handle file size exceeding the limit
             alert(trans('file size exceeds the limit. Max allowed size:') + ' ' + fileSizeLimit + 'b');
+            // Clear the file input
             event.target.value = null;
         } else {
             const reader = new FileReader();
@@ -193,6 +193,7 @@
             form.header.parameters[0].selection = 'upload';
             form.header.parameters[0].value = file;
 
+            // Start reading the file
             reader.readAsDataURL(file);
         }
     }
@@ -238,20 +239,7 @@
         }));
     };
 
-    const validateButtonValues = () => {
-        form.buttons.forEach((button) => {
-            if (button.parameters && button.parameters.length > 0) {
-                button.parameters.forEach((param) => {
-                    if (param.type === 'static' && !param.value) {
-                        param.value = button.text;
-                    }
-                });
-            }
-        });
-    };
-
     const submitForm = () => {
-        validateButtonValues(); 
         isLoading.value = true;
         form.post(props.isCampaignFlow ? '/campaigns' : '/chat/' + props.contact + '/send/template', {
             onFinish: () => {
@@ -269,15 +257,11 @@
         emit('viewTemplate', false);
     }
 
-    onMounted(() => { 
-        templateOptions.value = transformOptions(props.templates)
-        contactGroupOptions.value = [
-            ...contactGroupOptions.value, 
-            ...transformOptions(props.contactGroups)
-        ]
-    })
+    onMounted(() => {
+        templateOptions.value = transformOptions(props.templates);
+        contactGroupOptions.value = [...contactGroupOptions.value, ...transformOptions(props.contactGroups)];
+    });
 </script>
-
 <template>
     <div :class="'md:flex md:flex-grow-1'">
         <div v-if="!settings?.whatsapp" class="md:w-[50%] p-4 md:p-8 overflow-y-auto h-[90vh]">
@@ -353,7 +337,6 @@
                         </div>
                     </div>
                 </div>
-
                 <div v-if="form.body.parameters.length > 0" class="bg-slate-100 p-3 mt-1 text-sm">
                     <h2 class="flex items-center justify-between space-x-2 pb-2 border-b">
                         <div class="flex items-center space-x-2">
@@ -377,7 +360,6 @@
                         </div>
                     </div>
                 </div>
-
                 <div v-if="form.buttons.length > 0" class="bg-slate-100 p-3 mt-1 text-sm">
                     <h2 class="flex items-center justify-between space-x-2 pb-2 border-b">
                         <div class="flex items-center space-x-2">
@@ -395,18 +377,10 @@
                             </div>
                             <div v-for="(value, key) in item.parameters" :key="key" class="flex items-center space-x-4">
                                 <div class="w-full">
-                                    <FormSelect v-model="value.type" :name="$t('Button type')" :options="variableOptions" :class="'sm:col-span-6'" disabled/>
+                                    <FormSelect v-model="value.type" :name="$t('Button type')" :options="variableOptions" :class="'sm:col-span-6'"/>
                                 </div>
                                 <div class="w-full">
-                                    <FormInput 
-                                        v-if="value.type === 'static'" 
-                                        v-model="value.value" 
-                                        :name="$t('Value')" 
-                                        :required="true" 
-                                        :error="form.errors['buttons.'+ index +'.parameters.0.value']" 
-                                        :type="'text'" 
-                                        :class="'sm:col-span-6'"
-                                    /> 
+                                    <FormInput v-if="value.type === 'static'" v-model="value.value" :name="$t('Value')" :required="true" :error="form.errors['buttons.'+ index +'.parameters.0.value']" :type="'text'" :class="'sm:col-span-6'"/>
                                     <FormSelect v-if="value.type === 'dynamic'" v-model="value.value" :name="$t('Value')" :required="true" :error="form.errors['buttons.'+ index +'.parameters.0.value']" :options="dynamicOptions" :class="'sm:col-span-6'"/>
                                 </div>
                             </div>
