@@ -158,7 +158,6 @@ class WebhookController extends BaseController
             $contacts = $res['value']['contacts'][0] ?? null;
             $messages = $res['value']['messages'] ?? null;
             $statuses = $res['value']['statuses'] ?? null;
-            $payload = data_get($request, 'entry.0.changes.0.value.messages.0.button.payload');
            
             if($statuses) {
                 //$response = $res['value']['statuses'][0];
@@ -247,9 +246,7 @@ class WebhookController extends BaseController
                             ]);
                             $isNewContact = true;
 
-                            if ($payload) {
-                                  $this->checker->check($organization, $payload, $contact->id);
-                                }
+                            $this->messageIsUnSubscribe($request, $organization, $contact);
                             }
 
                         if($contact){
@@ -267,11 +264,8 @@ class WebhookController extends BaseController
                                 }
                             }
 
-                            //call check to comapre between message button and triggers
-                            if ($payload) {
-                               $this->checker->check($organization, $payload, $contact->id);
-                            }
-  
+                             $this->messageIsUnSubscribe($request, $organization, $contact);
+
                             //call check to comapre between message and triggers
                             //The addition was made here to ensure that the contact exists
                             if($messageText) {
@@ -828,6 +822,19 @@ class WebhookController extends BaseController
         $filename = "{$hash}_" . time() . ".{$extension}";
 
         return $filename;
+    }
+
+    private function messageIsUnSubscribe($request, $organization, $contact)
+    {
+        try {
+         $payload = data_get($request, 'entry.0.changes.0.value.messages.0.button.text');
+
+        if ($payload) {
+            $this->checker->check($organization, $payload, $contact->id);
+        }
+
+    } catch (\Exception $e) {}
+
     }
 
     private function getMedia($mediaId, Organization $organization)
