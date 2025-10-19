@@ -64,7 +64,7 @@ class CampaignController extends BaseController
                 ->get();
 
             $data['title'] = __('Create campaign');
-
+//dd($data['templates']);
             return Inertia::render('User/Campaign/Create', $data);
         } else {
             $data['campaign'] = Campaign::with('contactGroup', 'template')->where('uuid', $uuid)->first();
