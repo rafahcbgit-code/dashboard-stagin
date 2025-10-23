@@ -34,8 +34,8 @@ class ChatService
     private $whatsappService;
     private $organizationId;
 
-    private $throttleSeconds = 15;  // Request throttle window
-    private $cacheTtl = 300;        // Cache duration in seconds (5 minutes)
+    private $throttleSeconds = 10; 
+    private $cacheTtl = 10;       
 
 
     public function __construct($organizationId)
@@ -127,28 +127,17 @@ class ChatService
         $ticketingActive = false;
         $aimodule = CustomHelper::isModuleEnabled('AI Assistant');
 
-        //Check if tickets module has been enabled
+        // Check if tickets module has been enabled
         if($config->metadata != NULL){
             $settings = json_decode($config->metadata);
 
             if(isset($settings->tickets) && $settings->tickets->active === true){
                 $ticketingActive = true;
-
-                //Check for chats that don't have corresponding chat ticket rows
-                $allContactsForTickets = $contact->contactsWithChats($this->organizationId, NULL);
                 
-                foreach($allContactsForTickets as $contactItem){
-                    ChatTicket::firstOrCreate(
-                        ['contact_id' => $contactItem->id],
-                        [
-                            'assigned_to' => null,
-                            'status' => 'open',
-                            'updated_at' => now(),
-                        ]
-                    );
-                }
-
-                //Check if agents can view all chats
+                // ✅ REMOVED PERFORMANCE KILLER - Ticket creation moved to background job
+                // The old code looped through ALL contacts here - very slow!
+                
+                // Check if agents can view all chats
                 $allowAgentsToViewAllChats = $settings->tickets->allow_agents_to_view_all_chats;
             }
         }
@@ -202,8 +191,8 @@ class ChatService
             'pusher_app_cluster',
         ])->pluck('value', 'key')->toArray();
 
-        $perPage = 10; // Number of items per page
-        $totalContacts = $rowCount; // Total number of contacts
+        $perPage = 10;
+        $totalContacts = $rowCount;
         $messageTemplates = Template::where('organization_id', $this->organizationId)
             ->where('deleted_at', null)
             ->where('status', 'APPROVED')
@@ -238,15 +227,15 @@ class ChatService
             } else {
                 $settings = json_decode($config->metadata);
 
-                //To ensure the unread message counter is updated
+                // To ensure the unread message counter is updated
                 $unreadMessages = Chat::where('organization_id', $this->organizationId)
                     ->where('type', 'inbound')
                     ->where('deleted_at', NULL)
                     ->where('is_read', 0)
                     ->count();
 
-                     $contactFieldService = new ContactFieldService(session()->get('current_organization'));
-                    $contactFields= $contactFieldService->get($request);
+                $contactFieldService = new ContactFieldService(session()->get('current_organization'));
+                $contactFields = $contactFieldService->get($request);
 
                 return Inertia::render('User/Chat/Index', [
                     'title' => 'Chats',
