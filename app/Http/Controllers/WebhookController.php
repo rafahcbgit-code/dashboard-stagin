@@ -184,14 +184,22 @@ class WebhookController extends BaseController
                         $chatStatusLog->metadata = json_encode($response);
                         $chatStatusLog->save();
                     }else{
-                        MissedChatStatusUpdate::create([
-                            'wam_id' => $chatWamId,
-                            'organization_id' => $organization->id,
-                            'payload' => json_encode($response),
-                            'status' => $status,
-                            'state' => MissedChatStatusUpdate::STATE_NOT_PROCESSED,
-                            'created_at' => now()
-                        ]);
+                        
+                        $exists = MissedChatStatusUpdate::where('organization_id', $organization->id)
+                            ->where('wam_id', $chatWamId)
+                            ->where('status', $status)
+                            ->exists();
+                       
+                        if (!$exists) {
+                            MissedChatStatusUpdate::create([
+                                'wam_id' => $chatWamId,
+                                'organization_id' => $organization->id,
+                                'payload' => json_encode($response),
+                                'status' => $status,
+                                'state' => MissedChatStatusUpdate::STATE_NOT_PROCESSED,
+                                'created_at' => now(),
+                            ]);
+                        }
                     }
                     // return Response::json(['error' => 'chat not found'], 404);
                 }
