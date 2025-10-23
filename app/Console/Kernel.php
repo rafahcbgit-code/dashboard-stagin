@@ -26,6 +26,11 @@ class Kernel extends ConsoleKernel
         $schedule->job(new \App\Jobs\ProcessMissedStatusUpdatesJob(), 'webhook-status')
             ->everyTenMinutes()
             ->withoutOverlapping();
+
+        // Run ticket creation check every 5 minutes
+        $schedule->job(new \App\Jobs\EnsureTicketsExistJob())
+            ->everyFiveMinutes()
+            ->withoutOverlapping();
         
 
         /*$schedule->command('queue:work --queue=campaign-messages,campaign-logs --stop-when-empty')
