@@ -140,6 +140,8 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::put('/tickets/{uuid}/update', [App\Http\Controllers\User\ChatTicketController::class, 'update']);
                 Route::put('/tickets/{uuid}/assign', [App\Http\Controllers\User\ChatTicketController::class, 'assign']);
 
+                Route::post('/contacts/chat-view-details', [App\Http\Controllers\User\ContactController::class, 'chatViewDetails']);
+
                 Route::get('/contacts/{uuid?}', [App\Http\Controllers\User\ContactController::class, 'index'])->name('contacts');
                 Route::post('/contacts', [App\Http\Controllers\User\ContactController::class, 'store']);
                 Route::post('/contacts/import', [App\Http\Controllers\User\ContactController::class, 'import']);

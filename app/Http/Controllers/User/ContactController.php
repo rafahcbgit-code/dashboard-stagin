@@ -405,4 +405,40 @@ class ContactController extends BaseController
             'message' => __('Bot status updated successfully!')
         ]);
     }
+
+    public function chatViewDetails(Request $request){
+        $organizationId = $this->getCurrentOrganizationId();
+
+        $validated = $request->validate([
+            'phone' => 'required|string',
+            'name'  => 'nullable|string',
+        ]);
+
+        $phone = preg_replace('/\s+/', '', $validated['phone']); // remove all whitespace
+        $phone = trim($phone);
+
+        $contact = Contact::where('organization_id', $organizationId)
+            ->where('phone', $phone)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$contact) {
+            $contact = Contact::create([
+                'organization_id' => $organizationId,
+                'phone'           => $phone,
+                'first_name'            => $validated['name'] ?? 'Unknown Contact',
+                'is_subscribed' => 1,
+                'last_name' => null,
+                'email' => null,
+                'created_by' => 0,
+                'created_at' => now(),
+                'updated_at' => now(),
+                'bot_enable' => 1
+            ]);
+        }
+
+        return response()->json([
+            'redirect' => '/contacts?id=' . $contact->uuid,
+        ]);
+    }
 }

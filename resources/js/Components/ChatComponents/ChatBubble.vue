@@ -1,13 +1,33 @@
 <script setup>
-    import { usePage } from "@inertiajs/vue3";
+    import { router, usePage } from "@inertiajs/vue3";
     import { ref, computed } from 'vue';
     import { GoogleMap, Marker } from "vue3-google-map";
     import Modal from '@/Components/Modal.vue';
+    import axios from "axios";
     
     const props = defineProps({
         content: Object,
         type: String,
     })
+
+    const metadata = computed(() => {
+        try {
+            return JSON.parse(props.content.metadata)
+        } catch {
+            return {}
+        }
+    })
+
+    
+    // Check if it's a contact type
+    const isContact = computed(() => metadata.value?.type === 'contacts')
+    // Extract first contact safely
+    const contact = computed(() => metadata.value?.contacts?.[0] || {})
+    // Precompute the data you'll send
+    const contactData = computed(() => ({
+        phone: contact.value?.phones?.[0]?.phone?.toString()?.trim?.() || '',
+        name: contact.value?.name?.formatted_name || ''
+    }))
 
     const downloading = ref(false);
 
@@ -121,6 +141,17 @@
             copiedRef.value = null;
         }, 2000);   
     };
+
+    const viewContactDetails = async (data) => {
+        try {
+            const response = await axios.post('/contacts/chat-view-details', data)
+            if (response.data.redirect) {
+                router.visit(response.data.redirect)
+            }
+        } catch (err) {
+            console.error(err)
+        }
+    }
 </script>
 <template>
     <div 
@@ -323,7 +354,11 @@
                 </span>
             </div>
 
-            <div v-if="JSON.parse(content.metadata).type === 'contacts'" class="cursor-pointer text-center border-t mt-2 pt-2">
+            <div
+                v-if="isContact"
+                class="cursor-pointer text-center border-t mt-2 pt-2"
+                @click="viewContactDetails(contactData)"
+            >
                 {{ $t('View') }}
             </div>
         </div>
