@@ -183,4 +183,8 @@ class FlowController extends BaseController
             ]
         );
     }
+
+    public function debug($uuid){
+        return response()->json($this->flowService->debugFlow($uuid));
+    }
 }

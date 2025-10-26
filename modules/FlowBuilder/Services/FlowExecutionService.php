@@ -213,7 +213,8 @@ class FlowExecutionService
         }
 
         $edgesArray = json_decode($flow->metadata, true);
-        $edges = \Arr::get($edgesArray, "edges", null);
+        $edges = \Arr::get($edgesArray, "edges", []);
+        $nodes = \Arr::get($edgesArray, "nodes", []);       
         
         // Process nodes continuously until we encounter a message node
         $maxIterations = 50; // Prevent infinite loops
@@ -223,7 +224,7 @@ class FlowExecutionService
             $iteration++;
             
             // Get the current node metadata
-            $metadataArray = $this->findEdgesBySource($edges, $flowData->current_step, $message);
+            $metadataArray = $this->findEdgesBySource($edges, $nodes, $flowData->current_step, $message);
 
             if(empty($metadataArray)){
                 Log::warning("DELETION POINT 2: No next step found for contact {$contactId}, ending flow");
@@ -340,7 +341,7 @@ class FlowExecutionService
 
         if($response){
             // Update to the next step
-            $this->proceedToNextStep($flowData, $contactId);
+            $this->proceedToNextStep($flowData, $contactId, $metadataArray);
             
             if(isset($response->data->chat->id)){
                 FlowLog::create([
@@ -440,7 +441,7 @@ class FlowExecutionService
                 isset($edge['source']) && (string)$edge['source'] === (string)$currentStep &&
                 isset($edge['sourceHandle']) && $edge['sourceHandle'] === $sourceHandle
             ) {
-                $targetNode = $edge['targetNode']['id'] ?? null;
+                $targetNode = $edge['targetNode']['id'] ?? $edge['target'] ?? null;
                 if ($targetNode) {
                     // \Log::info("Found matching edge, routing to node: " . $targetNode);
                     // Reload flowData
@@ -466,9 +467,8 @@ class FlowExecutionService
     /**
      * Proceed to the next step in the flow
      */
-    private function proceedToNextStep($flowData, $contactId)
+    private function proceedToNextStep($flowData, $contactId, $currentMetadataArray = null )
     {
-        // Find the next node by looking at the edges
         $flow = Flow::find($flowData->flow_id);
         if (!$flow || empty($flow->metadata)) {
             Log::warning("DELETION POINT 8: Flow not found or empty metadata for flow {$flowData->flow_id}");
@@ -476,21 +476,26 @@ class FlowExecutionService
         }
 
         $edgesArray = json_decode($flow->metadata, true);
-        $edges = \Arr::get($edgesArray, "edges", null);
-        
-        // Find edges that start from the current step
+        $edges = \Arr::get($edgesArray, "edges", []);
+        $nodes = \Arr::get($edgesArray, "nodes", []);
+
         $nextNodes = [];
         foreach ($edges as $edge) {
-            if (isset($edge['source']) && (string) $edge['source'] === (string) $flowData->current_step) {
+            if (isset($edge['source']) && (string)$edge['source'] === (string)$flowData->current_step) {
+                // Prefer nested targetNode, fallback to target id
                 if (isset($edge['targetNode']['id'])) {
                     $nextNodes[] = $edge['targetNode']['id'];
+                } elseif (isset($edge['target'])) {
+                    $nextNodes[] = $edge['target'];
                 }
             }
         }
-        
+
         if (!empty($nextNodes)) {
-            // Use the first next node found
             $nextStep = $nextNodes[0];
+            if(!empty($currentMetadataArray) && isset($currentMetadataArray['id'])){
+                $nextStep = $currentMetadataArray['id'] ?? $nextStep;
+            }
             FlowUserData::where('contact_id', $contactId)->update(['current_step' => $nextStep]);
         } else {
             Log::warning("DELETION POINT 6: No next step found for current_step {$flowData->current_step}, ending flow");
@@ -553,92 +558,140 @@ class FlowExecutionService
         return $buttonArray;
     }
 
-    private function findEdgesBySource($edges, $sourceId, $message)
+    /**
+ * Find the next node(s) by source node id.
+ *
+ * This version:
+ * - accepts $nodes array (so we can return the real node object)
+ * - respects edges that have sourceHandle set (will not auto-follow them unless message maps to that handle)
+ * - supports interactive buttons and lists by deriving handle from $message
+ *
+ * @param array $edges
+ * @param array $nodes  Entire nodes array from flow metadata
+ * @param string|int $sourceId
+ * @param string $message
+ * @return array  Returns the target node array (node object) or [] when none found.
+ */
+    private function findEdgesBySource(array $edges, array $nodes, $sourceId, string $message = ''): array
     {
-        // Convert $sourceId to a string to handle loose type matching
-        $sourceId = (string) $sourceId;
-        
-        //Log::info("findEdgesBySource: sourceId={$sourceId}, message={$message}, total_edges=" . count($edges));
-        
-        // Initialize an empty array to store matching edges
+        $sourceId = (string)$sourceId;
         $matchingEdges = [];
 
-        // Iterate over each edge to find matches with sourceId
-        foreach ($edges as $index => $edge) {
-            // Check if 'source' key exists and matches the source ID
-            if (isset($edge['source']) && (string) $edge['source'] === $sourceId) {
-                // If there's a match, add this edge to the matching array
+        // collect edges that originate from this source
+        foreach ($edges as $edge) {
+            if (!isset($edge['source'])) {
+                continue;
+            }
+            if ((string)$edge['source'] === $sourceId) {
                 $matchingEdges[] = $edge;
-                //Log::info("Found matching edge: source={$edge['source']}, target=" . ($edge['targetNode']['id'] ?? 'unknown'));
             }
         }
 
-        if (count($matchingEdges) === 1) {
-            //Log::info("Single edge found, returning targetNode");
-            return $matchingEdges[0]['targetNode'] ?? [];
-        } else if (count($matchingEdges) > 1) {
-            $firstEdge = $matchingEdges[0];
-            $nodeType = $firstEdge['sourceNode']['type'] ?? null;
-            $type = $firstEdge['sourceNode']['data']['metadata']['fields']['type'] ?? null;
+        \Log::info("findEdgesBySource: source={$sourceId}, total_matching_edges=" . count($matchingEdges));
 
-            // Handle action nodes (they don't require user input)
-            if ($nodeType === 'action') {
-                // For action nodes, just return the first edge (they proceed automatically)
-                return $matchingEdges[0]['targetNode'] ?? [];
+        if (count($matchingEdges) === 0) {
+            return [];
+        }
+
+        // Get source node (to inspect buttons / sections if needed)
+        $sourceNode = [];
+        // Prefer edge-provided sourceNode, fallback to nodes array
+        if (isset($matchingEdges[0]['sourceNode']) && is_array($matchingEdges[0]['sourceNode'])) {
+            $sourceNode = $matchingEdges[0]['sourceNode'];
+        } else {
+            $sourceNode = $this->getNodeById($nodes, $sourceId);
+        }
+
+        // If there's only one edge:
+        if (count($matchingEdges) === 1) {
+            $edge = $matchingEdges[0];
+
+            // If edge requires a specific handle (e.g. "c"), ensure message maps to it.
+            if (isset($edge['sourceHandle']) && $edge['sourceHandle'] !== null) {
+                $derivedHandle = $this->deriveHandleFromMessage($sourceNode, $message);
+                \Log::info("Single edge requires handle={$edge['sourceHandle']}, derivedHandle=" . ($derivedHandle ?? 'null'));
+                if ($derivedHandle === null || $derivedHandle !== $edge['sourceHandle']) {
+                    // user did not select the required handle — do not follow this edge.
+                    return [];
+                }
             }
 
-            // Perform logic based on the 'type'
-            if ($type == 'interactive buttons') {
-                $buttons = $firstEdge['sourceNode']['data']['metadata']['fields']['buttons'] ?? [];
+            // Resolve target node and return
+            $targetNodeObj = $edge['targetNode'] ?? null;
+            if (is_array($targetNodeObj) && isset($targetNodeObj['id'])) {
+                return $targetNodeObj;
+            }
 
-                // Define button mapping
-                $buttonMapping = ['button1' => 'a', 'button2' => 'b', 'button3' => 'c'];
-                $handle = null;
-
-                // Check for a match with the message in the buttons array
-                foreach ($buttons as $buttonKey => $buttonValue) {
-                    if (strtolower(trim($buttonValue)) === $message) {
-                        $handle = $buttonMapping[$buttonKey] ?? null;
-                    }
-                }
-
-                
-                if($handle != null){
-                    // Search for the edge with this handle and return its targetNode
-                    foreach ($matchingEdges as $edge) {
-                        if (isset($edge['sourceHandle']) && $edge['sourceHandle'] === $handle) {
-                            return $edge['targetNode'] ?? [];
-                        }
-                    }
-                }
-            } elseif ($type == 'interactive list') {
-                $sections = $firstEdge['sourceNode']['data']['metadata']['fields']['sections'] ?? [];
-                $handle = null;
-
-                // Search for the matching title and generate the handle dynamically
-                foreach ($sections as $sectionIndex => $section) {
-                    if (isset($section['rows']) && is_array($section['rows'])) {
-                        foreach ($section['rows'] as $rowIndex => $row) {
-                            if (isset($row['title']) && strtolower(trim($row['title'])) === strtolower(trim($message))) {
-                                // Construct the handle using section and row positions
-                                $handle = 'a' . $sectionIndex . $rowIndex;
-                            }
-                        }
-                    }
-                }
-
-                if($handle != null){
-                    foreach ($matchingEdges as $edge) {
-                        if (isset($edge['sourceHandle']) && $edge['sourceHandle'] === $handle) {
-                            return $edge['targetNode'] ?? [];
-                        }
-                    }
-                }
+            $targetId = $edge['target'] ?? null;
+            if ($targetId !== null) {
+                return $this->getNodeById($nodes, $targetId);
             }
 
             return [];
         }
 
+        // Multiple outgoing edges — need to resolve by handle/message/type
+        // Use the first matched edge to inspect sourceNode type / fields
+        $firstEdge = $matchingEdges[0];
+        $nodeType = $firstEdge['sourceNode']['type'] ?? $sourceNode['type'] ?? null;
+        $fieldsType = \Arr::get($sourceNode, 'data.metadata.fields.type', null);
+
+        // Action nodes: automatic progression — take the first edge
+        if ($nodeType === 'action') {
+            $edge = $matchingEdges[0];
+            $targetNodeObj = $edge['targetNode'] ?? null;
+            if (is_array($targetNodeObj) && isset($targetNodeObj['id'])) {
+                return $targetNodeObj;
+            }
+            $targetId = $edge['target'] ?? null;
+            return $this->getNodeById($nodes, $targetId);
+        }
+
+        // If interactive buttons, try to map message -> handle then find matching edge
+        if ($fieldsType === 'interactive buttons' || $nodeType === 'buttons') {
+            $derivedHandle = $this->deriveHandleFromMessage($sourceNode, $message);
+            \Log::info("Interactive buttons: derivedHandle=" . ($derivedHandle ?? 'null'));
+
+            if ($derivedHandle !== null) {
+                foreach ($matchingEdges as $edge) {
+                    if (isset($edge['sourceHandle']) && $edge['sourceHandle'] === $derivedHandle) {
+                        // return the edge's target node
+                        $targetNodeObj = $edge['targetNode'] ?? null;
+                        if (is_array($targetNodeObj) && isset($targetNodeObj['id'])) {
+                            return $targetNodeObj;
+                        }
+                        $targetId = $edge['target'] ?? null;
+                        return $this->getNodeById($nodes, $targetId);
+                    }
+                }
+            }
+
+            // no matching handle found
+            return [];
+        }
+
+        // If interactive list, attempt to derive handle from rows similarly
+        if ($fieldsType === 'interactive list') {
+            $derivedHandle = $this->deriveHandleFromMessage($sourceNode, $message);
+            \Log::info("Interactive list: derivedHandle=" . ($derivedHandle ?? 'null'));
+
+            if ($derivedHandle !== null) {
+                foreach ($matchingEdges as $edge) {
+                    if (isset($edge['sourceHandle']) && $edge['sourceHandle'] === $derivedHandle) {
+                        $targetNodeObj = $edge['targetNode'] ?? null;
+                        if (is_array($targetNodeObj) && isset($targetNodeObj['id'])) {
+                            return $targetNodeObj;
+                        }
+                        $targetId = $edge['target'] ?? null;
+                        return $this->getNodeById($nodes, $targetId);
+                    }
+                }
+            }
+            return [];
+        }
+
+        // Default: can't determine correct branch -> return empty (do not auto-follow)
+        \Log::info("Multiple edges found but unable to resolve a branch for source={$sourceId} message={$message}");
         return [];
     }
 
@@ -685,4 +738,71 @@ class FlowExecutionService
             return isset($mergedData[$key]) ? $mergedData[$key] : $matches[0];
         }, $message);
     }
+
+    /**
+ * Helper: find a node object inside the flow 'nodes' array by id
+ */
+private function getNodeById(array $nodes, $id): array
+{
+    foreach ($nodes as $node) {
+        if ((string)($node['id'] ?? '') === (string)$id) {
+            return $node;
+        }
+    }
+    return [];
+}
+
+/**
+ * Helper: derive a sourceHandle (a, b, c, a01 etc) from the node definition + user message.
+ * Returns NULL if we cannot derive a handle from the message.
+ */
+private function deriveHandleFromMessage(array $sourceNode, string $message): ?string
+{
+    $msg = strtolower(trim($message));
+    if ($msg === '') {
+        return null;
+    }
+
+    // 1) Buttons mapping
+    $buttons = \Arr::get($sourceNode, 'data.metadata.fields.buttons', []);
+    if (!empty($buttons) && is_array($buttons)) {
+        // mapping: button1 -> a, button2 -> b, button3 -> c
+        $buttonToHandle = ['button1' => 'a', 'button2' => 'b', 'button3' => 'c'];
+
+        foreach ($buttons as $key => $label) {
+            if (!is_string($label)) continue;
+            if (strtolower(trim($label)) === $msg) {
+                return $buttonToHandle[$key] ?? null;
+            }
+            // allow matching the key itself (e.g. "button1")
+            if (strtolower(trim($key)) === $msg) {
+                return $buttonToHandle[$key] ?? null;
+            }
+        }
+
+        // allow direct handle input (user might send 'a','b','c')
+        if (in_array($msg, ['a','b','c'])) {
+            return $msg;
+        }
+    }
+
+    // 2) Interactive list: search rows' titles
+    $sections = \Arr::get($sourceNode, 'data.metadata.fields.sections', []);
+    if (!empty($sections) && is_array($sections)) {
+        foreach ($sections as $sIndex => $section) {
+            $rows = $section['rows'] ?? [];
+            if (!is_array($rows)) continue;
+            foreach ($rows as $rIndex => $row) {
+                $title = strtolower(trim($row['title'] ?? ''));
+                if ($title !== '' && $title === $msg) {
+                    // handle format used by your code: a{sectionIndex}{rowIndex}
+                    return 'a' . $sIndex . $rIndex;
+                }
+            }
+        }
+    }
+
+    // no handle derived
+    return null;
+}
 }
