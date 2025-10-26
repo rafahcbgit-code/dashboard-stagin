@@ -32,10 +32,6 @@ const fields = ref({
 const options = ref([
   { value: 'none', label: 'None' },
   { value: 'text', label: 'Text' },
-  { value: 'image', label: 'Image' },
-  { value: 'video', label: 'Video' },
-  { value: 'audio', label: 'Audio' },
-  { value: 'document', label: 'Document' },
 ]);
 
 const node = useNode()
