@@ -31,7 +31,8 @@
         sendText: {
             type: String,
             default: 'Save'
-        }
+        },
+        contactFields: Array,
     });
     const isLoading = ref(false);
     const contactGroupOptions = ref([
@@ -46,14 +47,44 @@
         { value: 'dynamic', label: trans('dynamic') }
     ]);
 
-    const dynamicOptions = ref([
+  const baseDynamicOptions = [
         { value: 'first name', label: trans('contact first name') },
         { value: 'last name', label: trans('contact last name') },
         { value: 'name', label: trans('contact full name') },
         { value: 'phone', label: trans('contact phone') },
         { value: 'email', label: trans('contact email') },
-    ]);
+    ];
 
+    const dynamicOptions = computed(() => {
+        let options = [...baseDynamicOptions];
+        if (props.contactFields) {
+            let fieldsArray = [];
+            
+            if (Array.isArray(props.contactFields)) {
+                fieldsArray = props.contactFields;
+            } 
+        
+            else if (props.contactFields.data && Array.isArray(props.contactFields.data)) {
+                fieldsArray = props.contactFields.data;
+            }
+            else if (typeof props.contactFields === 'object') {
+                fieldsArray = Object.values(props.contactFields);
+            }
+            
+            if (fieldsArray.length > 0) {
+                const customFields = fieldsArray.map(field => {
+                    return {
+                        value: field.slug || field.name || field.label || field.key || field.field_name || field.id,
+                        label: field.label || field.name || field.display_name || field.slug || field.field_name || field.title
+                    };
+                }).filter(field => field.value && field.label); 
+                
+                options = [...options, ...customFields];
+            }
+        }
+        return options;
+    });
+    
     const form = useForm({
         name: null,
         template: null,
@@ -128,7 +159,7 @@
                         parameters: (item.type === 'QUICK_REPLY')
                             ? [{ type: 'static', value: null }]
                             : (item.example
-                                ? item.example.map(param => ({ type: 'static', value: param }))
+                                ? item.example.map(param => ({ type: 'dynamic', value: param }))
                                 : []
                             ),
                     }));

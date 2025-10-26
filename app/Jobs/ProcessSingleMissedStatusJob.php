@@ -116,7 +116,7 @@ class ProcessSingleMissedStatusJob implements ShouldQueue
             return true;
         }
 
-        return $statusOrder[$newStatus] >= $statusOrder[$currentStatus] || $newStatus === 'failed';
+        return $statusOrder[$newStatus] > $statusOrder[$currentStatus] || $newStatus === 'failed';
     }
 
     private function markAsProcessed(MissedChatStatusUpdate $missedUpdate)

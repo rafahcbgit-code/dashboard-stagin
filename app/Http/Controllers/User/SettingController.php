@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers\User;
 
-use DB;
+use Illuminate\Support\Facades\DB;
 use Validator;
 use Inertia\Inertia;
 use App\Models\Addon;
@@ -193,6 +193,19 @@ public function campaign(Request $request)
         if ($request->isMethod('get')) {
             $contactFieldService = new ContactFieldService(session()->get('current_organization'));
             $settings = Organization::where('id', session()->get('current_organization'))->first();
+            
+            $agents = DB::table('users')
+                ->join('teams', 'users.id', '=', 'teams.user_id')
+                ->where('teams.organization_id', '=', session()->get('current_organization'))
+                ->where('teams.role', '=', 'agent')
+                ->whereNull('teams.deleted_at')
+                ->select('users.*')
+                ->get();
+
+            $oldSelectedAgents = DB::table('assigned_agents')
+                ->where('organization_id', session()->get('current_organization'))
+                ->pluck('user_id')
+                ->toArray();
 
             return Inertia::render('User/Settings/Ticket', [
                 'title' => __('Settings'),
@@ -200,6 +213,8 @@ public function campaign(Request $request)
                 'rows' => $contactFieldService->get($request),
                 'settings' => $settings,
                 'modules' => Addon::get(),
+                'agents' => $agents,
+                'oldSelectedAgents' => $oldSelectedAgents
             ]);
         } else if($request->isMethod('post')) {
             $currentOrganizationId = session()->get('current_organization');
@@ -211,12 +226,16 @@ public function campaign(Request $request)
             $metadataArray['tickets']['auto_assignment'] = $request->auto_assignment;
             $metadataArray['tickets']['reassign_reopened_chats'] = $request->reassign_reopened_chats;
             $metadataArray['tickets']['allow_agents_to_view_all_chats'] = $request->allow_agents_to_view_all_chats;
+            $metadataArray['tickets']['assigned_to_specific_agents'] = $request->assigned_to_specific_agents;
 
             $updatedMetadataJson = json_encode($metadataArray);
 
             $organizationConfig->metadata = $updatedMetadataJson;
             $organizationConfig->save();
 
+    if (is_array($request->selected_agents)) {
+            $this->syncAssignedAgents($currentOrganizationId, $request->selected_agents);
+        }
             /*return back()->with(
                 'status', [
                     'type' => 'success', 
@@ -364,7 +383,7 @@ public function campaign(Request $request)
         $whatsappService = new WhatsappService($accessToken, $apiVersion, $appId, $phoneNumberId, $wabaId, $organizationId);
 
         $phoneNumberResponse = $whatsappService->getPhoneNumberId($accessToken, $wabaId);
-        
+     
         if(!$phoneNumberResponse->success){
             return back()->with(
                 'status', [
@@ -409,7 +428,6 @@ public function campaign(Request $request)
                 ]
             );
         }
-
         $organizationConfig = Organization::where('id', $organizationId)->first();
         
         $metadataArray = $organizationConfig->metadata ? json_decode($organizationConfig->metadata, true) : [];
@@ -425,6 +443,7 @@ public function campaign(Request $request)
         $metadataArray['whatsapp']['messaging_limit_tier'] = $phoneNumberResponse->data->messaging_limit_tier ?? NULL;
         $metadataArray['whatsapp']['max_daily_conversation_per_phone'] = NULL;
         $metadataArray['whatsapp']['max_phone_numbers_per_business'] = NULL;
+        $metadataArray['whatsapp']['whatsapp_business_manager_messaging_limit'] = $phoneNumberStatusResponse->data->whatsapp_business_manager_messaging_limit ?? NULL;
         $metadataArray['whatsapp']['number_status'] = $phoneNumberStatusResponse->data->status;
         $metadataArray['whatsapp']['code_verification_status'] = $phoneNumberStatusResponse->data->code_verification_status;
         $metadataArray['whatsapp']['business_verification'] = '';
@@ -732,5 +751,28 @@ public function campaign(Request $request)
                 'type' => 'success',
                 'message' => __('Contact group created successfully with :count contacts', ['count' => $contactsWithLabel->count()])
             ]);
+    }
+
+    private function syncAssignedAgents($organizationId, array $selectedAgents)
+    {
+        DB::table('assigned_agents')
+            ->where('organization_id', $organizationId)
+            ->delete();
+
+        $data = [];
+        $now = now();
+
+        foreach ($selectedAgents as $userId) {
+            $data[] = [
+                'organization_id' => $organizationId,
+                'user_id'        => $userId,
+                'created_at'     => $now,
+                'updated_at'     => $now,
+            ];
+        }
+
+        if (!empty($data)) {
+            DB::table('assigned_agents')->insert($data);
+        }
     }
 }

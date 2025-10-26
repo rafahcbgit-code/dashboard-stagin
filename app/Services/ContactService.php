@@ -61,7 +61,7 @@ class ContactService
             'zip' => $request->zip,
             'country' => $request->country,
         ]);
-        
+       
         $contact->address = $address;
         $contact->metadata = json_encode($request->metadata);
         $contact->updated_at = now();

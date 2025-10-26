@@ -17,7 +17,7 @@ use App\Models\SubscriptionPlan;
 use App\Models\Team;
 use App\Models\Template;
 use App\Models\User;
-use DB;
+use Illuminate\Support\Facades\DB;
 use Str;
 use Propaganistas\LaravelPhone\PhoneNumber;
 
@@ -164,9 +164,19 @@ class OrganizationService
         $plan = SubscriptionPlan::where('uuid', $request->plan)->first();
 
         if ($subscription) {
+            
+            // Calculate the subscription expiration date
+            $validUntil = match ($plan->period) {
+                'yearly'  => now()->addYear(),
+                'monthly' => now()->addMonth(),
+                };
+
             $subscription->update([
                 'plan_id' => $plan->id,
                 'status'  => 'active',
+                'start_date' => now(),
+                'valid_until' => $validUntil
+            
             ]);
         } else {
             $config = Setting::where('key', 'trial_period')->first();

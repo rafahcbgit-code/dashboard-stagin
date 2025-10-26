@@ -34,7 +34,7 @@
                             </div>
                             <div class="border-r">
                                 <div>{{ $t('Message limits') }}</div>
-                                <div>{{ settings.whatsapp?.messaging_limit_tier ? settings.whatsapp?.messaging_limit_tier : 'N/A' }}</div>
+                                <div>{{ settings.whatsapp?.whatsapp_business_manager_messaging_limit ? settings.whatsapp?.whatsapp_business_manager_messaging_limit : 'N/A' }}</div>
                             </div>
                             <div>
                                 <div>{{ $t('Number status') }}</div>

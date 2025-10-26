@@ -1424,6 +1424,7 @@ class WhatsappService
                 $responseObject->success = true;
                 $responseObject->data = new \stdClass();
                 $responseObject->data = (object) $response['data'][0];
+        
             }
         } catch (\Exception $e) {
             $responseObject->success = false;
@@ -1439,10 +1440,11 @@ class WhatsappService
         $responseObject = new \stdClass();
 
         try {
+
             $response = Http::withHeaders([
                 'Authorization' => 'Bearer ' . $this->accessToken
             ])->get("https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}", [
-                'fields' => 'status, code_verification_status , quality_score, health_status',
+                'fields' => 'status, code_verification_status , quality_score, health_status,whatsapp_business_manager_messaging_limit',
             ])->throw()->json();
 
             if (isset($response['data']['error'])) {

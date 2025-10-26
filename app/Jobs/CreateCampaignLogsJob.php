@@ -59,6 +59,9 @@ class CreateCampaignLogsJob implements ShouldQueue
         
         if ($this->createCampaignLogs($campaign, $contacts)) {
             Campaign::where('uuid', $campaign->uuid)->update(['status' => 'ongoing']);
+            Log::info("Campaign {$campaign->uuid} marked ongoing.");
+        }else{
+            Log::info("Campaign {$campaign->uuid} not marked ongoing.");
         }
     }
 
@@ -92,22 +95,27 @@ class CreateCampaignLogsJob implements ShouldQueue
         // Filter out contacts that already have logs
         $newContacts = $contactIds->diff($existingLogs);
 
+        if ($newContacts->isEmpty()) {
+            return false; // nothing new
+        }
+
         // Prepare new campaign logs
         $campaignLogs = $newContacts->map(function ($contactId) use ($campaign) {
             return [
                 'campaign_id' => $campaign->id,
-                'contact_id' => $contactId,
-                'status' => 'pending',
-                'created_at' => now(),
-                'updated_at' => now(),
+                'contact_id'  => $contactId,
+                'status'      => 'pending',
+                'created_at'  => now(),
+                'updated_at'  => now(),
             ];
         })->toArray();
 
-        // Insert new logs if any
-        if (!empty($campaignLogs)) {
-            return CampaignLog::insert($campaignLogs);
+        // Insert new logs in chunks
+        foreach (array_chunk($campaignLogs, 1000) as $chunk) {
+            CampaignLog::insert($chunk);
         }
 
-        return false;
+        return true;
     }
+
 }

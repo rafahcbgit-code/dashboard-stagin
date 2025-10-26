@@ -154,13 +154,11 @@ class WebhookController extends BaseController
     {
         $res = $request->entry[0]['changes'][0];
 
-        
-
         if($res['field'] === 'messages'){
             $contacts = $res['value']['contacts'][0] ?? null;
             $messages = $res['value']['messages'] ?? null;
             $statuses = $res['value']['statuses'] ?? null;
-
+           
             if($statuses) {
                 //$response = $res['value']['statuses'][0];
                 foreach($statuses as $response){
@@ -186,14 +184,22 @@ class WebhookController extends BaseController
                         $chatStatusLog->metadata = json_encode($response);
                         $chatStatusLog->save();
                     }else{
-                        MissedChatStatusUpdate::create([
-                            'wam_id' => $chatWamId,
-                            'organization_id' => $organization->id,
-                            'payload' => json_encode($response),
-                            'status' => $status,
-                            'state' => MissedChatStatusUpdate::STATE_NOT_PROCESSED,
-                            'created_at' => now()
-                        ]);
+                        
+                        $exists = MissedChatStatusUpdate::where('organization_id', $organization->id)
+                            ->where('wam_id', $chatWamId)
+                            ->where('status', $status)
+                            ->exists();
+                       
+                        if (!$exists) {
+                            MissedChatStatusUpdate::create([
+                                'wam_id' => $chatWamId,
+                                'organization_id' => $organization->id,
+                                'payload' => json_encode($response),
+                                'status' => $status,
+                                'state' => MissedChatStatusUpdate::STATE_NOT_PROCESSED,
+                                'created_at' => now(),
+                            ]);
+                        }
                     }
                     // return Response::json(['error' => 'chat not found'], 404);
                 }
@@ -207,6 +213,7 @@ class WebhookController extends BaseController
                 //Log::info($messages);
 
                 if(!$isLimitReached){
+                
                     foreach($messages as $response){
                         $phone = $response['from'];
 
@@ -246,7 +253,9 @@ class WebhookController extends BaseController
                                 'bot_enable' => 1
                             ]);
                             $isNewContact = true;
-                        }
+
+                            $this->messageIsUnSubscribe($request, $organization, $contact);
+                            }
 
                         if($contact){
                             if (empty($contact->first_name)) {
@@ -262,11 +271,14 @@ class WebhookController extends BaseController
                                     ]);
                                 }
                             }
-  
+
+                             $this->messageIsUnSubscribe($request, $organization, $contact);
+
                             //call check to comapre between message and triggers
                             //The addition was made here to ensure that the contact exists
                             if($messageText) {
                                 $this->checker->check($organization, $messageText, $contact->id);
+                                (new ChatService($organization->id))->handleTicketAssignment($contact->id); 
                             }
 
                             $chat = Chat::where('wam_id', $response['id'])->where('organization_id', $organization->id)->first();
@@ -744,7 +756,8 @@ class WebhookController extends BaseController
 
             $metadataArray['whatsapp']['max_daily_conversation_per_phone'] = $response['max_daily_conversation_per_phone'] ?? NULL;
             $metadataArray['whatsapp']['max_phone_numbers_per_business'] = $response['max_phone_numbers_per_business'] ?? NULL;
-
+            $metadataArray['whatsapp']['whatsapp_business_manager_messaging_limit'] = $response['whatsapp_business_manager_messaging_limit'] ?? NULL;
+           
             $updatedMetadataJson = json_encode($metadataArray);
             $organizationConfig->metadata = $updatedMetadataJson;
             $organizationConfig->save();
@@ -817,6 +830,19 @@ class WebhookController extends BaseController
         $filename = "{$hash}_" . time() . ".{$extension}";
 
         return $filename;
+    }
+
+    private function messageIsUnSubscribe($request, $organization, $contact)
+    {
+        try {
+         $payload = data_get($request, 'entry.0.changes.0.value.messages.0.button.text');
+
+        if ($payload) {
+            $this->checker->check($organization, $payload, $contact->id);
+        }
+
+    } catch (\Exception $e) {}
+
     }
 
     private function getMedia($mediaId, Organization $organization)

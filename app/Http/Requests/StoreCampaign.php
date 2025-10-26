@@ -90,7 +90,7 @@ class StoreCampaign extends FormRequest
                 case 'URL':
                     // Check if URL has parameters
                     if (!empty($button['parameters'])) {
-                        $rules["buttons.$index.parameters.0.value"] = 'required|url|max:2000'; // Adjust max as needed
+                        $rules["buttons.$index.parameters.0.value"] = 'required|max:2000'; // Adjust max as needed
                     }
                     break;
                 // Add more cases for other button types as needed

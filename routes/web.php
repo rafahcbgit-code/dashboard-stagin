@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\File;
 | be assigned to the "web" middleware group. Make something great!
 |
 */
+Route::post('/webhook/{organization}', [App\Http\Controllers\WebhookController::class, 'handlePostRequest']);
 
 //Installer routes
 Route::get('/install/{step?}', [App\Http\Controllers\InstallerController::class, 'index'])->name('install');
@@ -138,6 +139,8 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::get('/tickets/{status}', [App\Http\Controllers\User\ChatTicketController::class, 'index']);
                 Route::put('/tickets/{uuid}/update', [App\Http\Controllers\User\ChatTicketController::class, 'update']);
                 Route::put('/tickets/{uuid}/assign', [App\Http\Controllers\User\ChatTicketController::class, 'assign']);
+
+                Route::post('/contacts/chat-view-details', [App\Http\Controllers\User\ContactController::class, 'chatViewDetails']);
 
                 Route::get('/contacts/{uuid?}', [App\Http\Controllers\User\ContactController::class, 'index'])->name('contacts');
                 Route::post('/contacts', [App\Http\Controllers\User\ContactController::class, 'store']);

@@ -15,16 +15,21 @@ class Kernel extends ConsoleKernel
     protected function schedule(Schedule $schedule): void
     {
         $schedule->job(new CreateCampaignLogsJob(), 'campaign-logs')
-            ->everyMinute()
+            ->everyTwoMinutes()
             ->withoutOverlapping();
 
         $schedule->job(new ProcessCampaignMessagesJob(), 'campaign-messages')
-            ->everyMinute()
+            ->everyTwoMinutes()
             ->withoutOverlapping();
 
         // Process missed status updates every 3 minutes
         $schedule->job(new \App\Jobs\ProcessMissedStatusUpdatesJob(), 'webhook-status')
-            ->everyThreeMinutes()
+            ->everyTenMinutes()
+            ->withoutOverlapping();
+
+        // Run ticket creation check every 5 minutes
+        $schedule->job(new \App\Jobs\EnsureTicketsExistJob())
+            ->everyFiveMinutes()
             ->withoutOverlapping();
         
 

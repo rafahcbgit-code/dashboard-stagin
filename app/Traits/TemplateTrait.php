@@ -6,6 +6,8 @@ use App\Models\Campaign;
 use App\Models\Template;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 trait TemplateTrait{
     function buildTemplateRequest($campaignId, $contact){
@@ -13,7 +15,11 @@ trait TemplateTrait{
         $campaignTemplate = Template::where('id', $campaign->template_id)->first();
 
         $metadata = json_decode($campaign->metadata);
-        //dd($metadata);
+         Log::channel('campaigns')->debug('TEMPLATE_METADATA_LOADED', [
+            'campaign_id' => $campaignId,
+            'template_name' => $campaignTemplate->name,
+            'template_language' => $campaignTemplate->language
+        ]);
 
         return $this->buildTemplate($campaignTemplate->name, $campaignTemplate->language, $metadata, $contact);
     }
@@ -130,21 +136,45 @@ trait TemplateTrait{
             }
         }
 
-        //dd($buttonComponent);
+      //  dd($buttonComponent);
         return $buttonComponent;
     }
 
     function getParameters($contact, $parameter){
-        if($parameter === 'first name'){
-            return $contact->first_name;
-        } else if($parameter === 'last name'){
-            return $contact->last_name;
-        } else if($parameter === 'name'){
-            return $contact->first_name . ' ' . $contact->last_name;
-        } else if($parameter === 'email'){
-            return $contact->email;
-        } else if($parameter === 'phone'){
-            return $contact->phone;
+        if (empty($parameter)) {
+            Log::warning('Parameter is empty', ['contact_id' => $contact->id]);
+            return null;
         }
-    }
+
+        if ($parameter === 'first name') {
+            return $contact->first_name;
+        } else if ($parameter === 'last name') {
+            return $contact->last_name;
+        } else if ($parameter === 'name') {
+            return $contact->first_name . ' ' . $contact->last_name;
+        } else if ($parameter === 'email') {
+            return $contact->email;
+        } else if ($parameter === 'phone') {
+            return $contact->phone;
+        } else {
+            // If the parameter exists in the 'metadata' column of the 'contacts' table
+            if (empty($contact->metadata)) {
+                Log::warning('Metadata is missing or empty', ['contact_id' => $contact->id]);
+                return null;
+            }
+
+            $metadata = json_decode($contact->metadata, true);  // Convert the column to an array
+            if ($metadata === null) {
+                Log::error('Invalid metadata format', ['contact_id' => $contact->id, 'metadata' => $contact->metadata]);
+                return null;  
+            }
+
+            if (array_key_exists($parameter, $metadata)) {
+                return $metadata[$parameter];
+            } else {
+                Log::warning('Parameter not found in metadata', ['parameter' => $parameter, 'contact_id' => $contact->id]);
+                return 'Value not found for ' . $parameter;
+            }
+        }
+}
 }

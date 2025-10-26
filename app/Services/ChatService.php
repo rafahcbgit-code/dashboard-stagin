@@ -2,35 +2,30 @@
 
 namespace App\Services;
 
-use App\Events\NewChatEvent;
 use App\Http\Resources\ContactResource;
 use App\Helpers\CustomHelper;
-use App\Models\Addon;
 use App\Models\Chat;
+use App\Models\Addon;
 use App\Models\ChatLog;
+use App\Models\Contact;
 use App\Models\ChatMedia;
 use App\Models\ChatTicket;
-use App\Models\ChatTicketLog;
-use App\Models\Contact;
+use App\Events\NewChatEvent;
 use App\Models\ContactField;
-use App\Models\ContactGroup;
 use App\Models\Organization;
 use App\Models\Setting;
 use App\Models\Team;
 use App\Models\Template;
-use App\Services\SubscriptionService;
-use App\Services\WhatsappService;
+use App\Models\ChatTicketLog;
 use App\Traits\TemplateTrait;
-use Illuminate\Http\Request;
+use App\Services\WhatsappService;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Http;
+use App\Services\SubscriptionService;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
-use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
-use Validator;
-use Illuminate\Pagination\Paginator;
-use Illuminate\Pagination\LengthAwarePaginator;
 
 class ChatService
 {
@@ -38,6 +33,10 @@ class ChatService
 
     private $whatsappService;
     private $organizationId;
+
+    private $throttleSeconds = 10; 
+    private $cacheTtl = 10;       
+
 
     public function __construct($organizationId)
     {
@@ -59,73 +58,131 @@ class ChatService
         $this->whatsappService = new WhatsappService($accessToken, $apiVersion, $appId, $phoneNumberId, $wabaId, $this->organizationId);
     }
 
+    private function shouldThrottle($cacheKey)
+    {
+        $throttleKey = $cacheKey . ':throttle';
+        $lastRequest = Cache::get($throttleKey);
+        
+        if ($lastRequest) {
+            $elapsed = time() - $lastRequest;
+            if ($elapsed < $this->throttleSeconds) {
+                return [
+                    'throttled' => true,
+                    'wait' => $this->throttleSeconds - $elapsed,
+                    'data' => Cache::get($cacheKey)
+                ];
+            }
+        }
+        
+        return ['throttled' => false];
+    }
+
+    private function markRequestProcessed($cacheKey)
+    {
+        $throttleKey = $cacheKey . ':throttle';
+        Cache::put($throttleKey, time(), $this->throttleSeconds);
+    }
+
     public function getChatList($request, $uuid = null, $searchTerm = null)
     {
         $role = auth()->user()->teams[0]->role;
         $contact = new Contact;
-        $unassigned = ChatTicket::where('assigned_to', NULL)->count();
-        $closedCount = ChatTicket::where('status', 'closed')->count();
-        $closedCount = ChatTicket::where('status', 'open')->count();
-        $allCount = ChatTicket::count();
-        $config = Organization::where('id', $this->organizationId)->first();
-        $agents = Team::where('organization_id', $this->organizationId)->get();
         $ticketState = $request->status == null ? 'all' : $request->status;
         $sortDirection = $request->session()->get('chat_sort_direction') ?? 'desc';
-        $allowAgentsToViewAllChats = true;
-        $ticketingActive = false;
-        $aimodule = CustomHelper::isModuleEnabled('AI Assistant');
         
         // Get label filters from request
         $labelFilters = $request->query('labels') ? explode(',', $request->query('labels')) : [];
 
-        //Check if tickets module has been enabled
+        // Generate unique cache key - now including page number
+        $page = $request->get('page', 1);
+        $labelKey = !empty($labelFilters) ? md5(json_encode($labelFilters)) : 'none';
+        $searchKey = $searchTerm ? md5($searchTerm) : 'none';
+        $cacheKey = sprintf(
+            'chat_list:%d:%s:%s:%s:%s:%s:%d',
+            $this->organizationId,
+            $ticketState,
+            $searchKey,
+            $labelKey,
+            $sortDirection,
+            $role,
+            $page
+        );
+        
+        // Check throttle for AJAX requests only
+        if (request()->expectsJson() && $uuid === null) {
+            $throttleCheck = $this->shouldThrottle($cacheKey);
+            
+            if ($throttleCheck['throttled']) {
+                return response()->json([
+                    'status' => 'wait',
+                    'wait_seconds' => $throttleCheck['wait'],
+                    'message' => 'Please wait before refreshing'
+                ], 200);
+            }
+        }
+
+        $config = Organization::where('id', $this->organizationId)->first();
+        $agents = Team::where('organization_id', $this->organizationId)->get();
+        $allowAgentsToViewAllChats = true;
+        $ticketingActive = false;
+        $aimodule = CustomHelper::isModuleEnabled('AI Assistant');
+
+        // Check if tickets module has been enabled
         if($config->metadata != NULL){
             $settings = json_decode($config->metadata);
 
             if(isset($settings->tickets) && $settings->tickets->active === true){
                 $ticketingActive = true;
-
-                //Check for chats that don't have corresponding chat ticket rows
-                $contacts = $contact->contactsWithChats($this->organizationId, NULL);
                 
-                foreach($contacts as $contact){
-                    ChatTicket::firstOrCreate(
-                        ['contact_id' => $contact->id],
-                        [
-                            'assigned_to' => null,
-                            'status' => 'open',
-                            'updated_at' => now(),
-                        ]
-                    );
-                }
-
-                //Check if agents can view all chats
+                // ✅ REMOVED PERFORMANCE KILLER - Ticket creation moved to background job
+                // The old code looped through ALL contacts here - very slow!
+                
+                // Check if agents can view all chats
                 $allowAgentsToViewAllChats = $settings->tickets->allow_agents_to_view_all_chats;
             }
         }
 
-        // Retrieve the list of contacts with chats (now with label filtering)
-        $contacts = $contact->contactsWithChats(
-            $this->organizationId, 
+        // Get or cache the contact list for THIS specific page
+        $cachedData = Cache::remember($cacheKey, $this->cacheTtl, function() use (
+            $contact, 
             $searchTerm, 
             $ticketingActive, 
             $ticketState, 
             $sortDirection, 
             $role, 
-            $allowAgentsToViewAllChats,
-            $labelFilters // Add label filters parameter
-        );
-        
-        $rowCount = $contact->contactsWithChatsCount(
-            $this->organizationId, 
-            $searchTerm, 
-            $ticketingActive, 
-            $ticketState, 
-            $sortDirection, 
-            $role, 
-            $allowAgentsToViewAllChats,
-            $labelFilters // Add label filters parameter
-        );
+            $allowAgentsToViewAllChats, 
+            $labelFilters
+        ) {
+            $contacts = $contact->contactsWithChats(
+                $this->organizationId, 
+                $searchTerm, 
+                $ticketingActive, 
+                $ticketState, 
+                $sortDirection, 
+                $role, 
+                $allowAgentsToViewAllChats,
+                $labelFilters
+            );
+            
+            $rowCount = $contact->contactsWithChatsCount(
+                $this->organizationId, 
+                $searchTerm, 
+                $ticketingActive, 
+                $ticketState, 
+                $sortDirection, 
+                $role, 
+                $allowAgentsToViewAllChats,
+                $labelFilters
+            );
+
+            return [
+                'contacts' => $contacts,
+                'rowCount' => $rowCount
+            ];
+        });
+
+        $contacts = $cachedData['contacts'];
+        $rowCount = $cachedData['rowCount'];
 
         $pusherSettings = Setting::whereIn('key', [
             'pusher_app_id',
@@ -134,16 +191,16 @@ class ChatService
             'pusher_app_cluster',
         ])->pluck('value', 'key')->toArray();
 
-        $perPage = 10; // Number of items per page
-        $totalContacts = count($contacts); // Total number of contacts
+        $perPage = 10;
+        $totalContacts = $rowCount;
         $messageTemplates = Template::where('organization_id', $this->organizationId)
             ->where('deleted_at', null)
             ->where('status', 'APPROVED')
             ->get();
 
-            $team = Team::where('organization_id', $this->organizationId)
-                            ->where('user_id', auth()->user()->id)
-                ->first();
+        $team = Team::where('organization_id', $this->organizationId)
+            ->where('user_id', auth()->user()->id)
+            ->first();
 
         if ($uuid !== null) {
             $contact = Contact::with(['lastChat', 'lastInboundChat', 'notes', 'contactGroups', 'labels'])
@@ -170,12 +227,15 @@ class ChatService
             } else {
                 $settings = json_decode($config->metadata);
 
-                //To ensure the unread message counter is updated
+                // To ensure the unread message counter is updated
                 $unreadMessages = Chat::where('organization_id', $this->organizationId)
                     ->where('type', 'inbound')
                     ->where('deleted_at', NULL)
                     ->where('is_read', 0)
                     ->count();
+
+                $contactFieldService = new ContactFieldService(session()->get('current_organization'));
+                $contactFields = $contactFieldService->get($request);
 
                 return Inertia::render('User/Chat/Index', [
                     'title' => 'Chats',
@@ -201,10 +261,16 @@ class ChatService
                     'addon' => $aimodule,
                     'chat_sort_direction' => $sortDirection,
                     'unreadMessages' => $unreadMessages,
+                    'contactFields' => $contactFields,
                     'isChatLimitReached' => SubscriptionService::isSubscriptionFeatureLimitReached($this->organizationId, 'message_limit'),
                     'teamRole' => $team?->role  
                 ]);
             }
+        }
+
+        // Mark this request as processed (for throttling)
+        if (request()->expectsJson()) {
+            $this->markRequestProcessed($cacheKey);
         }
 
         if (request()->expectsJson()) {
@@ -236,92 +302,157 @@ class ChatService
         }
     }
 
-    public function handleTicketAssignment($contactId){
-        $organizationId = $this->organizationId;
-        $settings = Organization::where('id', $this->organizationId)->first();
-        $settings = json_decode($settings->metadata);
+    public function handleTicketAssignment($contactId)
+        {
 
-        // Check if ticket functionality is active
-        if(isset($settings->tickets) && $settings->tickets->active === true){
-            $autoassignment = $settings->tickets->auto_assignment;
-            $reassignOnReopen = $settings->tickets->reassign_reopened_chats;
+            try{
+                $organizationId = $this->organizationId;
+                // Get organization settings
+                $settings = Organization::where('id', $organizationId)->first();
+                $settings = json_decode($settings->metadata);
+               $isSpecificAgentEnabled = !empty($settings->tickets->assigned_to_specific_agents ?? false);
 
-            // Check if a ticket already exists for the contact
-            $ticket = ChatTicket::where('contact_id', $contactId)->first();
+                // Case 1: Assign tickets to specific agents in a round-robin style
+                if ($isSpecificAgentEnabled) {
+                    $this->assignTicketToSpecificAgent($contactId, $organizationId);
+                    return ;
+                }
 
-            DB::transaction(function () use ($reassignOnReopen, $autoassignment, $ticket, $contactId, $organizationId) {
-                if(!$ticket){
-                    // Create a new ticket if it doesn't exist
-                    $ticket = New ChatTicket;
-                    $ticket->contact_id = $contactId;
-                    $ticket->status = 'open';
-                    $ticket->updated_at = now();
 
-                    // Perform auto-assignment if enabled
-                    if($autoassignment){
-                        // Find an agent with the least number of assigned tickets
-                        $agent = Team::where('organization_id', $organizationId)
-                            ->withCount('tickets')
-                            ->whereNull('deleted_at')
-                            ->orderBy('tickets_count')->first();
+                // Case 2: Auto-assignment logic if active
+                if (isset($settings->tickets) && $settings->tickets->active === true) {
+                    $autoassignment    = $settings->tickets->auto_assignment;
+                    $reassignOnReopen  = $settings->tickets->reassign_reopened_chats;
 
-                        // Assign the ticket to the agent with the least number of assigned tickets
-                        $ticket->assigned_to = $agent->user_id;
-                    } else {
-                        $ticket->assigned_to = NULL;
-                    }
+                    $ticket = ChatTicket::where('contact_id', $contactId)->first();
 
-                    $ticket->save();
+                    DB::transaction(function () use ($reassignOnReopen, $autoassignment, $ticket, $contactId, $organizationId, $isSpecificAgentEnabled) {
+                        if (!$ticket) {
+                            // Create a new ticket if none exists
+                            $ticket = new ChatTicket();
+                            $ticket->contact_id = $contactId;
+                            $ticket->status = 'open';
+                            $ticket->updated_at = now();
 
-                    $ticketId = ChatTicketLog::insertGetId([
-                        'contact_id' => $contactId,
-                        'description' => 'Conversation was opened',
-                        'created_at' => now()
-                    ]);
-
-                    ChatLog::insert([
-                        'contact_id' => $contactId,
-                        'entity_type' => 'ticket',
-                        'entity_id' => $ticketId,
-                        'created_at' => now()
-                    ]);
-                } else {
-                    // Reopen the ticket if it's closed and reassignment on reopen is enabled
-                    if($ticket->status === 'closed'){
-                        if($reassignOnReopen){
-                            if($autoassignment){
+                            if ($autoassignment) {
+                                // Find the agent with the least number of assigned tickets
                                 $agent = Team::where('organization_id', $organizationId)
                                     ->withCount('tickets')
                                     ->whereNull('deleted_at')
                                     ->orderBy('tickets_count')
                                     ->first();
 
-                                $ticket->assigned_to = $agent->user_id;
+                                // Assign the ticket to the agent
+                                if ($agent) {
+                                    $ticket->assigned_to = $agent->user_id;
+                                    } else {
+                                        $ticket->assigned_to = null;
+                                    }
                             } else {
-                                $ticket->assigned_to = NULL;
+                                $ticket->assigned_to = null;
+                            }
+
+                            $ticket->save();
+
+                            $ticketId = ChatTicketLog::insertGetId([
+                                'contact_id' => $contactId,
+                                'description' => 'Conversation was opened',
+                                'created_at' => now()
+                            ]);
+
+                            ChatLog::insert([
+                                'contact_id' => $contactId,
+                                'entity_type' => 'ticket',
+                                'entity_id' => $ticketId,
+                                'created_at' => now()
+                            ]);
+                        } else {
+                            // Reopen the ticket if closed and reassignment is enabled
+                            if ($ticket->status === 'closed') {
+                            if($isSpecificAgentEnabled){
+                                    $this->assignTicketToSpecificAgent($contactId, $organizationId);
+                                    return ;
+                                }
+                            elseif ($reassignOnReopen) {
+                                    if ($autoassignment) {
+                                        $agent = Team::where('organization_id', $organizationId)
+                                            ->withCount('tickets')
+                                            ->whereNull('deleted_at')
+                                            ->orderBy('tickets_count')
+                                            ->first();
+
+                                        $ticket->assigned_to = $agent->user_id;
+                                    } else {
+                                        $ticket->assigned_to = null;
+                                    }
+                                }
+
+                                $ticket->status = 'open';
+                                $ticket->save();
+
+                                $ticketId = ChatTicketLog::insertGetId([
+                                    'contact_id' => $contactId,
+                                    'description' => 'Conversation was moved from closed to open',
+                                    'created_at' => now()
+                                ]);
+
+                                ChatLog::insert([
+                                    'contact_id' => $contactId,
+                                    'entity_type' => 'ticket',
+                                    'entity_id' => $ticketId,
+                                    'created_at' => now()
+                                ]);
                             }
                         }
-
-                        $ticket->status = 'open';
-                        $ticket->save();
-
-                        $ticketId = ChatTicketLog::insertGetId([
-                            'contact_id' => $contactId,
-                            'description' => 'Conversation was moved from closed to open',
-                            'created_at' => now()
-                        ]);
-    
-                        ChatLog::insert([
-                            'contact_id' => $contactId,
-                            'entity_type' => 'ticket',
-                            'entity_id' => $ticketId,
-                            'created_at' => now()
-                        ]);
-                    }
+                    });
                 }
-            });
+            }catch(\Exception $ex){
+                
+            }
         }
-    }
+        
+
+    private function assignTicketToSpecificAgent($contactId, $organizationId)
+        {
+            $ticket = ChatTicket::where('contact_id', $contactId)->first();
+
+            if (!$ticket) {
+                // Create a new ticket
+                $ticket = new ChatTicket();
+                $ticket->contact_id = $contactId;
+                $ticket->status = 'open';
+                $ticket->created_at = now();
+            }
+
+            // 1. Get the list of agents assigned to this organization
+            $agents = DB::table('assigned_agents')
+                ->where('organization_id', $organizationId)
+                ->orderBy('id')
+                ->pluck('user_id')
+                ->toArray();
+
+            if (!empty($agents)) {
+                // 2. Find the last ticket assigned among these agents
+                $lastTicket = ChatTicket::whereIn('assigned_to', $agents)
+                    ->latest()
+                    ->first();
+
+                if ($lastTicket) {
+                    $lastIndex = array_search($lastTicket->assigned_to, $agents);
+                    $nextIndex = ($lastIndex === false) ? 0 : ($lastIndex + 1) % count($agents);
+                } else {
+                    $nextIndex = 0;
+                }
+
+                // 3. Assign the next agent in sequence
+                $ticket->assigned_to = $agents[$nextIndex];
+            }
+
+            $ticket->updated_at = now();
+            $ticket->save();
+
+            return $ticket;
+        }
 
     public function sendMessage(object $request)
     {

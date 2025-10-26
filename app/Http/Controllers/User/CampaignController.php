@@ -18,6 +18,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redirect;
 use Inertia\Inertia;
 use Maatwebsite\Excel\Facades\Excel;
+use App\Services\ContactFieldService;
 
 class CampaignController extends BaseController
 {
@@ -55,12 +56,15 @@ class CampaignController extends BaseController
                 ->where('status', 'APPROVED')
                 ->get();
 
+            $contactFieldService = new ContactFieldService(session()->get('current_organization'));
+            $data['contactFields'] = $contactFieldService->get($request);
+
             $data['contactGroups'] = ContactGroup::where('organization_id', $organizationId)
                 ->where('deleted_at', null)
                 ->get();
 
             $data['title'] = __('Create campaign');
-
+//dd($data['templates']);
             return Inertia::render('User/Campaign/Create', $data);
         } else {
             $data['campaign'] = Campaign::with('contactGroup', 'template')->where('uuid', $uuid)->first();

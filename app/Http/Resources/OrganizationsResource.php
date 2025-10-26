@@ -18,6 +18,9 @@ class OrganizationsResource extends JsonResource
         $data = parent::toArray($request);
         $data['updated_at'] = DateTimeHelper::formatDate($this->updated_at);
         $data['created_at'] = DateTimeHelper::formatDate($this->created_at);
+        if ($this->subscription) {
+            $data['subscription']['next_billing_date'] = $this->subscription->next_billing_date;
+        }
 
         return $data;
     }
