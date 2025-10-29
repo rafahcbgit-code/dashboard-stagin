@@ -75,5 +75,7 @@ class Kernel extends HttpKernel
         'auth.bearer' => \App\Http\Middleware\AuthenticateBearerToken::class,
         'setOrganization' => \App\Http\Middleware\SetOrganizationFromSession::class,
         'redirectIfAuthenticated' => \App\Http\Middleware\RedirectIfAuthenticated::class,
+        'check.organization_selected' => \App\Http\Middleware\CheckSelectedOrganization::class,
+        'sanctum.auth' => \App\Http\Middleware\EnsureSanctumAuth::class,
     ];
 }
