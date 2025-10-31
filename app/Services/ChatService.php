@@ -44,6 +44,25 @@ class ChatService
         $this->initializeWhatsappService();
     }
 
+    /**
+     * Get authenticated user ID (supports both session and Sanctum)
+     */
+    private function getUserId()
+    {
+        // Try Sanctum first (for API)
+        if (auth('sanctum')->check()) {
+            return auth('sanctum')->user()->id;
+        }
+        
+        // Try session (for web)
+        if (auth()->check()) {
+            return auth()->user()->id;
+        }
+        
+        // Default to 0 (system/API)
+        return 0;
+    }
+
     private function initializeWhatsappService()
     {
         $config = Organization::where('id', $this->organizationId)->first()->metadata;
@@ -456,8 +475,11 @@ class ChatService
 
     public function sendMessage(object $request)
     {
+        // ✅ Get user ID from request OR from auth
+        $userId = $request->user_id ?? $this->getUserId();
+
         if($request->type === 'text'){
-            return $this->whatsappService->sendMessage($request->uuid, $request->message, auth()->user()->id);
+            return $this->whatsappService->sendMessage($request->uuid, $request->message, $userId);
         } else {
             $storage = Setting::where('key', 'storage_system')->first()->value;
             $fileName = $request->file('file')->getClientOriginalName();

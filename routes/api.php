@@ -58,3 +58,41 @@ Route::middleware([AuthenticateBearerToken::class])->group(function () {
     Route::get('/templates', [App\Http\Controllers\ApiController::class, 'listTemplates']);
     Route::get('/verify', [App\Http\Controllers\ApiController::class, 'verifyApiKey']);
 });
+
+
+// ============================================
+// Mobile API Routes (v1)
+// ============================================
+Route::prefix('v1')->group(function () {
+    
+    // Public routes (No authentication)
+    Route::post('/auth/login', [App\Http\Controllers\Api\AuthController::class, 'login']);
+    
+    // Protected routes (Sanctum authentication for mobile)
+    Route::middleware('sanctum.auth')->group(function () {
+        Route::get('/auth/me', [App\Http\Controllers\Api\AuthController::class, 'me']);
+        Route::post('/auth/logout', [App\Http\Controllers\Api\AuthController::class, 'logout']);
+        
+        // Get organizations list
+        Route::get('/auth/organizations', [App\Http\Controllers\Api\AuthController::class, 'organizations']);
+
+
+        // Organization-specific endpoints (requires X-Organization-UUID header)
+        Route::middleware('check.organization_selected')->group(function () {
+            
+            // Labels
+            Route::get('/labels', [App\Http\Controllers\Api\LabelController::class, 'index']);
+            
+
+            // Chats
+            Route::get('/chats', [App\Http\Controllers\Api\ChatController::class, 'index']);
+            Route::get('/chats/unread-count', [App\Http\Controllers\Api\ChatController::class, 'unreadCount']);
+            Route::get('/chats/{contact_uuid}/messages', [App\Http\Controllers\Api\ChatController::class, 'getMessages']);
+            Route::post('/chats/{contact_uuid}/mark-as-read', [App\Http\Controllers\Api\ChatController::class, 'markAsRead']);
+
+            // Messages (Send) - NEW
+            Route::post('/chats/{contact_uuid}/messages', [App\Http\Controllers\Api\MessageController::class, 'sendMessage']);
+            Route::post('/chats/{contact_uuid}/messages/template', [App\Http\Controllers\Api\MessageController::class, 'sendTemplate']);
+        });
+    });
+});
