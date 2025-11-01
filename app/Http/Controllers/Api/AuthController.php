@@ -108,39 +108,58 @@ class AuthController extends Controller
      */
     public function me(Request $request)
     {
-        $user = $request->user();
+        try {
+            // ✅ Explicitly use Sanctum guard
+            $user = $request->user('sanctum');
+            
+            // Check if user exists
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized - Invalid or expired token'
+                ], 401);
+            }
 
-        $organizations = Team::with('organization')
-            ->where('user_id', $user->id)
-            ->whereNull('deleted_at')
-            ->get()
-            ->map(function ($team) {
-                return [
-                    'id' => $team->organization->id,
-                    'uuid' => $team->organization->uuid,
-                    'name' => $team->organization->name,
-                    'role' => $team->role,
-                    'status' => $team->status,
-                ];
-            });
+            // Get organizations
+            $organizations = Team::with('organization')
+                ->where('user_id', $user->id)
+                ->whereNull('deleted_at')
+                ->get()
+                ->map(function ($team) {
+                    return [
+                        'id' => $team->organization->id,
+                        'uuid' => $team->organization->uuid,
+                        'name' => $team->organization->name,
+                        'role' => $team->role,
+                        'status' => $team->status,
+                    ];
+                });
 
-        return response()->json([
-            'success' => true,
-            'data' => [
-                'user' => [
-                    'id' => $user->id,
-                    'uuid' => $user->uuid,
-                    'first_name' => $user->first_name,
-                    'last_name' => $user->last_name,
-                    'full_name' => $user->full_name,
-                    'email' => $user->email,
-                    'phone' => $user->phone,
-                    'avatar' => $user->avatar,
-                    'role' => $user->role,
-                ],
-                'organizations' => $organizations,
-            ]
-        ], 200);
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'user' => [
+                        'id' => $user->id,
+                        'uuid' => $user->uuid,
+                        'first_name' => $user->first_name,
+                        'last_name' => $user->last_name,
+                        'full_name' => $user->full_name,
+                        'email' => $user->email,
+                        'phone' => $user->phone,
+                        'avatar' => $user->avatar,
+                        'role' => $user->role,
+                    ],
+                    'organizations' => $organizations,
+                ]
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch user data',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
