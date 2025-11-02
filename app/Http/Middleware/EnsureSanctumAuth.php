@@ -13,14 +13,17 @@ class EnsureSanctumAuth
      */
     public function handle(Request $request, Closure $next): Response
     {
-        // Check if user is authenticated via Sanctum
-        if (!$request->user('sanctum')) {
+        $user = $request->user('sanctum');
+        if (!$user) {
             return response()->json([
                 'success' => false,
                 'message' => 'Unauthorized - Invalid or missing authentication token'
             ], 401);
         }
-
+        
+        //  Attach user to request for easy access in controllers
+        $request->merge(['auth_user' => $user]);
+        
         return $next($request);
     }
 }

@@ -168,13 +168,32 @@ class AuthController extends Controller
      */
     public function logout(Request $request)
     {
-        // Revoke current access token
-        $request->user()->currentAccessToken()->delete();
+        try {
+            // Get user from Sanctum guard
+            $user = $request->user('sanctum');
+            
+            if (!$user) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Unauthorized - Invalid or missing token'
+                ], 401);
+            }
 
-        return response()->json([
-            'success' => true,
-            'message' => 'Logged out successfully'
-        ], 200);
+            // Revoke current access token
+            $request->user('sanctum')->currentAccessToken()->delete();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Logged out successfully'
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Logout failed',
+                'error' => $e->getMessage()
+            ], 500);
+        }
     }
 
     /**
@@ -184,8 +203,9 @@ class AuthController extends Controller
     public function organizations(Request $request)
     {
         try {
+            // Get user from Sanctum guard
             $user = $request->user('sanctum');
-
+            
             if (!$user) {
                 return response()->json([
                     'success' => false,
@@ -201,7 +221,7 @@ class AuthController extends Controller
                 ->map(function ($team) {
                     $organization = $team->organization;
                     $subscription = $organization->subscription;
-
+                    
                     return [
                         'id' => $organization->id,
                         'uuid' => $organization->uuid,
@@ -210,7 +230,7 @@ class AuthController extends Controller
                         'role' => $team->role, // owner, manager, agent
                         'status' => $team->status, // active, inactive
                         'subscription' => $subscription ? [
-                            'status' => $subscription->status,
+                            'status' => $subscription->status, // active, trial, expired
                             'plan_name' => $subscription->plan ? $subscription->plan->name : 'Free',
                             'valid_until' => $subscription->valid_until,
                         ] : null,
