@@ -390,23 +390,46 @@
                 </div>
             </div>
         </div>
-        <Modal :label="''" :isOpen=isModalOpen :showHeader="false">
-            <div class="mt-5 grid grid-cols-1 gap-x-6 gap-y-4">
-                <div class="text-center">
-                    <div v-if="error != null" class="bg-[#fae6e6] text-[darkred] rounded text-sm p-2 mb-4">
-                        <div>{{ $t('Error') }}: </div>
-                        <div>{{ error }}</div>
-                        <button type="button" @click="closeModal" class="mt-4 inline-flex justify-center rounded-md border border-transparent bg-slate-50 px-4 py-2 text-sm text-slate-500 hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 mr-4">Close</button>
+        <Modal :isOpen="isModalOpen" :showHeader="false">
+            <div class="mt-5 grid grid-cols-1 gap-y-4 text-center">
+                <div v-if="error">
+                <div class="bg-red-50 text-red-700 border border-red-200 rounded p-3 text-sm">
+                    <div class="font-semibold mb-1">
+                    {{ error.error_user_title || 'Error' }}
                     </div>
-                    <div v-else>
-                        <h2 class="text-xl capitalize mt-6">{{ $t('Your template is being uploaded!') }}</h2>
-                        <div class="flex justify-center mt-4">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-dasharray="15" stroke-dashoffset="15" stroke-linecap="round" stroke-width="2" d="M12 3C16.9706 3 21 7.02944 21 12"><animate fill="freeze" attributeName="stroke-dashoffset" dur="0.3s" values="15;0"/><animateTransform attributeName="transform" dur="1.5s" repeatCount="indefinite" type="rotate" values="0 12 12;360 12 12"/></path></svg>
-                        </div>
+                    <div>
+                    {{ error.error_user_msg || error.message || 'Something went wrong.' }}
                     </div>
+                    <div v-if="error.code" class="text-xs text-gray-500 mt-2">
+                    (Code: {{ error.code }}{{ error.error_subcode ? ' / ' + error.error_subcode : '' }})
+                    </div>
+                    <button
+                    type="button"
+                    @click="closeModal"
+                    class="mt-4 px-4 py-2 rounded bg-gray-100 text-gray-600 hover:bg-gray-200"
+                    >
+                    Close
+                    </button>
+                </div>
+                </div>
+
+                <div v-else>
+                <h2 class="text-xl capitalize mt-6">Your template is being uploaded!</h2>
+                <div class="flex justify-center mt-4">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24">
+                    <path fill="none" stroke="currentColor" stroke-dasharray="15" stroke-dashoffset="15"
+                            stroke-linecap="round" stroke-width="2"
+                            d="M12 3C16.9706 3 21 7.02944 21 12">
+                        <animate fill="freeze" attributeName="stroke-dashoffset" dur="0.3s" values="15;0" />
+                        <animateTransform attributeName="transform" dur="1.5s" repeatCount="indefinite"
+                                        type="rotate" values="0 12 12;360 12 12" />
+                    </path>
+                    </svg>
+                </div>
                 </div>
             </div>
         </Modal>
+
 
         
     </AppLayout>
@@ -785,7 +808,7 @@
         .then(response => {
             if(response.data.success === false){
                 isLoading.value = false;
-                error.value = response.data.data.error.message;
+                error.value = response.data.data.error;
             } else {
                 router.visit('/templates', {
                     method: 'get',
