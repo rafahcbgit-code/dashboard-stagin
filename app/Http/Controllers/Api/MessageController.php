@@ -60,20 +60,20 @@ class MessageController extends Controller
             }
            
             // Check subscription
-            /* if (!SubscriptionService::isSubscriptionActive($organizationId)) {
+            if (!SubscriptionService::isSubscriptionActive($organizationId)) {
                 return response()->json([
                     'success' => false,
                     'message' => 'Please renew or subscribe to a plan to continue!'
                 ], 403);
-            } */
+            }
 
             // Check message limit
-            /* if (!SubscriptionService::isSubscriptionFeatureLimitReached($organizationId, 'message_limit')) {
+            if (SubscriptionService::isSubscriptionFeatureLimitReached($organizationId, 'message_limit')) {
                 return response()->json([
                     'success' => false,
                     'message' => 'You have reached your message limit. Please upgrade your plan!'
                 ], 403);
-            } */
+            }
 
             // Check WhatsApp connection
             if (!$this->isWhatsAppConnected($organizationId)) {
