@@ -36,7 +36,7 @@
                 <div v-if="contact && !displayContactInfo && !formLoading && !displayTemplate" class="w-full py-4">
                     <ChatForm 
                         :contact="contact" 
-                        :simpleForm="simpleForm" 
+                        :simpleForm="simpleForm"
                         :chatLimitReached="isChatLimitReached" 
                         @viewTemplate="displayTemplate = true;" 
                     />
