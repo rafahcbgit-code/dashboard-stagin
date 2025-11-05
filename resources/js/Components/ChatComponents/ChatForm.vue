@@ -354,8 +354,8 @@ onBeforeUnmount(() => {
             </span>
             <div>
                 <div class="text-sm">{{ $t('Maximum chat limit reached') }}</div>
-                <div class="text-sm">{{ $t('You have reached the maximum chat limit for your subscription! Please
-                    upgrade to send / receive more messages') }}</div>
+                <div class="text-sm">{{ $t(`You have reached the maximum chat limit for your subscription! Please
+                    upgrade to send / receive more messages`) }}</div>
             </div>
         </div>
     </div>
@@ -378,8 +378,8 @@ onBeforeUnmount(() => {
                 </span>
                 <div>
                     <div class="text-sm">{{ $t('24 hour limit') }}</div>
-                    <div class="text-sm">{{ $t('Whatsapp does not allow sending messages 24 hours after they last
-                        messaged you.However, you can send them a template message') }}</div>
+                    <div class="text-sm">{{ $t(`Whatsapp does not allow sending messages 24 hours after they last
+                        messaged you.However, you can send them a template message`) }}</div>
                 </div>
             </div>
             <button @click="viewTemplate()"
