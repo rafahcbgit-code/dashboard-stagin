@@ -216,7 +216,7 @@
             case 'IMAGE':
                 return 5 * 1024 * 1024; // 5MB
             case 'DOCUMENT':
-                return 100 * 1024 * 1024; // 100MB
+                return 30 * 1024 * 1024; // 30MB
             case 'VIDEO':
                 return 16 * 1024 * 1024; // 16MB
             default:
@@ -329,7 +329,7 @@
                                     <span v-else>{{ $t('No file chosen') }}</span>
                                 </div>
                                 <p v-if="form.header.parameters[index].type === 'IMAGE'" class="text-left text-xs mt-2">{{ $t('Max file upload size is') }} <b>5MB</b> <br> {{ $t('Supported file extensions') }}: .png, jpg</p>
-                                <p v-if="form.header.parameters[index].type === 'DOCUMENT'" class="text-left text-xs mt-2">{{ $t('Max file upload size is') }} <b>100MB</b> <br> {{ $t('Supported file extensions') }}: .pdf, .txt, .ppt, .doc, .xls, .docx, .pptx, .xlsx</p>
+                                <p v-if="form.header.parameters[index].type === 'DOCUMENT'" class="text-left text-xs mt-2">{{ $t('Max file upload size is') }} <b>30MB</b> <br> {{ $t('Supported file extensions') }}: .pdf, .txt, .ppt, .doc, .xls, .docx, .pptx, .xlsx</p>
                                 <p v-if="form.header.parameters[index].type === 'VIDEO'" class="text-left text-xs mt-2">{{ $t('Max file upload size is') }} <b>16MB</b> <br> {{ $t('Supported file extensions') }}: .mp4</p>
                             </div>
                             
