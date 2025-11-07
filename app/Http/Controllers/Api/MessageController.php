@@ -39,7 +39,7 @@ class MessageController extends Controller
     {
         try {
             $organizationId = $request->organization_id;
-            
+            $userId = $request->user('sanctum')->id; 
             // Initialize ChatService with organization
             $this->chatService = new ChatService($organizationId);
 
@@ -102,7 +102,7 @@ class MessageController extends Controller
             if ($messageType === 'text') {
                 return $this->handleTextMessage($request, $contact);
             } elseif (in_array($messageType, ['image', 'video', 'audio', 'document'])) {
-                return $this->handleMediaMessage($request, $contact, $messageType);
+                return $this->handleMediaMessage($request, $contact, $messageType, $userId);
             } elseif ($messageType === 'interactive') {
                 return $this->handleInteractiveMessage($request, $contact);
             }
@@ -155,7 +155,7 @@ class MessageController extends Controller
     /**
      * Handle media message (image, video, audio, document)
      */
-    private function handleMediaMessage($request, $contact, $mediaType)
+    private function handleMediaMessage($request, $contact, $mediaType, $userId)
     {
         // Validate file
         $validator = $this->validateMediaFile($request, $mediaType);
@@ -170,6 +170,8 @@ class MessageController extends Controller
 
         $file = $request->file('file');
         $caption = $request->input('caption', '');
+        
+        $organizationId = $request->organization_id;
         $storage = Setting::where('key', 'storage_system')->first()->value;
         $fileName = $file->getClientOriginalName();
         
@@ -181,17 +183,34 @@ class MessageController extends Controller
             $mediaUrl = rtrim(config('app.url'), '/') . '/media/' . ltrim($mediaFilePath, '/');
         } elseif ($storage === 'aws') {
             $location = 'amazon';
-            $uploadedFile = $file->store('uploads/media/sent/' . $contact->organization_id, 's3');
+            $uploadedFile = $file->store('uploads/media/sent/' . $organizationId, 's3');
             $mediaFilePath = Storage::disk('s3')->url($uploadedFile);
             $mediaUrl = $mediaFilePath;
         }
 
-        // Send via ChatService
-        $response = $this->chatService->sendMessage((object)[
-            'uuid' => $contact->uuid,
-            'type' => $mediaType,
-            'file' => $file
-        ]);
+        // Initialize WhatsappService directly
+        $config = \App\Models\Organization::where('id', $organizationId)->first()->metadata;
+        $config = $config ? json_decode($config, true) : [];
+
+        $whatsappService = new \App\Services\WhatsappService(
+            $config['whatsapp']['access_token'] ?? null,
+            config('graph.api_version'),
+            $config['whatsapp']['app_id'] ?? null,
+            $config['whatsapp']['phone_number_id'] ?? null,
+            $config['whatsapp']['waba_id'] ?? null,
+            $organizationId
+        );
+
+        // Send media directly
+        $response = $whatsappService->sendMedia(
+            $contact->uuid,
+            $mediaType,
+            $fileName,
+            $mediaFilePath,
+            $mediaUrl,
+            $location,
+            $caption
+        );
 
         if (isset($response->success) && $response->success === true) {
             return response()->json([
