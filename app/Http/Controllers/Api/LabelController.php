@@ -38,7 +38,6 @@ class LabelController extends Controller
                 ->map(function ($label) {
                     return [
                         'id' => $label->id,
-                        'uuid' => $label->uuid,
                         'title' => $label->title,
                         'color' => $label->color,
                         'created_at' => $label->created_at,

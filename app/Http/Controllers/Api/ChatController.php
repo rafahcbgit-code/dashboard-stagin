@@ -65,11 +65,11 @@ class ChatController extends Controller
 
             // Label filter
             if ($labelFilter) {
-                $labelUuids = array_filter(explode(',', $labelFilter));
+                $labelIds = array_filter(explode(',', $labelFilter));
 
-                if (!empty($labelUuids)) {
-                    $query->whereHas('labels', function ($q) use ($labelUuids) {
-                        $q->whereIn('labels.uuid', $labelUuids);
+                if (!empty($labelIds)) {
+                    $query->whereHas('labels', function ($q) use ($labelIds) {
+                        $q->whereIn('labels.id', $labelIds);
                     });
                 }
             }
@@ -121,7 +121,7 @@ class ChatController extends Controller
                     'unread_count' => $unreadCount,
                     'labels' => $contact->labels->map(function ($label) {
                         return [
-                            'uuid' => $label->uuid,
+                            'id' => $label->id,
                             'title' => $label->title,
                             'color' => $label->color,
                         ];
