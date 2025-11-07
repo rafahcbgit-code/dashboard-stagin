@@ -90,9 +90,20 @@ Route::prefix('v1')->group(function () {
             Route::get('/chats/{contact_uuid}/messages', [App\Http\Controllers\Api\ChatController::class, 'getMessages']);
             Route::post('/chats/{contact_uuid}/mark-as-read', [App\Http\Controllers\Api\ChatController::class, 'markAsRead']);
 
-            // Messages (Send) - NEW
+            // Messages (Send) 
             Route::post('/chats/{contact_uuid}/messages', [App\Http\Controllers\Api\MessageController::class, 'sendMessage']);
             Route::post('/chats/{contact_uuid}/messages/template', [App\Http\Controllers\Api\MessageController::class, 'sendTemplate']);
+
+            // Contact Management 
+            Route::get('/contacts/{contact_uuid}/labels', [App\Http\Controllers\Api\ContactController::class, 'getLabels']);
+            Route::put('/contacts/{contact_uuid}/labels', [App\Http\Controllers\Api\ContactController::class, 'updateLabels']);
+            Route::delete('/contacts/{contact_uuid}/labels', [App\Http\Controllers\Api\ContactController::class, 'removeLabels']);
+            Route::put('/contacts/{contact_uuid}/bot', [App\Http\Controllers\Api\ContactController::class, 'toggleBot']);
+        
+            // Ticket Management
+            Route::get('/chats/{contact_uuid}/ticket', [App\Http\Controllers\Api\TicketController::class, 'getTicket']);
+            Route::put('/chats/{contact_uuid}/status', [App\Http\Controllers\Api\TicketController::class, 'updateStatus']);
+            Route::put('/chats/{contact_uuid}/assign', [App\Http\Controllers\Api\TicketController::class, 'assignAgent']);
         });
     });
 });
