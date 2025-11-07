@@ -310,4 +310,68 @@ class TicketController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Get available agents/team members for assignment
+     * GET /api/v1/agents
+     * 
+     * Query Parameters:
+     * - role: string (optional) - Filter by role: owner, manager, agent
+     */
+    public function getAgents(Request $request)
+    {
+        try {
+            $organizationId = $request->organization_id;
+            $roleFilter = $request->query('role'); // Optional: owner, manager, agent
+
+            // Validation
+            if ($roleFilter && !in_array($roleFilter, ['owner', 'manager', 'agent'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid role. Must be: owner, manager, or agent'
+                ], 422);
+            }
+
+            // Get team members
+            $query = Team::with('user')
+                ->where('organization_id', $organizationId)
+                ->where('status', 'active')
+                ->whereNull('deleted_at');
+
+            // Apply role filter if provided
+            if ($roleFilter) {
+                $query->where('role', $roleFilter);
+            }
+
+            $agents = $query->get()->map(function($team) {
+                return [
+                    'id' => $team->user->id,
+                    'uuid' => $team->user->uuid,
+                    'first_name' => $team->user->first_name,
+                    'last_name' => $team->user->last_name,
+                    'full_name' => $team->user->full_name,
+                    'email' => $team->user->email,
+                    'phone' => $team->user->phone,
+                    'avatar' => $team->user->avatar,
+                    'role' => $team->role, // owner, manager, agent
+                    'status' => $team->status, // active, inactive
+                ];
+            });
+
+            return response()->json([
+                'success' => true,
+                'data' => [
+                    'agents' => $agents,
+                    'total' => $agents->count()
+                ]
+            ], 200);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch agents',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
 }
