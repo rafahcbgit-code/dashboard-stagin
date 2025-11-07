@@ -101,6 +101,7 @@ Route::prefix('v1')->group(function () {
             Route::put('/contacts/{contact_uuid}/bot', [App\Http\Controllers\Api\ContactController::class, 'toggleBot']);
         
             // Ticket Management
+            Route::get('/agents', [App\Http\Controllers\Api\TicketController::class, 'getAgents']);
             Route::get('/chats/{contact_uuid}/ticket', [App\Http\Controllers\Api\TicketController::class, 'getTicket']);
             Route::put('/chats/{contact_uuid}/status', [App\Http\Controllers\Api\TicketController::class, 'updateStatus']);
             Route::put('/chats/{contact_uuid}/assign', [App\Http\Controllers\Api\TicketController::class, 'assignAgent']);
