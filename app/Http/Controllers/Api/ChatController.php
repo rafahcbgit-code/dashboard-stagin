@@ -111,6 +111,7 @@ class ChatController extends Controller
                         'uuid' => $contact->uuid,
                         'first_name' => $contact->first_name,
                         'last_name' => $contact->last_name,
+                        'bot_enable' => $contact->bot_enable,
                         'full_name' => trim($contact->first_name . ' ' . $contact->last_name),
                         'phone' => $contact->phone,
                         'email' => $contact->email,
