@@ -17,7 +17,9 @@ class ChatController extends Controller
      * 
      * Query Parameters:
      * - search: string (search by name or phone)
-     * - labels: string (comma-separated label UUIDs)
+     * - labels: string (comma-separated label IDs)
+     * - ticket_status: string (all, unassigned, open, closed)
+     * - sort: string (newest, oldest)
      * - page: integer
      * - per_page: integer (default: 20, max: 50)
      */
@@ -27,7 +29,9 @@ class ChatController extends Controller
             // Validation
             $validator = Validator::make($request->all(), [
                 'search' => 'nullable|string|max:255',
-                'labels' => 'nullable|string', // comma-separated UUIDs
+                'labels' => 'nullable|string', // comma-separated IDs
+                'ticket_status' => 'nullable|in:all,unassigned,open,closed',
+                'sort' => 'nullable|in:newest,oldest',
                 'page' => 'nullable|integer|min:1',
                 'per_page' => 'nullable|integer|min:1|max:50',
             ]);
@@ -42,12 +46,14 @@ class ChatController extends Controller
 
             $organizationId = $request->organization_id;
             $searchTerm = $request->input('search');
-            $labelFilter = $request->input('labels'); // "label-uuid-1,label-uuid-2"
+            $labelFilter = $request->input('labels'); // "1,2,3"
+            $ticketStatus = $request->input('ticket_status', 'all'); // all, unassigned, open, closed
+            $sort = $request->input('sort', 'newest'); // newest, oldest
             $perPage = $request->input('per_page', 20);
 
             // Base query - Get contacts with chats
             $query = Contact::with(['labels', 'contactGroups'])
-                ->where('organization_id', $organizationId)
+                ->where('contacts.organization_id', $organizationId)
                 ->whereNull('contacts.deleted_at')
                 ->whereHas('chats', function ($q) {
                     $q->whereNull('deleted_at');
@@ -56,10 +62,10 @@ class ChatController extends Controller
             // Search filter (name or phone)
             if ($searchTerm) {
                 $query->where(function ($q) use ($searchTerm) {
-                    $q->where('first_name', 'like', "%{$searchTerm}%")
-                        ->orWhere('last_name', 'like', "%{$searchTerm}%")
-                        ->orWhere(DB::raw("CONCAT(first_name, ' ', last_name)"), 'like', "%{$searchTerm}%")
-                        ->orWhere('phone', 'like', "%{$searchTerm}%");
+                    $q->where('contacts.first_name', 'like', "%{$searchTerm}%")
+                        ->orWhere('contacts.last_name', 'like', "%{$searchTerm}%")
+                        ->orWhere(DB::raw("CONCAT(contacts.first_name, ' ', contacts.last_name)"), 'like', "%{$searchTerm}%")
+                        ->orWhere('contacts.phone', 'like', "%{$searchTerm}%");
                 });
             }
 
@@ -74,13 +80,36 @@ class ChatController extends Controller
                 }
             }
 
-            // Sort by last message time (most recent first)
-            $query->orderByDesc(
+            // Ticket status filter
+            if ($ticketStatus && $ticketStatus !== 'all') {
+                if ($ticketStatus === 'unassigned') {
+                    // Chats where ticket has no assigned agent OR ticket doesn't exist
+                    $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
+                        ->whereNull('chat_tickets.assigned_to');
+                } elseif ($ticketStatus === 'open') {
+                    // Chats where ticket status is "open"
+                    $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
+                        ->where('chat_tickets.status', 'open');
+                } elseif ($ticketStatus === 'closed') {
+                    // Chats where ticket status is "closed"
+                    $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
+                        ->where('chat_tickets.status', 'closed');
+                }
+                
+                // Ensure we select only contact columns to avoid conflicts
+                $query->select('contacts.*');
+            }
+
+            // Sort by last message time
+            $sortDirection = $sort === 'oldest' ? 'asc' : 'desc';
+            
+            $query->orderBy(
                 Chat::select('created_at')
                     ->whereColumn('contact_id', 'contacts.id')
                     ->whereNull('deleted_at')
                     ->latest('created_at')
-                    ->limit(1)
+                    ->limit(1),
+                $sortDirection
             );
 
             // Paginate
@@ -103,6 +132,11 @@ class ChatController extends Controller
                     ->whereNull('deleted_at')
                     ->count();
 
+                // Get ticket info
+                $ticket = \App\Models\ChatTicket::with('user')
+                    ->where('contact_id', $contact->id)
+                    ->first();
+
                 // Parse last message
                 $lastMessage = $this->parseLastMessage($lastChat);
 
@@ -120,6 +154,17 @@ class ChatController extends Controller
                     ],
                     'last_message' => $lastMessage,
                     'unread_count' => $unreadCount,
+                    'ticket' => $ticket ? [
+                        'status' => $ticket->status,
+                        'assigned_to' => $ticket->assigned_to ? [
+                            'id' => $ticket->user->id,
+                            'uuid' => $ticket->user->uuid,
+                            'first_name' => $ticket->user->first_name,
+                            'last_name' => $ticket->user->last_name,
+                            'full_name' => $ticket->user->full_name,
+                            'email' => $ticket->user->email,
+                        ] : null
+                    ] : null,
                     'labels' => $contact->labels->map(function ($label) {
                         return [
                             'id' => $label->id,
