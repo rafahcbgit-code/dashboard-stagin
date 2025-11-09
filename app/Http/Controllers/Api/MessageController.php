@@ -133,9 +133,9 @@ class MessageController extends Controller
 
         // Check if WhatsappService returned success
         if (isset($response->success) && $response->success === true) {
-            // Get the sent message from database to return consistent format
-            $sentMessage = \App\Models\Chat::where('uuid', $response->data->chat->uuid ?? null)
-                ->with('media')
+            // Get the sent message from database with media relationship
+            $sentMessage = \App\Models\Chat::with('media')
+                ->where('uuid', $response->data->chat->uuid ?? null)
                 ->first();
 
             if ($sentMessage) {
@@ -249,9 +249,9 @@ class MessageController extends Controller
             );
 
             if (isset($response->success) && $response->success === true) {
-                // Get the sent message from database to return consistent format
-                $sentMessage = \App\Models\Chat::where('uuid', $response->data->chat->uuid ?? null)
-                    ->with('media')
+                // Get the sent message from database with media relationship
+                $sentMessage = \App\Models\Chat::with('media')
+                    ->where('uuid', $response->data->chat->uuid ?? null)
                     ->first();
 
                 if ($sentMessage) {
@@ -351,9 +351,9 @@ class MessageController extends Controller
         ]);
 
         if (isset($response->success) && $response->success === true) {
-            // Get the sent message from database to return consistent format
-            $sentMessage = \App\Models\Chat::where('uuid', $response->data->chat->uuid ?? null)
-                ->with('media')
+            // Get the sent message from database with media relationship
+            $sentMessage = \App\Models\Chat::with('media')
+                ->where('uuid', $response->data->chat->uuid ?? null)
                 ->first();
 
             if ($sentMessage) {
@@ -467,9 +467,9 @@ class MessageController extends Controller
             ], $contact->uuid);
 
             if (isset($response->success) && $response->success === true) {
-                // Get the sent message from database to return consistent format
-                $sentMessage = \App\Models\Chat::where('uuid', $response->data->chat->uuid ?? null)
-                    ->with('media')
+                // Get the sent message from database with media relationship
+                $sentMessage = \App\Models\Chat::with('media')
+                    ->where('uuid', $response->data->chat->uuid ?? null)
                     ->first();
 
                 if ($sentMessage) {
@@ -609,89 +609,128 @@ class MessageController extends Controller
     /**
      * Format message to match GET messages endpoint structure
      */
-    private function formatMessage($message)
+    private function formatMessage($chat)
     {
-        $formatted = [
-            'uuid' => $message->uuid,
-            'type' => $message->type, // inbound or outbound
-            'message_type' => $message->message_type,
-            'status' => $message->status,
-            'is_read' => (bool) $message->is_read,
-            'created_at' => $message->created_at,
-            'wam_id' => $message->wam_id,
+        $metadata = json_decode($chat->metadata, true);
+        $messageType = $metadata['type'] ?? 'text';
+
+        $message = [
+            'uuid' => $chat->uuid,
+            'type' => $chat->type, // inbound or outbound
+            'message_type' => $messageType,
+            'status' => $chat->status,
+            'is_read' => (bool) $chat->is_read,
+            'created_at' => $chat->created_at,
+            'wam_id' => $chat->wam_id,
         ];
 
-        // Format content based on message type
-        switch ($message->message_type) {
-            case 'text':
-                $formatted['content'] = [
-                    'text' => $message->text
-                ];
-                break;
-
-            case 'image':
-            case 'video':
-            case 'audio':
-            case 'document':
-                $media = $message->media->first();
-                $formatted['content'] = [
-                    'caption' => $message->text,
-                    'media' => $media ? [
-                        'url' => $media->url,
-                        'filename' => $media->filename,
-                        'type' => $media->type,
-                        'size' => $media->size
-                    ] : null
-                ];
-                break;
-
-            case 'sticker':
-                $media = $message->media->first();
-                $formatted['content'] = [
-                    'media' => $media ? [
-                        'url' => $media->url,
-                        'filename' => $media->filename,
-                        'type' => $media->type,
-                        'size' => $media->size
-                    ] : null
-                ];
-                break;
-
-            case 'location':
-                $metadata = $message->metadata ? json_decode($message->metadata, true) : [];
-                $formatted['content'] = [
-                    'latitude' => $metadata['latitude'] ?? null,
-                    'longitude' => $metadata['longitude'] ?? null,
-                    'name' => $metadata['name'] ?? null,
-                    'address' => $metadata['address'] ?? null
-                ];
-                break;
-
-            case 'interactive':
-                $metadata = $message->metadata ? json_decode($message->metadata, true) : [];
-                $formatted['content'] = [
-                    'header' => $metadata['header'] ?? null,
-                    'text' => $message->text,
-                    'footer' => $metadata['footer'] ?? null,
-                    'buttons' => $metadata['buttons'] ?? []
-                ];
-                break;
-
-            case 'button':
-                $metadata = $message->metadata ? json_decode($message->metadata, true) : [];
-                $formatted['content'] = [
-                    'text' => $message->text,
-                    'payload' => $metadata['payload'] ?? null
-                ];
-                break;
-
-            default:
-                $formatted['content'] = [
-                    'text' => $message->text
-                ];
-                break;
+        // Text message
+        if ($messageType === 'text' && isset($metadata['text']['body'])) {
+            $message['content'] = [
+                'text' => $metadata['text']['body']
+            ];
         }
 
-        return $formatted;
+        // Image
+        elseif ($messageType === 'image') {
+            $message['content'] = [
+                'caption' => $metadata['image']['caption'] ?? null,
+                'media' => $this->getMediaInfo($chat->media)
+            ];
+        }
+
+        // Video
+        elseif ($messageType === 'video') {
+            $message['content'] = [
+                'caption' => $metadata['video']['caption'] ?? null,
+                'media' => $this->getMediaInfo($chat->media)
+            ];
+        }
+
+        // Audio
+        elseif ($messageType === 'audio') {
+            $message['content'] = [
+                'media' => $this->getMediaInfo($chat->media),
+                'transcript' => $metadata['transcript'] ?? null
+            ];
+        }
+
+        // Document
+        elseif ($messageType === 'document') {
+            $message['content'] = [
+                'filename' => $metadata['document']['filename'] ?? 'Document',
+                'media' => $this->getMediaInfo($chat->media)
+            ];
+        }
+
+        // Sticker
+        elseif ($messageType === 'sticker') {
+            $message['content'] = [
+                'media' => $this->getMediaInfo($chat->media)
+            ];
+        }
+
+        // Location
+        elseif ($messageType === 'location') {
+            $message['content'] = [
+                'latitude' => $metadata['location']['latitude'] ?? null,
+                'longitude' => $metadata['location']['longitude'] ?? null,
+                'name' => $metadata['location']['name'] ?? null,
+                'address' => $metadata['location']['address'] ?? null,
+            ];
+        }
+
+        // Interactive (buttons/list)
+        elseif ($messageType === 'interactive') {
+            $message['content'] = [
+                'header' => $metadata['header'] ?? null,
+                'text' => $metadata['text']['body'] ?? $metadata['body']['text'] ?? null,
+                'footer' => $metadata['footer']['text'] ?? null,
+                'buttons' => $metadata['buttons'] ?? null,
+            ];
+        }
+
+        // Button reply
+        elseif ($messageType === 'button') {
+            $message['content'] = [
+                'text' => $metadata['button']['text'] ?? null,
+                'payload' => $metadata['button']['payload'] ?? null,
+            ];
+        }
+
+        // Default fallback
+        else {
+            $message['content'] = [
+                'text' => $chat->text ?? null
+            ];
+        }
+
+        return $message;
+    }
+
+    /**
+     * Get media info from Chat model relationship
+     */
+    private function getMediaInfo($mediaRelation)
+    {
+        if (!$mediaRelation) {
+            return null;
+        }
+
+        // If it's a collection, get the first item
+        $media = is_object($mediaRelation) && method_exists($mediaRelation, 'first') 
+            ? $mediaRelation->first() 
+            : $mediaRelation;
+
+        if (!$media) {
+            return null;
+        }
+
+        return [
+            'url' => $media->path ?? null,
+            'filename' => $media->name ?? null,
+            'type' => $media->type ?? null,
+            'size' => $media->size ?? null,
+        ];
     }
 }
