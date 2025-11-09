@@ -318,6 +318,7 @@ class ChatController extends Controller
                         'phone' => $contact->phone,
                         'email' => $contact->email,
                         'avatar' => $contact->avatar,
+                        'bot_enable' => $contact->bot_enable,
                     ],
                     'messages' => $formattedMessages,
                 ],
