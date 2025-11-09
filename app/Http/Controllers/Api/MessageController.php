@@ -100,11 +100,11 @@ class MessageController extends Controller
             $messageType = $request->input('type');
 
             if ($messageType === 'text') {
-                return $this->handleTextMessage($request, $contact);
+                return $this->handleTextMessage($request, $contact, $userId);
             } elseif (in_array($messageType, ['image', 'video', 'audio', 'document'])) {
                 return $this->handleMediaMessage($request, $contact, $messageType, $userId);
             } elseif ($messageType === 'interactive') {
-                return $this->handleInteractiveMessage($request, $contact);
+                return $this->handleInteractiveMessage($request, $contact, $userId);
             }
 
         } catch (\Exception $e) {
@@ -119,10 +119,10 @@ class MessageController extends Controller
     /**
      * Handle text message
      */
-    private function handleTextMessage($request, $contact)
+    private function handleTextMessage($request, $contact, $userId)
     {
         $message = $request->input('message');
-        $userId = $request->user('sanctum')->id;
+
         // Send via ChatService (which uses WhatsappService)
         $response = $this->chatService->sendMessage((object)[
             'uuid' => $contact->uuid,
@@ -133,14 +133,38 @@ class MessageController extends Controller
 
         // Check if WhatsappService returned success
         if (isset($response->success) && $response->success === true) {
+            // Get the sent message from database to return consistent format
+            $sentMessage = \App\Models\Chat::where('uuid', $response->data->chat->uuid ?? null)
+                ->with('media')
+                ->first();
+
+            if ($sentMessage) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Message sent successfully',
+                    'data' => [
+                        'message' => $this->formatMessage($sentMessage)
+                    ]
+                ], 200);
+            }
+
+            // Fallback if message not found in DB yet
             return response()->json([
                 'success' => true,
                 'message' => 'Message sent successfully',
                 'data' => [
-                    'message_uuid' => $response->data->chat->uuid ?? null,
-                    'wam_id' => $response->data->messages[0]->id ?? null,
-                    'status' => 'sent',
-                    'timestamp' => now()->toIso8601String()
+                    'message' => [
+                        'uuid' => $response->data->chat->uuid ?? null,
+                        'type' => 'outbound',
+                        'message_type' => 'text',
+                        'status' => 'sent',
+                        'is_read' => false,
+                        'created_at' => now()->toIso8601String(),
+                        'wam_id' => $response->data->messages[0]->id ?? null,
+                        'content' => [
+                            'text' => $message
+                        ]
+                    ]
                 ]
             ], 200);
         } else {
@@ -168,67 +192,116 @@ class MessageController extends Controller
             ], 422);
         }
 
-        $file = $request->file('file');
-        $caption = $request->input('caption', '');
-        
-        $organizationId = $request->organization_id;
-        $storage = Setting::where('key', 'storage_system')->first()->value;
-        $fileName = $file->getClientOriginalName();
-        
-        // Upload file
-        if ($storage === 'local') {
-            $location = 'local';
-            $uploadedFile = Storage::disk('local')->put('public', $file);
-            $mediaFilePath = $uploadedFile;
-            $mediaUrl = rtrim(config('app.url'), '/') . '/media/' . ltrim($mediaFilePath, '/');
-        } elseif ($storage === 'aws') {
-            $location = 'amazon';
-            $uploadedFile = $file->store('uploads/media/sent/' . $organizationId, 's3');
-            $mediaFilePath = Storage::disk('s3')->url($uploadedFile);
-            $mediaUrl = $mediaFilePath;
-        }
+        try {
+            $organizationId = $request->organization_id;
+            $file = $request->file('file');
+            $caption = $request->input('caption', '');
+            $storage = Setting::where('key', 'storage_system')->first()->value;
+            $fileName = $file->getClientOriginalName();
+            
+            // Upload file based on storage system
+            if ($storage === 'local') {
+                $location = 'local';
+                $uploadedFile = Storage::disk('local')->put('public', $file);
+                $mediaFilePath = $uploadedFile;
+                $mediaUrl = rtrim(config('app.url'), '/') . '/media/' . ltrim($mediaFilePath, '/');
+            } elseif ($storage === 'aws') {
+                $location = 'amazon';
+                $uploadedFile = $file->store('uploads/media/sent/' . $organizationId, 's3');
+                $mediaFilePath = Storage::disk('s3')->url($uploadedFile);
+                $mediaUrl = $mediaFilePath;
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Invalid storage configuration'
+                ], 500);
+            }
 
-        // Initialize WhatsappService directly
-        $config = \App\Models\Organization::where('id', $organizationId)->first()->metadata;
-        $config = $config ? json_decode($config, true) : [];
+            // Initialize WhatsappService
+            $config = \App\Models\Organization::where('id', $organizationId)->first()->metadata;
+            $config = $config ? json_decode($config, true) : [];
 
-        $whatsappService = new \App\Services\WhatsappService(
-            $config['whatsapp']['access_token'] ?? null,
-            config('graph.api_version'),
-            $config['whatsapp']['app_id'] ?? null,
-            $config['whatsapp']['phone_number_id'] ?? null,
-            $config['whatsapp']['waba_id'] ?? null,
-            $organizationId
-        );
+            if (!isset($config['whatsapp'])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'WhatsApp not configured'
+                ], 403);
+            }
 
-        // Send media directly
-        $response = $whatsappService->sendMedia(
-            $contact->uuid,
-            $mediaType,
-            $fileName,
-            $mediaFilePath,
-            $mediaUrl,
-            $location,
-            $caption
-        );
+            $whatsappService = new \App\Services\WhatsappService(
+                $config['whatsapp']['access_token'] ?? null,
+                config('graph.api_version'),
+                $config['whatsapp']['app_id'] ?? null,
+                $config['whatsapp']['phone_number_id'] ?? null,
+                $config['whatsapp']['waba_id'] ?? null,
+                $organizationId
+            );
 
-        if (isset($response->success) && $response->success === true) {
-            return response()->json([
-                'success' => true,
-                'message' => 'Media sent successfully',
-                'data' => [
-                    'message_uuid' => $response->data->chat->uuid ?? null,
-                    'wam_id' => $response->data->messages[0]->id ?? null,
-                    'status' => 'sent',
-                    'media_type' => $mediaType,
-                    'timestamp' => now()->toIso8601String()
-                ]
-            ], 200);
-        } else {
+            // Send media via WhatsApp
+            $response = $whatsappService->sendMedia(
+                $contact->uuid,
+                $mediaType,
+                $fileName,
+                $mediaFilePath,
+                $mediaUrl,
+                $location,
+                $caption
+            );
+
+            if (isset($response->success) && $response->success === true) {
+                // Get the sent message from database to return consistent format
+                $sentMessage = \App\Models\Chat::where('uuid', $response->data->chat->uuid ?? null)
+                    ->with('media')
+                    ->first();
+
+                if ($sentMessage) {
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Media sent successfully',
+                        'data' => [
+                            'message' => $this->formatMessage($sentMessage)
+                        ]
+                    ], 200);
+                }
+
+                // Fallback if message not found in DB yet
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Media sent successfully',
+                    'data' => [
+                        'message' => [
+                            'uuid' => $response->data->chat->uuid ?? null,
+                            'type' => 'outbound',
+                            'message_type' => $mediaType,
+                            'status' => 'sent',
+                            'is_read' => false,
+                            'created_at' => now()->toIso8601String(),
+                            'wam_id' => $response->data->messages[0]->id ?? null,
+                            'content' => [
+                                'caption' => $caption,
+                                'media' => [
+                                    'url' => $mediaUrl,
+                                    'filename' => $fileName,
+                                    'type' => $file->getMimeType(),
+                                    'size' => $file->getSize()
+                                ]
+                            ]
+                        ]
+                    ]
+                ], 200);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => $response->message ?? 'Failed to send media',
+                    'error' => $response->data->error ?? null
+                ], 500);
+            }
+
+        } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
-                'message' => $response->message ?? 'Failed to send media',
-                'error' => $response->data->error ?? null
+                'message' => 'Failed to send media',
+                'error' => $e->getMessage()
             ], 500);
         }
     }
@@ -236,7 +309,7 @@ class MessageController extends Controller
     /**
      * Handle interactive message (buttons)
      */
-    private function handleInteractiveMessage($request, $contact)
+    private function handleInteractiveMessage($request, $contact, $userId)
     {
         $validator = Validator::make($request->all(), [
             'buttons' => 'required|array|min:1|max:3',
@@ -273,18 +346,46 @@ class MessageController extends Controller
             'type' => 'interactive buttons',
             'buttons' => $buttons,
             'header' => $headerFormatted,
-            'footer' => $footer
+            'footer' => $footer,
+            'user_id' => $userId
         ]);
 
         if (isset($response->success) && $response->success === true) {
+            // Get the sent message from database to return consistent format
+            $sentMessage = \App\Models\Chat::where('uuid', $response->data->chat->uuid ?? null)
+                ->with('media')
+                ->first();
+
+            if ($sentMessage) {
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Interactive message sent successfully',
+                    'data' => [
+                        'message' => $this->formatMessage($sentMessage)
+                    ]
+                ], 200);
+            }
+
+            // Fallback if message not found in DB yet
             return response()->json([
                 'success' => true,
                 'message' => 'Interactive message sent successfully',
                 'data' => [
-                    'message_uuid' => $response->data->chat->uuid ?? null,
-                    'wam_id' => $response->data->messages[0]->id ?? null,
-                    'status' => 'sent',
-                    'timestamp' => now()->toIso8601String()
+                    'message' => [
+                        'uuid' => $response->data->chat->uuid ?? null,
+                        'type' => 'outbound',
+                        'message_type' => 'interactive',
+                        'status' => 'sent',
+                        'is_read' => false,
+                        'created_at' => now()->toIso8601String(),
+                        'wam_id' => $response->data->messages[0]->id ?? null,
+                        'content' => [
+                            'header' => $headerFormatted,
+                            'text' => $message,
+                            'footer' => ['text' => $footer],
+                            'buttons' => $buttons
+                        ]
+                    ]
                 ]
             ], 200);
         } else {
@@ -296,14 +397,10 @@ class MessageController extends Controller
         }
     }
 
-    /**
-     * Send template message
-     * POST /api/v1/chats/{contact_uuid}/messages/template
-     */
-    public function sendTemplate(Request $request, $contactUuid)
-    {
+    public function sendTemplate(Request $request, $contactUuid){
         try {
             $organizationId = $request->organization_id;
+            $userId = $request->user('sanctum')->id;
             $this->chatService = new ChatService($organizationId);
 
             // Validation
@@ -363,23 +460,45 @@ class MessageController extends Controller
                 ], 404);
             }
 
-            // Build template object for WhatsApp API
-            $templateData = $this->buildTemplateData($template, $request->input('parameters', []), $contact);
-
             // Send via ChatService
             $response = $this->chatService->sendTemplateMessage((object)[
-                'template' => $request->template_uuid
+                'template' => $request->template_uuid,
+                'user_id' => $userId
             ], $contact->uuid);
 
             if (isset($response->success) && $response->success === true) {
+                // Get the sent message from database to return consistent format
+                $sentMessage = \App\Models\Chat::where('uuid', $response->data->chat->uuid ?? null)
+                    ->with('media')
+                    ->first();
+
+                if ($sentMessage) {
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Template sent successfully',
+                        'data' => [
+                            'message' => $this->formatMessage($sentMessage)
+                        ]
+                    ], 200);
+                }
+
+                // Fallback if message not found in DB yet
                 return response()->json([
                     'success' => true,
                     'message' => 'Template sent successfully',
                     'data' => [
-                        'message_uuid' => $response->data->chat->uuid ?? null,
-                        'wam_id' => $response->data->messages[0]->id ?? null,
-                        'status' => $response->data->messages[0]->message_status ?? 'sent',
-                        'timestamp' => now()->toIso8601String()
+                        'message' => [
+                            'uuid' => $response->data->chat->uuid ?? null,
+                            'type' => 'outbound',
+                            'message_type' => 'template',
+                            'status' => $response->data->messages[0]->message_status ?? 'sent',
+                            'is_read' => false,
+                            'created_at' => now()->toIso8601String(),
+                            'wam_id' => $response->data->messages[0]->id ?? null,
+                            'content' => [
+                                'template_name' => $template->name
+                            ]
+                        ]
                     ]
                 ], 200);
             } else {
@@ -485,5 +604,94 @@ class MessageController extends Controller
         $metadata = $settings->metadata ? json_decode($settings->metadata, true) : [];
 
         return isset($metadata['whatsapp']);
+    }
+
+    /**
+     * Format message to match GET messages endpoint structure
+     */
+    private function formatMessage($message)
+    {
+        $formatted = [
+            'uuid' => $message->uuid,
+            'type' => $message->type, // inbound or outbound
+            'message_type' => $message->message_type,
+            'status' => $message->status,
+            'is_read' => (bool) $message->is_read,
+            'created_at' => $message->created_at,
+            'wam_id' => $message->wam_id,
+        ];
+
+        // Format content based on message type
+        switch ($message->message_type) {
+            case 'text':
+                $formatted['content'] = [
+                    'text' => $message->text
+                ];
+                break;
+
+            case 'image':
+            case 'video':
+            case 'audio':
+            case 'document':
+                $media = $message->media->first();
+                $formatted['content'] = [
+                    'caption' => $message->text,
+                    'media' => $media ? [
+                        'url' => $media->url,
+                        'filename' => $media->filename,
+                        'type' => $media->type,
+                        'size' => $media->size
+                    ] : null
+                ];
+                break;
+
+            case 'sticker':
+                $media = $message->media->first();
+                $formatted['content'] = [
+                    'media' => $media ? [
+                        'url' => $media->url,
+                        'filename' => $media->filename,
+                        'type' => $media->type,
+                        'size' => $media->size
+                    ] : null
+                ];
+                break;
+
+            case 'location':
+                $metadata = $message->metadata ? json_decode($message->metadata, true) : [];
+                $formatted['content'] = [
+                    'latitude' => $metadata['latitude'] ?? null,
+                    'longitude' => $metadata['longitude'] ?? null,
+                    'name' => $metadata['name'] ?? null,
+                    'address' => $metadata['address'] ?? null
+                ];
+                break;
+
+            case 'interactive':
+                $metadata = $message->metadata ? json_decode($message->metadata, true) : [];
+                $formatted['content'] = [
+                    'header' => $metadata['header'] ?? null,
+                    'text' => $message->text,
+                    'footer' => $metadata['footer'] ?? null,
+                    'buttons' => $metadata['buttons'] ?? []
+                ];
+                break;
+
+            case 'button':
+                $metadata = $message->metadata ? json_decode($message->metadata, true) : [];
+                $formatted['content'] = [
+                    'text' => $message->text,
+                    'payload' => $metadata['payload'] ?? null
+                ];
+                break;
+
+            default:
+                $formatted['content'] = [
+                    'text' => $message->text
+                ];
+                break;
+        }
+
+        return $formatted;
     }
 }
