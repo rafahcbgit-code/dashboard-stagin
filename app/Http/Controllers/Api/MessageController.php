@@ -310,20 +310,24 @@ class MessageController extends Controller
      * Send template message
      * POST /api/v1/chats/{contact_uuid}/messages/template
      * 
+     * For templates with IMAGE/VIDEO/DOCUMENT header:
+     * Content-Type: multipart/form-data
+     * 
+     * Fields:
+     * - template_uuid: string (required)
+     * - header_selection: "upload" or "link" (required if template has media header)
+     * - header_file: file (required if header_selection=upload)
+     * - header_link: url (required if header_selection=link)
+     * - body_params: JSON array of parameter values (optional)
+     * 
+     * For templates with TEXT header or no header:
+     * Content-Type: application/json
+     * 
      * Body:
      * {
      *     "template_uuid": "template-123",
-     *     "header": {
-     *         "parameters": [
-     *             { "type": "text", "text": "John" }
-     *         ]
-     *     },
-     *     "body": {
-     *         "parameters": [
-     *             { "type": "text", "text": "#12345" },
-     *             { "type": "text", "text": "confirmed" }
-     *         ]
-     *     }
+     *     "header": { "parameters": [{"type": "text", "text": "John"}] },
+     *     "body": { "parameters": [{"type": "text", "text": "#12345"}] }
      * }
      */
     public function sendTemplate(Request $request, $contactUuid)
@@ -333,23 +337,9 @@ class MessageController extends Controller
             $userId = $request->user('sanctum')->id;
             $this->chatService = new ChatService($organizationId);
 
-            // Validation
+            // Basic validation
             $validator = Validator::make($request->all(), [
                 'template_uuid' => 'required|string|exists:templates,uuid',
-                'header' => 'nullable|array',
-                'header.parameters' => 'nullable|array',
-                'header.parameters.*.type' => 'required|in:text,image,video,document',
-                'header.parameters.*.text' => 'required_if:header.parameters.*.type,text',
-                'header.parameters.*.image' => 'nullable|array',
-                'header.parameters.*.image.link' => 'required_if:header.parameters.*.type,image|url',
-                'header.parameters.*.video' => 'nullable|array',
-                'header.parameters.*.video.link' => 'required_if:header.parameters.*.type,video|url',
-                'header.parameters.*.document' => 'nullable|array',
-                'header.parameters.*.document.link' => 'required_if:header.parameters.*.type,document|url',
-                'body' => 'nullable|array',
-                'body.parameters' => 'nullable|array',
-                'body.parameters.*.type' => 'required|in:text',
-                'body.parameters.*.text' => 'required',
             ]);
 
             if ($validator->fails()) {
@@ -403,8 +393,8 @@ class MessageController extends Controller
                 ], 404);
             }
 
-            // Build template request object for ChatService
-            $templateRequest = $this->buildTemplateRequest($request, $template);
+            // Build template request - NEW METHOD
+            $templateRequest = $this->buildTemplateRequestWithMedia($request, $template, $organizationId);
 
             // Send via ChatService
             $response = $this->chatService->sendTemplateMessage(
@@ -413,7 +403,7 @@ class MessageController extends Controller
             );
 
             if (isset($response->success) && $response->success === true) {
-                // Get the sent message from database with media relationship
+                // Get the sent message from database
                 $sentMessage = \App\Models\Chat::with('media')
                     ->where('uuid', $response->data->chat->uuid ?? null)
                     ->first();
@@ -428,7 +418,7 @@ class MessageController extends Controller
                     ], 200);
                 }
 
-                // Fallback if message not found in DB yet
+                // Fallback
                 return response()->json([
                     'success' => true,
                     'message' => 'Template sent successfully',
@@ -459,15 +449,16 @@ class MessageController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to send template',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'line' => $e->getLine()
             ], 500);
         }
     }
 
     /**
-     * Build template request object for ChatService
+     * Build template request with media upload support (matches web version)
      */
-    private function buildTemplateRequest($request, $template)
+    private function buildTemplateRequestWithMedia($request, $template, $organizationId)
     {
         $metadata = json_decode($template->metadata, true);
         $components = $metadata['components'] ?? [];
@@ -477,23 +468,25 @@ class MessageController extends Controller
             'user_id' => $request->user('sanctum')->id,
         ];
 
-        // Build header
+        // Find header component
         $headerComponent = $this->findComponent($components, 'HEADER');
+        
         if ($headerComponent) {
-            $templateRequest->header = [
-                'format' => $headerComponent['format'] ?? 'TEXT',
-                'text' => $headerComponent['text'] ?? null,
-                'parameters' => $this->formatHeaderParameters($request->input('header.parameters', []))
-            ];
+            $format = $headerComponent['format'] ?? 'TEXT';
+            
+            // Check if this is a media header (IMAGE, VIDEO, DOCUMENT)
+            if (in_array($format, ['IMAGE', 'VIDEO', 'DOCUMENT'])) {
+                $templateRequest->header = $this->buildMediaHeader($request, $format, $organizationId);
+            } else {
+                // TEXT header
+                $templateRequest->header = $this->buildTextHeader($request, $headerComponent);
+            }
         }
 
         // Build body
         $bodyComponent = $this->findComponent($components, 'BODY');
         if ($bodyComponent) {
-            $templateRequest->body = [
-                'text' => $bodyComponent['text'] ?? '',
-                'parameters' => $this->formatBodyParameters($request->input('body.parameters', []))
-            ];
+            $templateRequest->body = $this->buildBody($request, $bodyComponent);
         }
 
         // Build footer
@@ -511,6 +504,174 @@ class MessageController extends Controller
         }
 
         return $templateRequest;
+    }
+
+    /**
+     * Build media header (IMAGE, VIDEO, DOCUMENT)
+     * Supports both file upload and URL
+     */
+    private function buildMediaHeader($request, $format, $organizationId)
+    {
+        $selection = $request->input('header_selection', 'link'); // 'upload' or 'link'
+        
+        $header = [
+            'format' => $format,
+            'parameters' => []
+        ];
+
+        if ($selection === 'upload') {
+            // Validate file upload
+            if (!$request->hasFile('header_file')) {
+                throw new \Exception('header_file is required when header_selection is upload');
+            }
+
+            $file = $request->file('header_file');
+            
+            // Validate file type based on format
+            $this->validateHeaderFile($file, $format);
+
+            // Upload file (same logic as web version)
+            $storage = Setting::where('key', 'storage_system')->first()->value;
+            $fileName = $file->getClientOriginalName();
+
+            if ($storage === 'local') {
+                $uploadedFile = Storage::disk('local')->put('public', $file);
+                $mediaFilePath = $uploadedFile;
+                $mediaUrl = rtrim(config('app.url'), '/') . '/media/' . ltrim($mediaFilePath, '/');
+            } elseif ($storage === 'aws') {
+                $uploadedFile = $file->store('uploads/media/sent/' . $organizationId, 's3');
+                $mediaFilePath = Storage::disk('s3')->url($uploadedFile);
+                $mediaUrl = $mediaFilePath;
+            } else {
+                throw new \Exception('Invalid storage configuration');
+            }
+
+            $header['parameters'][] = [
+                'type' => strtolower($format),
+                'selection' => 'upload',
+                'value' => $file // Pass file object (ChatService will handle it)
+            ];
+            
+        } else {
+            // Use provided URL
+            $headerLink = $request->input('header_link');
+            
+            if (!$headerLink) {
+                throw new \Exception('header_link is required when header_selection is link');
+            }
+
+            // Validate URL
+            if (!filter_var($headerLink, FILTER_VALIDATE_URL)) {
+                throw new \Exception('header_link must be a valid URL');
+            }
+
+            $header['parameters'][] = [
+                'type' => strtolower($format),
+                'selection' => 'static',
+                'value' => $headerLink
+            ];
+        }
+
+        return $header;
+    }
+
+    /**
+     * Build text header
+     */
+    private function buildTextHeader($request, $headerComponent)
+    {
+        $header = [
+            'format' => 'TEXT',
+            'text' => $headerComponent['text'] ?? null,
+            'parameters' => []
+        ];
+
+        // Get header parameters from request
+        // Support both JSON and form data
+        $headerParams = $request->input('header_params');
+        
+        if ($headerParams) {
+            if (is_string($headerParams)) {
+                $headerParams = json_decode($headerParams, true);
+            }
+            
+            if (is_array($headerParams)) {
+                foreach ($headerParams as $param) {
+                    $header['parameters'][] = [
+                        'type' => 'text',
+                        'selection' => 'static',
+                        'value' => $param
+                    ];
+                }
+            }
+        }
+
+        return $header;
+    }
+
+    /**
+     * Build body
+     */
+    private function buildBody($request, $bodyComponent)
+    {
+        $body = [
+            'text' => $bodyComponent['text'] ?? '',
+            'parameters' => []
+        ];
+
+        // Get body parameters from request
+        // Support both JSON and form data
+        $bodyParams = $request->input('body_params');
+        
+        if ($bodyParams) {
+            if (is_string($bodyParams)) {
+                $bodyParams = json_decode($bodyParams, true);
+            }
+            
+            if (is_array($bodyParams)) {
+                foreach ($bodyParams as $param) {
+                    $body['parameters'][] = [
+                        'type' => 'text',
+                        'selection' => 'static',
+                        'value' => $param
+                    ];
+                }
+            }
+        }
+
+        return $body;
+    }
+
+    /**
+     * Validate header file based on format
+     */
+    private function validateHeaderFile($file, $format)
+    {
+        $rules = [];
+        
+        switch ($format) {
+            case 'IMAGE':
+                $rules = [
+                    'header_file' => 'required|file|mimes:jpg,jpeg,png|max:5120' // 5MB
+                ];
+                break;
+            case 'VIDEO':
+                $rules = [
+                    'header_file' => 'required|file|mimes:mp4,3gp|max:16384' // 16MB
+                ];
+                break;
+            case 'DOCUMENT':
+                $rules = [
+                    'header_file' => 'required|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx|max:102400' // 100MB
+                ];
+                break;
+        }
+
+        $validator = Validator::make(['header_file' => $file], $rules);
+        
+        if ($validator->fails()) {
+            throw new \Exception($validator->errors()->first());
+        }
     }
 
     /**
