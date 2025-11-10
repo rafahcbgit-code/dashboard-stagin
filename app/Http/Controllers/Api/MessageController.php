@@ -307,6 +307,273 @@ class MessageController extends Controller
     }
 
     /**
+     * Send template message
+     * POST /api/v1/chats/{contact_uuid}/messages/template
+     * 
+     * Body:
+     * {
+     *     "template_uuid": "template-123",
+     *     "header": {
+     *         "parameters": [
+     *             { "type": "text", "text": "John" }
+     *         ]
+     *     },
+     *     "body": {
+     *         "parameters": [
+     *             { "type": "text", "text": "#12345" },
+     *             { "type": "text", "text": "confirmed" }
+     *         ]
+     *     }
+     * }
+     */
+    public function sendTemplate(Request $request, $contactUuid)
+    {
+        try {
+            $organizationId = $request->organization_id;
+            $userId = $request->user('sanctum')->id;
+            $this->chatService = new ChatService($organizationId);
+
+            // Validation
+            $validator = Validator::make($request->all(), [
+                'template_uuid' => 'required|string|exists:templates,uuid',
+                'header' => 'nullable|array',
+                'header.parameters' => 'nullable|array',
+                'header.parameters.*.type' => 'required|in:text,image,video,document',
+                'header.parameters.*.text' => 'required_if:header.parameters.*.type,text',
+                'header.parameters.*.image' => 'nullable|array',
+                'header.parameters.*.image.link' => 'required_if:header.parameters.*.type,image|url',
+                'header.parameters.*.video' => 'nullable|array',
+                'header.parameters.*.video.link' => 'required_if:header.parameters.*.type,video|url',
+                'header.parameters.*.document' => 'nullable|array',
+                'header.parameters.*.document.link' => 'required_if:header.parameters.*.type,document|url',
+                'body' => 'nullable|array',
+                'body.parameters' => 'nullable|array',
+                'body.parameters.*.type' => 'required|in:text',
+                'body.parameters.*.text' => 'required',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation error',
+                    'errors' => $validator->errors()
+                ], 422);
+            }
+
+            // Check subscription
+            if (!SubscriptionService::isSubscriptionActive($organizationId)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Please renew or subscribe to a plan to continue!'
+                ], 403);
+            }
+
+            // Check WhatsApp connection
+            if (!$this->isWhatsAppConnected($organizationId)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Please setup your WhatsApp account first!'
+                ], 403);
+            }
+
+            // Find contact
+            $contact = Contact::where('uuid', $contactUuid)
+                ->where('organization_id', $organizationId)
+                ->whereNull('deleted_at')
+                ->first();
+
+            if (!$contact) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Contact not found'
+                ], 404);
+            }
+
+            // Find template
+            $template = Template::where('uuid', $request->template_uuid)
+                ->where('organization_id', $organizationId)
+                ->where('status', 'APPROVED')
+                ->whereNull('deleted_at')
+                ->first();
+
+            if (!$template) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Template not found or not approved'
+                ], 404);
+            }
+
+            // Build template request object for ChatService
+            $templateRequest = $this->buildTemplateRequest($request, $template);
+
+            // Send via ChatService
+            $response = $this->chatService->sendTemplateMessage(
+                $templateRequest,
+                $contact->uuid
+            );
+
+            if (isset($response->success) && $response->success === true) {
+                // Get the sent message from database with media relationship
+                $sentMessage = \App\Models\Chat::with('media')
+                    ->where('uuid', $response->data->chat->uuid ?? null)
+                    ->first();
+
+                if ($sentMessage) {
+                    return response()->json([
+                        'success' => true,
+                        'message' => 'Template sent successfully',
+                        'data' => [
+                            'message' => $this->formatMessage($sentMessage)
+                        ]
+                    ], 200);
+                }
+
+                // Fallback if message not found in DB yet
+                return response()->json([
+                    'success' => true,
+                    'message' => 'Template sent successfully',
+                    'data' => [
+                        'message' => [
+                            'uuid' => $response->data->chat->uuid ?? null,
+                            'type' => 'outbound',
+                            'message_type' => 'template',
+                            'status' => $response->data->messages[0]->message_status ?? 'sent',
+                            'is_read' => false,
+                            'created_at' => now()->toIso8601String(),
+                            'wam_id' => $response->data->messages[0]->id ?? null,
+                            'content' => [
+                                'template_name' => $template->name
+                            ]
+                        ]
+                    ]
+                ], 200);
+            } else {
+                return response()->json([
+                    'success' => false,
+                    'message' => $response->message ?? 'Failed to send template',
+                    'error' => $response->data->error ?? null
+                ], 500);
+            }
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to send template',
+                'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Build template request object for ChatService
+     */
+    private function buildTemplateRequest($request, $template)
+    {
+        $metadata = json_decode($template->metadata, true);
+        $components = $metadata['components'] ?? [];
+
+        $templateRequest = (object)[
+            'template' => $template->uuid,
+            'user_id' => $request->user('sanctum')->id,
+        ];
+
+        // Build header
+        $headerComponent = $this->findComponent($components, 'HEADER');
+        if ($headerComponent) {
+            $templateRequest->header = [
+                'format' => $headerComponent['format'] ?? 'TEXT',
+                'text' => $headerComponent['text'] ?? null,
+                'parameters' => $this->formatHeaderParameters($request->input('header.parameters', []))
+            ];
+        }
+
+        // Build body
+        $bodyComponent = $this->findComponent($components, 'BODY');
+        if ($bodyComponent) {
+            $templateRequest->body = [
+                'text' => $bodyComponent['text'] ?? '',
+                'parameters' => $this->formatBodyParameters($request->input('body.parameters', []))
+            ];
+        }
+
+        // Build footer
+        $footerComponent = $this->findComponent($components, 'FOOTER');
+        if ($footerComponent) {
+            $templateRequest->footer = [
+                'text' => $footerComponent['text'] ?? null
+            ];
+        }
+
+        // Build buttons
+        $buttonsComponent = $this->findComponent($components, 'BUTTONS');
+        if ($buttonsComponent) {
+            $templateRequest->buttons = $buttonsComponent['buttons'] ?? [];
+        }
+
+        return $templateRequest;
+    }
+
+    /**
+     * Find component by type
+     */
+    private function findComponent($components, $type)
+    {
+        foreach ($components as $component) {
+            if ($component['type'] === $type) {
+                return $component;
+            }
+        }
+        return null;
+    }
+
+    /**
+     * Format header parameters for ChatService
+     */
+    private function formatHeaderParameters($parameters)
+    {
+        if (empty($parameters)) {
+            return [];
+        }
+
+        return array_map(function($param) {
+            $formatted = [
+                'type' => $param['type'],
+                'selection' => 'static', // API always uses static values
+            ];
+
+            if ($param['type'] === 'text') {
+                $formatted['value'] = $param['text'];
+            } elseif ($param['type'] === 'image') {
+                $formatted['value'] = $param['image']['link'];
+            } elseif ($param['type'] === 'video') {
+                $formatted['value'] = $param['video']['link'];
+            } elseif ($param['type'] === 'document') {
+                $formatted['value'] = $param['document']['link'];
+            }
+
+            return $formatted;
+        }, $parameters);
+    }
+
+    /**
+     * Format body parameters for ChatService
+     */
+    private function formatBodyParameters($parameters)
+    {
+        if (empty($parameters)) {
+            return [];
+        }
+
+        return array_map(function($param) {
+            return [
+                'type' => 'text',
+                'selection' => 'static',
+                'value' => $param['text']
+            ];
+        }, $parameters);
+    }
+
+    /**
      * Handle interactive message (buttons)
      */
     private function handleInteractiveMessage($request, $contact, $userId)
@@ -395,171 +662,6 @@ class MessageController extends Controller
                 'error' => $response->data->error ?? null
             ], 500);
         }
-    }
-
-    public function sendTemplate(Request $request, $contactUuid){
-        try {
-            $organizationId = $request->organization_id;
-            $userId = $request->user('sanctum')->id;
-            $this->chatService = new ChatService($organizationId);
-
-            // Validation
-            $validator = Validator::make($request->all(), [
-                'template_uuid' => 'required|string|exists:templates,uuid',
-                'parameters' => 'nullable|array',
-            ]);
-
-            if ($validator->fails()) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Validation error',
-                    'errors' => $validator->errors()
-                ], 422);
-            }
-
-            // Check subscription
-            if (!SubscriptionService::isSubscriptionActive($organizationId)) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Please renew or subscribe to a plan to continue!'
-                ], 403);
-            }
-
-            // Check WhatsApp connection
-            if (!$this->isWhatsAppConnected($organizationId)) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Please setup your WhatsApp account first!'
-                ], 403);
-            }
-
-            // Find contact
-            $contact = Contact::where('uuid', $contactUuid)
-                ->where('organization_id', $organizationId)
-                ->whereNull('deleted_at')
-                ->first();
-
-            if (!$contact) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Contact not found'
-                ], 404);
-            }
-
-            // Find template
-            $template = Template::where('uuid', $request->template_uuid)
-                ->where('organization_id', $organizationId)
-                ->where('status', 'APPROVED')
-                ->whereNull('deleted_at')
-                ->first();
-
-            if (!$template) {
-                return response()->json([
-                    'success' => false,
-                    'message' => 'Template not found or not approved'
-                ], 404);
-            }
-
-            // Send via ChatService
-            $response = $this->chatService->sendTemplateMessage((object)[
-                'template' => $request->template_uuid,
-                'user_id' => $userId
-            ], $contact->uuid);
-
-            if (isset($response->success) && $response->success === true) {
-                // Get the sent message from database with media relationship
-                $sentMessage = \App\Models\Chat::with('media')
-                    ->where('uuid', $response->data->chat->uuid ?? null)
-                    ->first();
-
-                if ($sentMessage) {
-                    return response()->json([
-                        'success' => true,
-                        'message' => 'Template sent successfully',
-                        'data' => [
-                            'message' => $this->formatMessage($sentMessage)
-                        ]
-                    ], 200);
-                }
-
-                // Fallback if message not found in DB yet
-                return response()->json([
-                    'success' => true,
-                    'message' => 'Template sent successfully',
-                    'data' => [
-                        'message' => [
-                            'uuid' => $response->data->chat->uuid ?? null,
-                            'type' => 'outbound',
-                            'message_type' => 'template',
-                            'status' => $response->data->messages[0]->message_status ?? 'sent',
-                            'is_read' => false,
-                            'created_at' => now()->toIso8601String(),
-                            'wam_id' => $response->data->messages[0]->id ?? null,
-                            'content' => [
-                                'template_name' => $template->name
-                            ]
-                        ]
-                    ]
-                ], 200);
-            } else {
-                return response()->json([
-                    'success' => false,
-                    'message' => $response->message ?? 'Failed to send template',
-                    'error' => $response->data->error ?? null
-                ], 500);
-            }
-
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to send template',
-                'error' => $e->getMessage()
-            ], 500);
-        }
-    }
-
-    /**
-     * Build template data with parameters
-     */
-    private function buildTemplateData($template, $parameters, $contact)
-    {
-        $templateData = [
-            'name' => $template->name,
-            'language' => [
-                'code' => $template->language
-            ]
-        ];
-
-        // Add components with parameters if provided
-        if (!empty($parameters)) {
-            $components = [];
-
-            // Header parameters
-            if (isset($parameters['header']) && is_array($parameters['header'])) {
-                $components[] = [
-                    'type' => 'header',
-                    'parameters' => array_map(function($value) {
-                        return ['type' => 'text', 'text' => $value];
-                    }, $parameters['header'])
-                ];
-            }
-
-            // Body parameters
-            if (isset($parameters['body']) && is_array($parameters['body'])) {
-                $components[] = [
-                    'type' => 'body',
-                    'parameters' => array_map(function($value) {
-                        return ['type' => 'text', 'text' => $value];
-                    }, $parameters['body'])
-                ];
-            }
-
-            if (!empty($components)) {
-                $templateData['components'] = $components;
-            }
-        }
-
-        return $templateData;
     }
 
     /**
