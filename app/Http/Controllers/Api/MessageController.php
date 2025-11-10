@@ -466,6 +466,10 @@ class MessageController extends Controller
         $templateRequest = (object)[
             'template' => $template->uuid,
             'user_id' => $request->user('sanctum')->id,
+            'header' => null,    //  Initialize all properties
+            'body' => null,      //  Initialize all properties
+            'footer' => null,    //  Initialize all properties
+            'buttons' => null,   //  Initialize all properties
         ];
 
         $mediaId = null; // Track media ID
@@ -491,20 +495,34 @@ class MessageController extends Controller
         $bodyComponent = $this->findComponent($components, 'BODY');
         if ($bodyComponent) {
             $templateRequest->body = $this->buildBody($request, $bodyComponent);
-        }
-
-        // Build footer
-        $footerComponent = $this->findComponent($components, 'FOOTER');
-        if ($footerComponent) {
-            $templateRequest->footer = [
-                'text' => $footerComponent['text'] ?? null
+        } else {
+            //  Set empty body structure if no body component
+            $templateRequest->body = [
+                'text' => '',
+                'parameters' => []
             ];
         }
 
-        // Build buttons
+        // Build footer -  Always set, even if null
+        $footerComponent = $this->findComponent($components, 'FOOTER');
+        if ($footerComponent && isset($footerComponent['text'])) {
+            $templateRequest->footer = [
+                'text' => $footerComponent['text']
+            ];
+        } else {
+            //  Set null footer structure if no footer
+            $templateRequest->footer = [
+                'text' => null
+            ];
+        }
+
+        // Build buttons -  Always set, even if empty
         $buttonsComponent = $this->findComponent($components, 'BUTTONS');
-        if ($buttonsComponent) {
-            $templateRequest->buttons = $buttonsComponent['buttons'] ?? [];
+        if ($buttonsComponent && isset($buttonsComponent['buttons'])) {
+            $templateRequest->buttons = $buttonsComponent['buttons'];
+        } else {
+            //  Set empty buttons if no buttons component
+            $templateRequest->buttons = [];
         }
 
         // Add media ID if present (for ChatService to use)

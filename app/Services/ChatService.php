@@ -475,7 +475,6 @@ class ChatService
 
     public function sendMessage(object $request)
     {
-        // ✅ Get user ID from request OR from auth
         $userId = $request->user_id ?? $this->getUserId();
 
         if($request->type === 'text'){
@@ -505,9 +504,13 @@ class ChatService
 
     public function sendTemplateMessage(object $request, $uuid)
     {
+        $userId = $request->user_id ?? $this->getUserId();
+
         $template = Template::where('uuid', $request->template)->first();
         $contact = Contact::where('uuid', $uuid)->first();
-        $mediaId = null;
+        
+        // Extract media_id from request if already uploaded
+        $mediaId = $request->media_id ?? null;
 
         if(in_array($request->header['format'], ['IMAGE', 'DOCUMENT', 'VIDEO'])){
             $header = $request->header;
@@ -518,6 +521,7 @@ class ChatService
         
                 foreach ($request->header['parameters'] as $key => $parameter) {
                     if ($parameter['selection'] === 'upload') {
+                        // This is now only for web version (when file object is passed)
                         $storage = Setting::where('key', 'storage_system')->first()->value;
                         $fileName = $parameter['value']->getClientOriginalName();
                         $fileContent = $parameter['value'];
@@ -550,6 +554,7 @@ class ChatService
 
                         $mediaId = $chatMedia->id;
                     } else {
+                        // For API (when URL is passed) - use the URL directly
                         $mediaUrl = $parameter['value'];
                     }
         
@@ -564,15 +569,15 @@ class ChatService
             $metadata['header'] = $request->header;
         }
 
-        $metadata['body'] = $request->body;
-        $metadata['footer'] = $request->footer;
-        $metadata['buttons'] = $request->buttons;
+        $metadata['body'] = $request->body ?? ['text' => '', 'parameters' => []];
+        $metadata['footer'] = $request->footer ?? ['text' => null];
+        $metadata['buttons'] = $request->buttons ?? [];
         $metadata['media'] = $mediaId;
 
         //Build Template to send
         $template = $this->buildTemplate($template->name, $template->language, json_decode(json_encode($metadata)), $contact);
         
-        return $this->whatsappService->sendTemplateMessage($contact->uuid, $template, auth()->user()->id, NULL, $mediaId);
+        return $this->whatsappService->sendTemplateMessage($contact->uuid, $template, $userId, NULL, $mediaId);
     }
 
     public function clearMessage($uuid)
