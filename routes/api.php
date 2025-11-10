@@ -93,7 +93,7 @@ Route::prefix('v1')->group(function () {
             // Messages (Send) 
             Route::post('/chats/{contact_uuid}/messages', [App\Http\Controllers\Api\MessageController::class, 'sendMessage']);
             Route::post('/chats/{contact_uuid}/messages/template', [App\Http\Controllers\Api\MessageController::class, 'sendTemplate']);
-
+            
             // Contact Management 
             Route::get('/contacts/{contact_uuid}/labels', [App\Http\Controllers\Api\ContactController::class, 'getLabels']);
             Route::put('/contacts/{contact_uuid}/labels', [App\Http\Controllers\Api\ContactController::class, 'updateLabels']);
@@ -105,6 +105,10 @@ Route::prefix('v1')->group(function () {
             Route::get('/chats/{contact_uuid}/ticket', [App\Http\Controllers\Api\TicketController::class, 'getTicket']);
             Route::put('/chats/{contact_uuid}/status', [App\Http\Controllers\Api\TicketController::class, 'updateStatus']);
             Route::put('/chats/{contact_uuid}/assign', [App\Http\Controllers\Api\TicketController::class, 'assignAgent']);
+
+            // Templates
+            Route::get('/templates', [App\Http\Controllers\Api\TemplateController::class, 'index']);
+            Route::get('/templates/{uuid}', [App\Http\Controllers\Api\TemplateController::class, 'show']);
         });
     });
 });
