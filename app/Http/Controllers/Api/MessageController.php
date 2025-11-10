@@ -542,8 +542,8 @@ class MessageController extends Controller
         $selection = $request->input('header_selection', 'link');
         
         $header = [
-            'format' => $format,
-            'parameters' => null // Initialize as null
+            'format' => $format, // Keep uppercase: IMAGE, VIDEO, DOCUMENT
+            'parameters' => null
         ];
 
         if ($selection === 'upload') {
@@ -580,9 +580,9 @@ class MessageController extends Controller
             $chatMedia->created_at = now();
             $chatMedia->save();
 
-            // Set parameters with uploaded URL
+            // Build parameter in format ChatService expects
             $header['parameters'] = [[
-                'type' => strtolower($format),
+                'type' => $format, // Keep UPPERCASE: IMAGE, VIDEO, DOCUMENT
                 'selection' => 'static', // Use 'static' since we already have URL
                 'value' => $mediaUrl
             ]];
@@ -600,8 +600,9 @@ class MessageController extends Controller
                 throw new \Exception('header_link must be a valid URL');
             }
 
+            // Build parameter in format ChatService expects
             $header['parameters'] = [[
-                'type' => strtolower($format),
+                'type' => $format, // Keep UPPERCASE: IMAGE, VIDEO, DOCUMENT
                 'selection' => 'static',
                 'value' => $headerLink
             ]];
