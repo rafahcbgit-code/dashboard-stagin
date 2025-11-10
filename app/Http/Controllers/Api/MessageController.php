@@ -468,6 +468,8 @@ class MessageController extends Controller
             'user_id' => $request->user('sanctum')->id,
         ];
 
+        $mediaId = null; // Track media ID
+
         // Find header component
         $headerComponent = $this->findComponent($components, 'HEADER');
         
@@ -476,7 +478,9 @@ class MessageController extends Controller
             
             // Check if this is a media header (IMAGE, VIDEO, DOCUMENT)
             if (in_array($format, ['IMAGE', 'VIDEO', 'DOCUMENT'])) {
-                $templateRequest->header = $this->buildMediaHeader($request, $format, $organizationId);
+                $headerData = $this->buildMediaHeader($request, $format, $organizationId);
+                $templateRequest->header = $headerData;
+                $mediaId = $headerData['media_id'] ?? null; // Extract media ID
             } else {
                 // TEXT header
                 $templateRequest->header = $this->buildTextHeader($request, $headerComponent);
@@ -503,6 +507,11 @@ class MessageController extends Controller
             $templateRequest->buttons = $buttonsComponent['buttons'] ?? [];
         }
 
+        // Add media ID if present (for ChatService to use)
+        if ($mediaId) {
+            $templateRequest->media_id = $mediaId;
+        }
+
         return $templateRequest;
     }
 
@@ -512,25 +521,22 @@ class MessageController extends Controller
      */
     private function buildMediaHeader($request, $format, $organizationId)
     {
-        $selection = $request->input('header_selection', 'link'); // 'upload' or 'link'
+        $selection = $request->input('header_selection', 'link');
         
         $header = [
             'format' => $format,
-            'parameters' => []
+            'parameters' => null // Initialize as null
         ];
 
         if ($selection === 'upload') {
-            // Validate file upload
             if (!$request->hasFile('header_file')) {
                 throw new \Exception('header_file is required when header_selection is upload');
             }
 
             $file = $request->file('header_file');
-            
-            // Validate file type based on format
             $this->validateHeaderFile($file, $format);
 
-            // Upload file (same logic as web version)
+            // Upload file
             $storage = Setting::where('key', 'storage_system')->first()->value;
             $fileName = $file->getClientOriginalName();
 
@@ -546,30 +552,43 @@ class MessageController extends Controller
                 throw new \Exception('Invalid storage configuration');
             }
 
-            $header['parameters'][] = [
+            // Save media
+            $chatMedia = new \App\Models\ChatMedia;
+            $chatMedia->name = $fileName;
+            $chatMedia->location = $storage === 'aws' ? 'amazon' : 'local';
+            $chatMedia->path = $mediaUrl;
+            $chatMedia->type = $file->getMimeType();
+            $chatMedia->size = $file->getSize();
+            $chatMedia->created_at = now();
+            $chatMedia->save();
+
+            // Set parameters with uploaded URL
+            $header['parameters'] = [[
                 'type' => strtolower($format),
-                'selection' => 'upload',
-                'value' => $file // Pass file object (ChatService will handle it)
-            ];
+                'selection' => 'static', // Use 'static' since we already have URL
+                'value' => $mediaUrl
+            ]];
+            
+            $header['media_id'] = $chatMedia->id;
             
         } else {
-            // Use provided URL
             $headerLink = $request->input('header_link');
             
             if (!$headerLink) {
                 throw new \Exception('header_link is required when header_selection is link');
             }
 
-            // Validate URL
             if (!filter_var($headerLink, FILTER_VALIDATE_URL)) {
                 throw new \Exception('header_link must be a valid URL');
             }
 
-            $header['parameters'][] = [
+            $header['parameters'] = [[
                 'type' => strtolower($format),
                 'selection' => 'static',
                 'value' => $headerLink
-            ];
+            ]];
+            
+            $header['media_id'] = null;
         }
 
         return $header;
