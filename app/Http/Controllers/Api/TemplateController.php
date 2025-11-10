@@ -12,8 +12,7 @@ class TemplateController extends Controller
      * Get all approved templates for organization
      * GET /api/v1/templates
      */
-    public function index(Request $request)
-    {
+    public function index(Request $request){
         try {
             $organizationId = $request->organization_id;
 
@@ -27,7 +26,6 @@ class TemplateController extends Controller
                     try {
                         $metadata = @json_decode($template->metadata, true);
                         
-                        // If json_decode fails, return minimal data
                         if (json_last_error() !== JSON_ERROR_NONE) {
                             \Log::warning("Template {$template->uuid} has corrupt metadata: " . json_last_error_msg());
                             
@@ -44,7 +42,7 @@ class TemplateController extends Controller
                                 'button_count' => 0,
                                 'parameter_count' => 0,
                                 'created_at' => $template->created_at,
-                                'is_corrupt' => true // Flag for frontend
+                                'is_corrupt' => true
                             ];
                         }
                         
@@ -53,11 +51,11 @@ class TemplateController extends Controller
                         // Extract header info
                         $headerInfo = $this->extractHeaderInfo($components);
                         
-                        // Extract body preview
                         $bodyPreview = $this->extractBodyPreview($components);
+                        $bodyPreview = $this->cleanUtf8($bodyPreview);
                         
-                        // Extract footer
                         $footer = $this->extractFooter($components);
+                        $footer = $this->cleanUtf8($footer);
                         
                         // Count buttons
                         $buttonCount = $this->countButtons($components);
@@ -67,7 +65,7 @@ class TemplateController extends Controller
 
                         return [
                             'uuid' => $template->uuid,
-                            'name' => $template->name,
+                            'name' => $this->cleanUtf8($template->name),
                             'category' => $template->category,
                             'language' => $template->language,
                             'status' => $template->status,
@@ -80,7 +78,6 @@ class TemplateController extends Controller
                             'created_at' => $template->created_at,
                         ];
                     } catch (\Exception $e) {
-                        // Catch any other errors per template
                         \Log::error("Error processing template {$template->uuid}: " . $e->getMessage());
                         
                         return [
@@ -99,19 +96,14 @@ class TemplateController extends Controller
                             'is_corrupt' => true
                         ];
                     }
-                })
-                ->filter(function($template) {
-                    // Optionally filter out corrupt templates
-                    // return !isset($template['is_corrupt']);
-                    return true; // Keep all templates for now
                 });
 
             return response()->json([
                 'success' => true,
                 'data' => [
-                    'templates' => $templates->values() // Reset array keys
+                    'templates' => $templates->values()
                 ]
-            ], 200);
+            ], 200, [], JSON_UNESCAPED_UNICODE);
 
         } catch (\Exception $e) {
             return response()->json([
@@ -127,12 +119,10 @@ class TemplateController extends Controller
      * Get template details with full structure
      * GET /api/v1/templates/{uuid}
      */
-    public function show(Request $request, $uuid)
-    {
+    public function show(Request $request, $uuid){
         try {
             $organizationId = $request->organization_id;
 
-            // Find template
             $template = Template::where('uuid', $uuid)
                 ->where('organization_id', $organizationId)
                 ->where('status', 'APPROVED')
@@ -146,7 +136,6 @@ class TemplateController extends Controller
                 ], 404);
             }
 
-            // Safely decode metadata
             $metadata = @json_decode($template->metadata, true);
             
             if (json_last_error() !== JSON_ERROR_NONE) {
@@ -159,10 +148,9 @@ class TemplateController extends Controller
 
             $components = $metadata['components'] ?? [];
 
-            // Build detailed component structure
             $templateStructure = [
                 'uuid' => $template->uuid,
-                'name' => $template->name,
+                'name' => $this->cleanUtf8($template->name), // Clean UTF-8
                 'category' => $template->category,
                 'language' => $template->language,
                 'status' => $template->status,
@@ -174,12 +162,13 @@ class TemplateController extends Controller
                 ]
             ];
 
+            // Use JSON_UNESCAPED_UNICODE
             return response()->json([
                 'success' => true,
                 'data' => [
                     'template' => $templateStructure
                 ]
-            ], 200);
+            ], 200, [], JSON_UNESCAPED_UNICODE);
 
         } catch (\Exception $e) {
             return response()->json([
@@ -218,8 +207,8 @@ class TemplateController extends Controller
     {
         foreach ($components as $component) {
             if ($component['type'] === 'BODY') {
-                $text = $component['text'] ?? '';
-                return strlen($text) > 100 ? substr($text, 0, 100) . '...' : $text;
+                $text = $this->cleanUtf8($component['text'] ?? ''); //  Clean UTF-8
+                return mb_strlen($text) > 100 ? mb_substr($text, 0, 100) . '...' : $text;
             }
         }
 
@@ -233,7 +222,7 @@ class TemplateController extends Controller
     {
         foreach ($components as $component) {
             if ($component['type'] === 'FOOTER') {
-                return $component['text'] ?? null;
+                return $this->cleanUtf8($component['text'] ?? null); // Clean UTF-8
             }
         }
 
@@ -286,7 +275,7 @@ class TemplateController extends Controller
                 ];
 
                 if (isset($component['text'])) {
-                    $header['text'] = $component['text'];
+                    $header['text'] = $this->cleanUtf8($component['text']);
                     $header['parameters'] = $this->extractParameters($component['text'], $component['example'] ?? null);
                 }
 
@@ -309,7 +298,7 @@ class TemplateController extends Controller
         foreach ($components as $component) {
             if ($component['type'] === 'BODY') {
                 return [
-                    'text' => $component['text'] ?? '',
+                    'text' => $this->cleanUtf8($component['text'] ?? ''),
                     'parameters' => $this->extractParameters($component['text'] ?? '', $component['example'] ?? null),
                 ];
             }
@@ -326,7 +315,7 @@ class TemplateController extends Controller
         foreach ($components as $component) {
             if ($component['type'] === 'FOOTER') {
                 return [
-                    'text' => $component['text'] ?? null
+                    'text' => $this->cleanUtf8($component['text'] ?? null)
                 ];
             }
         }
@@ -344,7 +333,7 @@ class TemplateController extends Controller
                 return array_map(function($button) {
                     $buttonData = [
                         'type' => $button['type'],
-                        'text' => $button['text'] ?? null,
+                        'text' => $this->cleanUtf8($button['text'] ?? null), // Clean UTF-8
                     ];
 
                     if (isset($button['url'])) {
@@ -384,5 +373,23 @@ class TemplateController extends Controller
         }
 
         return $parameters;
+    }
+
+    /**
+     * Clean UTF-8 string to prevent encoding issues
+     */
+    private function cleanUtf8($string)
+    {
+        if ($string === null) {
+            return null;
+        }
+        
+        // Remove any invalid UTF-8 sequences
+        $string = mb_convert_encoding($string, 'UTF-8', 'UTF-8');
+        
+        // Remove any non-UTF-8 characters
+        $string = preg_replace('/[^\x{0009}\x{000a}\x{000d}\x{0020}-\x{D7FF}\x{E000}-\x{FFFD}]+/u', '', $string);
+        
+        return $string;
     }
 }
