@@ -24,44 +24,92 @@ class TemplateController extends Controller
                 ->orderBy('name', 'asc')
                 ->get()
                 ->map(function($template) {
-                    $metadata = json_decode($template->metadata, true);
-                    $components = $metadata['components'] ?? [];
+                    try {
+                        $metadata = @json_decode($template->metadata, true);
+                        
+                        // If json_decode fails, return minimal data
+                        if (json_last_error() !== JSON_ERROR_NONE) {
+                            \Log::warning("Template {$template->uuid} has corrupt metadata: " . json_last_error_msg());
+                            
+                            return [
+                                'uuid' => $template->uuid,
+                                'name' => $template->name,
+                                'category' => $template->category,
+                                'language' => $template->language,
+                                'status' => $template->status,
+                                'has_header' => false,
+                                'header_format' => null,
+                                'body_preview' => 'Template data unavailable',
+                                'footer' => null,
+                                'button_count' => 0,
+                                'parameter_count' => 0,
+                                'created_at' => $template->created_at,
+                                'is_corrupt' => true // Flag for frontend
+                            ];
+                        }
+                        
+                        $components = $metadata['components'] ?? [];
 
-                    // Extract header info
-                    $headerInfo = $this->extractHeaderInfo($components);
-                    
-                    // Extract body preview
-                    $bodyPreview = $this->extractBodyPreview($components);
-                    
-                    // Extract footer
-                    $footer = $this->extractFooter($components);
-                    
-                    // Count buttons
-                    $buttonCount = $this->countButtons($components);
-                    
-                    // Count parameters
-                    $parameterCount = $this->countParameters($components);
+                        // Extract header info
+                        $headerInfo = $this->extractHeaderInfo($components);
+                        
+                        // Extract body preview
+                        $bodyPreview = $this->extractBodyPreview($components);
+                        
+                        // Extract footer
+                        $footer = $this->extractFooter($components);
+                        
+                        // Count buttons
+                        $buttonCount = $this->countButtons($components);
+                        
+                        // Count parameters
+                        $parameterCount = $this->countParameters($components);
 
-                    return [
-                        'uuid' => $template->uuid,
-                        'name' => $template->name,
-                        'category' => $template->category,
-                        'language' => $template->language,
-                        'status' => $template->status,
-                        'has_header' => $headerInfo['has_header'],
-                        'header_format' => $headerInfo['format'],
-                        'body_preview' => $bodyPreview,
-                        'footer' => $footer,
-                        'button_count' => $buttonCount,
-                        'parameter_count' => $parameterCount,
-                        'created_at' => $template->created_at,
-                    ];
+                        return [
+                            'uuid' => $template->uuid,
+                            'name' => $template->name,
+                            'category' => $template->category,
+                            'language' => $template->language,
+                            'status' => $template->status,
+                            'has_header' => $headerInfo['has_header'],
+                            'header_format' => $headerInfo['format'],
+                            'body_preview' => $bodyPreview,
+                            'footer' => $footer,
+                            'button_count' => $buttonCount,
+                            'parameter_count' => $parameterCount,
+                            'created_at' => $template->created_at,
+                        ];
+                    } catch (\Exception $e) {
+                        // Catch any other errors per template
+                        \Log::error("Error processing template {$template->uuid}: " . $e->getMessage());
+                        
+                        return [
+                            'uuid' => $template->uuid,
+                            'name' => $template->name,
+                            'category' => $template->category,
+                            'language' => $template->language,
+                            'status' => $template->status,
+                            'has_header' => false,
+                            'header_format' => null,
+                            'body_preview' => 'Error loading template',
+                            'footer' => null,
+                            'button_count' => 0,
+                            'parameter_count' => 0,
+                            'created_at' => $template->created_at,
+                            'is_corrupt' => true
+                        ];
+                    }
+                })
+                ->filter(function($template) {
+                    // Optionally filter out corrupt templates
+                    // return !isset($template['is_corrupt']);
+                    return true; // Keep all templates for now
                 });
 
             return response()->json([
                 'success' => true,
                 'data' => [
-                    'templates' => $templates
+                    'templates' => $templates->values() // Reset array keys
                 ]
             ], 200);
 
@@ -69,7 +117,8 @@ class TemplateController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch templates',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'line' => $e->getLine()
             ], 500);
         }
     }
@@ -97,7 +146,17 @@ class TemplateController extends Controller
                 ], 404);
             }
 
-            $metadata = json_decode($template->metadata, true);
+            // Safely decode metadata
+            $metadata = @json_decode($template->metadata, true);
+            
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Template data is corrupt or unavailable',
+                    'error' => 'JSON decode error: ' . json_last_error_msg()
+                ], 500);
+            }
+
             $components = $metadata['components'] ?? [];
 
             // Build detailed component structure
@@ -126,7 +185,8 @@ class TemplateController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch template details',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'line' => $e->getLine()
             ], 500);
         }
     }
