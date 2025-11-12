@@ -450,7 +450,8 @@ class MessageController extends Controller
                 'success' => false,
                 'message' => 'Failed to send template',
                 'error' => $e->getMessage(),
-                'line' => $e->getLine()
+                'line' => $e->getLine(),
+                'file' => $e->getFile()
             ], 500);
         }
     }
@@ -489,6 +490,11 @@ class MessageController extends Controller
                 // TEXT header
                 $templateRequest->header = $this->buildTextHeader($request, $headerComponent);
             }
+        }else {
+            $templateRequest->header = [
+                'format' => null,
+                'parameters' => null
+            ];
         }
 
         // Build body
