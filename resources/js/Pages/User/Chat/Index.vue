@@ -128,7 +128,7 @@
     let updateDebounceTimer = null;
     let pendingChats = [];
     let isRequestInFlight = ref(false);
-    const DEBOUNCE_DELAY = 1000 * 10;
+    const DEBOUNCE_DELAY = 1000 * 30;
     const BROADCAST_CHANNEL_NAME = `chat-sync-${props.organizationId}`;
     let broadcastChannel = null;
     let isLeaderTab = ref(false);

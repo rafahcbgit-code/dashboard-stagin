@@ -34,8 +34,8 @@ class ChatService
     private $whatsappService;
     private $organizationId;
 
-    private $throttleSeconds = 10; 
-    private $cacheTtl = 10;       
+    private $throttleSeconds = 15; 
+    private $cacheTtl = 30;       
 
 
     public function __construct($organizationId)
