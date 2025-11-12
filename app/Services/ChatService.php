@@ -512,10 +512,10 @@ class ChatService
         // Extract media_id from request if already uploaded
         $mediaId = $request->media_id ?? null;
 
-        if(in_array($request->header['format'], ['IMAGE', 'DOCUMENT', 'VIDEO'])){
+        if(isset($request->header['format']) && in_array($request->header['format'], ['IMAGE', 'DOCUMENT', 'VIDEO'])){
             $header = $request->header;
             
-            if ($request->header['parameters']) {
+            if (isset($request->header['parameters']) && $request->header['parameters']) {
                 $metadata['header']['format'] = $header['format'];
                 $metadata['header']['parameters'] = [];
         
@@ -566,7 +566,7 @@ class ChatService
                 }
             }
         } else {
-            $metadata['header'] = $request->header;
+            $metadata['header'] = $request->header ?? null;
         }
 
         $metadata['body'] = $request->body ?? ['text' => '', 'parameters' => []];
