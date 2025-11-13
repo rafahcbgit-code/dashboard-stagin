@@ -17,6 +17,7 @@ $providers = [
     App\Providers\BroadcastConfigServiceProvider::class,
     App\Providers\MailConfigServiceProvider::class,
     App\Providers\RouteServiceProvider::class,
+        App\Providers\TelescopeServiceProvider::class,
     App\Providers\RecaptchaServiceProvider::class,
     Mews\Purifier\PurifierServiceProvider::class,
 ];
