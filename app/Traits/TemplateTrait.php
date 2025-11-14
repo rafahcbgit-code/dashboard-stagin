@@ -15,12 +15,7 @@ trait TemplateTrait{
         $campaignTemplate = Template::where('id', $campaign->template_id)->first();
 
         $metadata = json_decode($campaign->metadata);
-         Log::channel('campaigns')->debug('TEMPLATE_METADATA_LOADED', [
-            'campaign_id' => $campaignId,
-            'template_name' => $campaignTemplate->name,
-            'template_language' => $campaignTemplate->language
-        ]);
-
+        
         return $this->buildTemplate($campaignTemplate->name, $campaignTemplate->language, $metadata, $contact);
     }
 
