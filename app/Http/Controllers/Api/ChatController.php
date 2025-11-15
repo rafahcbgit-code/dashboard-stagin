@@ -18,7 +18,7 @@ class ChatController extends Controller
      * Query Parameters:
      * - search: string (search by name or phone)
      * - labels: string (comma-separated label IDs)
-     * - ticket_status: string (all, unassigned, open, closed)
+     * - ticket_status: string (all, unassigned, open, closed, assigned_to_me)
      * - sort: string (newest, oldest)
      * - page: integer
      * - per_page: integer (default: 20, max: 50)
@@ -30,7 +30,7 @@ class ChatController extends Controller
             $validator = Validator::make($request->all(), [
                 'search' => 'nullable|string|max:255',
                 'labels' => 'nullable|string', // comma-separated IDs
-                'ticket_status' => 'nullable|in:all,unassigned,open,closed',
+                'ticket_status' => 'nullable|in:all,unassigned,open,closed,assigned_to_me',
                 'sort' => 'nullable|in:newest,oldest',
                 'page' => 'nullable|integer|min:1',
                 'per_page' => 'nullable|integer|min:1|max:50',
@@ -94,6 +94,12 @@ class ChatController extends Controller
                     // Chats where ticket status is "closed"
                     $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
                         ->where('chat_tickets.status', 'closed');
+                } elseif ($ticketStatus === 'assigned_to_me') {
+                    // Chats assigned to current user
+                    $currentUserId = $request->user('sanctum')->id;
+                    
+                    $query->join('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
+                        ->where('chat_tickets.assigned_to', $currentUserId);
                 }
                 
                 // Ensure we select only contact columns to avoid conflicts
