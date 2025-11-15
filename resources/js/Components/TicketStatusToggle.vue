@@ -7,6 +7,10 @@
         currentLanguage: String,
         status: String,
         rowCount: Number,
+        teamRole: {
+            type: String,
+            default: 'owner'
+        }
     })
 
     const isOpen = ref(false);
@@ -50,6 +54,16 @@
         </div>
         <div v-if="isOpen" class="absolute bg-white z-10 px-1 py-2 mt-2 shadow w-full rounded-md text-black">
             <div>
+                <Link 
+                    v-if="teamRole === 'agent'" 
+                    :href="'/chats?status=assigned_to_me'" 
+                    class="block px-2 py-1 cursor-pointer hover:bg-slate-100 rounded-md"
+                >
+                    <div class="flex items-center space-x-2">
+                        <span>{{ $t('Assigned to Me') }}</span>
+                    </div>
+                </Link>
+
                 <Link :href="'/chats?status=unassigned'" class="block px-2 py-1 cursor-pointer hover:bg-slate-100 rounded-md">
                     {{ $t('Unassigned')}} 
                 </Link>

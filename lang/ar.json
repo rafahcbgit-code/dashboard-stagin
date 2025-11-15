@@ -893,5 +893,7 @@
     "Choose the order in which the system searches for a matching response when replying to messages. Set the sequence for Basic Replies, Automated Flows, and AI Assistant to control how replies are prioritized.": "اختر الترتيب الذي يستخدمه النظام للبحث عن استجابة مطابقة عند الرد على الرسائل. قم بتعيين تسلسل الردود الأساسية، والتدفقات الآلية، ومساعد الذكاء الاصطناعي للتحكم في أولوية الردود",
     "If a flow is already active for a contact, the response sequence will not be followed.": "إذا كان هناك تدفّق نشط بالفعل لجهة الاتصال، فلن يتم اتباع تسلسل الاستجابة",
     "Enable this option to reassign chats when a contact re-opens a closed conversation.": "قم بتفعيل هذا الخيار لإعادة تعيين الدردشات عندما يعيد جهة الاتصال فتح محادثة مغلقة",
-    "Disable this option, if you want live chat agents to have access only to new conversations.": "قم بتعطيل هذا الخيار إذا كنت ترغب في أن يكون لوكلاء الدردشة المباشرة الوصول فقط إلى المحادثات الجديدة"
+    "Disable this option, if you want live chat agents to have access only to new conversations.": "قم بتعطيل هذا الخيار إذا كنت ترغب في أن يكون لوكلاء الدردشة المباشرة الوصول فقط إلى المحادثات الجديدة",
+    "Assigned to Me": "المسندة لي",
+    "Assigned_to_me": "المسندة لي"
 }

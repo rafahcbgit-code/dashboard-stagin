@@ -102,7 +102,7 @@ class Contact extends Model {
         return $this->hasMany(ChatLog::class);
     }
 
-    public function contactsWithChats($organizationId, $searchTerm = null, $ticketingActive = false, $ticketState = null, $sortDirection = 'asc', $role = 'owner', $allowAgentsViewAllChats = true, $labelFilters = [])
+    public function contactsWithChats($organizationId, $searchTerm = null, $ticketingActive = false, $ticketState = null, $sortDirection = 'asc', $role = 'owner', $allowAgentsViewAllChats = true, $labelFilters = [], $assignedToMe = false)
     {
         $query = $this->newQuery()
             ->where('contacts.organization_id', $organizationId)
@@ -129,6 +129,10 @@ class Contact extends Model {
         if ($ticketingActive) {
             $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id');
 
+            // "Assigned to Me" filter
+            if ($assignedToMe && $role === 'agent') {
+                $query->where('chat_tickets.assigned_to', auth()->user()->id);
+            } 
             if ($ticketState === 'unassigned') {
                 $query->whereNull('chat_tickets.assigned_to');
             } elseif ($ticketState !== null && $ticketState !== 'all') {
@@ -210,7 +214,7 @@ class Contact extends Model {
         return $query->paginate(10);*/
     }
 
-    public function contactsWithChatsCount($organizationId, $searchTerm = null, $ticketingActive = false, $ticketState = null, $sortDirection = 'asc', $role = 'owner', $allowAgentsViewAllChats = true, $labelFilters = [])
+    public function contactsWithChatsCount($organizationId, $searchTerm = null, $ticketingActive = false, $ticketState = null, $sortDirection = 'asc', $role = 'owner', $allowAgentsViewAllChats = true, $labelFilters = [], $assignedToMe = false)
     {
         $query = $this->newQuery()
             ->where('contacts.organization_id', $organizationId)
@@ -232,6 +236,11 @@ class Contact extends Model {
                 $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id');
             }
 
+            // "Assigned to Me" filter
+            if ($assignedToMe && $role === 'agent') {
+                $query->where('chat_tickets.assigned_to', auth()->user()->id);
+            }
+
             if($role == 'agent' && $allowAgentsViewAllChats == false){
                 $query->where(function($q) {
                     $q->where('chat_tickets.assigned_to', auth()->user()->id);
@@ -239,10 +248,10 @@ class Contact extends Model {
             }
         }
 
-        if($role == 'agent' && $allowAgentsViewAllChats == false){
+        if($role == 'agent' && $allowAgentsViewAllChats == false && !$assignedToMe){
             $query->where(function($q) {
                 $q->whereNull('chat_tickets.assigned_to')
-                  ->orWhere('chat_tickets.assigned_to', auth()->user()->id);
+                ->orWhere('chat_tickets.assigned_to', auth()->user()->id);
             });
         }
 

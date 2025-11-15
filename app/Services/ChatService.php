@@ -112,14 +112,22 @@ class ChatService
         // Get label filters from request
         $labelFilters = $request->query('labels') ? explode(',', $request->query('labels')) : [];
 
+        $assignedToMe = ($ticketState === 'assigned_to_me');
+
+        if ($assignedToMe) {
+            $ticketState = 'all';
+        }
+        
         // Generate unique cache key - now including page number
         $page = $request->get('page', 1);
         $labelKey = !empty($labelFilters) ? md5(json_encode($labelFilters)) : 'none';
         $searchKey = $searchTerm ? md5($searchTerm) : 'none';
+        $statusKey = $request->status ?? 'all';
+        
         $cacheKey = sprintf(
             'chat_list:%d:%s:%s:%s:%s:%s:%d',
             $this->organizationId,
-            $ticketState,
+            $statusKey,
             $searchKey,
             $labelKey,
             $sortDirection,
@@ -170,7 +178,8 @@ class ChatService
             $sortDirection, 
             $role, 
             $allowAgentsToViewAllChats, 
-            $labelFilters
+            $labelFilters,
+            $assignedToMe
         ) {
             $contacts = $contact->contactsWithChats(
                 $this->organizationId, 
@@ -180,7 +189,8 @@ class ChatService
                 $sortDirection, 
                 $role, 
                 $allowAgentsToViewAllChats,
-                $labelFilters
+                $labelFilters,
+                $assignedToMe
             );
             
             $rowCount = $contact->contactsWithChatsCount(
@@ -191,7 +201,8 @@ class ChatService
                 $sortDirection, 
                 $role, 
                 $allowAgentsToViewAllChats,
-                $labelFilters
+                $labelFilters,
+                $assignedToMe
             );
 
             return [
