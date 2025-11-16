@@ -67,6 +67,8 @@ Route::get('/logout', [App\Http\Controllers\AuthController::class, 'logout'])->n
 //Webhook
 Route::match(['get', 'post'], '/webhook/whatsapp/{identifier?}', [App\Http\Controllers\WebhookController::class, 'handle']);
 Route::match(['get', 'post'], '/webhook/waba', [App\Http\Controllers\WebhookController::class, 'whatsappWebhook']);
+Route::match(['get', 'post'], '/webhook/waba/new', [App\Http\Controllers\WebhookController::class, 'whatsappWebhook']);
+
 Route::match(['get', 'post'], '/webhook/{processor}', [App\Http\Controllers\WebhookController::class, 'processWebhook']);
 Route::match(['get', 'post'], '/payment/{processor}', [App\Http\Controllers\PaymentController::class, 'processPayment']);
 
