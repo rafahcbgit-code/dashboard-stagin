@@ -389,6 +389,20 @@ class ChatService
 
                             $ticket->save();
 
+                            if ($ticket->assigned_to) {
+                                try {
+                                    $notificationService = new \App\Services\ApiNotificationService();
+                                    $notificationService->sendAssignmentNotification(
+                                        $contactId,
+                                        $ticket->assigned_to,
+                                        auth('sanctum')->id() ?? auth()->id() ?? 0,
+                                        $organizationId
+                                    );
+                                } catch (\Exception $e) {
+                                    \Log::error('Failed to send assignment notification: ' . $e->getMessage());
+                                }
+                            }
+
                             $ticketId = ChatTicketLog::insertGetId([
                                 'contact_id' => $contactId,
                                 'description' => 'Conversation was opened',
@@ -424,6 +438,20 @@ class ChatService
 
                                 $ticket->status = 'open';
                                 $ticket->save();
+
+                                if ($ticket->assigned_to) {
+                                    try {
+                                        $notificationService = new \App\Services\ApiNotificationService();
+                                        $notificationService->sendAssignmentNotification(
+                                            $contactId,
+                                            $ticket->assigned_to,
+                                            0, // System reassignment
+                                            $organizationId
+                                        );
+                                    } catch (\Exception $e) {
+                                        \Log::error('Failed to send assignment notification: ' . $e->getMessage());
+                                    }
+                                }
 
                                 $ticketId = ChatTicketLog::insertGetId([
                                     'contact_id' => $contactId,
@@ -485,6 +513,19 @@ class ChatService
 
             $ticket->updated_at = now();
             $ticket->save();
+
+            // Send assignment notification
+            try {
+                $notificationService = new \App\Services\ApiNotificationService();
+                $notificationService->sendAssignmentNotification(
+                    $contactId,
+                    $ticket->assigned_to,
+                    0, // System round-robin assignment
+                    $organizationId
+                );
+            } catch (\Exception $e) {
+                \Log::error('Failed to send assignment notification: ' . $e->getMessage());
+            }
 
             return $ticket;
         }
