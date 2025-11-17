@@ -340,15 +340,15 @@ class Contact extends Model {
         return $this->belongsToMany(Label::class, 'contact_label');
     }
 
-public function latestAssignedUser()
-{
-    return $this->hasOneThrough(
-        User::class,
-        ChatTicket::class,
-        'contact_id',   // FK في chat_tickets
-        'id',           // FK في users
-        'id',           // PK في contacts
-        'assigned_to'   // الحقل اللي يربط مع اليوزر
-    )->latest('chat_tickets.id'); // نطلب آخر تذكرة
-}
+    public function latestAssignedUser()
+    {
+        return $this->hasOneThrough(
+            User::class,
+            ChatTicket::class,
+            'contact_id',  
+            'id',          
+            'id',           
+            'assigned_to'   
+        )->latest('chat_tickets.id'); 
+    }
 }
