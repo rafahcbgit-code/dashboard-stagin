@@ -221,8 +221,6 @@ class ChatService
             'pusher_app_cluster',
         ])->pluck('value', 'key')->toArray();
 
-        $perPage = 10;
-        $totalContacts = $rowCount;
         $messageTemplates = Template::where('organization_id', $this->organizationId)
             ->where('deleted_at', null)
             ->where('status', 'APPROVED')
@@ -266,6 +264,12 @@ class ChatService
 
                 $contactFieldService = new ContactFieldService(session()->get('current_organization'));
                 $contactFields = $contactFieldService->get($request);
+               
+                $labelColors = DB::table('labels')
+                        ->join('contact_label', 'labels.id', '=', 'contact_label.label_id')
+                        ->where('contact_label.contact_id', $contact->id)
+                        ->select('labels.color')
+                        ->pluck('color');
 
                 return Inertia::render('User/Chat/Index', [
                     'title' => 'Chats',
@@ -293,7 +297,8 @@ class ChatService
                     'unreadMessages' => $unreadMessages,
                     'contactFields' => $contactFields,
                     'isChatLimitReached' => SubscriptionService::isSubscriptionFeatureLimitReached($this->organizationId, 'message_limit'),
-                    'teamRole' => $team?->role  
+                    'teamRole' => $team?->role,
+                    'labelColors' => $labelColors
                 ]);
             }
         }
@@ -309,7 +314,7 @@ class ChatService
             ], 200);
         } else {
             $settings = json_decode($config->metadata);
-            
+     
             return Inertia::render('User/Chat/Index', [
                 'title' => 'Chats',
                 'rows' => ContactResource::collection($contacts),

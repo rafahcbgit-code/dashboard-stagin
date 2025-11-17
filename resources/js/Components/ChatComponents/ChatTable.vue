@@ -313,12 +313,50 @@
                     <div v-else class="rounded-full w-10 h-10 flex items-center justify-center bg-slate-200 capitalize">{{ contact.full_name.substring(0, 1) }}</div>
                 </div>
                 <div class="w-[85%]">
-                    <div class="flex justify-between">
-                        <h3 class="truncate">{{ contact.full_name }}</h3>
-                        <span class="self-center text-slate-500 text-xs">{{ formatTime(contact?.last_chat?.created_at) }}</span>
+                  
+                  <div class="flex justify-between items-center p-2 bg-white rounded-lg shadow-sm hover:bg-gray-50 transition">
+                    
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:space-x-3">
+                        <h3 class="font-medium text-gray-900 truncate">
+                        {{ contact.full_name }}
+                        </h3>
+
+                        <span 
+                        v-if="contact?.latest_assigned_user?.full_name" 
+                        class="text-gray-500 text-sm truncate"
+                        >
+                        {{ contact.latest_assigned_user.full_name }}
+                        </span>
                     </div>
+
+                    <span class="text-gray-400 text-xs whitespace-nowrap">
+                        {{ formatTime(contact?.last_chat?.created_at) }}
+                    </span>
+                    </div>
+                     <div class="flex space-x-1 mt-1 justify-end">
+    <svg 
+        v-for="(label, index) in contact.labels" 
+        :key="index"
+        xmlns="http://www.w3.org/2000/svg" 
+        width="16" 
+        height="16" 
+        viewBox="0 0 24 24"
+    >
+        <path 
+            :fill="label.color" 
+            :stroke="label.color" 
+            stroke-linecap="round" 
+            stroke-linejoin="round" 
+            stroke-width="2"
+            d="M20.59 13.41 12 22 4 14V4h10l8.59 8.59zM7 7h.01" 
+        />
+    </svg>
+</div>
+
+
+
                     <div v-if="contact?.last_chat?.deleted_at === null" class="flex justify-between">
-                        <div v-if="contentType(contact?.last_chat?.metadata) ==='text'" class="text-slate-500 text-xs truncate self-end"> {{ content(contact?.last_chat?.metadata).text.body }}</div>
+                        <div v-if="contentType(contact?.last_chat?.metadata) ==='text'" class="text-slate-500 text-xs truncate self-end"> {{ content(contact?.last_chat?.metadata).text.body }}</div> 
                         <div v-if="contentType(contact?.last_chat?.metadata) ==='button'" class="text-slate-500 text-xs truncate self-end"> {{ content(contact?.last_chat?.metadata).button.text }}</div>
                         <div v-if="contentType(contact?.last_chat?.metadata) ==='interactive'" class="text-slate-500 text-xs truncate self-end"> {{ content(contact?.last_chat?.metadata).interactive?.button_reply?.title || content(contact?.last_chat?.metadata).interactive?.list_reply?.title }}</div>
                         <div v-if="contentType(contact?.last_chat?.metadata) ==='image'" class="text-slate-500 text-xs truncate self-end"> 

@@ -14,7 +14,7 @@
     import { useI18n } from 'vue-i18n';
 
     const { t } = useI18n();
-    const props = defineProps(['contact', 'displayContactInfo', 'ticketingIsEnabled', 'ticket', 'addon', 'teamRole']);
+    const props = defineProps(['contact', 'displayContactInfo', 'ticketingIsEnabled', 'ticket', 'addon', 'teamRole', 'labelColors']);
 
     const accountUser = computed(() => usePage().props.auth.user);
     const showAlert = ref(false);
@@ -241,11 +241,33 @@
                 </div>
                 <FormSelectCombo v-if="ticketingIsEnabled && accountUser.teams[0]['role'] != 'agent'" v-model="user" :name="''" :loadOptions="loadUsers" :class="'col-span-1 md:block hidden'" :placeholder="'Select Agent'" @update:modelValue="changeTicketAgent()"/>
             </div>
+            
         </div>
         <div class="relative">
             <div class="flex items-center space-x-4">
+
+                 <!-- Label Color Icons -->
+                <div class="flex items-center space-x-1 ml-2">
+                    <svg 
+                    v-for="(color, index) in props.labelColors" 
+                    :key="index"
+                    xmlns="http://www.w3.org/2000/svg" 
+                    width="24" 
+                    height="24" 
+                    viewBox="0 0 24 24"
+                    >
+                    <path 
+                        :fill="color" 
+                        :stroke="color" 
+                        stroke-linecap="round" 
+                        stroke-linejoin="round" 
+                        stroke-width="2"
+                        d="M20.59 13.41 12 22 4 14V4h10l8.59 8.59zM7 7h.01" 
+                    />
+                    </svg>
+                </div>
                 <button v-if="ticketState === 'open' && ticketingIsEnabled" @click="changeTicketStatus('closed')" class="text-sm md:inline-flex hidden justify-center rounded-md border border-transparent bg-red-800 px-4 py-1 text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">{{ $t('Mark as closed') }}</button>
-                <button v-if="ticketState === 'closed' && ticketingIsEnabled" @click="changeTicketStatus('open')" class="text-sm md:inline-flex hidden justify-center rounded-md border border-transparent bg-primary px-4 py-1 text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">{{ $t('Mark as open') }}</button>
+                <button v-if="ticketState === 'closed' && ticketingIsEnabled" @click="changeTicketStatus('open')" class="text-sm md:inline-flex hidden justify-center rounded-md border border-transparent bg-primary px-4 py-1 text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">{{ $t('Mark as open') }}</button> 
 
                 <div v-if="!displayContact" class="dropdown-container relative">
                     <!-- Custom Dropdown -->
