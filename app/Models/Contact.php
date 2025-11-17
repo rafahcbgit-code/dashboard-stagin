@@ -107,7 +107,7 @@ class Contact extends Model {
         $query = $this->newQuery()
             ->where('contacts.organization_id', $organizationId)
             ->whereNotNull('contacts.latest_chat_created_at')
-            ->with(['lastChat', 'lastInboundChat'])
+            ->with(['lastChat', 'lastInboundChat', 'latestAssignedUser'])
             ->whereNull('contacts.deleted_at')
             ->select('contacts.*')
             ->selectSub(function ($subquery) use ($organizationId) {
@@ -339,4 +339,16 @@ class Contact extends Model {
     {
         return $this->belongsToMany(Label::class, 'contact_label');
     }
+
+public function latestAssignedUser()
+{
+    return $this->hasOneThrough(
+        User::class,
+        ChatTicket::class,
+        'contact_id',   // FK في chat_tickets
+        'id',           // FK في users
+        'id',           // PK في contacts
+        'assigned_to'   // الحقل اللي يربط مع اليوزر
+    )->latest('chat_tickets.id'); // نطلب آخر تذكرة
+}
 }

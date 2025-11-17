@@ -221,8 +221,6 @@ class ChatService
             'pusher_app_cluster',
         ])->pluck('value', 'key')->toArray();
 
-        $perPage = 10;
-        $totalContacts = $rowCount;
         $messageTemplates = Template::where('organization_id', $this->organizationId)
             ->where('deleted_at', null)
             ->where('status', 'APPROVED')
@@ -316,7 +314,7 @@ class ChatService
             ], 200);
         } else {
             $settings = json_decode($config->metadata);
-            
+     //dd(ContactResource::collection($contacts),);
             return Inertia::render('User/Chat/Index', [
                 'title' => 'Chats',
                 'rows' => ContactResource::collection($contacts),
