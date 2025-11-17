@@ -266,6 +266,12 @@ class ChatService
 
                 $contactFieldService = new ContactFieldService(session()->get('current_organization'));
                 $contactFields = $contactFieldService->get($request);
+               
+                $labelColors = DB::table('labels')
+                        ->join('contact_label', 'labels.id', '=', 'contact_label.label_id')
+                        ->where('contact_label.contact_id', $contact->id)
+                        ->select('labels.color')
+                        ->pluck('color');
 
                 return Inertia::render('User/Chat/Index', [
                     'title' => 'Chats',
@@ -293,7 +299,8 @@ class ChatService
                     'unreadMessages' => $unreadMessages,
                     'contactFields' => $contactFields,
                     'isChatLimitReached' => SubscriptionService::isSubscriptionFeatureLimitReached($this->organizationId, 'message_limit'),
-                    'teamRole' => $team?->role  
+                    'teamRole' => $team?->role,
+                    'labelColors' => $labelColors
                 ]);
             }
         }

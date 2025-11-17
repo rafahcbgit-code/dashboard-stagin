@@ -10,6 +10,7 @@
                     :ticketingIsEnabled="ticketingIsEnabled" 
                     :contact="contact" 
                     :displayContactInfo="displayContactInfo" 
+                    :labelColors="labelColors" 
                     :ticket="ticket" 
                     :addon="addon" 
                     :teamRole="props.teamRole"
@@ -101,7 +102,8 @@
         locationSettings: Object,
         simpleForm: Boolean,
         contactFields: Array,
-        teamRole: String
+        teamRole: String,
+        labelColors: Array,
     });
 
     const rows = ref(props.rows);
@@ -119,6 +121,7 @@
     const chatThread = ref(props.chatThread);
     const contact = ref(props.contact);
     const contactFields = ref(props.contactFields);
+    const labelColors = ref(props.labelColors);
     
 
     /* Chat Optimization Configuration */
