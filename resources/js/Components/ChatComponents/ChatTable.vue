@@ -333,9 +333,30 @@
                         {{ formatTime(contact?.last_chat?.created_at) }}
                     </span>
                     </div>
+                     <div class="flex space-x-1 mt-1 justify-end">
+    <svg 
+        v-for="(label, index) in contact.labels" 
+        :key="index"
+        xmlns="http://www.w3.org/2000/svg" 
+        width="16" 
+        height="16" 
+        viewBox="0 0 24 24"
+    >
+        <path 
+            :fill="label.color" 
+            :stroke="label.color" 
+            stroke-linecap="round" 
+            stroke-linejoin="round" 
+            stroke-width="2"
+            d="M20.59 13.41 12 22 4 14V4h10l8.59 8.59zM7 7h.01" 
+        />
+    </svg>
+</div>
+
+
 
                     <div v-if="contact?.last_chat?.deleted_at === null" class="flex justify-between">
-                        <div v-if="contentType(contact?.last_chat?.metadata) ==='text'" class="text-slate-500 text-xs truncate self-end"> {{ content(contact?.last_chat?.metadata).text.body }}  {{ contact?.latestAssignedUser?.first_name }}</div> 
+                        <div v-if="contentType(contact?.last_chat?.metadata) ==='text'" class="text-slate-500 text-xs truncate self-end"> {{ content(contact?.last_chat?.metadata).text.body }}</div> 
                         <div v-if="contentType(contact?.last_chat?.metadata) ==='button'" class="text-slate-500 text-xs truncate self-end"> {{ content(contact?.last_chat?.metadata).button.text }}</div>
                         <div v-if="contentType(contact?.last_chat?.metadata) ==='interactive'" class="text-slate-500 text-xs truncate self-end"> {{ content(contact?.last_chat?.metadata).interactive?.button_reply?.title || content(contact?.last_chat?.metadata).interactive?.list_reply?.title }}</div>
                         <div v-if="contentType(contact?.last_chat?.metadata) ==='image'" class="text-slate-500 text-xs truncate self-end"> 

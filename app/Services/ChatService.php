@@ -314,7 +314,7 @@ class ChatService
             ], 200);
         } else {
             $settings = json_decode($config->metadata);
-     //dd(ContactResource::collection($contacts),);
+     
             return Inertia::render('User/Chat/Index', [
                 'title' => 'Chats',
                 'rows' => ContactResource::collection($contacts),

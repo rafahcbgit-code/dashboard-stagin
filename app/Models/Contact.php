@@ -107,7 +107,7 @@ class Contact extends Model {
         $query = $this->newQuery()
             ->where('contacts.organization_id', $organizationId)
             ->whereNotNull('contacts.latest_chat_created_at')
-            ->with(['lastChat', 'lastInboundChat', 'latestAssignedUser'])
+            ->with(['lastChat', 'lastInboundChat', 'latestAssignedUser', 'labels'])
             ->whereNull('contacts.deleted_at')
             ->select('contacts.*')
             ->selectSub(function ($subquery) use ($organizationId) {
