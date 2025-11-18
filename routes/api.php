@@ -118,6 +118,10 @@ Route::prefix('v1')->group(function () {
                 Route::get('/list', [App\Http\Controllers\Api\DeviceTokenController::class, 'list']);
                 Route::post('/test', [App\Http\Controllers\Api\DeviceTokenController::class, 'test']);
             });
+           
+            Route::prefix('config')->group(function () {
+                Route::get('/pusher', [App\Http\Controllers\Api\ConfigController::class, 'pusher']);
+            });
         });
     });
 });
