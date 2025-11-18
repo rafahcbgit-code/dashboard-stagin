@@ -140,6 +140,13 @@ return [
             'level' => 'debug',
             'days' => 7,
         ],
+
+        'fcm' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/fcm.log'),
+            'level' => 'debug',
+            'days' => 7,
+        ],
     ],
 
 ];

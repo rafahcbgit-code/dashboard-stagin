@@ -339,6 +339,14 @@ class WebhookController extends BaseController
 
                                 event(new NewChatEvent($chatArray, $organization->id));
 
+                                // Send FCM notification for new message
+                                try {
+                                    $notificationService = new \App\Services\ApiNotificationService();
+                                    $notificationService->sendNewMessageNotification($chat, $organization->id);
+                                } catch (\Exception $e) {
+                                    \Log::error('Failed to send FCM notification: ' . $e->getMessage());
+                                }
+
                                 $isMessageLimitReached = SubscriptionService::isSubscriptionFeatureLimitReached($organization->id, 'message_limit');
 
                                 if(!$isMessageLimitReached && $contact->bot_enable){

@@ -109,6 +109,19 @@ Route::prefix('v1')->group(function () {
             // Templates
             Route::get('/templates', [App\Http\Controllers\Api\TemplateController::class, 'index']);
             Route::get('/templates/{uuid}', [App\Http\Controllers\Api\TemplateController::class, 'show']);
+
+            // Device Token Endpoints
+            Route::prefix('device-token')->group(function () {
+                Route::post('/register', [App\Http\Controllers\Api\DeviceTokenController::class, 'register']);
+                Route::post('/unregister', [App\Http\Controllers\Api\DeviceTokenController::class, 'unregister']);
+                Route::post('/heartbeat', [App\Http\Controllers\Api\DeviceTokenController::class, 'heartbeat']);
+                Route::get('/list', [App\Http\Controllers\Api\DeviceTokenController::class, 'list']);
+                Route::post('/test', [App\Http\Controllers\Api\DeviceTokenController::class, 'test']);
+            });
+           
+            Route::prefix('config')->group(function () {
+                Route::get('/pusher', [App\Http\Controllers\Api\ConfigController::class, 'pusher']);
+            });
         });
     });
 });
