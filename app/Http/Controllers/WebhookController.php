@@ -733,16 +733,29 @@ class WebhookController extends BaseController
             //Display Name
             $response = $res['value'] ?? null;
 
-            if($response['decision'] == 'APPROVED'){
-                $organizationConfig = Organization::where('id', $organization->id)->first();
-                $metadataArray = $organizationConfig->metadata ? json_decode($organizationConfig->metadata, true) : [];
+            if ($response['decision'] == 'APPROVED') {
 
-                $metadataArray['whatsapp']['verified_name'] = $response['requested_verified_name'] ?? NULL;
+                $organizationConfig = Organization::find($organization->id);
 
-                $updatedMetadataJson = json_encode($metadataArray);
-                $organizationConfig->metadata = $updatedMetadataJson;
+                // Decode metadata as array ONLY
+                $metadataArray = $organizationConfig->metadata
+                    ? json_decode($organizationConfig->metadata, true)
+                    : [];
+
+                // Ensure 'whatsapp' exists and is array
+                if (!isset($metadataArray['whatsapp']) || !is_array($metadataArray['whatsapp'])) {
+                    $metadataArray['whatsapp'] = [];
+                }
+
+                // Assign safely (never causes undefined property)
+                $metadataArray['whatsapp']['verified_name'] =
+                    $response['requested_verified_name'] ?? null;
+
+                // Save metadata
+                $organizationConfig->metadata = json_encode($metadataArray);
                 $organizationConfig->save();
             }
+
         } 
         else if($res['field'] === 'phone_number_quality_update'){
             //messaging_tier_limit

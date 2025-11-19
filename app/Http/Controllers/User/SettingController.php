@@ -431,15 +431,20 @@ public function campaign(Request $request)
         $organizationConfig = Organization::where('id', $organizationId)->first();
         
         $metadataArray = $organizationConfig->metadata ? json_decode($organizationConfig->metadata, true) : [];
+        
+        if (!isset($metadataArray['whatsapp']) || !is_array($metadataArray['whatsapp'])) {
+            $metadataArray['whatsapp'] = [];
+        }
+
         $metadataArray['whatsapp']['is_embedded_signup'] = $metadataArray['whatsapp']['is_embedded_signup'] ?? 0;
         $metadataArray['whatsapp']['access_token'] = $accessToken;
         $metadataArray['whatsapp']['app_id'] = $appId;
         $metadataArray['whatsapp']['waba_id'] = $wabaId;
         $metadataArray['whatsapp']['phone_number_id'] = $phoneNumberResponse->data->id;
         $metadataArray['whatsapp']['display_phone_number'] = $phoneNumberResponse->data->display_phone_number;
-        $metadataArray['whatsapp']['verified_name'] = $phoneNumberResponse->data->verified_name;
-        $metadataArray['whatsapp']['quality_rating'] = $phoneNumberResponse->data->quality_rating;
-        $metadataArray['whatsapp']['name_status'] = $phoneNumberResponse->data->name_status;
+        $metadataArray['whatsapp']['verified_name'] = $phoneNumberResponse->data->verified_name ?? null;
+        $metadataArray['whatsapp']['quality_rating'] = $phoneNumberResponse->data->quality_rating ?? null;
+        $metadataArray['whatsapp']['name_status'] = $phoneNumberResponse->data->name_status ?? null;
         $metadataArray['whatsapp']['messaging_limit_tier'] = $phoneNumberResponse->data->messaging_limit_tier ?? NULL;
         $metadataArray['whatsapp']['max_daily_conversation_per_phone'] = NULL;
         $metadataArray['whatsapp']['max_phone_numbers_per_business'] = NULL;
@@ -448,6 +453,11 @@ public function campaign(Request $request)
         $metadataArray['whatsapp']['code_verification_status'] = $phoneNumberStatusResponse->data->code_verification_status;
         $metadataArray['whatsapp']['business_verification'] = '';
         $metadataArray['whatsapp']['account_review_status'] = $accountReviewStatusResponse->data->account_review_status;
+
+        if (!isset($metadataArray['whatsapp']['business_profile']) || !is_array($metadataArray['whatsapp']['business_profile'])) {
+            $metadataArray['whatsapp']['business_profile'] = [];
+        }
+
         $metadataArray['whatsapp']['business_profile']['about'] = $businessProfileResponse->data->about ?? NULL;
         $metadataArray['whatsapp']['business_profile']['address'] = $businessProfileResponse->data->address ?? NULL;
         $metadataArray['whatsapp']['business_profile']['description'] = $businessProfileResponse->data->description ?? NULL;
