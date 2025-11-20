@@ -19,6 +19,10 @@ class PreCreatedReplyController extends Controller
             ->orderBy('created_at', 'desc')
             ->paginate(10);
 
+        if ($request->wantsJson()) {
+            return \App\Http\Resources\PreCreatedReplyResource::collection($rows);
+        }
+
         return Inertia::render('User/PreCreatedReplies/Index', [
             'title' => 'Pre-created Replies',
             'rows' => \App\Http\Resources\PreCreatedReplyResource::collection($rows),

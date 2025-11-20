@@ -4,12 +4,14 @@ import { ref, watchEffect, computed, onMounted, onBeforeUnmount } from 'vue';
 import EmojiPicker from 'vue3-emoji-picker';
 import 'vue3-emoji-picker/css';
 import MicRecorder from 'mic-recorder-to-mp3-fixed';
+import PreCreatedRepliesModal from './PreCreatedRepliesModal.vue';
 
 const recorder = ref(null);
 const props = defineProps(['contact', 'chatLimitReached', 'simpleForm']);
 const processingForm = ref(null);
 const processingAISuggestions = ref(false);
 const formTextInput = ref(null);
+const showRepliesModal = ref(false);
 const isRecording = ref(false);
 const mediaRecorder = ref(null);
 const audioChunks = ref([]);
@@ -83,6 +85,19 @@ const sendMessage = async () => {
             await sendAudioMessage();
         }
 
+        processingForm.value = false;
+    }
+}
+
+const sendPreCreatedReply = async (payload) => {
+    processingForm.value = true;
+    try {
+        await axios.post('/chats', payload);
+        
+        // Reset form if needed or show success
+        processingForm.value = false;
+    } catch (error) {
+        console.error('Error sending reply:', error);
         processingForm.value = false;
     }
 }
@@ -464,6 +479,13 @@ onBeforeUnmount(() => {
                     <button class="hidden md:inline">{{ $t('Templates') }}</button>
                 </div>
                 <div class="hidden md:block">|</div>
+                <div @click="showRepliesModal = true" class="flex gap-x-1 text-sm items-center cursor-pointer">
+                    <span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2zm0 14H6l-2 2V4h16v12z"/></svg>
+                    </span>
+                    <button class="hidden md:inline">{{ $t('Saved Replies') }}</button>
+                </div>
+                <div class="hidden md:block">|</div>
                 <div class="flex gap-x-2 md:gap-x-4 text-sm items-center">
                     <div>
                         <button type="button" class="py-1" @click="toggleEmojiPicker">
@@ -519,7 +541,7 @@ onBeforeUnmount(() => {
                                         d="M6.5 8a2 2 0 1 0 4 0a2 2 0 0 0-4 0Zm14.427 1.99c-6.61-.908-12.31 4-11.927 10.51" />
                                     <path d="M3 13.066c2.78-.385 5.275.958 6.624 3.1" />
                                     <path
-                                        d="M3 12c0-4.243 0-6.364 1.318-7.682C5.636 3 7.758 3 12 3c4.243 0 6.364 0 7.682 1.318C21 5.636 21 7.758 21 12c0 4.243 0 6.364-1.318 7.682C18.364 21 16.242 21 12 21c-4.243 0-6.364 0-7.682-1.318C3 18.364 3 16.242 3 12Z" />
+                                        d="M3 12c0-4.243 0-6.364 1.318-7.682C5.636 3 7.758 3 12 3c4.243 0 6.364 0 7.682 1.318C21 5.636 21 7.758 21 12c0 4.243 0 6.364 0 7.682C18.364 21 16.242 21 12 21c-4.243 0-6.364 0-7.682-1.318C3 18.364 3 16.242 3 12Z" />
                                 </g>
                             </svg>
                         </label>
@@ -547,7 +569,7 @@ onBeforeUnmount(() => {
                                 <path
                                     d="M21.984 12.976c.021-.986.021-1.966 0-2.952c-.065-3.065-.098-4.598-1.229-5.733c-1.131-1.136-2.705-1.175-5.854-1.254a115 115 0 0 0-5.802 0c-3.149.079-4.723.118-5.854 1.254c-1.131 1.135-1.164 2.668-1.23 5.733a69 69 0 0 0 0 2.952c.066 3.065.099 4.598 1.23 5.733c1.131 1.136 2.705 1.175 5.854 1.254c1.305.033 2.601.044 3.901.033" />
                                 <path
-                                    d="m18.5 14l.258.697c.338.914.507 1.371.84 1.704c.334.334.791.503 1.705.841L22 17.5l-.697.258c-.914.338-1.371.507-1.704.84c-.334.334-.503.791-.841 1.705L18.5 21l-.258-.697c-.338-.914-.507-1.371-.84-1.704c-.334-.334-.791-.503-1.705-.841L15 17.5l.697-.258c.914-.338 1.371-.507 1.704-.84c.334-.334.503-.791.841-1.705z" />
+                                    d="m18.5 14l.258.697c.338.914.507 1.371.84 1.704c.334.334.791.503 1.705.841L22 17.5l-.697.258c-.914.338-1.371.507-1.704.84c-.334.334-.503.791-.841 1.705L18.5 21l-.258-.697c-.338-.914-.507-1.371-.84-1.704c-.334-.334-.503-.791-.841 1.705L15 17.5l.697-.258c.914-.338 1.371-.507 1.704-.84c.334-.334.503-.791.841-1.705z" />
                             </g>
                         </svg>
                         <span class="hidden md:inline">{{ $t('AI Assist') }}</span>
@@ -635,4 +657,10 @@ onBeforeUnmount(() => {
             </div>
         </div>
     </form>
+    <PreCreatedRepliesModal 
+        :show="showRepliesModal" 
+        :contactUuid="props.contact.uuid" 
+        @close="showRepliesModal = false" 
+        @send="sendPreCreatedReply"
+    />
 </template>
