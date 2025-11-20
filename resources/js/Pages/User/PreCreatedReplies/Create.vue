@@ -166,6 +166,51 @@
     });
 
     const submit = () => {
-        form.post('/pre-created-replies');
+        form.clearErrors();
+        let hasError = false;
+
+        if (!form.title) {
+            form.setError('title', 'Title is required');
+            hasError = true;
+        }
+
+        if (form.type === 'text' || form.type === 'quick_reply' || form.type === 'header_footer' || form.type === 'link') {
+            if (!form.content.body) {
+                form.setError('content.body', 'Message body is required');
+                hasError = true;
+            }
+        }
+
+        if (form.type === 'quick_reply' || form.type === 'header_footer') {
+            if (form.content.buttons.length === 0) {
+                // Show a general error or alert since we don't have a specific field for "buttons array" error in UI usually
+                // But we can set it on the first button or a general error if supported.
+                // For now, let's assume we can set it on the form object or use a toast.
+                // Since we don't have a toast helper visible here, we'll set a manual error on the first button index if possible or just alert.
+                // Actually, let's just check if buttons have text.
+            }
+            
+            form.content.buttons.forEach((btn, index) => {
+                if (!btn.text) {
+                    form.setError(`content.buttons.${index}.text`, 'Button text is required');
+                    hasError = true;
+                }
+            });
+        }
+
+        if (form.type === 'link') {
+            if (!form.content.link_text) {
+                form.setError('content.link_text', 'Link button text is required');
+                hasError = true;
+            }
+            if (!form.content.link_url) {
+                form.setError('content.link_url', 'Link URL is required');
+                hasError = true;
+            }
+        }
+
+        if (!hasError) {
+            form.post('/pre-created-replies');
+        }
     };
 </script>

@@ -173,6 +173,43 @@
     });
 
     const submit = () => {
-        form.put(`/pre-created-replies/${props.reply.uuid}`);
+        form.clearErrors();
+        let hasError = false;
+
+        if (!form.title) {
+            form.setError('title', 'Title is required');
+            hasError = true;
+        }
+
+        if (form.type === 'text' || form.type === 'quick_reply' || form.type === 'header_footer' || form.type === 'link') {
+            if (!form.content.body) {
+                form.setError('content.body', 'Message body is required');
+                hasError = true;
+            }
+        }
+
+        if (form.type === 'quick_reply' || form.type === 'header_footer') {
+            form.content.buttons.forEach((btn, index) => {
+                if (!btn.text) {
+                    form.setError(`content.buttons.${index}.text`, 'Button text is required');
+                    hasError = true;
+                }
+            });
+        }
+
+        if (form.type === 'link') {
+            if (!form.content.link_text) {
+                form.setError('content.link_text', 'Link button text is required');
+                hasError = true;
+            }
+            if (!form.content.link_url) {
+                form.setError('content.link_url', 'Link URL is required');
+                hasError = true;
+            }
+        }
+
+        if (!hasError) {
+            form.put(`/pre-created-replies/${props.reply.uuid}`);
+        }
     };
 </script>
