@@ -24,7 +24,7 @@ class PreCreatedReplyController extends Controller
         }
 
         return Inertia::render('User/PreCreatedReplies/Index', [
-            'title' => 'Pre-created Replies',
+            'title' => __('Pre-created Replies'),
             'rows' => \App\Http\Resources\PreCreatedReplyResource::collection($rows),
         ]);
     }
@@ -32,7 +32,7 @@ class PreCreatedReplyController extends Controller
     public function create()
     {
         return Inertia::render('User/PreCreatedReplies/Create', [
-            'title' => 'Create Reply',
+            'title' => __('Create Reply'),
         ]);
     }
 
@@ -66,7 +66,7 @@ class PreCreatedReplyController extends Controller
         $reply = PreCreatedReply::where('uuid', $uuid)->firstOrFail();
 
         return Inertia::render('User/PreCreatedReplies/Edit', [
-            'title' => 'Edit Reply',
+            'title' => __('Edit Reply'),
             'reply' => $reply,
         ]);
     }
