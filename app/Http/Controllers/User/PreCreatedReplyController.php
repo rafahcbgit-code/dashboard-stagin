@@ -43,10 +43,10 @@ class PreCreatedReplyController extends Controller
             'type' => 'required|in:text,quick_reply,header_footer,link',
             'content' => 'required|array',
             'content.body' => 'required|string',
-            'content.buttons' => 'required_if:type,quick_reply,header_footer|array',
-            'content.buttons.*.text' => 'required_if:type,quick_reply,header_footer|string',
-            'content.link_text' => 'required_if:type,link|string',
-            'content.link_url' => 'required_if:type,link|url',
+            'content.buttons' => 'nullable|required_if:type,quick_reply,header_footer|array',
+            'content.buttons.*.text' => 'nullable|required_if:type,quick_reply,header_footer|string',
+            'content.link_text' => 'nullable|required_if:type,link|string',
+            'content.link_url' => 'nullable|required_if:type,link|url',
         ]);
 
         $organizationId = session()->get('current_organization');
@@ -83,10 +83,10 @@ class PreCreatedReplyController extends Controller
             'type' => 'required|in:text,quick_reply,header_footer,link',
             'content' => 'required|array',
             'content.body' => 'required|string',
-            'content.buttons' => 'required_if:type,quick_reply,header_footer|array',
-            'content.buttons.*.text' => 'required_if:type,quick_reply,header_footer|string',
-            'content.link_text' => 'required_if:type,link|string',
-            'content.link_url' => 'required_if:type,link|url',
+            'content.buttons' => 'nullable|required_if:type,quick_reply,header_footer|array',
+            'content.buttons.*.text' => 'nullable|required_if:type,quick_reply,header_footer|string',
+            'content.link_text' => 'nullable|required_if:type,link|string',
+            'content.link_url' => 'nullable|required_if:type,link|url',
         ]);
 
         $reply = PreCreatedReply::where('uuid', $uuid)->firstOrFail();
