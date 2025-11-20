@@ -115,7 +115,7 @@ class WhatsappService
         }
 
         $responseObject = $this->sendHttpRequest('POST', $url, $requestData, $headers);
-        dd($responseObject);
+
         if($responseObject->success === true){
             $response['text']['body'] = clean($messageContent);
             $response['type'] = 'text';
