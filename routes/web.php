@@ -180,6 +180,10 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::put('/automation/basic/{uuid}', [App\Http\Controllers\User\CannedReplyController::class, 'update'])->name('cannedReply.update');
                 Route::delete('/automation/basic/{uuid}', [App\Http\Controllers\User\CannedReplyController::class, 'delete'])->name('cannedReply.destroy');
 
+                Route::resource('pre-created-replies', App\Http\Controllers\User\PreCreatedReplyController::class)->parameters([
+                    'pre-created-replies' => 'uuid'
+                ]);
+
                 Route::get('/support/{uuid?}', [App\Http\Controllers\User\TicketController::class, 'index'])->name('support');
                 Route::post('/support', [App\Http\Controllers\User\TicketController::class, 'store']);
                 Route::post('/support/{uuid}/comment', [App\Http\Controllers\User\TicketController::class, 'comment']);

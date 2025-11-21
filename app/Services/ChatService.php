@@ -536,6 +536,22 @@ class ChatService
 
         if($request->type === 'text'){
             return $this->whatsappService->sendMessage($request->uuid, $request->message, $userId);
+        } elseif (in_array($request->type, ['interactive buttons', 'interactive call to action url', 'interactive list'])) {
+            $buttons = $request->buttons ?? [];
+            $header = $request->header ?? [];
+            $footer = $request->footer ?? null;
+            $buttonLabel = $request->button_label ?? null;
+            
+            return $this->whatsappService->sendMessage(
+                $request->uuid, 
+                $request->message, 
+                $userId, 
+                $request->type, 
+                $buttons, 
+                $header, 
+                $footer, 
+                $buttonLabel
+            );
         } else {
             $storage = Setting::where('key', 'storage_system')->first()->value;
             $fileName = $request->file('file')->getClientOriginalName();
