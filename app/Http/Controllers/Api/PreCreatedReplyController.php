@@ -252,7 +252,7 @@ class PreCreatedReplyController extends Controller
             'message_type' => $message->media ? explode('/', $message->media->type)[0] : 'text', // Simplified
             'status' => $message->status,
             'is_read' => $message->is_read,
-            'created_at' => $message->created_at->toIso8601String(),
+            'created_at' => $message->created_at,
             'wam_id' => $message->wam_id,
             'content' => $content
         ];
