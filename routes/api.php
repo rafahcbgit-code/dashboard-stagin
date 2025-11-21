@@ -93,6 +93,10 @@ Route::prefix('v1')->group(function () {
             // Messages (Send) 
             Route::post('/chats/{contact_uuid}/messages', [App\Http\Controllers\Api\MessageController::class, 'sendMessage']);
             Route::post('/chats/{contact_uuid}/messages/template', [App\Http\Controllers\Api\MessageController::class, 'sendTemplate']);
+            Route::post('/chats/{contact_uuid}/messages/pre-created-reply', [App\Http\Controllers\Api\PreCreatedReplyController::class, 'send']);
+
+            // Pre-created Replies
+            Route::get('/pre-created-replies', [App\Http\Controllers\Api\PreCreatedReplyController::class, 'index']);
             
             // Contact Management 
             Route::get('/contacts/{contact_uuid}/labels', [App\Http\Controllers\Api\ContactController::class, 'getLabels']);
