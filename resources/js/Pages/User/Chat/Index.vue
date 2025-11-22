@@ -150,6 +150,7 @@ const contact = ref(props.contact);
 const contactFields = ref(props.contactFields);
 const labelColors = ref(props.labelColors);
 
+
 /* Chat Optimization Configuration */
 const DEBUG_MODE = true; // Set to false for production
 

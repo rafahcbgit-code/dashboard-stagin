@@ -393,8 +393,7 @@ onBeforeUnmount(() => {
                 </span>
                 <div>
                     <div class="text-sm">{{ $t('24 hour limit') }}</div>
-                    <div class="text-sm">{{ $t(`Whatsapp does not allow sending messages 24 hours after they last
-                        messaged you.However, you can send them a template message`) }}</div>
+                    <div class="text-sm">{{ $t('Whatsapp does not allow sending messages 24 hours after they last messaged you.However, you can send them a template message') }}</div>
                 </div>
             </div>
             <button @click="viewTemplate()"

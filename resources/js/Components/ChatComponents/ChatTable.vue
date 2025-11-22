@@ -314,46 +314,47 @@
                 </div>
                 <div class="w-[85%]">
               
-                <div class="flex items-center gap-1 w-full">
-    
-                    <div class="flex flex-col flex-1 min-w-0">
-                        <h3 class="font-small text-gray-900 truncate">
-                            {{ contact.full_name }}
-                        </h3>
+     <div class="flex items-center gap-1 w-full">
+    <div class="flex flex-col flex-1 min-w-0">
+        
+        <div class="flex items-center gap-2">
+            <h3 class="font-small text-gray-900 whitespace-nowrap shrink-0">
+                {{ contact.full_name }}
+            </h3>
 
-                        <span 
-                            v-if="contact?.latest_assigned_user?.full_name" 
-                            class="text-gray-500 text-sm truncate"
-                        >
-                            {{ contact.latest_assigned_user.full_name }}
-                        </span>
-                    </div>
-
-                    <span class="text-gray-400 text-xs whitespace-nowrap ml-auto">
-                        {{ formatTime(contact?.last_chat?.created_at) }}
-                    </span>
-
+            <div class="flex space-x-1 min-w-0 overflow-hidden"> 
+                <svg 
+                    v-for="(label, index) in contact.labels" 
+                    :key="index"
+                    xmlns="http://www.w3.org/2000/svg"
+                    class="w-4 h-4 shrink"
+                    viewBox="0 0 24 24"
+                >
+                    <path 
+                        fill="none"
+                        :stroke="label.color" 
+                        stroke-linecap="round" 
+                        stroke-linejoin="round" 
+                        stroke-width="4"
+                        d="M5 12h14" 
+                    />
+                </svg>
             </div>
+        </div>
 
-                     <div class="flex space-x-1 mt-1 justify-end">
-                        <svg 
-                            v-for="(label, index) in contact.labels" 
-                            :key="index"
-                            xmlns="http://www.w3.org/2000/svg" 
-                            width="16" 
-                            height="16" 
-                            viewBox="0 0 24 24"
-                        >
-                            <path 
-                                :fill="label.color" 
-                                :stroke="label.color" 
-                                stroke-linecap="round" 
-                                stroke-linejoin="round" 
-                                stroke-width="2"
-                                d="M20.59 13.41 12 22 4 14V4h10l8.59 8.59zM7 7h.01" 
-                            />
-                        </svg>
-                    </div>
+            <span 
+                v-if="contact?.latest_assigned_user?.full_name" 
+                class="inline-flex w-fit text-sm truncate bg-gray-200 text-gray-800 px-2 py-0.5 rounded-full"
+            >
+                {{ contact.latest_assigned_user.full_name }}
+            </span>
+    </div>
+
+    <span class="text-gray-400 text-xs whitespace-nowrap ml-auto">
+        {{ formatTime(contact?.last_chat?.created_at) }}
+    </span>
+</div>
+
 
                     <div v-if="contact?.last_chat?.deleted_at === null" class="flex justify-between">
                         <div v-if="contentType(contact?.last_chat?.metadata) ==='text'" class="text-slate-500 text-xs truncate self-end"> {{ content(contact?.last_chat?.metadata).text.body }}</div> 
