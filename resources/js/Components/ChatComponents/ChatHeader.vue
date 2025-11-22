@@ -171,6 +171,14 @@
                 if (props.contact.labels) {
                     props.contact.labels = updatedLabels;
                 }
+
+                   if (props.labelColors) {
+                props.labelColors.splice(
+                    0, 
+                    props.labelColors.length, 
+                    ...updatedLabels.map(l => l.color)
+                );
+            }
             },
             onError: (errors) => {
                 console.error('Error saving labels:', errors);
@@ -233,7 +241,7 @@
             <div class="flex items-center w-full gap-x-8">
                 <div>
                     <div class="flex items-center" @click="toggleView">
-                        <span>{{ contact.full_name }}</span>
+                        <span class="whitespace-nowrap">{{ contact.full_name }}</span>
                     </div>
                     <div class="w-full flex items-center text-xs">
                         <span @click="toggleView">{{ contact.formatted_phone_number }}</span>
@@ -247,27 +255,28 @@
             <div class="flex items-center space-x-4">
 
                  <!-- Label Color Icons -->
-                <div class="flex items-center space-x-1 ml-2">
+                <div class="flex items-center space-x-1 ml-2 shrink min-w-0">
                     <svg 
                     v-for="(color, index) in props.labelColors" 
                     :key="index"
                     xmlns="http://www.w3.org/2000/svg" 
-                    width="24" 
-                    height="24" 
+                    
+                    class="w-6 h-6 shrink"
                     viewBox="0 0 24 24"
                     >
-                    <path 
-                        :fill="color" 
-                        :stroke="color" 
-                        stroke-linecap="round" 
-                        stroke-linejoin="round" 
-                        stroke-width="2"
-                        d="M20.59 13.41 12 22 4 14V4h10l8.59 8.59zM7 7h.01" 
-                    />
+                        <path 
+                            :fill="color" 
+                            :stroke="color" 
+                            stroke-linecap="round" 
+                            stroke-linejoin="round" 
+                            stroke-width="2"
+                            d="M20.59 13.41 12 22 4 14V4h10l8.59 8.59zM7 7h.01" 
+                        />
                     </svg>
                 </div>
-                <button v-if="ticketState === 'open' && ticketingIsEnabled" @click="changeTicketStatus('closed')" class="text-sm md:inline-flex hidden justify-center rounded-md border border-transparent bg-red-800 px-4 py-1 text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">{{ $t('Mark as closed') }}</button>
-                <button v-if="ticketState === 'closed' && ticketingIsEnabled" @click="changeTicketStatus('open')" class="text-sm md:inline-flex hidden justify-center rounded-md border border-transparent bg-primary px-4 py-1 text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">{{ $t('Mark as open') }}</button> 
+                
+                <button v-if="ticketState === 'open' && ticketingIsEnabled" @click="changeTicketStatus('closed')" class="text-sm md:inline-flex hidden justify-center rounded-md border border-transparent bg-red-800 px-4 py-1 text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 whitespace-nowrap">{{ $t('Mark as closed') }}</button>
+                <button v-if="ticketState === 'closed' && ticketingIsEnabled" @click="changeTicketStatus('open')" class="text-sm md:inline-flex hidden justify-center rounded-md border border-transparent bg-primary px-4 py-1 text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 whitespace-nowrap">{{ $t('Mark as open') }}</button> 
 
                 <div v-if="!displayContact" class="dropdown-container relative">
                     <!-- Custom Dropdown -->
