@@ -106,6 +106,31 @@
         labelColors: Array,
     });
 
+
+//   const refreshChatTable = (updatedContact) => {
+//         if (updatedContact && props.rows && props.rows.data) {
+            
+//             // 1. إنشاء نسخة جديدة من مصفوفة البيانات القديمة
+//             // هذا أمر حيوي لتجنب مشاكل التفاعلية عند تعديل props مباشرة
+//             const newRowsData = [...props.rows.data];
+            
+//             // 2. البحث عن فهرس (Index) جهة الاتصال التي تم تحديثها
+//             const rowIndex = newRowsData.findIndex(c => c.uuid === updatedContact.uuid);
+            
+//             if (rowIndex !== -1) {
+//                 // 3. تحديث العنصر داخل المصفوفة الجديدة
+//                 newRowsData[rowIndex] = updatedContact; 
+                
+//                 // 4. استبدال مصفوفة البيانات القديمة بالمصفوفة الجديدة
+//                 // هذا يضمن أن Vue يعالج التحديث بشكل نظيف دون ترك حالة مكسورة
+//                 props.rows.data = newRowsData;
+//             }
+//         }
+        
+//         // **ملاحظة:** لا تزال هذه الدالة خالية من router.reload() لضمان عدم حدوث ارتداد للبيانات القديمة.
+//         console.log('Contact synced successfully by array replacement.');
+//     }
+
     const rows = ref(props.rows);
     const rowCount = ref(props.rowCount);
     const scrollContainer2 = ref(null);

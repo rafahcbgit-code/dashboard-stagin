@@ -314,7 +314,7 @@
                 </div>
                 <div class="w-[85%]">
               
-    <!-- <div class="flex items-center gap-1 w-full">
+     <div class="flex items-center gap-1 w-full">
     <div class="flex flex-col flex-1 min-w-0">
         
         <div class="flex items-center gap-2">
@@ -342,54 +342,12 @@
             </div>
         </div>
 
-        <span 
-            v-if="contact?.latest_assigned_user?.full_name" 
-            class="text-gray-500 text-sm truncate"
-        >
-            {{ contact.latest_assigned_user.full_name }}
-        </span>
-    </div>
-
-    <span class="text-gray-400 text-xs whitespace-nowrap ml-auto">
-        {{ formatTime(contact?.last_chat?.created_at) }}
-    </span>
-</div> -->
-
-<div class="flex items-center gap-1 w-full">
-    <div class="flex flex-col flex-1 min-w-0">
-        
-        <div class="flex items-center gap-2">
-            <h3 class="font-small text-gray-900 truncate">
-                {{ contact.full_name }}
-            </h3>
-
-            <div class="flex space-x-1 shrink-0"> 
-                <svg 
-                    v-for="(label, index) in contact.labels" 
-                    :key="index"
-                    xmlns="http://www.w3.org/2000/svg" 
-                    width="16" 
-                    height="16" 
-                    viewBox="0 0 24 24"
-                >
-                    <path 
-                        fill="none"
-                        :stroke="label.color" 
-                        stroke-linecap="round" 
-                        stroke-linejoin="round" 
-                        stroke-width="4"
-                        d="M5 12h14" 
-                    />
-                </svg>
-            </div>
-            </div>
-
-        <span 
-            v-if="contact?.latest_assigned_user?.full_name" 
-            class="text-gray-500 text-sm truncate"
-        >
-            {{ contact.latest_assigned_user.full_name }}
-        </span>
+            <span 
+                v-if="contact?.latest_assigned_user?.full_name" 
+                class="inline-flex w-fit text-sm truncate bg-gray-200 text-gray-800 px-2 py-0.5 rounded-full"
+            >
+                {{ contact.latest_assigned_user.full_name }}
+            </span>
     </div>
 
     <span class="text-gray-400 text-xs whitespace-nowrap ml-auto">

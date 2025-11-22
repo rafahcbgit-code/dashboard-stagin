@@ -35,7 +35,7 @@
         ticketState.value = props.ticket?.status;
     });
 
-    const emit = defineEmits(['toggleView', 'deleteThread', 'closeThread']);
+    const emit = defineEmits(['toggleView', 'deleteThread', 'closeThread','labelsUpdated']);
 
     const closeThread = () => {
         emit('closeThread', true);
@@ -162,6 +162,7 @@
             onSuccess: () => {
                 isOpenLabelsModal.value = false;
                 
+                emit('labelsUpdated', props.contact);;
                 // Update the local contact data with selected labels
                 const updatedLabels = availableLabels.value.filter(label => 
                     labelsForm.labels.includes(label.id)
