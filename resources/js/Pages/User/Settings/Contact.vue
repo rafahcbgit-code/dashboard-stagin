@@ -24,7 +24,7 @@
                                     <div class="mb-1 text-slate-500">{{ $t('Place custom fields before or after the address section') }}</div>
                                 </div>
                                 <div class="ml-auto">
-                                    <FormSelect v-model="location" :options="locationOptions" :name="''" :error="form2.errors.location" :class="'col-span-6'" :placeholder="'Select Here'"/>
+                                    <FormSelect v-model="location" :options="locationOptions" :name="''" :error="form2.errors.location" :class="'col-span-6'" :placeholder=" $t('Select Here')" />
                                 </div>
                             </div>
                         </div>

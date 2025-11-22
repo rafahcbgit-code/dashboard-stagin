@@ -882,7 +882,6 @@
     "Select Agents": "اختر الوكلاء",
     "Save Selected Agents": "احفظ الوكلاء المحددين",
     "Global Reply Settings": "إعدادات الردود العامة",
-    
     "There are no new contacts": "ليس هناك جهات اتصال جديدة",
     "Create Group from Label": "إنشاء غروب اعتمادا على العلامة",
     "Enable this option to allow assigning conversations only to specific agents.": "قم بتفعيل هذا الخيار للسماح بتعيين المحادثات لوكلاء محددين فقط",
@@ -895,5 +894,54 @@
     "Enable this option to reassign chats when a contact re-opens a closed conversation.": "قم بتفعيل هذا الخيار لإعادة تعيين الدردشات عندما يعيد جهة الاتصال فتح محادثة مغلقة",
     "Disable this option, if you want live chat agents to have access only to new conversations.": "قم بتعطيل هذا الخيار إذا كنت ترغب في أن يكون لوكلاء الدردشة المباشرة الوصول فقط إلى المحادثات الجديدة",
     "Assigned to Me": "المسندة لي",
-    "Assigned_to_me": "المسندة لي"
+    "Assigned_to_me": "المسندة لي",
+    "Automated Flows": "التدفقات المؤتمتة",
+    
+    "Saved Replies": "الردودالمحفوظة",
+    "Manage your pre-created replies for quick use in chats.": "قم بإدارة الردود التي أنشأتها مسبقًا لاستخدامها بسرعة داخل المحادثات.",
+    "Create Reply": "إنشاء رد",
+    "No replies found": "لا توجد ردود",
+    "Type": "النوع",
+    "Created At": "تاريخ الإنشاء",
+    "Create a new pre-defined reply template.": "إنشاء قالب رد مخصص جديد.",
+    "Reply Details": "تفاصيل الرد",
+    "General Info": "معلومات عامة",
+    "Basic information about the reply.": "معلومات أساسية عن الرد.",
+    "Simple Text": "نص بسيط",
+    "Text with Buttons (Quick Replies)": "نص مع أزرار (ردود سريعة)",
+    "Header, Text, Footer & Buttons": "ترويسة ونص وتذييل وأزرار",
+    "Link Button": "زر رابط",
+    "Message Content": "محتوى الرسالة",
+    "Message Body": "نص الرسالة",
+    "The main body of your message.": "النص الأساسي للرسالة.",
+    "Header & Footer": "الترويسة والتذييل",
+    "Link Button Text" : "نص زر الرابط",
+
+"Link URL" : "رابط URL",
+
+"Save Reply" : "حفظ الرد",
+
+"Title is required" : "العنوان مطلوب",
+
+"Message body is required" : "نص الرسالة مطلوب",
+
+"Button text is required" : "نص الزر مطلوب",
+"Select Here": "اختار هنا",
+"Link button text is required" : "نص زر الرابط مطلوب",
+"Whatsapp does not allow sending messages 24 hours after they last messaged you.However, you can send them a template message": "واتساب لا يسمح بإرسال الرسائل بعد مرور 24 ساعة من آخر رسالة أرسلها لك العميل. ولكن يمكنك إرسال رسالة قالب (Template Message) لهم.",
+"Link URL is required" : "رابط URL مطلوب",
+"Header Text" : "نص الترويسة",
+
+"Footer Text" : "نص التذييل",
+
+"Add up to 3 buttons." : "يمكنك إضافة ما يصل إلى 3 أزرار.",
+
+"Button Text" : "نص الزر",
+
+"Add Button" : "إضافة زر",
+
+"Link Details" : "تفاصيل الرابط",
+
+"Message body and link configuration." : "نص الرسالة وإعدادات الرابط."
+   
 }
