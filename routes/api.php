@@ -126,6 +126,15 @@ Route::prefix('v1')->group(function () {
             Route::prefix('config')->group(function () {
                 Route::get('/pusher', [App\Http\Controllers\Api\ConfigController::class, 'pusher']);
             });
+
+            // Chat Notes Endpoints (nested under contacts)
+            Route::prefix('contacts/{contact_uuid}/notes')->group(function () {
+                Route::get('/', [App\Http\Controllers\Api\ChatNoteController::class, 'index']);           // List notes
+                Route::post('/', [App\Http\Controllers\Api\ChatNoteController::class, 'store']);          // Create note
+                Route::get('/{note_uuid}', [App\Http\Controllers\Api\ChatNoteController::class, 'show']); // Get single note
+                Route::put('/{note_uuid}', [App\Http\Controllers\Api\ChatNoteController::class, 'update']); // Update note
+                Route::delete('/{note_uuid}', [App\Http\Controllers\Api\ChatNoteController::class, 'destroy']); // Delete note
+            });
         });
     });
 });
