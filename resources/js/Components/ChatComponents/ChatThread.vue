@@ -80,12 +80,12 @@ const loadMoreMessages = async () => {
                     <div class="text-xs">{{ chat[0].value.created_at }}</div>
                 </div>
             </div>
-            <div v-if="chat[0].type === 'notes'" class="py-2 bg-orange-100 my-2 rounded-lg p-2 w-[fit-content] ml-auto">
+            <div v-if="chat[0].type === 'notes'" class="py-2 !bg-[#152638] !text-white my-2 rounded-lg p-2 w-[fit-content] ml-auto"  >
                 <div class="text-right font-light text-sm">
                     <div>{{ chat[0].value.content }}</div>
                     <div class="flex items-center justify-between mt-2 space-x-4">
                         <!--<span v-if="props.type === 'outbound' && content.user" class="text-gray-500 text-xs text-right leading-none">Sent By: {{ content.user?.first_name + ' ' + content.user?.last_name }}</span>-->
-                        <p class="text-gray-500 text-xs text-right leading-none">{{ chat[0].value.created_at }}</p>
+                        <p class="!text-white text-xs text-right leading-none">{{ chat[0].value.created_at }}</p>
                     </div>
                 </div>
             </div>
