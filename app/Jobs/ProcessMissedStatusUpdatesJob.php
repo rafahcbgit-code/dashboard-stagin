@@ -24,21 +24,28 @@ class ProcessMissedStatusUpdatesJob implements ShouldQueue
     public function handle(): void
     {
         try {
-            // Clean up old processing records that might be stuck (older than 15 minutes)
+            // Clean up old processing records that might be stuck
             $this->cleanupStuckRecords();
 
-            // Get 1000 unprocessed records
-            $missedUpdates = MissedChatStatusUpdate::notProcessed()
+            // Get 1000 records that are ready for processing
+            // This now respects the next_retry_at timestamp
+            $missedUpdates = MissedChatStatusUpdate::readyForRetry()
+                ->where('retry_count', '<', MissedChatStatusUpdate::MAX_RETRIES)
+                ->orderBy('retry_count', 'asc') // Process items with fewer retries first
                 ->orderBy('created_at', 'asc')
                 ->limit(1000)
                 ->get();
 
             if ($missedUpdates->isEmpty()) {
+                Log::channel('webhook')->info('No missed status updates ready for processing');
                 return;
             }
 
             Log::channel('webhook')->info('Processing missed status updates', [
-                'count' => $missedUpdates->count()
+                'count' => $missedUpdates->count(),
+                'retry_distribution' => $missedUpdates->groupBy('retry_count')
+                    ->map->count()
+                    ->toArray()
             ]);
 
             // Mark all selected records as processing
@@ -58,6 +65,9 @@ class ProcessMissedStatusUpdatesJob implements ShouldQueue
             Log::channel('webhook')->info('Dispatched missed status update jobs', [
                 'dispatched' => count($updateIds)
             ]);
+
+            // Mark records that have exceeded max retries as failed
+            $this->markExceededRetriesAsFailed();
 
         } catch (\Exception $e) {
             Log::error('Error in ProcessMissedStatusUpdatesJob: ' . $e->getMessage(), [
@@ -82,6 +92,22 @@ class ProcessMissedStatusUpdatesJob implements ShouldQueue
         if ($stuckCount > 0) {
             Log::channel('webhook')->warning('Reset stuck processing records', [
                 'reset_count' => $stuckCount
+            ]);
+        }
+    }
+
+    private function markExceededRetriesAsFailed()
+    {
+        $failedCount = MissedChatStatusUpdate::notProcessed()
+            ->where('retry_count', '>=', MissedChatStatusUpdate::MAX_RETRIES)
+            ->update([
+                'state' => MissedChatStatusUpdate::STATE_FAILED,
+                'updated_at' => now()
+            ]);
+
+        if ($failedCount > 0) {
+            Log::channel('webhook')->warning('Marked records as permanently failed', [
+                'failed_count' => $failedCount
             ]);
         }
     }

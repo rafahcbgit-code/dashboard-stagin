@@ -42,7 +42,7 @@ class ProcessSingleMissedStatusJob implements ShouldQueue
             $missedUpdate = MissedChatStatusUpdate::find($this->missedUpdateId);
             
             if (!$missedUpdate || $missedUpdate->state !== MissedChatStatusUpdate::STATE_PROCESSING) {
-                return; // Already processed or doesn't exist
+                return;
             }
 
             // Try to find the chat
@@ -54,9 +54,22 @@ class ProcessSingleMissedStatusJob implements ShouldQueue
                 // Chat found - update status and mark as processed
                 $this->updateChatStatus($chat, $missedUpdate);
                 $this->markAsProcessed($missedUpdate);
+
+                /* Log::channel('webhook')->info('Successfully processed missed status update', [
+                    'missed_update_id' => $missedUpdate->id,
+                    'retry_count' => $missedUpdate->retry_count,
+                    'wam_id' => $missedUpdate->wam_id
+                ]); */
             } else {
                 // Chat still not found - mark back to not processed for retry later
-                $this->markAsNotProcessed($missedUpdate);
+                $this->incrementRetryAndSchedule($missedUpdate);
+
+                /* Log::channel('webhook')->warning('Chat not found, scheduling retry', [
+                    'missed_update_id' => $missedUpdate->id,
+                    'retry_count' => $missedUpdate->retry_count + 1,
+                    'wam_id' => $missedUpdate->wam_id,
+                    'next_retry_at' => MissedChatStatusUpdate::calculateNextRetryTime($missedUpdate->retry_count + 1)
+                ]); */
             }
 
         } catch (\Exception $e) {
@@ -65,9 +78,8 @@ class ProcessSingleMissedStatusJob implements ShouldQueue
                 'error' => $e->getMessage()
             ]);
 
-            // Mark as not processed to retry later
             if (isset($missedUpdate)) {
-                $this->markAsNotProcessed($missedUpdate);
+                $this->incrementRetryAndSchedule($missedUpdate);
             }
         }
     }
@@ -135,6 +147,28 @@ class ProcessSingleMissedStatusJob implements ShouldQueue
         ]);
     }
 
+    private function incrementRetryAndSchedule(MissedChatStatusUpdate $missedUpdate)
+    {
+        $newRetryCount = $missedUpdate->retry_count + 1;
+        
+        if ($newRetryCount >= MissedChatStatusUpdate::MAX_RETRIES) {
+            // Mark as failed if max retries exceeded
+            $missedUpdate->update([
+                'state' => MissedChatStatusUpdate::STATE_FAILED,
+                'retry_count' => $newRetryCount,
+                'updated_at' => now()
+            ]);
+        } else {
+            // Schedule next retry with exponential backoff
+            $missedUpdate->update([
+                'state' => MissedChatStatusUpdate::STATE_NOT_PROCESSED,
+                'retry_count' => $newRetryCount,
+                'next_retry_at' => MissedChatStatusUpdate::calculateNextRetryTime($newRetryCount),
+                'updated_at' => now()
+            ]);
+        }
+    }
+
     public function failed(\Throwable $exception)
     {
         Log::channel('webhook')->error('ProcessSingleMissedStatusJob failed permanently', [
@@ -142,14 +176,13 @@ class ProcessSingleMissedStatusJob implements ShouldQueue
             'error' => $exception->getMessage()
         ]);
 
-        // Mark as not processed for later retry
         try {
             $missedUpdate = MissedChatStatusUpdate::find($this->missedUpdateId);
             if ($missedUpdate) {
-                $this->markAsNotProcessed($missedUpdate);
+                $this->incrementRetryAndSchedule($missedUpdate);
             }
         } catch (\Exception $e) {
-            Log::channel('webhook')->error('Failed to reset missed update state', [
+            Log::channel('webhook')->error('Failed to update retry count', [
                 'missed_update_id' => $this->missedUpdateId
             ]);
         }
