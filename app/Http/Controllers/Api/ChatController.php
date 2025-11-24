@@ -658,4 +658,166 @@ class ChatController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Get single timeline item by UUID
+     * GET /api/v1/timeline-items/{uuid}
+     * 
+     * This endpoint fetches a single message, note, or ticket event
+     * Used when Pusher broadcasts a new item and mobile needs full formatted data
+     * 
+     * @param string $uuid - UUID of the message/note/ticket
+     * @return JSON response with timeline item in same format as messages endpoint
+     */
+    public function getTimelineItem(Request $request, $uuid)
+    {
+        try {
+            $organizationId = $request->organization_id;
+
+            // Try to find as Chat (message)
+            $chat = Chat::with(['media', 'contact'])
+                ->where('uuid', $uuid)
+                ->where('organization_id', $organizationId)
+                ->whereNull('deleted_at')
+                ->first();
+
+            if ($chat) {
+                // Verify contact belongs to organization
+                if ($chat->contact->organization_id !== $organizationId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized access'
+                    ], 403);
+                }
+
+                // Mark as read if inbound
+                if ($chat->type === 'inbound' && !$chat->is_read) {
+                    $chat->update(['is_read' => 1]);
+                }
+
+                return response()->json([
+                    'success' => true,
+                    'data' => [
+                        'timeline_item' => [
+                            'type' => 'message',
+                            'data' => $this->formatMessage($chat)
+                        ],
+                        'contact' => [
+                            'uuid' => $chat->contact->uuid,
+                            'first_name' => $chat->contact->first_name,
+                            'last_name' => $chat->contact->last_name,
+                            'full_name' => trim($chat->contact->first_name . ' ' . $chat->contact->last_name),
+                            'phone' => $chat->contact->phone,
+                            'email' => $chat->contact->email,
+                            'avatar' => $chat->contact->avatar,
+                        ]
+                    ]
+                ], 200);
+            }
+
+            // Try to find as Note
+            $note = \App\Models\ChatNote::with('contact', 'creator')
+                ->where('uuid', $uuid)
+                ->whereNull('deleted_at')
+                ->first();
+
+            if ($note) {
+                // Verify contact belongs to organization
+                if ($note->contact->organization_id !== $organizationId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized access'
+                    ], 403);
+                }
+
+                $creator = \App\Models\User::find($note->created_by);
+
+                return response()->json([
+                    'success' => true,
+                    'data' => [
+                        'timeline_item' => [
+                            'type' => 'note',
+                            'data' => [
+                                'uuid' => $note->uuid,
+                                'content' => $note->content,
+                                'created_by' => $creator ? [
+                                    'id' => $creator->id,
+                                    'uuid' => $creator->uuid,
+                                    'first_name' => $creator->first_name,
+                                    'last_name' => $creator->last_name,
+                                    'full_name' => trim($creator->first_name . ' ' . $creator->last_name),
+                                    'email' => $creator->email,
+                                ] : null,
+                                'created_at' => $note->created_at,
+                                'updated_at' => $note->updated_at,
+                            ]
+                        ],
+                        'contact' => [
+                            'uuid' => $note->contact->uuid,
+                            'first_name' => $note->contact->first_name,
+                            'last_name' => $note->contact->last_name,
+                            'full_name' => trim($note->contact->first_name . ' ' . $note->contact->last_name),
+                            'phone' => $note->contact->phone,
+                            'email' => $note->contact->email,
+                            'avatar' => $note->contact->avatar,
+                        ]
+                    ]
+                ], 200);
+            }
+
+            // Try to find as Ticket Event
+            $ticketLog = \App\Models\ChatTicketLog::with(['contact'])
+                ->where('id', $uuid) // Ticket logs might not have UUID, using ID
+                ->first();
+
+            if ($ticketLog) {
+                // Get contact
+                $contact = \App\Models\Contact::find($ticketLog->contact_id);
+
+                if (!$contact || $contact->organization_id !== $organizationId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized access'
+                    ], 403);
+                }
+
+                return response()->json([
+                    'success' => true,
+                    'data' => [
+                        'timeline_item' => [
+                            'type' => 'ticket_event',
+                            'data' => [
+                                'id' => $ticketLog->id,
+                                'description' => $ticketLog->description,
+                                'created_at' => $ticketLog->created_at,
+                            ]
+                        ],
+                        'contact' => [
+                            'uuid' => $contact->uuid,
+                            'first_name' => $contact->first_name,
+                            'last_name' => $contact->last_name,
+                            'full_name' => trim($contact->first_name . ' ' . $contact->last_name),
+                            'phone' => $contact->phone,
+                            'email' => $contact->email,
+                            'avatar' => $contact->avatar,
+                        ]
+                    ]
+                ], 200);
+            }
+
+            // Not found in any table
+            return response()->json([
+                'success' => false,
+                'message' => 'Timeline item not found'
+            ], 404);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch timeline item',
+                'error' => $e->getMessage(),
+                'line' => $e->getLine()
+            ], 500);
+        }
+    }
 }
