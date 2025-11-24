@@ -90,6 +90,8 @@ Route::prefix('v1')->group(function () {
             Route::get('/chats/{contact_uuid}/messages', [App\Http\Controllers\Api\ChatController::class, 'getMessages']);
             Route::post('/chats/{contact_uuid}/mark-as-read', [App\Http\Controllers\Api\ChatController::class, 'markAsRead']);
 
+            Route::get('/timeline-items/{uuid}', [App\Http\Controllers\Api\ChatController::class, 'getTimelineItem']);
+
             // Messages (Send) 
             Route::post('/chats/{contact_uuid}/messages', [App\Http\Controllers\Api\MessageController::class, 'sendMessage']);
             Route::post('/chats/{contact_uuid}/messages/template', [App\Http\Controllers\Api\MessageController::class, 'sendTemplate']);
