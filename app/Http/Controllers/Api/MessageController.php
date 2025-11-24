@@ -158,7 +158,7 @@ class MessageController extends Controller
                         'type' => 'outbound',
                         'message_type' => 'text',
                         'status' => 'sent',
-                        'is_read' => false,
+                        'is_read' => (bool)false,
                         'created_at' => now()->toIso8601String(),
                         'wam_id' => $response->data->messages[0]->id ?? null,
                         'content' => [
@@ -274,7 +274,7 @@ class MessageController extends Controller
                             'type' => 'outbound',
                             'message_type' => $mediaType,
                             'status' => 'sent',
-                            'is_read' => false,
+                            'is_read' => (bool)false,
                             'created_at' => now()->toIso8601String(),
                             'wam_id' => $response->data->messages[0]->id ?? null,
                             'content' => [
@@ -428,7 +428,7 @@ class MessageController extends Controller
                             'type' => 'outbound',
                             'message_type' => 'template',
                             'status' => $response->data->messages[0]->message_status ?? 'sent',
-                            'is_read' => false,
+                            'is_read' => (bool)false,
                             'created_at' => now()->toIso8601String(),
                             'wam_id' => $response->data->messages[0]->id ?? null,
                             'content' => [
@@ -848,7 +848,7 @@ class MessageController extends Controller
                         'type' => 'outbound',
                         'message_type' => 'interactive',
                         'status' => 'sent',
-                        'is_read' => false,
+                        'is_read' => (bool) false,
                         'created_at' => now()->toIso8601String(),
                         'wam_id' => $response->data->messages[0]->id ?? null,
                         'content' => [
