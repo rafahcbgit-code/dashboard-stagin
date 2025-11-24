@@ -238,7 +238,7 @@ class ChatController extends Controller
             'message_type' => $messageType,
             'status' => $chat->status,
             'created_at' => $chat->created_at,
-            'is_read' => $chat->is_read,
+            'is_read' => (bool)$chat->is_read,
             'has_media' => $chat->media_id ? true : false,
         ];
     }
