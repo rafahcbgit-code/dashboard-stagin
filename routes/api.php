@@ -59,6 +59,8 @@ Route::middleware([AuthenticateBearerToken::class])->group(function () {
     Route::get('/verify', [App\Http\Controllers\ApiController::class, 'verifyApiKey']);
 });
 
+Route::get('/generateOtp', [App\Http\Controllers\AuthController::class, 'generateOtp']);
+ 
 
 // ============================================
 // Mobile API Routes (v1)

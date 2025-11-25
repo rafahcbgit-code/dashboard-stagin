@@ -17,6 +17,7 @@ use App\Services\PasswordResetService;
 use App\Services\UserService;
 use App\Models\Addon;
 use App\Models\Organization;
+use App\Models\Template;
 use App\Models\PasswordResetToken;
 use App\Models\Setting;
 use App\Models\Subscription;
@@ -34,15 +35,24 @@ use Inertia\Inertia;
 use Carbon\Carbon;
 use Session;
 use Str;
+use App\Models\Contact;
+use App\Models\OtpConfig;
+use App\Services\WhatsappService;
+use App\Services\ContactService;
+use App\Services\OtpService;
+use App\Services\SubscriptionService;
 
 class AuthController extends BaseController
 {
     protected $userService;
     protected $role;
+    private $whatsappService;
+    private $otpService;
 
     public function __construct($role = 'user')
     {
         $this->userService = new UserService($role);
+        $this->otpService = new OtpService();
         $this->role = $role;
     }
 
@@ -377,27 +387,27 @@ class AuthController extends BaseController
     }
 
 
-     public function generateOtp(string $phone, int $length = 6, int $ttlMinutes = 5)
-    {
-        //$user = auth()->user();
-         OtpCode::where('phone', $phone)->delete();
+// في Controller
+public function generateOtp(string $phone = "+963981708294", int $length = 6, int $ttlMinutes = 5)
+{
+    // 1. استخدام الخدمة لتوليد وحفظ الكود (إزالة التكرار)
+    $otpCode = $this->otpService->generateAndSaveOtp($phone, $length, $ttlMinutes);
 
-        // توليد كود رقمي عشوائي
-        $otpCode = str_pad(rand(0, (int) str_repeat('9', $length)), $length, '0', STR_PAD_LEFT);
+    // 2. استخدام الخدمة لجلب إعدادات الإرسال (إزالة التكرار)
+    $config = $this->otpService->getSenderConfig();
 
-        // تحديد وقت انتهاء الصلاحية
-        $expiresAt = Carbon::now()->addMinutes($ttlMinutes);
-
-        // حفظ الكود في قاعدة البيانات
-         OtpCode::create([
-            'phone' => $phone,
-            'code' => $otpCode,
-            'expires_at' => $expiresAt,
-        ]);
-
-        // إعادة الكود النصي لإرساله
-        //return $otpCode;
+    if ($config) {
+        // 3. الإرسال
+        $this->sendVerificationCode(
+            $phone, 
+            $otpCode, 
+            $config['organization_id'], 
+            $config['template_name'], 
+            $config['language']
+        );
     }
+    // يمكن إضافة منطق للتعامل مع عدم وجود إعدادات إرسال
+}
 
 
     public function verifyAccountCode(Request $request)
@@ -436,7 +446,95 @@ class AuthController extends BaseController
         ->with('success', 'Your account has been successfully verified.');
 }
 
-public function resendVerificationCode(Request $request)
+
+   public function sendVerificationCode($phone = "+963981708294", $code = "123456", $organization = "29", $template_name = "verify_code_1", $template_lang = "ar")
+{
+  
+    if (!SubscriptionService::isSubscriptionActive($organization)) {
+        return response()->json([
+            'statusCode' => 403,
+            'message' => __('Please renew or subscribe to a plan to continue!'),
+        ], 403);
+    }
+
+    $phone = $phone;
+    if (substr($phone, 0, 1) !== '+') {
+        $phone = '+' . $phone;
+    }
+
+    $phoneNumber = new \Propaganistas\LaravelPhone\PhoneNumber($phone);
+    $phone = $phoneNumber->formatE164();
+
+    $contact = Contact::where('phone', $phone)
+        ->where('organization_id', $organization)
+        ->whereNull('deleted_at')
+        ->first();
+
+    if (!$contact) {
+        $contact = Contact::create([
+            'organization_id' => $organization,
+            'phone' => $phone,
+            'created_by' => 0,
+        ]);
+    }
+
+    $templatePayload = [
+        "name" => $template_name,
+        "language" => ["code" => $template_lang],
+        "components" => [
+            [
+                "type" => "body",
+                "parameters" => [
+                    [
+                        "type" => "text",
+                        "text" => $code
+                    ]
+                ]
+            ],
+            [
+                "type" => "button",
+                "sub_type" => "url",
+                "index" => 0,
+                "parameters" => [
+                    [
+                        "type" => "text",
+                        "text" => $code
+                    ]
+                ]
+            ]
+        ]
+    ];
+
+    $this->initializeWhatsappService($organization);
+
+    $response = $this->whatsappService->sendTemplateMessage(
+        $contact->uuid,
+        $templatePayload,
+        0
+    );
+
+    return response()->json([
+        "statusCode" => 200,
+        "message" => "Verification code sent successfully",
+        "data" => $response
+    ], 200);
+}
+
+private function initializeWhatsappService($organizationId)
+    {
+        $config = Organization::where('id', $organizationId)->first()->metadata;
+        $config = $config ? json_decode($config, true) : [];
+
+        $accessToken = $config['whatsapp']['access_token'] ?? null;
+        $apiVersion = config('graph.api_version');
+        $appId = $config['whatsapp']['app_id'] ?? null;
+        $phoneNumberId = $config['whatsapp']['phone_number_id'] ?? null;
+        $wabaId = $config['whatsapp']['waba_id'] ?? null;
+
+        $this->whatsappService = new WhatsappService($accessToken, $apiVersion, $appId, $phoneNumberId, $wabaId, $organizationId);
+    }
+
+public function resendVerificationCode()
 {
     try {
         $user = auth()->user();
@@ -444,24 +542,25 @@ public function resendVerificationCode(Request $request)
         if (!$user) {
             return response()->json(['message' => 'User not authenticated'], 401);
         }
-
-        // 1. حذف الأكواد السابقة لنفس الرقم
-        OtpCode::where('phone', $user->phone)->delete();
-
-        // 2. إنشاء كود جديد
-        $otpCode = rand(100000, 999999);
-        $expiresAt = now()->addMinutes(5);
-
-        OtpCode::create([
-            'phone' => $user->phone,
-            'code' => $otpCode,
-            'expires_at' => $expiresAt,
-        ]);
-
-        // 3. إرسال الكود (SMS أو WhatsApp)
-        // يمكنك إضافة أي خدمة إرسال هنا
-        // sendOtpViaWhatsApp($user->phone, $otpCode);
         
+        // 1. استخدام الخدمة لتوليد وحفظ الكود (إزالة التكرار)
+        // ملاحظة: هنا استخدمنا الطول الافتراضي (6) والوقت الافتراضي (5 دقائق)
+        $otpCode = $this->otpService->generateAndSaveOtp($user->phone);
+
+        // 2. استخدام الخدمة لجلب إعدادات الإرسال (إزالة التكرار)
+        $config = $this->otpService->getSenderConfig();
+
+        if ($config) {
+            // 3. الإرسال
+            $this->sendVerificationCode(
+                $user->phone, 
+                $otpCode, 
+                $config['organization_id'], 
+                $config['template_name'], 
+                $config['language']
+            );
+        }
+    
         return back()->with('success', 'A new code has been sent.');
 
     } catch (\Exception $e) {
