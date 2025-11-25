@@ -23,6 +23,7 @@ use App\Models\Subscription;
 use App\Models\Team;
 use App\Models\TeamInvite;
 use App\Models\User;
+use App\Models\OtpCode;
 use App\Services\SocialLoginService;
 use App\Services\TeamService;
 use Illuminate\Http\Request;
@@ -30,6 +31,7 @@ use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redirect;
 use Inertia\Inertia;
+use Carbon\Carbon;
 use Session;
 use Str;
 
@@ -348,8 +350,14 @@ class AuthController extends BaseController
         return Inertia::render('Auth/Register', $data);
     }
 
+    public function VerifyAccount()
+    {
+        return Inertia::render('Auth/VerifyAccount');
+    }
+
     public function handleRegistration(SignupRequest $request)
     {
+         try {
         $user = $this->userService->store($request);
         $authService = (new AuthService($user))->authenticateSession($request);
         $config = Setting::where('key', 'verify_email')->first();
@@ -358,8 +366,114 @@ class AuthController extends BaseController
             $user->sendEmailVerificationNotification();
         }
 
-        return redirect('/dashboard');
+        $this->generateOtp($user->phone);
+
+        return redirect('/VerifyAccount');
+         } catch (\Exception $e) { 
+             \Log::error('Registration Error: '.$e->getMessage(), [
+            'trace' => $e->getTraceAsString(),
+        ]);
+        }
     }
+
+
+     public function generateOtp(string $phone, int $length = 6, int $ttlMinutes = 5)
+    {
+        //$user = auth()->user();
+         OtpCode::where('phone', $phone)->delete();
+
+        // توليد كود رقمي عشوائي
+        $otpCode = str_pad(rand(0, (int) str_repeat('9', $length)), $length, '0', STR_PAD_LEFT);
+
+        // تحديد وقت انتهاء الصلاحية
+        $expiresAt = Carbon::now()->addMinutes($ttlMinutes);
+
+        // حفظ الكود في قاعدة البيانات
+         OtpCode::create([
+            'phone' => $phone,
+            'code' => $otpCode,
+            'expires_at' => $expiresAt,
+        ]);
+
+        // إعادة الكود النصي لإرساله
+        //return $otpCode;
+    }
+
+
+    public function verifyAccountCode(Request $request)
+{
+    // 1. التحقق من صحة المدخلات
+    $request->validate([
+        'code' => 'required|string'
+    ]);
+
+    $user = auth()->user();
+
+    // 2. جلب آخر كود OTP لهذا المستخدم
+    $otp = OtpCode::where('phone', $user->phone)
+        ->orderBy('id', 'desc')
+        ->first();
+
+    if (!$otp) {
+            return back()->withErrors(['general' => 'No verification code found, please resend.']);
+        }
+
+    // 3. Check expiration time
+    if (now()->greaterThan($otp->expires_at)) {
+        return back()->withErrors(['general' => 'The code has expired, please request a new code.']);
+    }
+
+    // 4. Check if the code matches
+    if ($otp->code !== $request->code) {
+        return back()->withErrors(['code' => 'The code is incorrect.']);
+    }
+
+    // 6. Delete the code after successful verification
+    $otp->delete();
+
+    // 7. Redirect to the dashboard
+    return redirect()->route('dashboard')
+        ->with('success', 'Your account has been successfully verified.');
+}
+
+public function resendVerificationCode(Request $request)
+{
+    try {
+        $user = auth()->user();
+
+        if (!$user) {
+            return response()->json(['message' => 'User not authenticated'], 401);
+        }
+
+        // 1. حذف الأكواد السابقة لنفس الرقم
+        OtpCode::where('phone', $user->phone)->delete();
+
+        // 2. إنشاء كود جديد
+        $otpCode = rand(100000, 999999);
+        $expiresAt = now()->addMinutes(5);
+
+        OtpCode::create([
+            'phone' => $user->phone,
+            'code' => $otpCode,
+            'expires_at' => $expiresAt,
+        ]);
+
+        // 3. إرسال الكود (SMS أو WhatsApp)
+        // يمكنك إضافة أي خدمة إرسال هنا
+        // sendOtpViaWhatsApp($user->phone, $otpCode);
+        
+        return back()->with('success', 'A new code has been sent.');
+
+    } catch (\Exception $e) {
+
+        \Log::error('Resend OTP Error: '.$e->getMessage());
+
+        return back()->withErrors([
+            'general' => 'An error occurred while sending the code, please try again later.'
+        ]);
+    }
+}
+
 
     public function viewInvite($uuid)
     {

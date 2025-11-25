@@ -91,6 +91,17 @@ Route::middleware(['guest', 'redirectIfAuthenticated:user,admin'])->group(functi
     Route::post('/reset-password', [App\Http\Controllers\AuthController::class, 'resetPassword']);
 });
 
+Route::middleware(['auth'])->group(function () {
+    Route::get('/VerifyAccount', [App\Http\Controllers\AuthController::class, 'VerifyAccount'])
+        ->name('VerifyAccount');
+    
+     Route::post('/verify-account-code', [App\Http\Controllers\AuthController::class, 'verifyAccountCode'])
+        ->name('VerifyAccountCode');
+
+        Route::post('/resend-verification-code', [App\Http\Controllers\AuthController::class, 'resendVerificationCode'])
+        ;
+});
+
 Route::middleware(['auth:user,admin'])->group(function () {
     Route::put('/profile', [App\Http\Controllers\ProfileController::class, 'update']);
     Route::put('/profile/password', [App\Http\Controllers\ProfileController::class, 'updatePassword']);

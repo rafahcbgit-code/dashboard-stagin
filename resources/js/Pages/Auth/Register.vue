@@ -98,6 +98,11 @@
             preserveScroll: true,
             onFinish: () => {
                 isLoading.value = false;
+            },
+            onSuccess: () => {
+                // هذا سيحدث فقط إذا لم يقم السيرفر بإرجاع Redirect
+                // ولكن الصحيح هو أن يعيد السيرفر Redirect
+                // router.visit('/verify-account-page'); 
             }
         });
     };
