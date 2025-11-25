@@ -896,7 +896,10 @@
     "Assigned to Me": "المسندة لي",
     "Assigned_to_me": "المسندة لي",
     "Automated Flows": "التدفقات المؤتمتة",
-    
+    "trial_alert": {
+        "message": "نسختك التجريبية تعمل الآن.",
+        "cta": "تواصل معنا للانتقال إلى الاشتراك المدفوع"
+    },
     "Saved Replies": "الردودالمحفوظة",
     "Manage your pre-created replies for quick use in chats.": "قم بإدارة الردود التي أنشأتها مسبقًا لاستخدامها بسرعة داخل المحادثات.",
     "Create Reply": "إنشاء رد",

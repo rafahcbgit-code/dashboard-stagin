@@ -124,7 +124,7 @@ Route::middleware(['auth:user'])->group(function () {
         Route::post('/select-organization', [App\Http\Controllers\User\OrganizationController::class, 'selectOrganization'])->name('user.organization.selectOrganization');
         Route::post('/organization', [App\Http\Controllers\User\OrganizationController::class, 'store'])->name('user.organization.store');
 
-        Route::group(['middleware' => ['check.organization']], function () {
+        Route::group(['middleware' => ['check.organization', 'isTrial']], function () {
             //User Panel Routes
             Route::match(['get', 'post'], '/dashboard', [App\Http\Controllers\User\DashboardController::class, 'index'])->name('dashboard');
 

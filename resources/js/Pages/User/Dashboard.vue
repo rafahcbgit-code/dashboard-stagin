@@ -99,6 +99,31 @@
                     </div>
                 </div>
                 <div class="space-y-5">
+                    
+                    <!-- NEW: Red Card for Trial Subscription -->
+                   <div v-if="props.subscription?.status === 'trial'" class="bg-red-500 text-white rounded-lg p-4 shadow-sm">
+    <h2 class="font-bold text-lg mb-2">{{ $t('Schedule a Meeting') }}</h2>
+    <p class="text-sm mb-3">
+        {{ $t('To book an appointment click the following link') }}:
+    </p>
+    <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
+        <a href="https://calendly.com/chatberry-info/chatberry-whatsapp-meeting-clone?month=2025-07" target="_blank" class="bg-white text-red-500 px-4 py-2 rounded-lg font-bold text-sm inline-flex items-center justify-center hover:bg-gray-100 transition-colors">
+            {{ $t('Book Now') }}
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ms-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+            </svg>
+        </a>
+
+        <a href="https://wa.me/966542922948" target="_blank" class="bg-green-500 text-white px-4 py-2 rounded-lg font-bold text-sm inline-flex items-center justify-center hover:bg-green-600 transition-colors">
+            {{ $t('Contact us') }}
+            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ms-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.79 21 3 14.21 3 6V5z" />
+            </svg>
+        </a>
+    </div>
+</div>
+                    <!-- End of New Code -->
+
                     <div class="flex justify-between rounded-lg py-4 px-4" :class="!subscriptionIsActive ? 'bg-red-500 text-white' : 'bg-slate-100 md:bg-white'">
                         <div>
                             <h2 v-if="props.subscription?.status === 'trial' && !subscriptionIsActive">{{ $t('Your trial period is over') }}</h2>
