@@ -31,6 +31,15 @@
 
         <Modal :label="$t('Add Webhook')" :isOpen=isOpenModal>
             <div class="mt-5 grid grid-cols-1 gap-x-6">
+                <!-- Display top-level errors if any -->
+        <div v-if="Object.keys(form.errors).length > 0" class="mb-4 p-4 bg-red-50 border border-red-200 rounded-md">
+            <p class="text-sm font-medium text-red-800 mb-2">{{ $t('Please fix the following errors') }}</p>
+            <ul class="list-disc list-inside">
+                <li v-for="(error, key) in form.errors" :key="key" class="text-sm text-red-700">
+                    {{ error }}
+                </li>
+            </ul>
+        </div>
                 <form @submit.prevent="submitForm()" class="grid gap-x-6 sm:grid-cols-6">
                     <FormInput v-model="form.url" :error="form.errors.url" :name="$t('URL')" :type="'text'" :class="'sm:col-span-6'"/>
                     <h4 class="mt-4 text-sm">{{ $t('Events') }}</h4>
@@ -62,6 +71,8 @@
     import WebhookTable from './WebhookTable.vue';
     import { Link, useForm } from "@inertiajs/vue3";
     import { ref } from 'vue';
+    import { toast } from 'vue3-toastify';
+
 
     const props = defineProps({ rows: Object, url: String, apirequests: Object, events: Object });
 
@@ -81,7 +92,15 @@
                 isOpenModal.value = false
             },
             onError: (errors) => {
-                alert(JSON.stringify(errors, null, 2));
+                let errorMessage = '';
+                for (const [key, value] of Object.entries(errors)) {
+                    errorMessage += value + '\n';
+                }
+                
+                toast(errorMessage || 'Error creating webhook', {
+                    autoClose: 5000,
+                    type: 'error'
+                });
             }
         })
     };
