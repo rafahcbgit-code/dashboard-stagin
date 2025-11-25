@@ -79,6 +79,9 @@
             preserveState: false,
             onSuccess: () => {
                 isOpenModal.value = false
+            },
+            onError: (errors) => {
+                alert(JSON.stringify(errors, null, 2));
             }
         })
     };
