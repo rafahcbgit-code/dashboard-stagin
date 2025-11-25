@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Chat;
 use App\Models\Contact;
+use App\Models\ChatLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
@@ -29,7 +30,7 @@ class ChatController extends Controller
             // Validation
             $validator = Validator::make($request->all(), [
                 'search' => 'nullable|string|max:255',
-                'labels' => 'nullable|string', // comma-separated IDs
+                'labels' => 'nullable|string',
                 'ticket_status' => 'nullable|in:all,unassigned,open,closed,assigned_to_me',
                 'sort' => 'nullable|in:newest,oldest',
                 'page' => 'nullable|integer|min:1',
@@ -46,9 +47,9 @@ class ChatController extends Controller
 
             $organizationId = $request->organization_id;
             $searchTerm = $request->input('search');
-            $labelFilter = $request->input('labels'); // "1,2,3"
-            $ticketStatus = $request->input('ticket_status', 'all'); // all, unassigned, open, closed
-            $sort = $request->input('sort', 'newest'); // newest, oldest
+            $labelFilter = $request->input('labels');
+            $ticketStatus = $request->input('ticket_status', 'all');
+            $sort = $request->input('sort', 'newest');
             $perPage = $request->input('per_page', 20);
 
             // Base query - Get contacts with chats
@@ -59,7 +60,7 @@ class ChatController extends Controller
                     $q->whereNull('deleted_at');
                 });
 
-            // Search filter (name or phone)
+            // Search filter
             if ($searchTerm) {
                 $query->where(function ($q) use ($searchTerm) {
                     $q->where('contacts.first_name', 'like', "%{$searchTerm}%")
@@ -72,7 +73,6 @@ class ChatController extends Controller
             // Label filter
             if ($labelFilter) {
                 $labelIds = array_filter(explode(',', $labelFilter));
-
                 if (!empty($labelIds)) {
                     $query->whereHas('labels', function ($q) use ($labelIds) {
                         $q->whereIn('labels.id', $labelIds);
@@ -83,32 +83,24 @@ class ChatController extends Controller
             // Ticket status filter
             if ($ticketStatus && $ticketStatus !== 'all') {
                 if ($ticketStatus === 'unassigned') {
-                    // Chats where ticket has no assigned agent OR ticket doesn't exist
                     $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
                         ->whereNull('chat_tickets.assigned_to');
                 } elseif ($ticketStatus === 'open') {
-                    // Chats where ticket status is "open"
                     $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
                         ->where('chat_tickets.status', 'open');
                 } elseif ($ticketStatus === 'closed') {
-                    // Chats where ticket status is "closed"
                     $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
                         ->where('chat_tickets.status', 'closed');
                 } elseif ($ticketStatus === 'assigned_to_me') {
-                    // Chats assigned to current user
                     $currentUserId = $request->user('sanctum')->id;
-                    
                     $query->join('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
                         ->where('chat_tickets.assigned_to', $currentUserId);
                 }
-                
-                // Ensure we select only contact columns to avoid conflicts
                 $query->select('contacts.*');
             }
 
             // Sort by last message time
             $sortDirection = $sort === 'oldest' ? 'asc' : 'desc';
-            
             $query->orderBy(
                 Chat::select('created_at')
                     ->whereColumn('contact_id', 'contacts.id')
@@ -122,28 +114,23 @@ class ChatController extends Controller
             $contacts = $query->paginate($perPage);
 
             // Format response
-            $chats = $contacts->map(function ($contact) use ($organizationId) {
-
-                // Get last chat manually (more reliable)
+            $chats = $contacts->map(function ($contact) {
                 $lastChat = Chat::with('media')
                     ->where('contact_id', $contact->id)
                     ->whereNull('deleted_at')
                     ->orderBy('created_at', 'desc')
                     ->first();
 
-                // Get unread count
                 $unreadCount = Chat::where('contact_id', $contact->id)
                     ->where('type', 'inbound')
                     ->where('is_read', 0)
                     ->whereNull('deleted_at')
                     ->count();
 
-                // Get ticket info
                 $ticket = \App\Models\ChatTicket::with('user')
                     ->where('contact_id', $contact->id)
                     ->first();
 
-                // Parse last message
                 $lastMessage = $this->parseLastMessage($lastChat);
 
                 return [
@@ -220,7 +207,6 @@ class ChatController extends Controller
         $messageText = null;
         $messageType = $metadata['type'] ?? 'text';
 
-        // Extract message text based on type
         if ($messageType === 'text' && isset($metadata['text']['body'])) {
             $messageText = $metadata['text']['body'];
         } elseif ($messageType === 'image') {
@@ -248,17 +234,17 @@ class ChatController extends Controller
         return [
             'uuid' => $chat->uuid,
             'text' => $messageText,
-            'type' => $chat->type, // inbound or outbound
-            'message_type' => $messageType, // text, image, video, etc.
-            'status' => $chat->status, // sent, delivered, read, failed
+            'type' => $chat->type,
+            'message_type' => $messageType,
+            'status' => $chat->status,
             'created_at' => $chat->created_at,
-            'is_read' => $chat->is_read,
+            'is_read' => (bool)$chat->is_read,
             'has_media' => $chat->media_id ? true : false,
         ];
     }
 
     /**
-     * Get unread message count for all chats
+     * Get unread message count
      * GET /api/v1/chats/unread-count
      */
     public function unreadCount(Request $request)
@@ -296,15 +282,16 @@ class ChatController extends Controller
      * - page: integer (default: 1)
      * - per_page: integer (default: 50, max: 100)
      * - sort: string (asc = oldest first, desc = newest first, default: desc)
+     * - include_types: string (comma-separated: message,note,ticket - default: all)
      */
     public function getMessages(Request $request, $contactUuid)
     {
         try {
-            // Validation
             $validator = Validator::make($request->all(), [
                 'page' => 'nullable|integer|min:1',
                 'per_page' => 'nullable|integer|min:1|max:100',
                 'sort' => 'nullable|in:asc,desc',
+                'include_types' => 'nullable|string',
             ]);
 
             if ($validator->fails()) {
@@ -317,7 +304,8 @@ class ChatController extends Controller
 
             $organizationId = $request->organization_id;
             $perPage = $request->input('per_page', 50);
-            $sort = $request->input('sort', 'desc'); // desc = newest first
+            $sort = $request->input('sort', 'desc');
+            $includeTypes = $request->input('include_types', 'all');
 
             // Find contact
             $contact = Contact::where('uuid', $contactUuid)
@@ -332,26 +320,53 @@ class ChatController extends Controller
                 ], 404);
             }
 
-            // Get messages with pagination
-            $query = Chat::with(['media', 'contact'])
-                ->where('contact_id', $contact->id)
-                ->whereNull('deleted_at');
+            // Parse include_types filter
+            $typesToInclude = ['chat', 'notes', 'ticket'];
+            
+            if ($includeTypes !== 'all') {
+                $requestedTypes = array_map('trim', explode(',', $includeTypes));
+                $typeMap = [
+                    'message' => 'chat',
+                    'note' => 'notes',
+                    'ticket' => 'ticket'
+                ];
+                
+                $typesToInclude = [];
+                foreach ($requestedTypes as $type) {
+                    if (isset($typeMap[$type])) {
+                        $typesToInclude[] = $typeMap[$type];
+                    }
+                }
+                
+                if (empty($typesToInclude)) {
+                    $typesToInclude = ['chat', 'notes', 'ticket'];
+                }
+            }
+
+            // Get chat logs (unified timeline)
+            $query = ChatLog::where('contact_id', $contact->id)
+                ->whereNull('deleted_at')
+                ->whereIn('entity_type', $typesToInclude);
 
             // Sort order
             if ($sort === 'asc') {
-                $query->orderBy('created_at', 'asc'); // Oldest first
+                $query->orderBy('created_at', 'asc');
             } else {
-                $query->orderBy('created_at', 'desc'); // Newest first (default)
+                $query->orderBy('created_at', 'desc');
             }
 
-            $messages = $query->paginate($perPage);
+            $chatLogs = $query->paginate($perPage);
 
             // Format messages
-            $formattedMessages = $messages->map(function ($chat) {
-                return $this->formatMessage($chat);
-            });
+            $messages = [];
+            foreach ($chatLogs as $chatLog) {
+                $item = $this->formatTimelineItem($chatLog);
+                if ($item) {
+                    $messages[] = $item;
+                }
+            }
 
-            // Auto mark as read (only unread inbound messages)
+            // Auto mark messages as read
             Chat::where('contact_id', $contact->id)
                 ->where('type', 'inbound')
                 ->where('is_read', 0)
@@ -371,16 +386,16 @@ class ChatController extends Controller
                         'avatar' => $contact->avatar,
                         'bot_enable' => $contact->bot_enable,
                     ],
-                    'messages' => $formattedMessages,
+                    'messages' => $messages,
                 ],
                 'meta' => [
-                    'current_page' => $messages->currentPage(),
-                    'last_page' => $messages->lastPage(),
-                    'per_page' => $messages->perPage(),
-                    'total' => $messages->total(),
-                    'from' => $messages->firstItem(),
-                    'to' => $messages->lastItem(),
-                    'has_more' => $messages->hasMorePages(),
+                    'current_page' => $chatLogs->currentPage(),
+                    'last_page' => $chatLogs->lastPage(),
+                    'per_page' => $chatLogs->perPage(),
+                    'total' => $chatLogs->total(),
+                    'from' => $chatLogs->firstItem(),
+                    'to' => $chatLogs->lastItem(),
+                    'has_more' => $chatLogs->hasMorePages(),
                 ]
             ], 200);
 
@@ -388,8 +403,76 @@ class ChatController extends Controller
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to fetch messages',
-                'error' => $e->getMessage()
+                'error' => $e->getMessage(),
+                'line' => $e->getLine()
             ], 500);
+        }
+    }
+
+    /**
+     * Format timeline item based on entity type
+     */
+    private function formatTimelineItem($chatLog)
+    {
+        $entityType = $chatLog->entity_type;
+        
+        try {
+            // Type 1: Message
+            if ($entityType === 'chat') {
+                $chat = $chatLog->relatedEntities;
+                if (!$chat) return null;
+                
+                $formattedMessage = $this->formatMessage($chat);
+                $formattedMessage['entity'] = 'message';
+                
+                return $formattedMessage;
+            } 
+            
+            // Type 2: Note
+            elseif ($entityType === 'notes') {
+                $note = $chatLog->relatedEntities;
+                if (!$note) return null;
+                
+                $creator = \App\Models\User::find($note->created_by);
+                
+                return [
+                    'entity' => 'note',
+                    'uuid' => $note->uuid,
+                    'content' => $note->content,
+                    'created_by' => $creator ? [
+                        'id' => $creator->id,
+                        'uuid' => $creator->uuid,
+                        'first_name' => $creator->first_name,
+                        'last_name' => $creator->last_name,
+                        'full_name' => trim($creator->first_name . ' ' . $creator->last_name),
+                        'email' => $creator->email,
+                    ] : null,
+                    'created_at' => $note->created_at,
+                    'updated_at' => $note->updated_at,
+                ];
+            } 
+            
+            // Type 3: Ticket Event
+            elseif ($entityType === 'ticket') {
+                $ticketLog = $chatLog->relatedEntities;
+                if (!$ticketLog) return null;
+                
+                return [
+                    'entity' => 'ticket_event',
+                    'id' => $ticketLog->id,
+                    'description' => $ticketLog->description,
+                    'created_at' => $ticketLog->created_at,
+                ];
+            }
+            
+            return null;
+            
+        } catch (\Exception $e) {
+            \Log::error('Error formatting timeline item: ' . $e->getMessage(), [
+                'entity_type' => $entityType,
+                'chat_log_id' => $chatLog->id
+            ]);
+            return null;
         }
     }
 
@@ -403,7 +486,7 @@ class ChatController extends Controller
 
         $message = [
             'uuid' => $chat->uuid,
-            'type' => $chat->type, // inbound or outbound
+            'type' => $chat->type,
             'message_type' => $messageType,
             'status' => $chat->status,
             'is_read' => (bool) $chat->is_read,
@@ -417,7 +500,6 @@ class ChatController extends Controller
                 'text' => $metadata['text']['body']
             ];
         }
-
         // Image
         elseif ($messageType === 'image') {
             $message['content'] = [
@@ -425,7 +507,6 @@ class ChatController extends Controller
                 'media' => $this->getMediaInfo($chat->media)
             ];
         }
-
         // Video
         elseif ($messageType === 'video') {
             $message['content'] = [
@@ -433,7 +514,6 @@ class ChatController extends Controller
                 'media' => $this->getMediaInfo($chat->media)
             ];
         }
-
         // Audio
         elseif ($messageType === 'audio') {
             $message['content'] = [
@@ -441,7 +521,6 @@ class ChatController extends Controller
                 'transcript' => $metadata['transcript'] ?? null
             ];
         }
-
         // Document
         elseif ($messageType === 'document') {
             $message['content'] = [
@@ -449,14 +528,12 @@ class ChatController extends Controller
                 'media' => $this->getMediaInfo($chat->media)
             ];
         }
-
         // Sticker
         elseif ($messageType === 'sticker') {
             $message['content'] = [
                 'media' => $this->getMediaInfo($chat->media)
             ];
         }
-
         // Location
         elseif ($messageType === 'location') {
             $message['content'] = [
@@ -466,8 +543,7 @@ class ChatController extends Controller
                 'address' => $metadata['location']['address'] ?? null,
             ];
         }
-
-        // Interactive (buttons/list)
+        // Interactive
         elseif ($messageType === 'interactive') {
             $message['content'] = [
                 'header' => $metadata['header'] ?? null,
@@ -476,7 +552,6 @@ class ChatController extends Controller
                 'buttons' => $metadata['buttons'] ?? null,
             ];
         }
-
         // Button reply
         elseif ($messageType === 'button') {
             $message['content'] = [
@@ -514,7 +589,6 @@ class ChatController extends Controller
         try {
             $organizationId = $request->organization_id;
 
-            // Find contact
             $contact = Contact::where('uuid', $contactUuid)
                 ->where('organization_id', $organizationId)
                 ->whereNull('deleted_at')
@@ -527,7 +601,6 @@ class ChatController extends Controller
                 ], 404);
             }
 
-            // Mark all unread messages as read
             $updated = Chat::where('contact_id', $contact->id)
                 ->where('type', 'inbound')
                 ->where('is_read', 0)
@@ -547,6 +620,114 @@ class ChatController extends Controller
                 'success' => false,
                 'message' => 'Failed to mark messages as read',
                 'error' => $e->getMessage()
+            ], 500);
+        }
+    }
+
+    /**
+     * Get single timeline item by UUID
+     * GET /api/v1/timeline-items/{uuid}
+     */
+    public function getTimelineItem(Request $request, $uuid)
+    {
+        try {
+            $organizationId = $request->organization_id;
+
+            // Try to find as Chat (message)
+            $chat = Chat::with(['media', 'contact'])
+                ->where('uuid', $uuid)
+                ->where('organization_id', $organizationId)
+                ->whereNull('deleted_at')
+                ->first();
+
+            if ($chat) {
+                if ($chat->contact->organization_id !== $organizationId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized access'
+                    ], 403);
+                }
+
+                if ($chat->type === 'inbound' && !$chat->is_read) {
+                    $chat->update(['is_read' => 1]);
+                }
+
+                $messageData = $this->formatMessage($chat);
+                $messageData['entity'] = 'message';
+                $messageData['contact'] = [
+                    'uuid' => $chat->contact->uuid,
+                    'first_name' => $chat->contact->first_name,
+                    'last_name' => $chat->contact->last_name,
+                    'full_name' => trim($chat->contact->first_name . ' ' . $chat->contact->last_name),
+                    'phone' => $chat->contact->phone,
+                    'email' => $chat->contact->email,
+                    'avatar' => $chat->contact->avatar,
+                    'bot_enable' => $chat->contact->bot_enable,
+                ];
+
+                return response()->json([
+                    'success' => true,
+                    'data' => $messageData
+                ], 200);
+            }
+
+            // Try to find as Note
+            $note = \App\Models\ChatNote::with('contact', 'creator')
+                ->where('uuid', $uuid)
+                ->whereNull('deleted_at')
+                ->first();
+
+            if ($note) {
+                if ($note->contact->organization_id !== $organizationId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'Unauthorized access'
+                    ], 403);
+                }
+
+                $creator = \App\Models\User::find($note->created_by);
+
+                return response()->json([
+                    'success' => true,
+                    'data' => [
+                        'entity' => 'note',
+                        'uuid' => $note->uuid,
+                        'content' => $note->content,
+                        'created_by' => $creator ? [
+                            'id' => $creator->id,
+                            'uuid' => $creator->uuid,
+                            'first_name' => $creator->first_name,
+                            'last_name' => $creator->last_name,
+                            'full_name' => trim($creator->first_name . ' ' . $creator->last_name),
+                            'email' => $creator->email,
+                        ] : null,
+                        'created_at' => $note->created_at,
+                        'updated_at' => $note->updated_at,
+                        'contact' => [
+                            'uuid' => $note->contact->uuid,
+                            'first_name' => $note->contact->first_name,
+                            'last_name' => $note->contact->last_name,
+                            'full_name' => trim($note->contact->first_name . ' ' . $note->contact->last_name),
+                            'phone' => $note->contact->phone,
+                            'email' => $note->contact->email,
+                            'avatar' => $note->contact->avatar,
+                        ]
+                    ]
+                ], 200);
+            }
+
+            // Not found
+            return response()->json([
+                'success' => false,
+                'message' => 'Timeline item not found'
+            ], 404);
+
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to fetch timeline item',
+                'error' => $e->getMessage(),
+                'line' => $e->getLine()
             ], 500);
         }
     }
