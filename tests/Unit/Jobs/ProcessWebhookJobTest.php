@@ -21,6 +21,7 @@ use App\Models\Chat;
 use App\Models\ChatLog;
 use App\Models\Contact;
 use App\Models\Organization;
+use App\Models\WebhookFailure;
 use App\Services\ContactService;
 use Illuminate\Support\Facades\Queue;
 
@@ -588,5 +589,107 @@ describe('Edge Cases', function () {
         $job->handle();
 
         expect(Chat::where('organization_id', $organization->id)->count())->toBe(0);
+    });
+});
+
+describe('AC-1.5.1: Retry Configuration', function () {
+    it('has $tries = 3 for 3 retry attempts', function () {
+        $job = new ProcessWebhookJob(
+            ['field' => 'messages', 'value' => []],
+            1,
+            'messages'
+        );
+
+        expect($job->tries)->toBe(3);
+    });
+
+    it('has exponential backoff of [60, 300, 900] seconds (1min, 5min, 15min)', function () {
+        $job = new ProcessWebhookJob(
+            ['field' => 'messages', 'value' => []],
+            1,
+            'messages'
+        );
+
+        expect($job->backoff)->toBe([60, 300, 900]);
+    });
+
+    it('has $timeout = 120 seconds', function () {
+        $job = new ProcessWebhookJob(
+            ['field' => 'messages', 'value' => []],
+            1,
+            'messages'
+        );
+
+        expect($job->timeout)->toBe(120);
+    });
+});
+
+describe('AC-1.5.2: Failed Job Logging', function () {
+    it('creates WebhookFailure record when job fails', function () {
+        $organization = Organization::factory()->withoutAppSecret()->create();
+
+        $payload = createMessagePayload('text', 'wamid_test_failure');
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
+
+        // Simulate job failure by calling failed() directly
+        $exception = new \RuntimeException('Test exception for webhook failure');
+        $job->failed($exception);
+
+        // Verify WebhookFailure record was created
+        $failure = WebhookFailure::where('organization_id', $organization->id)
+            ->where('job_type', 'ProcessWebhookJob')
+            ->first();
+
+        expect($failure)->not->toBeNull();
+        expect($failure->error_message)->toBe('Test exception for webhook failure');
+        expect($failure->payload)->not->toBeNull();
+    });
+
+    it('truncates error_message to 1000 characters', function () {
+        $organization = Organization::factory()->withoutAppSecret()->create();
+
+        $payload = createMessagePayload('text');
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
+
+        // Create an exception with a very long message
+        $longMessage = str_repeat('A', 2000);
+        $exception = new \RuntimeException($longMessage);
+        $job->failed($exception);
+
+        $failure = WebhookFailure::where('organization_id', $organization->id)->first();
+
+        expect(strlen($failure->error_message))->toBeLessThanOrEqual(1000);
+    });
+
+    it('stores full payload in WebhookFailure record', function () {
+        $organization = Organization::factory()->withoutAppSecret()->create();
+
+        $payload = createMessagePayload('text', 'wamid_payload_test', '1234567890', 'Test User');
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
+        $job->failed(new \RuntimeException('Test failure'));
+
+        $failure = WebhookFailure::where('organization_id', $organization->id)->first();
+
+        // Payload is cast to array in model
+        expect($failure->payload)->toBeArray();
+        expect($failure->payload['field'])->toBe('messages');
+    });
+
+    it('stores error_code when exception has code', function () {
+        $organization = Organization::factory()->withoutAppSecret()->create();
+
+        $payload = createMessagePayload('text');
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
+
+        $exception = new \RuntimeException('Test with code', 500);
+        $job->failed($exception);
+
+        $failure = WebhookFailure::where('organization_id', $organization->id)->first();
+
+        expect($failure->error_code)->toBe('500');
     });
 });
