@@ -3,6 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
 /**
  * WebhookFailure - Records failed webhook processing jobs.
@@ -46,5 +47,25 @@ class WebhookFailure extends Model
         'contact_id' => 'integer',
         'attempts' => 'integer',
         'created_at' => 'datetime',
+        'payload' => 'array',
     ];
+
+    /**
+     * Get the organization that owns the webhook failure.
+     */
+    public function organization(): BelongsTo
+    {
+        return $this->belongsTo(Organization::class);
+    }
+
+    /**
+     * Scope a query to only include failures for a given organization.
+     *
+     * @param  \Illuminate\Database\Eloquent\Builder  $query
+     * @return \Illuminate\Database\Eloquent\Builder
+     */
+    public function scopeForOrganization($query, int $organizationId)
+    {
+        return $query->where('organization_id', $organizationId);
+    }
 }

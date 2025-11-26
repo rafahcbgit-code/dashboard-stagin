@@ -5,6 +5,7 @@ namespace App\Jobs\Webhook;
 use App\Models\Chat;
 use App\Models\ChatLog;
 use App\Models\ChatStatusLog;
+use App\Models\WebhookFailure;
 use App\Services\AutoReplyService;
 use App\Services\ChatService;
 use App\Services\ContactService;
@@ -584,16 +585,39 @@ class ProcessWebhookJob implements ShouldQueue
     }
 
     /**
-     * Handle a job failure.
+     * Handle a job failure after all retries exhausted.
+     *
+     * Creates a WebhookFailure record for monitoring and manual retry capability.
+     * AC-1.5.2: After 3 failed attempts, webhook_failures record is created with full payload.
+     *
+     * @param  \Throwable  $exception The exception that caused the failure
      */
     public function failed(\Throwable $exception): void
     {
-        Log::channel('webhook')->error('ProcessWebhookJob failed', [
+        Log::channel('webhook')->error('ProcessWebhookJob failed permanently', [
             'organization_id' => $this->organizationId,
             'webhook_type' => $this->webhookType,
             'error' => $exception->getMessage(),
             'attempts' => $this->attempts(),
             'trace' => $exception->getTraceAsString(),
         ]);
+
+        // AC-1.5.2: Log to webhook_failures table for monitoring and manual retry
+        try {
+            WebhookFailure::create([
+                'organization_id' => $this->organizationId,
+                'job_type' => 'ProcessWebhookJob',
+                'error_message' => substr($exception->getMessage(), 0, 1000),
+                'error_code' => $exception->getCode() ? (string) $exception->getCode() : null,
+                'payload' => $this->payload, // Model will cast to JSON
+                'attempts' => $this->attempts(),
+            ]);
+        } catch (\Exception $e) {
+            // Fail-safe: don't let logging failure mask original exception
+            Log::channel('webhook')->error('Failed to log webhook failure to database', [
+                'original_error' => $exception->getMessage(),
+                'logging_error' => $e->getMessage(),
+            ]);
+        }
     }
 }
