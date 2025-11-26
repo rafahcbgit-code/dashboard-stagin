@@ -1,12 +1,9 @@
 <?php
 
-use App\Jobs\CreateCampaignLogsJob;
-use App\Jobs\ProcessCampaignMessagesJob;
 use App\Models\Language;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\File;
+use Illuminate\Support\Facades\Route;
 
 /*
 |--------------------------------------------------------------------------
@@ -34,6 +31,7 @@ Route::get('/current-locale', function () {
 
 Route::get('/locales', function () {
     $locales = Language::all()->pluck('code');
+
     return response()->json($locales);
 });
 
@@ -41,6 +39,7 @@ Route::get('/translations/{locale}', function ($locale) {
     $path = base_path("lang/{$locale}.json");
     if (File::exists($path)) {
         $translations = File::get($path);
+
         return response()->json(json_decode($translations, true));
     } else {
         return response()->json(['error' => 'Locale not found'], 404);
@@ -100,9 +99,10 @@ Route::middleware(['auth:user,admin'])->group(function () {
 
 Route::middleware(['auth:user'])->group(function () {
     Route::get('/email/verify', [App\Http\Controllers\AuthController::class, 'verifyEmail'])->middleware('auth')->name('verification.notice');
-    
+
     Route::get('/email/verify/{id}/{hash}', function (EmailVerificationRequest $request) {
         $request->fulfill();
+
         return redirect('/dashboard');
     })->middleware(['auth', 'signed'])->name('verification.verify');
 
@@ -181,7 +181,7 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::delete('/automation/basic/{uuid}', [App\Http\Controllers\User\CannedReplyController::class, 'delete'])->name('cannedReply.destroy');
 
                 Route::resource('pre-created-replies', App\Http\Controllers\User\PreCreatedReplyController::class)->parameters([
-                    'pre-created-replies' => 'uuid'
+                    'pre-created-replies' => 'uuid',
                 ]);
 
                 Route::get('/support/{uuid?}', [App\Http\Controllers\User\TicketController::class, 'index'])->name('support');
@@ -211,13 +211,13 @@ Route::middleware(['auth:user'])->group(function () {
                     Route::post('/settings/whatsapp/business-profile', [App\Http\Controllers\User\SettingController::class, 'whatsappBusinessProfileUpdate']);
                     Route::delete('/settings/whatsapp/business-profile', [App\Http\Controllers\User\SettingController::class, 'deleteWhatsappIntegration']);
                     Route::post('/settings/whatsapp/update-coexistence', [App\Http\Controllers\User\SettingController::class, 'updateWhatsappForCoExistence']);
-                   
+
                     Route::get('/settings/labels', [App\Http\Controllers\User\SettingController::class, 'labels'])->name('settings.labels');
                     Route::post('/settings/labels', [App\Http\Controllers\User\SettingController::class, 'labels']);
                     Route::post('/settings/labels/create-group', [App\Http\Controllers\User\SettingController::class, 'createGroupFromLabel']);
                     Route::put('/settings/labels/{label}', [App\Http\Controllers\User\SettingController::class, 'updateLabel'])->name('settings.labels.update');
                     Route::delete('/settings/labels/{label}', [App\Http\Controllers\User\SettingController::class, 'deleteLabel'])->name('settings.labels.delete');
-                    
+
                     Route::get('/settings/global-reply', [App\Http\Controllers\User\SettingController::class, 'viewGlobalReplySettings']);
                     Route::post('/settings/global-reply', [App\Http\Controllers\User\SettingController::class, 'updateGlobalReply']);
 
@@ -248,7 +248,7 @@ Route::prefix('admin')->middleware(['auth:admin'])->group(function () {
     Route::get('/dashboard', [App\Http\Controllers\Admin\DashboardController::class, 'index']);
     Route::resource('users', App\Http\Controllers\Admin\UserController::class);
     Route::resource('organizations', App\Http\Controllers\Admin\OrganizationController::class);
-     Route::get('/organizations/{id}/login-as', [App\Http\Controllers\AuthController::class, 'loginAs']);
+    Route::get('/organizations/{id}/login-as', [App\Http\Controllers\AuthController::class, 'loginAs']);
     /*Route::resource('blog/posts', App\Http\Controllers\Admin\BlogController::class);
     Route::resource('blog/categories', App\Http\Controllers\Admin\BlogCategoryController::class);
     Route::resource('blog/authors', App\Http\Controllers\Admin\BlogAuthorController::class);
@@ -313,4 +313,10 @@ Route::prefix('admin')->middleware(['auth:admin'])->group(function () {
 
     Route::get('/user-logs/notifications', [App\Http\Controllers\Admin\NotificationController::class, 'index']);
     Route::get('/user-logs/emails', [App\Http\Controllers\Admin\EmailLogController::class, 'index']);
+
+    // Webhook Failures - AC-1.5.4 & AC-1.5.5
+    Route::get('/webhook-failures', [App\Http\Controllers\Admin\WebhookFailureController::class, 'index']);
+    Route::get('/webhook-failures/{id}', [App\Http\Controllers\Admin\WebhookFailureController::class, 'show']);
+    Route::post('/webhook-failures/{id}/retry', [App\Http\Controllers\Admin\WebhookFailureController::class, 'retry']);
+    Route::delete('/webhook-failures/{id}', [App\Http\Controllers\Admin\WebhookFailureController::class, 'destroy']);
 });
