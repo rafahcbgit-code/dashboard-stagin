@@ -337,7 +337,7 @@ class WebhookController extends BaseController
                                     'value' => $chatLogArray->relatedEntities
                                 ]);
 
-                                event(new NewChatEvent($chatArray, $organization->id));
+                                event(new NewChatEvent($chatArray, $organization->id, $contact));
 
                                 // Send FCM notification for new message
                                 try {
@@ -476,7 +476,7 @@ class WebhookController extends BaseController
                                     'value' => $chatLogArray->relatedEntities
                                 ]);
                                 
-                                event(new NewChatEvent($chatArray, $organization->id, $contact->uuid));
+                                event(new NewChatEvent($chatArray, $organization->id, $contact));
                                 
                                 
                             }
