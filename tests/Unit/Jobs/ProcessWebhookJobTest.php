@@ -301,7 +301,7 @@ describe('AC-1.2.4: ProcessWebhookNotificationsJob Dispatch', function () {
         });
     });
 
-    it('dispatches ProcessWebhookNotificationsJob to notifications queue', function () {
+    it('dispatches ProcessWebhookNotificationsJob to webhook-high queue', function () {
         $organization = Organization::factory()->withoutAppSecret()->create();
         $payload = createMessagePayload('text');
 
@@ -309,7 +309,7 @@ describe('AC-1.2.4: ProcessWebhookNotificationsJob Dispatch', function () {
         $job->handle();
 
         Queue::assertPushed(ProcessWebhookNotificationsJob::class, function ($job) {
-            return $job->queue === 'notifications';
+            return $job->queue === 'webhook-high';
         });
     });
 

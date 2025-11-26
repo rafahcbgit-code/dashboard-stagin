@@ -270,12 +270,13 @@ class ProcessWebhookJob implements ShouldQueue
         }
 
         // AC-1.2.4: Dispatch ProcessWebhookNotificationsJob for real-time updates
+        // Uses webhook-high queue for priority processing (fire-and-forget pattern)
         ProcessWebhookNotificationsJob::dispatch(
             $chat->id,
             $contact->id,
             $this->organizationId,
             $isNewContact
-        )->onQueue('notifications');
+        )->onQueue('webhook-high');
 
         Log::channel('webhook')->info('ProcessWebhookNotificationsJob dispatched', [
             'chat_id' => $chat->id,
