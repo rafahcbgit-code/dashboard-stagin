@@ -28,7 +28,7 @@ class NewChatEvent implements ShouldBroadcast
      * @param int $organizationId
      * @param int $contact
      */
-    public function __construct($chat, $organizationId, $contact)
+    public function __construct($chat, $organizationId, $contact = null)
     {
         $this->chat = $chat;
         $this->organizationId = $organizationId;
