@@ -19,16 +19,20 @@ class NewChatEvent implements ShouldBroadcast
     public $chat;
     public $organizationId;
 
+    public $contact;
+
     /**
      * Create a new event instance.
      *
      * @param mixed $chat
      * @param int $organizationId
+     * @param int $contact
      */
-    public function __construct($chat, $organizationId)
+    public function __construct($chat, $organizationId, $contact)
     {
         $this->chat = $chat;
         $this->organizationId = $organizationId;
+        $this->contact = $contact;
     }
 
     /**
@@ -62,6 +66,12 @@ class NewChatEvent implements ShouldBroadcast
      */
     public function broadcastWith()
     {
-        return ['chat' => $this->chat];
+        $data = ['chat' => $this->chat];
+        try {
+            $data['contact'] = $this->contact;
+        }catch (Exception $e) {
+            Log::error('Failed to broadcastWith: ' . $e->getMessage());
+        }
+        return $data;
     }
 }
