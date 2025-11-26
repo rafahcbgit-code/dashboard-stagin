@@ -5,10 +5,7 @@
                 <div class="w-[20em] md:w-[30em]">
                     <div class="flex justify-center mb-5">
                         <Link href="/">
-                            <!-- <img class="max-w-[180px]" v-if="props.companyConfig.logo" :src="'/media/' + props.companyConfig.logo" :alt="props.companyConfig.company_name">
-                            <h4 v-else class="text-2xl mb-2">{{ props.companyConfig.company_name }}</h4>
-                        -->
-                        </Link>
+                            </Link>
                     </div>
 
                     <h1 class="text-2xl text-center">{{ $t('Verify Your Account') }}</h1>
@@ -45,10 +42,18 @@
                         </div>
 
                         <div class="text-center mt-4">
-                            <button type="button" @click="resendCode" :disabled="resendDisabled" class="text-sm text-primary-600 hover:text-primary-800 underline disabled:text-gray-400 disabled:no-underline">
+                            <button type="button" @click="resendCode" :disabled="resendDisabled" class="text-sm text-slate-600 hover:text-primary-800 underline disabled:text-gray-400 disabled:no-underline">
                                 {{ resendDisabled ? $t('Resend in') + ' ' + timer + 's' : $t('Resend Verification Code') }}
                             </button>
                         </div>
+
+                        <div class="text-center mt-3 border-t pt-3">
+                            <span class="text-sm text-slate-500">{{ $t('Or you can') }} </span>
+                            <Link href="otp-email" class="text-sm font-semibold text-primary-600 hover:text-primary-800 hover:underline">
+                                {{ $t('Send to email') }}
+                            </Link>
+                        </div>
+
                     </form>
                 </div>
             </div>
@@ -63,7 +68,7 @@
     import { useRtl } from '@/Composables/useRtl';
 
     const { rtlClass } = useRtl();
-   // const props = defineProps(['companyConfig']); // استقبلنا الكونفيج لعرض اللوجو
+    // const props = defineProps(['companyConfig']); 
 
     const resendDisabled = ref(false);
     const timer = ref(60);
@@ -73,16 +78,15 @@
     });
 
     const submitVerification = () => {
-        form.post('/verify-account-code', { // تأكد من المسار في الـ Backend
+        form.post('/verify-account-code', { 
             preserveScroll: true,
             onSuccess: () => {
-                // التوجيه سيتم تلقائياً من الباك إند للوحة التحكم
+                // Success logic
             }
         });
     };
 
     const resendCode = () => {
-        // منطق إعادة إرسال الكود
         form.post('/resend-verification-code', {
             onSuccess: () => {
                 startTimer();

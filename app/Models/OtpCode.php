@@ -12,5 +12,7 @@ class OtpCode extends Model
         'phone',
         'code',
         'expires_at',
+        'email',
+        'user_id'
     ];
 }

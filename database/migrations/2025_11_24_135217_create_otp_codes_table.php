@@ -13,9 +13,12 @@ return new class extends Migration
     {
         Schema::create('otp_codes', function (Blueprint $table) {
             $table->id();
-             $table->string('phone', 50)->index();
+             $table->string('phone', 50)->nullable()->index();
              $table->timestamp('expires_at')->nullable()->index();
              $table->string('code', 10);
+             $table->string('email', 100)->nullable();
+             $table->unsignedBigInteger('user_id');
+             $table->foreign('user_id')->references('id')->on('users')->onDelete('cascade');
             $table->timestamps();
         });
     }

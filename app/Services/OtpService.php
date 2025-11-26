@@ -4,12 +4,14 @@ namespace App\Services;
 
 use App\Http\Resources\OtpConfigResource;
 use App\Models\Module;
-use App\Models\RolePermission;
 use App\Models\OtpCode;
 use App\Models\OtpConfig;
 use App\Models\Organization;
 use App\Models\Template;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Mail;
+use App\Mail\VerifyCodeMail;
+use App\Models\User;
 
 class OtpService
 {
@@ -44,41 +46,52 @@ class OtpService
         return OtpConfig::updateOrCreate($match, $values);
     }
 
-    public function generateAndSaveOtp(string $phone, int $length = 6, int $ttlMinutes = 5): string
+    public function generateAndSaveOtp(string $phone, int $length = 6, int $ttlMinutes = 5, int $user_id = 0): string
     {
-        // 1. حذف الأكواد القديمة
-        OtpCode::where('phone', $phone)->delete();
+        OtpCode::where('user_id', auth()->user()->id)->delete();
 
-        // 2. توليد الكود (المنطق الموحد)
-        // استخدام الطريقة الأكثر أمانًا والقابلة للضبط
         $max = (int) str_repeat('9', $length);
         $otpCode = str_pad(rand(0, $max), $length, '0', STR_PAD_LEFT);
         
-        // 3. تحديد تاريخ الانتهاء
         $expiresAt = Carbon::now()->addMinutes($ttlMinutes);
 
-        // 4. الحفظ
-        OtpCode::create([
+         OtpCode::create([
             'phone' => $phone,
             'code' => $otpCode,
             'expires_at' => $expiresAt,
+            'user_id' => $user_id
         ]);
 
         return $otpCode;
     }
+
+    public function generateAndSaveOtpForEmail(string $email, int $length = 6, int $ttlMinutes = 5): string
+{
+    OtpCode::where('user_id', auth()->user()->id)->delete();
+    $user = User::where('email', $email)->latest()->first();
+    $max = (int) str_repeat('9', $length);
+    $otpCode = str_pad(rand(0, $max), $length, '0', STR_PAD_LEFT);
     
-    /**
-     * جلب إعدادات الإرسال (المنظمة والقالب)
-     *
-     * @return array|null [organization_id, template_name, language]
-     */
+    $expiresAt = Carbon::now()->addMinutes($ttlMinutes);
+
+    OtpCode::create([
+        'email' => $email, 
+        'code' => $otpCode,
+        'expires_at' => $expiresAt,
+        'user_id' => $user->id
+    ]);
+
+     Mail::to($user->email)->send(new VerifyCodeMail($user, $otpCode));
+
+    return $otpCode;
+}
+    
+    
     public function getSenderConfig(): ?array
     {
-        // تم توحيد منطق جلب الإعدادات المكرر
         $orgConfig = OtpConfig::first();
 
         if (!$orgConfig) {
-            // يجب التعامل مع حالة عدم وجود إعدادات
             return null;
         }
 
@@ -94,7 +107,7 @@ class OtpService
         return [
             'organization_id' => $organization->id,
             'template_name' => $orgConfig->template_name,
-            'language' => $template ? $template->language : 'en', // قيمة افتراضية للغة
+            'language' => $template ? $template->language : 'en', 
         ];
     }
 }

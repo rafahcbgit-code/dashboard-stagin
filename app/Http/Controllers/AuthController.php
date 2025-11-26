@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use DB;
 use App\Helpers\Email;
 use App\Http\Controllers\Controller as BaseController;
 use App\Http\Requests\LoginRequest;
@@ -30,6 +29,7 @@ use App\Services\TeamService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redirect;
 use Inertia\Inertia;
 use Carbon\Carbon;
@@ -376,28 +376,24 @@ class AuthController extends BaseController
             $user->sendEmailVerificationNotification();
         }
 
-        $this->generateOtp($user->phone);
+        $this->generateOtp(phone: $user->phone, length: 6, ttlMinutes: 5, user_id: $user->id);
 
-        return redirect('/VerifyAccount');
+        return Inertia::location('/VerifyAccount');
          } catch (\Exception $e) { 
-             \Log::error('Registration Error: '.$e->getMessage(), [
+             Log::error('Registration Error: '.$e->getMessage(), [
             'trace' => $e->getTraceAsString(),
         ]);
         }
     }
 
 
-// في Controller
-public function generateOtp(string $phone = "+963981708294", int $length = 6, int $ttlMinutes = 5)
+public function generateOtp(string $phone = "+963981708294", int $length = 6, int $ttlMinutes = 5, int $user_id = 0)
 {
-    // 1. استخدام الخدمة لتوليد وحفظ الكود (إزالة التكرار)
-    $otpCode = $this->otpService->generateAndSaveOtp($phone, $length, $ttlMinutes);
+    $otpCode = $this->otpService->generateAndSaveOtp($phone, $length, $ttlMinutes, $user_id);
 
-    // 2. استخدام الخدمة لجلب إعدادات الإرسال (إزالة التكرار)
     $config = $this->otpService->getSenderConfig();
 
     if ($config) {
-        // 3. الإرسال
         $this->sendVerificationCode(
             $phone, 
             $otpCode, 
@@ -406,42 +402,47 @@ public function generateOtp(string $phone = "+963981708294", int $length = 6, in
             $config['language']
         );
     }
-    // يمكن إضافة منطق للتعامل مع عدم وجود إعدادات إرسال
 }
+
+public function sendVerificationCodeToEmail(Request $request)
+    {
+        $request->validate([
+            'email' => ['required', 'string', 'email', 'exists:users,email'],
+        ], [
+            'email.exists' => 'The provided email is not registered.', // يمكنك تخصيص رسالة الخطأ
+        ]);
+
+        $this->otpService->generateAndSaveOtpForEmail($request->email);
+
+        return Inertia::location('/VerifyAccount');
+    }
 
 
     public function verifyAccountCode(Request $request)
 {
-    // 1. التحقق من صحة المدخلات
     $request->validate([
         'code' => 'required|string'
     ]);
 
     $user = auth()->user();
 
-    // 2. جلب آخر كود OTP لهذا المستخدم
-    $otp = OtpCode::where('phone', $user->phone)
+    $otp = OtpCode::where('phone', $user->phone)->orWhere('email', $user->email)
         ->orderBy('id', 'desc')
         ->first();
-
     if (!$otp) {
             return back()->withErrors(['general' => 'No verification code found, please resend.']);
         }
 
-    // 3. Check expiration time
     if (now()->greaterThan($otp->expires_at)) {
         return back()->withErrors(['general' => 'The code has expired, please request a new code.']);
     }
 
-    // 4. Check if the code matches
     if ($otp->code !== $request->code) {
         return back()->withErrors(['code' => 'The code is incorrect.']);
     }
 
-    // 6. Delete the code after successful verification
     $otp->delete();
 
-    // 7. Redirect to the dashboard
     return redirect()->route('dashboard')
         ->with('success', 'Your account has been successfully verified.');
 }
@@ -505,13 +506,13 @@ public function generateOtp(string $phone = "+963981708294", int $length = 6, in
         ]
     ];
 
-    $this->initializeWhatsappService($organization);
+     $this->initializeWhatsappService($organization);
 
-    $response = $this->whatsappService->sendTemplateMessage(
-        $contact->uuid,
-        $templatePayload,
-        0
-    );
+     $response = $this->whatsappService->sendTemplateMessage(
+         $contact->uuid,
+         $templatePayload,
+         0
+     );
 
     return response()->json([
         "statusCode" => 200,
@@ -543,15 +544,11 @@ public function resendVerificationCode()
             return response()->json(['message' => 'User not authenticated'], 401);
         }
         
-        // 1. استخدام الخدمة لتوليد وحفظ الكود (إزالة التكرار)
-        // ملاحظة: هنا استخدمنا الطول الافتراضي (6) والوقت الافتراضي (5 دقائق)
-        $otpCode = $this->otpService->generateAndSaveOtp($user->phone);
+        $otpCode = $this->otpService->generateAndSaveOtp(phone: $user->phone, user_id: $user->id);
 
-        // 2. استخدام الخدمة لجلب إعدادات الإرسال (إزالة التكرار)
         $config = $this->otpService->getSenderConfig();
 
         if ($config) {
-            // 3. الإرسال
             $this->sendVerificationCode(
                 $user->phone, 
                 $otpCode, 
@@ -565,7 +562,7 @@ public function resendVerificationCode()
 
     } catch (\Exception $e) {
 
-        \Log::error('Resend OTP Error: '.$e->getMessage());
+        Log::error('Resend OTP Error: '.$e->getMessage());
 
         return back()->withErrors([
             'general' => 'An error occurred while sending the code, please try again later.'
@@ -611,6 +608,14 @@ public function resendVerificationCode()
         $data['companyConfig'] = Setting::whereIn('key', $keys)->pluck('value', 'key')->toArray();
 
         return Inertia::render('Auth/Forgot', $data);
+    }
+
+     public function showOtpEmailForm(Request $request)
+    {
+        $keys = ['logo', 'company_name', 'address', 'email', 'phone', 'socials', 'trial_period'];
+        $data['companyConfig'] = Setting::whereIn('key', $keys)->pluck('value', 'key')->toArray();
+
+        return Inertia::render('Auth/OtpEmail', $data);
     }
 
     public function createPasswordResetToken(PasswordResetRequest $request)
@@ -721,7 +726,5 @@ public function resendVerificationCode()
         'type' => 'success',
         'message' => "You are now logged in as organization: {$organization->name}"
     ]);
-}
-
-    
+}   
 }

@@ -97,6 +97,11 @@ Route::middleware(['auth'])->group(function () {
     
      Route::post('/verify-account-code', [App\Http\Controllers\AuthController::class, 'verifyAccountCode'])
         ->name('VerifyAccountCode');
+        
+        Route::get('/otp-email', [App\Http\Controllers\AuthController::class, 'showOtpEmailForm'])
+        ->name('VerifyAccount');
+      
+        Route::post('/send-verification-code', [App\Http\Controllers\AuthController::class, 'sendVerificationCodeToEmail']);
 
         Route::post('/resend-verification-code', [App\Http\Controllers\AuthController::class, 'resendVerificationCode'])
         ;
