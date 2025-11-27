@@ -37,8 +37,6 @@ class ContactController extends BaseController
     public function index(Request $request, $uuid = null){
         $organizationId = $this->getCurrentOrganizationId();
         $contactModel = new Contact;
-        $whatsappLink = $request->get('whatsapp_link'); 
-        $isTrial = $request->get('is_trial');
 
         if($uuid === 'export') {
             $format = $request->query('format', 'xlsx');
@@ -66,8 +64,6 @@ class ContactController extends BaseController
                 'filters' => request()->all(),
                 'locationSettings' => $this->getLocationSettings(),
                 'editContact' => $editContact,
-                'whatsapp_link' => $whatsappLink, 
-                'is_trial' => $isTrial,
             ]);
         }
     }
