@@ -98,8 +98,7 @@ Route::middleware(['auth'])->group(function () {
      Route::post('/verify-account-code', [App\Http\Controllers\AuthController::class, 'verifyAccountCode'])
         ->name('VerifyAccountCode');
         
-        Route::get('/otp-email', [App\Http\Controllers\AuthController::class, 'showOtpEmailForm'])
-        ->name('VerifyAccount');
+        Route::get('/otp-email', [App\Http\Controllers\AuthController::class, 'showOtpEmailForm']);
       
         Route::post('/send-verification-code', [App\Http\Controllers\AuthController::class, 'sendVerificationCodeToEmail']);
 
@@ -142,7 +141,7 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::get('/subscription/coupon/remove/{id}', [App\Http\Controllers\User\SubscriptionController::class, 'removeCoupon']);
             });
 
-            Route::group(['middleware' => 'check.subscription'], function () {
+            Route::group(['middleware' => ['check.organization', 'isTrial']], function () {
                 Route::get('/chats/{uuid?}', [App\Http\Controllers\User\ChatController::class, 'index']);
                 Route::get('/chats/{id}/media', [App\Http\Controllers\User\ChatController::class, 'getMedia']);
                 Route::post('/chats', [App\Http\Controllers\User\ChatController::class, 'sendMessage']);

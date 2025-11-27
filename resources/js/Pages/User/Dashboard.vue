@@ -100,38 +100,33 @@
                 </div>
                 <div class="space-y-5">
                     
-                    <!-- NEW: Red Card for Trial Subscription -->
-                   <div v-if="props.subscription?.status === 'trial'" class="bg-red-500 text-white rounded-lg p-4 shadow-sm">
-    <h2 class="font-bold text-lg mb-2">{{ $t('Schedule a Meeting') }}</h2>
-    <p class="text-sm mb-3">
-        {{ $t('To book an appointment click the following link') }}:
-    </p>
-    <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
-        <a :href="calendly_url" target="_blank" class="bg-white text-red-500 px-4 py-2 rounded-lg font-bold text-sm inline-flex items-center justify-center hover:bg-gray-100 transition-colors">
-            {{ $t('Book Now') }}
-            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ms-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-            </svg>
-        </a>
+                <div v-if="props.subscription?.status === 'trial'" class="bg-red-500 text-white rounded-lg p-4 shadow-sm">
+                 
+                    <h2 class="font-bold text-lg mb-2">{{ $t('Schedule a Meeting') }}</h2>
+                    <p class="text-sm mb-3">
+                        {{ $t('To book an appointment click the following link') }}:
+                    </p>
+                    <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
+                        <a :href="calendly_url" target="_blank" class="bg-white text-red-500 px-4 py-2 rounded-lg font-bold text-sm inline-flex items-center justify-center hover:bg-gray-100 transition-colors">
+                            {{ $t('Book Now') }}
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ms-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                            </svg>
+                        </a>
+                
+                        <a :href="whatsapp_link"
+                        target="_blank"
+                        class="bg-[#25D366] text-white px-5 py-3 rounded-xl font-semibold text-base inline-flex items-center gap-3 hover:bg-[#1ebe5d] transition-all shadow-md hover:shadow-lg">
 
-
-  
-  <a :href="whatsapp_link"
-   target="_blank"
-   class="bg-[#25D366] text-white px-5 py-3 rounded-xl font-semibold text-base inline-flex items-center gap-3 hover:bg-[#1ebe5d] transition-all shadow-md hover:shadow-lg">
-
-    <span>{{ $t('Contact us') }}</span>
-    <svg xmlns="http://www.w3.org/2000/svg"
-         viewBox="0 0 32 32"
-         class="w-7 h-7 fill-white">
-        <path d="M16.027 3C9.38 3 4 8.375 4 15.016c0 2.566.77 4.953 2.105 6.938L4 29l7.27-2.07A12.02 12.02 0 0 0 16.027 27C22.67 27 28 21.625 28 14.984 28 8.344 22.67 3 16.027 3zm5.918 17.402c-.25.703-1.46 1.36-2.02 1.453-.541.098-1.23.14-1.984-.123-.457-.156-1.043-.34-1.793-.668-3.155-1.37-5.207-4.57-5.36-4.785-.152-.215-1.28-1.705-1.28-3.253 0-1.55.807-2.316 1.094-2.63.285-.312.623-.39.832-.39.207 0 .416.003.598.01.193.008.448-.073.701.535.25.609.85 2.094.926 2.246.076.152.127.33.025.543-.102.215-.152.33-.305.512-.152.18-.32.4-.457.535-.152.152-.31.317-.133.623.18.312.797 1.312 1.715 2.125 1.18 1.047 2.176 1.375 2.49 1.527.316.152.5.127.684-.076.18-.203.785-.91.996-1.223.213-.312.406-.254.684-.152.278.102 1.758.828 2.06.977.304.152.508.228.582.355.07.13.07.75-.18 1.45z"/>
-    </svg>
-</a>
-
-
-
-    </div>
-</div>
+                            <span>{{ $t('Contact us') }}</span>
+                            <svg xmlns="http://www.w3.org/2000/svg"
+                                viewBox="0 0 32 32"
+                                class="w-7 h-7 fill-white">
+                                <path d="M16.027 3C9.38 3 4 8.375 4 15.016c0 2.566.77 4.953 2.105 6.938L4 29l7.27-2.07A12.02 12.02 0 0 0 16.027 27C22.67 27 28 21.625 28 14.984 28 8.344 22.67 3 16.027 3zm5.918 17.402c-.25.703-1.46 1.36-2.02 1.453-.541.098-1.23.14-1.984-.123-.457-.156-1.043-.34-1.793-.668-3.155-1.37-5.207-4.57-5.36-4.785-.152-.215-1.28-1.705-1.28-3.253 0-1.55.807-2.316 1.094-2.63.285-.312.623-.39.832-.39.207 0 .416.003.598.01.193.008.448-.073.701.535.25.609.85 2.094.926 2.246.076.152.127.33.025.543-.102.215-.152.33-.305.512-.152.18-.32.4-.457.535-.152.152-.31.317-.133.623.18.312.797 1.312 1.715 2.125 1.18 1.047 2.176 1.375 2.49 1.527.316.152.5.127.684-.076.18-.203.785-.91.996-1.223.213-.312.406-.254.684-.152.278.102 1.758.828 2.06.977.304.152.508.228.582.355.07.13.07.75-.18 1.45z"/>
+                            </svg>
+                        </a>
+                    </div>
+                </div>
 
                     <div class="flex justify-between rounded-lg py-4 px-4" :class="!subscriptionIsActive ? 'bg-red-500 text-white' : 'bg-slate-100 md:bg-white'">
                         <div>
@@ -269,8 +264,14 @@
         appId: String,
         configId: String,
         graphAPIVersion: String,
-        whatsapp_link: String,
-        calendly_url: String,
+        whatsapp_link: {
+            type: String,
+            default: () => 'https://wa.me/966542922948', 
+        },
+        calendly_url: {
+            type: String,
+            default: () => "https://calendly.com/chatberry-info/chatberry-whatsapp-meeting-clone?month=2025-07", 
+        },
     });
 
     const chartOptions = {

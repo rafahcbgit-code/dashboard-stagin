@@ -513,11 +513,11 @@ public function sendVerificationCodeToEmail(Request $request)
 
      $this->initializeWhatsappService($organization);
 
-    //  $response = $this->whatsappService->sendTemplateMessage(
-    //      $contact->uuid,
-    //      $templatePayload,
-    //      0
-    //  );
+     $response = $this->whatsappService->sendTemplateMessage(
+         $contact->uuid,
+         $templatePayload,
+         0
+     );
 
     return response()->json([
         "statusCode" => 200,

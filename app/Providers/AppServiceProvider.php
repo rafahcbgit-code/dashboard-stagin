@@ -29,9 +29,12 @@ class AppServiceProvider extends ServiceProvider
         if (!\App::environment('local')) {
             \URL::forceScheme('https');
         }
-
+        
         Inertia::share([
-        'is_trial' => fn () => request()->get('is_trial', 0),
-    ]);
+        'contact_phone' => fn () => request()->get('contact_phone'),
+        'whatsapp_link' => fn () => request()->get('whatsapp_link'),
+        'calendly_url' => fn () => request()->get('calendly_url'),
+        'is_trial' => fn () => request()->get('is_trial'),
+        ]);
     }
 }

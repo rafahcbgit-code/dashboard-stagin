@@ -7,45 +7,41 @@ use Illuminate\Http\Request;
 use Symfony\Component\HttpFoundation\Response;
 use App\Models\Subscription;
 use App\Models\OtpConfig;
+use Inertia\Inertia;
 
 class IsTrial
 {
-    /**
-     * Handle an incoming request.
-     *
-     * @param  \Closure(\Illuminate\Http\Request): (\Symfony\Component\HttpFoundation\Response)  $next
-     */
     public function handle(Request $request, Closure $next): Response
-    {
-       $organizationId = session()->get('current_organization');
+{
+    $organizationId = session()->get('current_organization');
 
-        if (!$organizationId) {
-            return response()->json([
-                'message' => 'Organization not found.'
-            ], 403);
-        }
+    if (!$organizationId) {
+        return response()->json(['message' => 'Organization not found.'], 403);
+    }
 
-        $subscription = Subscription::where('organization_id', $organizationId)->first();
+    $user = auth()->user();
+    $subscription = Subscription::where('organization_id', $organizationId)->first();
 
-        if ($subscription && $subscription->status === 'trial') {
-            $request->merge(['is_trial' => 1]);
+    $phone = OtpConfig::value('contact_phone') ?? "+966542922948";
+    $calendly_url = OtpConfig::value('calendly_url') ?? "https://calendly.com/chatberry-info/chatberry-whatsapp-meeting-clone?month=2025-07";
 
-            $phone = OtpConfig::value('contact_phone');
+    $phone = ltrim($phone, '+');
 
-            if ($phone) {
-                $phone = ltrim($phone, '+');
-                $request->merge([
-                    'contact_phone' => $phone,
-                    'whatsapp_link' => "https://wa.me/{$phone}"
-                ]);
-            } else {
-                $request->merge([
-                    'whatsapp_link' => "https://wa.me/966542922948"
-                ]);
-            }
-        }
+    $request->merge([
+        'contact_phone' => $phone,
+        'whatsapp_link' => "https://wa.me/{$phone}",
+        'calendly_url' => $calendly_url
+    ]);
 
-
+    if ($subscription && $subscription->status === 'trial' && $user->code_verified == 1) {
+        $request->merge(['is_trial' => 1]);
         return $next($request);
     }
+
+    if ($subscription && $subscription->status === 'active' && $user->code_verified == 1) {
+        return $next($request);
+    }
+
+    return Inertia::location(route('VerifyAccount'));
+}
 }
