@@ -8,4 +8,20 @@ use Illuminate\Database\Eloquent\Model;
 class NotificationLog extends Model
 {
     use HasFactory;
+    protected $fillable = [
+        'user_id',
+        'organization_id',
+        'notification_type',
+        'payload',
+        'fcm_response',
+        'delivered',
+        'clicked',
+    ];
+
+    protected $casts = [
+        'payload' => 'array',
+        'fcm_response' => 'array',
+        'delivered' => 'boolean',
+        'clicked' => 'boolean',
+    ];
 }
