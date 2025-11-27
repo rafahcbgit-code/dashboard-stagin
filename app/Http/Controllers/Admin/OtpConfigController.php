@@ -26,7 +26,6 @@ class OtpConfigController extends BaseController
      * Display a listing of the resource.
      */
  public function index(Request $request){
-    
         return Inertia::render('Admin/Otp/Index', [
             'title' => __('Otp'),
             'allowCreate' => true,
@@ -51,9 +50,10 @@ class OtpConfigController extends BaseController
     public function store(Request $request)
     {
     $data = $request->validate([
-        'template_name' => 'required|string|max:255',
-        'uuid'          => 'nullable|string', 
-         'access_token'  => 'required|string',
+        'template_name' => 'nullable|string|max:255',
+        'uuid'          => 'required|string', 
+        'contact_phone'  => 'nullable|string',
+        'calendly_url'  => 'nullable|string',
     ]);
 
      $this->otpService->updateOrCreateConfig($data);

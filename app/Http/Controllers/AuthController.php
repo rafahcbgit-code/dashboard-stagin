@@ -429,6 +429,7 @@ public function sendVerificationCodeToEmail(Request $request)
     $otp = OtpCode::where('phone', $user->phone)->orWhere('email', $user->email)
         ->orderBy('id', 'desc')
         ->first();
+
     if (!$otp) {
             return back()->withErrors(['general' => 'No verification code found, please resend.']);
         }
@@ -440,6 +441,10 @@ public function sendVerificationCodeToEmail(Request $request)
     if ($otp->code !== $request->code) {
         return back()->withErrors(['code' => 'The code is incorrect.']);
     }
+
+     $user->update([
+            'code_verified' => 1
+        ]);
 
     $otp->delete();
 
@@ -508,11 +513,11 @@ public function sendVerificationCodeToEmail(Request $request)
 
      $this->initializeWhatsappService($organization);
 
-     $response = $this->whatsappService->sendTemplateMessage(
-         $contact->uuid,
-         $templatePayload,
-         0
-     );
+    //  $response = $this->whatsappService->sendTemplateMessage(
+    //      $contact->uuid,
+    //      $templatePayload,
+    //      0
+    //  );
 
     return response()->json([
         "statusCode" => 200,

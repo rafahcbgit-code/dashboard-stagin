@@ -44,7 +44,7 @@
                     </div>
                 </div>
 
-                <div class="sm:flex pb-5">
+                <!-- <div class="sm:flex border-b pb-5">
                     <div class="sm:w-[40%] mb-1">
                         <h1 class="text-sm text-gray-500 tracking-[0px]">{{ $t('Access Token') }}</h1>
                         <span class="flex text-xs mt-2 text-gray-400">
@@ -56,8 +56,34 @@
                             <FormInput v-model="form.access_token" :type="'text'" :error="form.errors.access_token" :class="'w-full'" :labelClass="'mb-0'"/>
                         </div>
                     </div>
-                </div>
+                </div> -->
 
+                <div class="sm:flex border-b pb-5">
+                    <div class="sm:w-[40%] mb-1">
+                        <h1 class="text-sm text-gray-500 tracking-[0px]">{{ $t('Contact Phone') }}</h1>
+                        <span class="flex text-xs mt-2 text-gray-400">
+                            {{ $t('The phone number for contacting the service provider or support.') }}
+                        </span>
+                    </div>
+                    <div class="sm:w-[60%] sm:flex space-x-6">
+                        <div class="sm:w-[80%]">
+                            <FormInput v-model="form.contact_phone" :type="'text'" :error="form.errors.contact_phone" :class="'w-full'" :labelClass="'mb-0'"/>
+                        </div>
+                    </div>
+                </div>
+                <div class="sm:flex pb-5">
+                    <div class="sm:w-[40%] mb-1">
+                        <h1 class="text-sm text-gray-500 tracking-[0px]">{{ $t('Calendly URL') }}</h1>
+                        <span class="flex text-xs mt-2 text-gray-400">
+                            {{ $t('The URL for scheduling appointments via Calendly.') }}
+                        </span>
+                    </div>
+                    <div class="sm:w-[60%] sm:flex space-x-6">
+                        <div class="sm:w-[80%]">
+                            <FormInput v-model="form.calendly_url" :type="'text'" :error="form.errors.calendly_url" :class="'w-full'" :labelClass="'mb-0'"/>
+                        </div>
+                    </div>
+                </div>
                 <div class="py-6">
                     <button type="submit" :disabled="form.processing" class="float-right flex items-center space-x-4 rounded-md bg-black px-3 py-2 text-sm text-white shadow-sm hover:bg-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
                         <svg v-if="form.processing" class="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
@@ -85,20 +111,18 @@
     const form = useForm({
         template_name: props.config?.template_name || '',
         uuid: props.config?.uuid || '',
-        access_token: props.config?.access_token || '',
+        contact_phone: props.config?.contact_phone || '',
+        calendly_url: props.config?.calendly_url || '',
+        id: props.config?.id || '',
     });
 
     const submitForm = async () => {
-        // تم توحيد الرابط ليشير دائماً إلى مسار التخزين (store)
         const url = '/admin/otp-config';
 
-        // استخدام post دائماً لإرسال البيانات إلى دالة store
         form.post(url, {
             preserveScroll: true,
             onSuccess: () => {
-                // يمكنك إضافة كود للتعامل مع النجاح هنا
             },
         });
     };
-    
 </script>

@@ -33,18 +33,24 @@ class OtpService
     }
 
     public function updateOrCreateConfig(array $data): OtpConfig
-    {
-        $match = [
-            'uuid' => $data['uuid'],
-        ];
+{
+     $match = [
+        'uuid' => $data['uuid'] ?? null,
+    ];
+    
+    $config = OtpConfig::firstOrNew($match);
 
-        $values = [
-            'template_name' => $data['template_name'],
-            'access_token' => $data['access_token'],
-        ];
+    $config->fill([
+        'template_name' => $data['template_name'] ?? $config->template_name,
+        'contact_phone' => $data['contact_phone'] ?? $config->contact_phone,
+        'calendly_url' => $data['calendly_url'] ?? $config->calendly_url,
+        'uuid' => $data['uuid'], 
+    ]);
 
-        return OtpConfig::updateOrCreate($match, $values);
-    }
+    $config->save();
+
+    return $config;
+}
 
     public function generateAndSaveOtp(string $phone, int $length = 6, int $ttlMinutes = 5, int $user_id = 0): string
     {

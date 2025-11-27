@@ -14,8 +14,9 @@ return new class extends Migration
         Schema::create('otp_configs', function (Blueprint $table) {
             $table->id();
             $table->char('uuid', 50)->unique();
-            $table->text('access_token')->unique();
             $table->string('template_name')->nullable();
+            $table->string('contact_phone')->nullable();
+            $table->string('calendly_url')->nullable();
             $table->timestamps();
         });
     }

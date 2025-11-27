@@ -5,6 +5,7 @@
                 <div>
                     <h1 class="text-xl mb-1">{{ $t('Otp Config') }}</h1>
                 </div>
+                <div class="mt-6"></div>
                 <div>
                     <Link href="/admin/otp-config/create" class="rounded-md bg-indigo-600 px-3 py-2 text-sm text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">{{ $t('Add New Config') }}</Link>
                 </div>

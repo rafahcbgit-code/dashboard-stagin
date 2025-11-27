@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 class OtpConfig extends Model
 {
     use HasFactory;
-    protected $fillable = ['access_token', 'template_name', 'uuid'];
+    protected $fillable = ['template_name', 'uuid', 'contact_phone', 'calendly_url'];
       public function listAll($searchTerm)
     {
         return $this
