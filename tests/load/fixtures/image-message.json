@@ -1,0 +1,32 @@
+{
+    "object": "whatsapp_business_account",
+    "entry": [{
+        "id": "{{WABA_ID}}",
+        "changes": [{
+            "field": "messages",
+            "value": {
+                "messaging_product": "whatsapp",
+                "metadata": {
+                    "display_phone_number": "{{PHONE_NUMBER}}",
+                    "phone_number_id": "{{PHONE_NUMBER_ID}}"
+                },
+                "contacts": [{
+                    "profile": { "name": "Load Test User" },
+                    "wa_id": "{{WA_ID}}"
+                }],
+                "messages": [{
+                    "from": "{{WA_ID}}",
+                    "id": "{{WAM_ID}}",
+                    "timestamp": "{{TIMESTAMP}}",
+                    "type": "image",
+                    "image": {
+                        "id": "{{MEDIA_ID}}",
+                        "mime_type": "image/jpeg",
+                        "sha256": "abc123hash",
+                        "caption": "Test image caption"
+                    }
+                }]
+            }
+        }]
+    }]
+}
