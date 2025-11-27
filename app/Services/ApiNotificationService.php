@@ -64,7 +64,7 @@ class ApiNotificationService
                     'contact_uuid' => $contact->uuid,
                     'contact_name' => $contactName,
                     'message_uuid' => $chat->uuid,
-                    'message_type' => $messageType,
+                    'msg_type' => $messageType,
                     'organization_id' => (string) $organizationId,
                     'unread_count' => (string) $unreadCount,
                     'click_action' => 'OPEN_CHAT',

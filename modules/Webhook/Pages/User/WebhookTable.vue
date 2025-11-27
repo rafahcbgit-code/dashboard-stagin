@@ -19,6 +19,8 @@
     import Dropdown from '@/Components/Dropdown.vue';
     import DropdownItemGroup from '@/Components/DropdownItemGroup.vue';
     import DropdownItem from '@/Components/DropdownItem.vue';
+    import { toast } from 'vue3-toastify';
+
 
     const props = defineProps({
         rows: {
@@ -127,6 +129,18 @@
             preserveState: false,
             onSuccess: () => {
                 isOpenModal.value = false
+            },
+            onError: (errors) => {
+                // Format errors into readable message
+                let errorMessage = '';
+                for (const [key, value] of Object.entries(errors)) {
+                    errorMessage += value + '\n';
+                }
+                
+                toast(errorMessage || 'Error updating webhook', {
+                    autoClose: 5000,
+                    type: 'error'
+                });
             }
         })
     };

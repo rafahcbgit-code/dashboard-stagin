@@ -129,7 +129,7 @@ class PreCreatedReplyController extends Controller
                             'type' => 'outbound',
                             'message_type' => $payload['type'] === 'text' ? 'text' : 'interactive',
                             'status' => 'sent',
-                            'is_read' => false,
+                            'is_read' =>  (bool) false,
                             'created_at' => now()->toIso8601String(),
                             'wam_id' => $response->data->messages[0]->id ?? null,
                             'content' => [
@@ -251,7 +251,7 @@ class PreCreatedReplyController extends Controller
             'type' => $message->type,
             'message_type' => $message->media ? explode('/', $message->media->type)[0] : 'text', // Simplified
             'status' => $message->status,
-            'is_read' => $message->is_read,
+            'is_read' => (bool)$message->is_read,
             'created_at' => $message->created_at,
             'wam_id' => $message->wam_id,
             'content' => $content
