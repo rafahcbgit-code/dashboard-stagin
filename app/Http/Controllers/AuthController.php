@@ -2,7 +2,6 @@
 
 namespace App\Http\Controllers;
 
-use DB;
 use App\Helpers\Email;
 use App\Http\Controllers\Controller as BaseController;
 use App\Http\Requests\LoginRequest;
@@ -17,30 +16,43 @@ use App\Services\PasswordResetService;
 use App\Services\UserService;
 use App\Models\Addon;
 use App\Models\Organization;
+use App\Models\Template;
 use App\Models\PasswordResetToken;
 use App\Models\Setting;
 use App\Models\Subscription;
 use App\Models\Team;
 use App\Models\TeamInvite;
 use App\Models\User;
+use App\Models\OtpCode;
 use App\Services\SocialLoginService;
 use App\Services\TeamService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redirect;
 use Inertia\Inertia;
+use Carbon\Carbon;
 use Session;
 use Str;
+use App\Models\Contact;
+use App\Models\OtpConfig;
+use App\Services\WhatsappService;
+use App\Services\ContactService;
+use App\Services\OtpService;
+use App\Services\SubscriptionService;
 
 class AuthController extends BaseController
 {
     protected $userService;
     protected $role;
+    private $whatsappService;
+    private $otpService;
 
     public function __construct($role = 'user')
     {
         $this->userService = new UserService($role);
+        $this->otpService = new OtpService();
         $this->role = $role;
     }
 
@@ -348,8 +360,14 @@ class AuthController extends BaseController
         return Inertia::render('Auth/Register', $data);
     }
 
+    public function VerifyAccount()
+    {
+        return Inertia::render('Auth/VerifyAccount');
+    }
+
     public function handleRegistration(SignupRequest $request)
     {
+         try {
         $user = $this->userService->store($request);
         $authService = (new AuthService($user))->authenticateSession($request);
         $config = Setting::where('key', 'verify_email')->first();
@@ -358,8 +376,205 @@ class AuthController extends BaseController
             $user->sendEmailVerificationNotification();
         }
 
-        return redirect('/dashboard');
+        $this->generateOtp(phone: $user->phone, length: 6, ttlMinutes: 5, user_id: $user->id);
+
+        return Inertia::location('/VerifyAccount');
+         } catch (\Exception $e) { 
+             Log::error('Registration Error: '.$e->getMessage(), [
+            'trace' => $e->getTraceAsString(),
+        ]);
+        }
     }
+
+
+public function generateOtp(string $phone = "+963981708294", int $length = 6, int $ttlMinutes = 5, int $user_id = 0)
+{
+    $otpCode = $this->otpService->generateAndSaveOtp($phone, $length, $ttlMinutes, $user_id);
+
+    $config = $this->otpService->getSenderConfig();
+
+    if ($config) {
+        $this->sendVerificationCode(
+            $phone, 
+            $otpCode, 
+            $config['organization_id'], 
+            $config['template_name'], 
+            $config['language']
+        );
+    }
+}
+
+public function sendVerificationCodeToEmail(Request $request)
+    {
+        $request->validate([
+            'email' => ['required', 'string', 'email', 'exists:users,email'],
+        ], [
+            'email.exists' => 'The provided email is not registered.', // يمكنك تخصيص رسالة الخطأ
+        ]);
+
+        $this->otpService->generateAndSaveOtpForEmail($request->email);
+
+        return Inertia::location('/VerifyAccount');
+    }
+
+
+    public function verifyAccountCode(Request $request)
+{
+    $request->validate([
+        'code' => 'required|string'
+    ]);
+
+    $user = auth()->user();
+
+    $otp = OtpCode::where('phone', $user->phone)->orWhere('email', $user->email)
+        ->orderBy('id', 'desc')
+        ->first();
+
+    if (!$otp) {
+            return back()->withErrors(['general' => 'No verification code found, please resend.']);
+        }
+
+    if (now()->greaterThan($otp->expires_at)) {
+        return back()->withErrors(['general' => 'The code has expired, please request a new code.']);
+    }
+
+    if ($otp->code !== $request->code) {
+        return back()->withErrors(['code' => 'The code is incorrect.']);
+    }
+
+     $user->update([
+            'code_verified' => 1
+        ]);
+
+    $otp->delete();
+
+    return redirect()->route('dashboard')
+        ->with('success', 'Your account has been successfully verified.');
+}
+
+
+   public function sendVerificationCode($phone = "+963981708294", $code = "123456", $organization = "29", $template_name = "verify_code_1", $template_lang = "ar")
+{
+  
+    if (!SubscriptionService::isSubscriptionActive($organization)) {
+        return response()->json([
+            'statusCode' => 403,
+            'message' => __('Please renew or subscribe to a plan to continue!'),
+        ], 403);
+    }
+
+    $phone = $phone;
+    if (substr($phone, 0, 1) !== '+') {
+        $phone = '+' . $phone;
+    }
+
+    $phoneNumber = new \Propaganistas\LaravelPhone\PhoneNumber($phone);
+    $phone = $phoneNumber->formatE164();
+
+    $contact = Contact::where('phone', $phone)
+        ->where('organization_id', $organization)
+        ->whereNull('deleted_at')
+        ->first();
+
+    if (!$contact) {
+        $contact = Contact::create([
+            'organization_id' => $organization,
+            'phone' => $phone,
+            'created_by' => 0,
+        ]);
+    }
+
+    $templatePayload = [
+        "name" => $template_name,
+        "language" => ["code" => $template_lang],
+        "components" => [
+            [
+                "type" => "body",
+                "parameters" => [
+                    [
+                        "type" => "text",
+                        "text" => $code
+                    ]
+                ]
+            ],
+            [
+                "type" => "button",
+                "sub_type" => "url",
+                "index" => 0,
+                "parameters" => [
+                    [
+                        "type" => "text",
+                        "text" => $code
+                    ]
+                ]
+            ]
+        ]
+    ];
+
+     $this->initializeWhatsappService($organization);
+
+     $response = $this->whatsappService->sendTemplateMessage(
+         $contact->uuid,
+         $templatePayload,
+         0
+     );
+
+    return response()->json([
+        "statusCode" => 200,
+        "message" => "Verification code sent successfully",
+        "data" => $response
+    ], 200);
+}
+
+private function initializeWhatsappService($organizationId)
+    {
+        $config = Organization::where('id', $organizationId)->first()->metadata;
+        $config = $config ? json_decode($config, true) : [];
+
+        $accessToken = $config['whatsapp']['access_token'] ?? null;
+        $apiVersion = config('graph.api_version');
+        $appId = $config['whatsapp']['app_id'] ?? null;
+        $phoneNumberId = $config['whatsapp']['phone_number_id'] ?? null;
+        $wabaId = $config['whatsapp']['waba_id'] ?? null;
+
+        $this->whatsappService = new WhatsappService($accessToken, $apiVersion, $appId, $phoneNumberId, $wabaId, $organizationId);
+    }
+
+public function resendVerificationCode()
+{
+    try {
+        $user = auth()->user();
+
+        if (!$user) {
+            return response()->json(['message' => 'User not authenticated'], 401);
+        }
+        
+        $otpCode = $this->otpService->generateAndSaveOtp(phone: $user->phone, user_id: $user->id);
+
+        $config = $this->otpService->getSenderConfig();
+
+        if ($config) {
+            $this->sendVerificationCode(
+                $user->phone, 
+                $otpCode, 
+                $config['organization_id'], 
+                $config['template_name'], 
+                $config['language']
+            );
+        }
+    
+        return back()->with('success', 'A new code has been sent.');
+
+    } catch (\Exception $e) {
+
+        Log::error('Resend OTP Error: '.$e->getMessage());
+
+        return back()->withErrors([
+            'general' => 'An error occurred while sending the code, please try again later.'
+        ]);
+    }
+}
+
 
     public function viewInvite($uuid)
     {
@@ -398,6 +613,14 @@ class AuthController extends BaseController
         $data['companyConfig'] = Setting::whereIn('key', $keys)->pluck('value', 'key')->toArray();
 
         return Inertia::render('Auth/Forgot', $data);
+    }
+
+     public function showOtpEmailForm(Request $request)
+    {
+        $keys = ['logo', 'company_name', 'address', 'email', 'phone', 'socials', 'trial_period'];
+        $data['companyConfig'] = Setting::whereIn('key', $keys)->pluck('value', 'key')->toArray();
+
+        return Inertia::render('Auth/OtpEmail', $data);
     }
 
     public function createPasswordResetToken(PasswordResetRequest $request)
@@ -508,7 +731,5 @@ class AuthController extends BaseController
         'type' => 'success',
         'message' => "You are now logged in as organization: {$organization->name}"
     ]);
-}
-
-    
+}   
 }

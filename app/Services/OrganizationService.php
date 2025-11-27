@@ -82,6 +82,7 @@ class OrganizationService
                     'last_name' => $request->input('last_name'),
                     'email' => $request->input('email'),
                     'role' => 'user',
+                    'code_verified' => 1,
                     'phone' => $request->input('phone') ? phone($request->input('phone'))->formatE164() : null,
                     'address' => json_encode([
                         'street' => $request->input('street'),

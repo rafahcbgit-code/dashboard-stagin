@@ -16,12 +16,13 @@ use App\Models\Setting;
 use App\Models\Subscription;
 use App\Models\Template;
 use App\Services\SubscriptionService;
-use App\Services\WhatsappService;
+use App\Models\OtpConfig;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
 class DashboardController extends BaseController
 {
+    protected $subscriptionService;
     public function __construct()
     {
         $this->subscriptionService = new SubscriptionService();
@@ -29,6 +30,13 @@ class DashboardController extends BaseController
 
     public function index(Request $request){
         $organizationId = session()->get('current_organization');
+
+        $phone = OtpConfig::value('contact_phone');
+        $phone = ltrim($phone, '+');
+        $data['contact_phone'] = $phone;
+        $data['whatsapp_link'] = "https://wa.me/{$data['contact_phone']}";
+        $data['calendly_url'] = OtpConfig::value('calendly_url');
+
         $data['subscription'] = Subscription::with('plan')->where('organization_id', $organizationId)->first();
         $data['subscriptionDetails'] = SubscriptionService::calculateSubscriptionBillingDetails($organizationId, $data['subscription']->plan_id);
         $data['subscriptionIsActive'] = SubscriptionService::isSubscriptionActive($organizationId);
@@ -43,7 +51,6 @@ class DashboardController extends BaseController
         $data['templateCount'] = Template::where('organization_id', $organizationId)->whereNull('deleted_at')->count();
         $data['graphAPIVersion'] = config('graph.api_version');
 
-        $organizationId = session()->get('current_organization');
         $organization = Organization::where('id', $organizationId)->first();
         $config = $organization->metadata ? json_decode($organization->metadata, true) : [];
         $settings = Setting::whereIn('key', ['is_embedded_signup_active', 'whatsapp_client_id', 'whatsapp_config_id'])

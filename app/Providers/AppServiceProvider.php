@@ -5,7 +5,7 @@ namespace App\Providers;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Telescope\TelescopeServiceProvider;
-
+use Inertia\Inertia;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -29,5 +29,12 @@ class AppServiceProvider extends ServiceProvider
         if (!\App::environment('local')) {
             \URL::forceScheme('https');
         }
+        
+        Inertia::share([
+        'contact_phone' => fn () => request()->get('contact_phone'),
+        'whatsapp_link' => fn () => request()->get('whatsapp_link'),
+        'calendly_url' => fn () => request()->get('calendly_url'),
+        'is_trial' => fn () => request()->get('is_trial'),
+        ]);
     }
 }

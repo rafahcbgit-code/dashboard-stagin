@@ -63,7 +63,7 @@ class ContactController extends BaseController
                 'contactGroups' => $contactGroups,
                 'filters' => request()->all(),
                 'locationSettings' => $this->getLocationSettings(),
-                'editContact' => $editContact
+                'editContact' => $editContact,
             ]);
         }
     }
