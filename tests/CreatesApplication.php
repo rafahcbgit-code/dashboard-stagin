@@ -16,6 +16,10 @@ trait CreatesApplication
 
         $app->make(Kernel::class)->bootstrap();
 
+        // Force test database configuration after Laravel bootstraps
+        // This ensures .env values don't override test settings
+        $app['config']->set('database.connections.mysql.database', 'chatberry_dashboard_test');
+
         return $app;
     }
 }
