@@ -1608,3 +1608,1856 @@ describe('AC-1.9.4: Error Isolation', function () {
         expect($chat)->not->toBeNull();
     });
 });
+
+/**
+ * Helper to create a valid SMB message echo webhook payload.
+ */
+function createSmbEchoPayload(
+    string $type = 'text',
+    string $wamId = null,
+    string $to = '1234567890',
+    string $from = '0987654321',
+    array $additionalData = []
+): array {
+    $wamId = $wamId ?? 'wamid_smb_echo_'.uniqid();
+
+    $echo = [
+        'from' => $from, // Business phone
+        'to' => $to, // Recipient phone
+        'id' => $wamId,
+        'timestamp' => (string) time(),
+        'type' => $type,
+    ];
+
+    // Add type-specific data
+    switch ($type) {
+        case 'text':
+            $echo['text'] = ['body' => $additionalData['body'] ?? 'Hello from Business App!'];
+            break;
+        case 'image':
+            $echo['image'] = [
+                'id' => $additionalData['media_id'] ?? 'media_img_'.uniqid(),
+                'mime_type' => 'image/jpeg',
+                'sha256' => 'abc123',
+            ];
+            break;
+        case 'video':
+            $echo['video'] = [
+                'id' => $additionalData['media_id'] ?? 'media_vid_'.uniqid(),
+                'mime_type' => 'video/mp4',
+            ];
+            break;
+        case 'document':
+            $echo['document'] = [
+                'id' => $additionalData['media_id'] ?? 'media_doc_'.uniqid(),
+                'mime_type' => 'application/pdf',
+                'filename' => 'document.pdf',
+            ];
+            break;
+        case 'audio':
+            $echo['audio'] = [
+                'id' => $additionalData['media_id'] ?? 'media_aud_'.uniqid(),
+                'mime_type' => 'audio/ogg',
+            ];
+            break;
+        case 'sticker':
+            $echo['sticker'] = [
+                'id' => $additionalData['media_id'] ?? 'media_stk_'.uniqid(),
+                'mime_type' => 'image/webp',
+            ];
+            break;
+    }
+
+    return [
+        'field' => 'smb_message_echoes',
+        'value' => [
+            'messaging_product' => 'whatsapp',
+            'metadata' => [
+                'display_phone_number' => $from,
+                'phone_number_id' => 'phone_id_123',
+            ],
+            'message_echoes' => [$echo],
+        ],
+    ];
+}
+
+/**
+ * Story 1.10 Tests: SMB Message Echoes Processing
+ *
+ * Tests for implementing SMB message echoes processing to enable "coexistence mode"
+ * where messages sent via WhatsApp Business App appear in the Chatberry dashboard.
+ *
+ * @see docs/sprint-artifacts/1-10-implement-smb-message-echoes-processing.md
+ */
+describe('AC-1.10.1: Contact Creation by Recipient Phone', function () {
+    it('creates new contact when recipient phone does not exist', function () {
+        $organization = createOrganizationWithSubscription();
+        $recipientPhone = '5551234567';
+
+        $payload = createSmbEchoPayload('text', null, $recipientPhone);
+
+        // Verify contact doesn't exist
+        expect(Contact::where('organization_id', $organization->id)->where('phone', 'like', "%{$recipientPhone}%")->exists())->toBeFalse();
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'smb_message_echoes');
+        $job->handle();
+
+        // Verify contact was created using recipient phone (not sender)
+        $contact = Contact::where('organization_id', $organization->id)
+            ->where('phone', 'like', "%{$recipientPhone}%")
+            ->first();
+
+        expect($contact)->not->toBeNull();
+    });
+
+    it('uses existing contact when recipient phone exists', function () {
+        $organization = createOrganizationWithSubscription();
+
+        // Create existing contact
+        $existingContact = Contact::create([
+            'organization_id' => $organization->id,
+            'phone' => '+5559876543',
+            'first_name' => 'Existing',
+            'last_name' => 'Recipient',
+            'is_subscribed' => 1,
+            'created_by' => 0,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $payload = createSmbEchoPayload('text', null, '5559876543');
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'smb_message_echoes');
+        $job->handle();
+
+        // Verify no new contact was created
+        $contactCount = Contact::where('organization_id', $organization->id)->count();
+        expect($contactCount)->toBe(1);
+
+        // Verify chat references existing contact
+        $chat = Chat::where('organization_id', $organization->id)->first();
+        expect($chat->contact_id)->toBe($existingContact->id);
+    });
+});
+
+describe('AC-1.10.2: Outbound Chat Creation', function () {
+    it('creates chat with type=outbound for echoed messages', function () {
+        $organization = createOrganizationWithSubscription();
+        $wamId = 'wamid_outbound_'.uniqid();
+
+        $payload = createSmbEchoPayload('text', $wamId);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'smb_message_echoes');
+        $job->handle();
+
+        $chat = Chat::where('organization_id', $organization->id)
+            ->where('wam_id', $wamId)
+            ->first();
+
+        expect($chat)->not->toBeNull();
+        expect($chat->type)->toBe('outbound');
+        expect($chat->status)->toBe('sent');
+        expect($chat->is_read)->toBe(1); // Outbound messages are read
+    });
+
+    it('creates chat with correct metadata for text message', function () {
+        $organization = createOrganizationWithSubscription();
+        $messageBody = 'Hello from WhatsApp Business App!';
+
+        $payload = createSmbEchoPayload('text', null, '1234567890', '0987654321', ['body' => $messageBody]);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'smb_message_echoes');
+        $job->handle();
+
+        $chat = Chat::where('organization_id', $organization->id)->first();
+        $metadata = json_decode($chat->metadata, true);
+
+        expect($metadata['type'])->toBe('text');
+        expect($metadata['text']['body'])->toBe($messageBody);
+    });
+
+    it('creates chat with correct metadata for image message', function () {
+        $organization = createOrganizationWithSubscription();
+        $mediaId = 'media_img_test_'.uniqid();
+
+        $payload = createSmbEchoPayload('image', null, '1234567890', '0987654321', ['media_id' => $mediaId]);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'smb_message_echoes');
+        $job->handle();
+
+        $chat = Chat::where('organization_id', $organization->id)->first();
+        $metadata = json_decode($chat->metadata, true);
+
+        expect($metadata['type'])->toBe('image');
+        expect($metadata['image']['id'])->toBe($mediaId);
+    });
+});
+
+describe('AC-1.10.3: DownloadWebhookMediaJob for Media Echoes', function () {
+    it('dispatches DownloadWebhookMediaJob for image echo', function () {
+        $organization = createOrganizationWithSubscription();
+        $mediaId = 'media_smb_image_'.uniqid();
+
+        $payload = createSmbEchoPayload('image', null, '1234567890', '0987654321', ['media_id' => $mediaId]);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'smb_message_echoes');
+        $job->handle();
+
+        Queue::assertPushed(DownloadWebhookMediaJob::class, function ($job) use ($organization, $mediaId) {
+            return $job->organizationId === $organization->id
+                && $job->mediaData['media_id'] === $mediaId
+                && $job->mediaData['type'] === 'image';
+        });
+    });
+
+    it('dispatches DownloadWebhookMediaJob for video echo', function () {
+        $organization = createOrganizationWithSubscription();
+
+        $payload = createSmbEchoPayload('video');
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'smb_message_echoes');
+        $job->handle();
+
+        Queue::assertPushed(DownloadWebhookMediaJob::class, function ($job) {
+            return $job->mediaData['type'] === 'video';
+        });
+    });
+
+    it('dispatches DownloadWebhookMediaJob for document echo', function () {
+        $organization = createOrganizationWithSubscription();
+
+        $payload = createSmbEchoPayload('document');
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'smb_message_echoes');
+        $job->handle();
+
+        Queue::assertPushed(DownloadWebhookMediaJob::class, function ($job) {
+            return $job->mediaData['type'] === 'document';
+        });
+    });
+
+    it('dispatches DownloadWebhookMediaJob for audio echo', function () {
+        $organization = createOrganizationWithSubscription();
+
+        $payload = createSmbEchoPayload('audio');
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'smb_message_echoes');
+        $job->handle();
+
+        Queue::assertPushed(DownloadWebhookMediaJob::class, function ($job) {
+            return $job->mediaData['type'] === 'audio';
+        });
+    });
+
+    it('dispatches DownloadWebhookMediaJob for sticker echo', function () {
+        $organization = createOrganizationWithSubscription();
+
+        $payload = createSmbEchoPayload('sticker');
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'smb_message_echoes');
+        $job->handle();
+
+        Queue::assertPushed(DownloadWebhookMediaJob::class, function ($job) {
+            return $job->mediaData['type'] === 'sticker';
+        });
+    });
+
+    it('does NOT dispatch DownloadWebhookMediaJob for text echo', function () {
+        $organization = createOrganizationWithSubscription();
+
+        $payload = createSmbEchoPayload('text');
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'smb_message_echoes');
+        $job->handle();
+
+        Queue::assertNotPushed(DownloadWebhookMediaJob::class);
+    });
+});
+
+describe('AC-1.10.4: ChatLog Entry Creation', function () {
+    it('creates ChatLog entry for SMB echo', function () {
+        $organization = createOrganizationWithSubscription();
+
+        $payload = createSmbEchoPayload('text');
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'smb_message_echoes');
+        $job->handle();
+
+        $chat = Chat::where('organization_id', $organization->id)->first();
+        $chatLog = ChatLog::where('entity_type', 'chat')
+            ->where('entity_id', $chat->id)
+            ->first();
+
+        expect($chatLog)->not->toBeNull();
+        expect($chatLog->contact_id)->toBe($chat->contact_id);
+    });
+});
+
+describe('AC-1.10.5: ProcessWebhookNotificationsJob Dispatch', function () {
+    it('dispatches ProcessWebhookNotificationsJob for SMB echo', function () {
+        $organization = createOrganizationWithSubscription();
+
+        $payload = createSmbEchoPayload('text');
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'smb_message_echoes');
+        $job->handle();
+
+        Queue::assertPushed(ProcessWebhookNotificationsJob::class, function ($job) use ($organization) {
+            return $job->organizationId === $organization->id;
+        });
+    });
+
+    it('dispatches ProcessWebhookNotificationsJob to webhook-high queue', function () {
+        $organization = createOrganizationWithSubscription();
+
+        $payload = createSmbEchoPayload('text');
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'smb_message_echoes');
+        $job->handle();
+
+        Queue::assertPushed(ProcessWebhookNotificationsJob::class, function ($job) {
+            return $job->queue === 'webhook-high';
+        });
+    });
+
+    it('passes isNewContact=true for new contacts', function () {
+        $organization = createOrganizationWithSubscription();
+
+        $payload = createSmbEchoPayload('text', null, '9999888877');
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'smb_message_echoes');
+        $job->handle();
+
+        Queue::assertPushed(ProcessWebhookNotificationsJob::class, function ($job) {
+            return $job->isNewContact === true;
+        });
+    });
+
+    it('passes isNewContact=false for existing contacts', function () {
+        $organization = createOrganizationWithSubscription();
+
+        // Create existing contact
+        Contact::create([
+            'organization_id' => $organization->id,
+            'phone' => '+1112223333',
+            'first_name' => 'Existing',
+            'last_name' => 'Contact',
+            'is_subscribed' => 1,
+            'created_by' => 0,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $payload = createSmbEchoPayload('text', null, '1112223333');
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'smb_message_echoes');
+        $job->handle();
+
+        Queue::assertPushed(ProcessWebhookNotificationsJob::class, function ($job) {
+            return $job->isNewContact === false;
+        });
+    });
+});
+
+describe('AC-1.10.6: Duplicate Echoes Skipped', function () {
+    it('skips duplicate echo with same wam_id', function () {
+        $organization = createOrganizationWithSubscription();
+        $wamId = 'wamid_duplicate_echo_'.uniqid();
+
+        // First echo - should create chat
+        $payload1 = createSmbEchoPayload('text', $wamId, '1234567890', '0987654321', ['body' => 'First echo']);
+        $job1 = new ProcessWebhookJob($payload1, $organization->id, 'smb_message_echoes');
+        $job1->handle();
+
+        $chatCountAfterFirst = Chat::where('organization_id', $organization->id)->count();
+        expect($chatCountAfterFirst)->toBe(1);
+
+        // Reset queue fake to count new dispatches
+        Queue::fake([DownloadWebhookMediaJob::class, ProcessWebhookNotificationsJob::class]);
+
+        // Second echo with same wam_id - should be skipped
+        $payload2 = createSmbEchoPayload('text', $wamId, '1234567890', '0987654321', ['body' => 'Duplicate echo']);
+        $job2 = new ProcessWebhookJob($payload2, $organization->id, 'smb_message_echoes');
+        $job2->handle();
+
+        $chatCountAfterSecond = Chat::where('organization_id', $organization->id)->count();
+        expect($chatCountAfterSecond)->toBe(1); // Still only 1 chat
+
+        // No notification job should be dispatched for duplicate
+        Queue::assertNotPushed(ProcessWebhookNotificationsJob::class);
+    });
+
+    it('creates separate chats for different wam_ids', function () {
+        $organization = createOrganizationWithSubscription();
+
+        $payload1 = createSmbEchoPayload('text', 'wamid_echo_unique_1');
+        $payload2 = createSmbEchoPayload('text', 'wamid_echo_unique_2');
+
+        $job1 = new ProcessWebhookJob($payload1, $organization->id, 'smb_message_echoes');
+        $job1->handle();
+
+        $job2 = new ProcessWebhookJob($payload2, $organization->id, 'smb_message_echoes');
+        $job2->handle();
+
+        $chatCount = Chat::where('organization_id', $organization->id)->count();
+        expect($chatCount)->toBe(2);
+    });
+});
+
+describe('AC-1.10.7: External Webhook Trigger', function () {
+    it('job completes successfully triggering smb.message.echo webhook', function () {
+        $organization = createOrganizationWithSubscription();
+
+        $payload = createSmbEchoPayload('text');
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'smb_message_echoes');
+
+        // Should complete without throwing exception (fire-and-forget pattern)
+        expect(fn () => $job->handle())->not->toThrow(\Exception::class);
+    });
+
+    it('job completes successfully even if webhook trigger fails', function () {
+        $organization = createOrganizationWithSubscription();
+
+        $payload = createSmbEchoPayload('text');
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'smb_message_echoes');
+
+        // Fire-and-forget pattern means job should complete even if webhook fails
+        expect(fn () => $job->handle())->not->toThrow(\Exception::class);
+
+        // Chat should still be created
+        $chat = Chat::where('organization_id', $organization->id)->first();
+        expect($chat)->not->toBeNull();
+    });
+});
+
+describe('SMB Echo Edge Cases', function () {
+    it('handles empty message_echoes array gracefully', function () {
+        $organization = createOrganizationWithSubscription();
+
+        $payload = [
+            'field' => 'smb_message_echoes',
+            'value' => [
+                'message_echoes' => [],
+            ],
+        ];
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'smb_message_echoes');
+
+        // Should not throw exception
+        expect(fn () => $job->handle())->not->toThrow(\Exception::class);
+
+        // No chat should be created
+        expect(Chat::where('organization_id', $organization->id)->count())->toBe(0);
+    });
+
+    it('handles missing required fields without crashing', function () {
+        $organization = createOrganizationWithSubscription();
+
+        // Payload with missing 'to' and 'id' fields
+        $payload = [
+            'field' => 'smb_message_echoes',
+            'value' => [
+                'message_echoes' => [
+                    ['type' => 'text'], // Missing 'to' and 'id'
+                ],
+            ],
+        ];
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'smb_message_echoes');
+
+        // Should not throw exception
+        expect(fn () => $job->handle())->not->toThrow(\Exception::class);
+
+        // No chat should be created
+        expect(Chat::where('organization_id', $organization->id)->count())->toBe(0);
+    });
+
+    it('handles missing to field without crashing', function () {
+        $organization = createOrganizationWithSubscription();
+
+        $payload = [
+            'field' => 'smb_message_echoes',
+            'value' => [
+                'message_echoes' => [
+                    [
+                        'id' => 'wamid_missing_to',
+                        'type' => 'text',
+                        'text' => ['body' => 'Test'],
+                    ],
+                ],
+            ],
+        ];
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'smb_message_echoes');
+
+        expect(fn () => $job->handle())->not->toThrow(\Exception::class);
+        expect(Chat::where('organization_id', $organization->id)->count())->toBe(0);
+    });
+
+    it('handles missing wam_id field without crashing', function () {
+        $organization = createOrganizationWithSubscription();
+
+        $payload = [
+            'field' => 'smb_message_echoes',
+            'value' => [
+                'message_echoes' => [
+                    [
+                        'to' => '1234567890',
+                        'type' => 'text',
+                        'text' => ['body' => 'Test'],
+                    ],
+                ],
+            ],
+        ];
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'smb_message_echoes');
+
+        expect(fn () => $job->handle())->not->toThrow(\Exception::class);
+        expect(Chat::where('organization_id', $organization->id)->count())->toBe(0);
+    });
+
+    it('processes multiple echoes in single payload', function () {
+        $organization = createOrganizationWithSubscription();
+
+        $payload = [
+            'field' => 'smb_message_echoes',
+            'value' => [
+                'message_echoes' => [
+                    [
+                        'id' => 'wamid_multi_1',
+                        'to' => '1111111111',
+                        'from' => '0987654321',
+                        'timestamp' => (string) time(),
+                        'type' => 'text',
+                        'text' => ['body' => 'First message'],
+                    ],
+                    [
+                        'id' => 'wamid_multi_2',
+                        'to' => '2222222222',
+                        'from' => '0987654321',
+                        'timestamp' => (string) time(),
+                        'type' => 'text',
+                        'text' => ['body' => 'Second message'],
+                    ],
+                    [
+                        'id' => 'wamid_multi_3',
+                        'to' => '3333333333',
+                        'from' => '0987654321',
+                        'timestamp' => (string) time(),
+                        'type' => 'text',
+                        'text' => ['body' => 'Third message'],
+                    ],
+                ],
+            ],
+        ];
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'smb_message_echoes');
+        $job->handle();
+
+        // All 3 chats should be created
+        $chatCount = Chat::where('organization_id', $organization->id)->count();
+        expect($chatCount)->toBe(3);
+
+        // All 3 contacts should be created
+        $contactCount = Contact::where('organization_id', $organization->id)->count();
+        expect($contactCount)->toBe(3);
+
+        // All should be outbound
+        $outboundCount = Chat::where('organization_id', $organization->id)
+            ->where('type', 'outbound')
+            ->count();
+        expect($outboundCount)->toBe(3);
+    });
+
+    it('processes multiple echoes to same recipient correctly', function () {
+        $organization = createOrganizationWithSubscription();
+
+        $payload = [
+            'field' => 'smb_message_echoes',
+            'value' => [
+                'message_echoes' => [
+                    [
+                        'id' => 'wamid_same_recipient_1',
+                        'to' => '5555555555',
+                        'from' => '0987654321',
+                        'timestamp' => (string) time(),
+                        'type' => 'text',
+                        'text' => ['body' => 'First'],
+                    ],
+                    [
+                        'id' => 'wamid_same_recipient_2',
+                        'to' => '5555555555',
+                        'from' => '0987654321',
+                        'timestamp' => (string) time(),
+                        'type' => 'text',
+                        'text' => ['body' => 'Second'],
+                    ],
+                ],
+            ],
+        ];
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'smb_message_echoes');
+        $job->handle();
+
+        // Both chats should be created
+        $chatCount = Chat::where('organization_id', $organization->id)->count();
+        expect($chatCount)->toBe(2);
+
+        // Only 1 contact should be created (same recipient)
+        $contactCount = Contact::where('organization_id', $organization->id)->count();
+        expect($contactCount)->toBe(1);
+    });
+});
+
+describe('SMB Echo FIFO Ordering', function () {
+    it('has middleware for FIFO ordering using recipient phone', function () {
+        $payload = createSmbEchoPayload('text', null, '9876543210');
+        $job = new ProcessWebhookJob($payload, 1, 'smb_message_echoes');
+
+        $middleware = $job->middleware();
+
+        expect($middleware)->not->toBeEmpty();
+    });
+});
+
+// =============================================================================
+// STORY 1.11: SMB App State Sync Processing
+// =============================================================================
+
+/**
+ * Helper to create a valid SMB App State Sync webhook payload.
+ */
+function createStateSyncPayload(
+    array $syncItems = [],
+    bool $syncEnabled = true
+): array {
+    return [
+        'field' => 'smb_app_state_sync',
+        'value' => [
+            'state_sync' => $syncItems,
+        ],
+    ];
+}
+
+/**
+ * Helper to create a single state sync item for contacts.
+ */
+function createStateSyncItem(
+    string $action = 'create',
+    string $phone = '1234567890',
+    ?string $firstName = 'John',
+    ?string $fullName = 'John Doe'
+): array {
+    return [
+        'type' => 'contact',
+        'action' => $action,
+        'contact' => [
+            'phone_number' => $phone,
+            'first_name' => $firstName,
+            'full_name' => $fullName,
+        ],
+        'metadata' => [
+            'timestamp' => (string) time(),
+        ],
+    ];
+}
+
+/**
+ * Helper to create organization with sync_contacts enabled.
+ */
+function createOrganizationWithSyncEnabled(bool $syncEnabled = true): Organization
+{
+    $organization = createOrganizationWithSubscription();
+
+    // Update metadata to include sync_contacts flag
+    $metadata = json_decode($organization->metadata ?? '{}', true);
+    $metadata['sync_contacts'] = $syncEnabled ? 1 : 0;
+    $organization->metadata = json_encode($metadata);
+    $organization->save();
+
+    return $organization;
+}
+
+describe('Story 1.11: SMB App State Sync Processing', function () {
+    describe('AC-1.11.1: Check sync_contacts Flag', function () {
+        it('skips processing when sync_contacts=0', function () {
+            $organization = createOrganizationWithSyncEnabled(false);
+
+            $syncItem = createStateSyncItem('create', '9998887777', 'Test', 'Test User');
+            $payload = createStateSyncPayload([$syncItem]);
+
+            $job = new ProcessWebhookJob($payload, $organization->id, 'smb_app_state_sync');
+            $job->handle();
+
+            // Contact should NOT be created
+            expect(Contact::where('organization_id', $organization->id)
+                ->where('phone', 'like', '%9998887777%')
+                ->exists())->toBeFalse();
+        });
+
+        it('processes when sync_contacts=1', function () {
+            $organization = createOrganizationWithSyncEnabled(true);
+
+            $syncItem = createStateSyncItem('create', '9998887776', 'Test', 'Test User');
+            $payload = createStateSyncPayload([$syncItem]);
+
+            $job = new ProcessWebhookJob($payload, $organization->id, 'smb_app_state_sync');
+            $job->handle();
+
+            // Contact should be created
+            expect(Contact::where('organization_id', $organization->id)
+                ->where('phone', 'like', '%9998887776%')
+                ->exists())->toBeTrue();
+        });
+
+        it('processes when sync_contacts is not set (defaults to disabled)', function () {
+            // Create org without setting sync_contacts (metadata is null or empty)
+            $organization = createOrganizationWithSubscription();
+            $organization->metadata = json_encode(['other' => 'settings']);
+            $organization->save();
+
+            $syncItem = createStateSyncItem('create', '9998887775', 'Test', 'Test User');
+            $payload = createStateSyncPayload([$syncItem]);
+
+            $job = new ProcessWebhookJob($payload, $organization->id, 'smb_app_state_sync');
+            $job->handle();
+
+            // Contact should NOT be created (sync disabled by default)
+            expect(Contact::where('organization_id', $organization->id)
+                ->where('phone', 'like', '%9998887775%')
+                ->exists())->toBeFalse();
+        });
+    });
+
+    describe('AC-1.11.2: Create Action Creates Contact', function () {
+        it('creates new contact when phone does not exist', function () {
+            $organization = createOrganizationWithSyncEnabled(true);
+            $phone = '5551234567';
+
+            $syncItem = createStateSyncItem('create', $phone, 'New', 'New Contact');
+            $payload = createStateSyncPayload([$syncItem]);
+
+            $job = new ProcessWebhookJob($payload, $organization->id, 'smb_app_state_sync');
+            $job->handle();
+
+            $contact = Contact::where('organization_id', $organization->id)
+                ->where('phone', 'like', "%{$phone}%")
+                ->first();
+
+            expect($contact)->not->toBeNull();
+            expect($contact->first_name)->toBe('New');
+            expect($contact->last_name)->toBe('Contact');
+            expect($contact->is_subscribed)->toBe(1);
+        });
+
+        it('uses existing contact when phone already exists', function () {
+            $organization = createOrganizationWithSyncEnabled(true);
+            $phone = '+5559876543';
+
+            // Create existing contact
+            $existingContact = Contact::create([
+                'organization_id' => $organization->id,
+                'phone' => $phone,
+                'first_name' => 'Existing',
+                'last_name' => 'Contact',
+                'is_subscribed' => 1,
+                'created_by' => 0,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            $syncItem = createStateSyncItem('create', '5559876543', 'Different', 'Different Name');
+            $payload = createStateSyncPayload([$syncItem]);
+
+            $job = new ProcessWebhookJob($payload, $organization->id, 'smb_app_state_sync');
+            $job->handle();
+
+            // Should still be only 1 contact
+            expect(Contact::where('organization_id', $organization->id)->count())->toBe(1);
+
+            // Name should NOT be changed (create doesn't update existing)
+            $contact = Contact::find($existingContact->id);
+            expect($contact->first_name)->toBe('Existing');
+        });
+
+        it('uses first_name over full_name when both provided', function () {
+            $organization = createOrganizationWithSyncEnabled(true);
+            $phone = '5552223333';
+
+            $syncItem = createStateSyncItem('create', $phone, 'FirstNameOnly', 'Full Name Different');
+            $payload = createStateSyncPayload([$syncItem]);
+
+            $job = new ProcessWebhookJob($payload, $organization->id, 'smb_app_state_sync');
+            $job->handle();
+
+            $contact = Contact::where('organization_id', $organization->id)
+                ->where('phone', 'like', "%{$phone}%")
+                ->first();
+
+            expect($contact->first_name)->toBe('FirstNameOnly');
+        });
+
+        it('parses full_name when first_name is not provided', function () {
+            $organization = createOrganizationWithSyncEnabled(true);
+            $phone = '5553334444';
+
+            $syncItem = [
+                'type' => 'contact',
+                'action' => 'create',
+                'contact' => [
+                    'phone_number' => $phone,
+                    'full_name' => 'Jane Smith',
+                    // first_name NOT provided
+                ],
+            ];
+            $payload = createStateSyncPayload([$syncItem]);
+
+            $job = new ProcessWebhookJob($payload, $organization->id, 'smb_app_state_sync');
+            $job->handle();
+
+            $contact = Contact::where('organization_id', $organization->id)
+                ->where('phone', 'like', "%{$phone}%")
+                ->first();
+
+            expect($contact->first_name)->toBe('Jane');
+            expect($contact->last_name)->toBe('Smith');
+        });
+    });
+
+    describe('AC-1.11.3: Update Action Updates Name If Empty', function () {
+        it('updates first_name when contact exists and name is empty', function () {
+            $organization = createOrganizationWithSyncEnabled(true);
+            $phone = '+5554445555';
+
+            // Create contact with empty name
+            $contact = Contact::create([
+                'organization_id' => $organization->id,
+                'phone' => $phone,
+                'first_name' => '', // Empty name
+                'last_name' => '',
+                'is_subscribed' => 1,
+                'created_by' => 0,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            $syncItem = createStateSyncItem('update', '5554445555', 'UpdatedName', null);
+            $payload = createStateSyncPayload([$syncItem]);
+
+            $job = new ProcessWebhookJob($payload, $organization->id, 'smb_app_state_sync');
+            $job->handle();
+
+            $contact->refresh();
+            expect($contact->first_name)->toBe('UpdatedName');
+        });
+
+        it('does NOT overwrite existing first_name', function () {
+            $organization = createOrganizationWithSyncEnabled(true);
+            $phone = '+5555556666';
+
+            // Create contact with existing name
+            $contact = Contact::create([
+                'organization_id' => $organization->id,
+                'phone' => $phone,
+                'first_name' => 'ExistingName',
+                'last_name' => 'ExistingLast',
+                'is_subscribed' => 1,
+                'created_by' => 0,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            $syncItem = createStateSyncItem('update', '5555556666', 'NewName', null);
+            $payload = createStateSyncPayload([$syncItem]);
+
+            $job = new ProcessWebhookJob($payload, $organization->id, 'smb_app_state_sync');
+            $job->handle();
+
+            $contact->refresh();
+            expect($contact->first_name)->toBe('ExistingName'); // Should NOT change
+        });
+
+        it('handles update for non-existent contact gracefully', function () {
+            $organization = createOrganizationWithSyncEnabled(true);
+
+            $syncItem = createStateSyncItem('update', '9999999999', 'UpdateName', null);
+            $payload = createStateSyncPayload([$syncItem]);
+
+            $job = new ProcessWebhookJob($payload, $organization->id, 'smb_app_state_sync');
+
+            // Should not throw exception
+            expect(fn () => $job->handle())->not->toThrow(\Exception::class);
+
+            // No contact should be created
+            expect(Contact::where('organization_id', $organization->id)
+                ->where('phone', 'like', '%9999999999%')
+                ->exists())->toBeFalse();
+        });
+    });
+
+    describe('AC-1.11.4: Delete Action Soft-Deletes Contact', function () {
+        it('soft-deletes contact by setting deleted_at', function () {
+            $organization = createOrganizationWithSyncEnabled(true);
+            $phone = '+5556667777';
+
+            // Create contact
+            $contact = Contact::create([
+                'organization_id' => $organization->id,
+                'phone' => $phone,
+                'first_name' => 'ToDelete',
+                'last_name' => 'Contact',
+                'is_subscribed' => 1,
+                'created_by' => 0,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            expect($contact->deleted_at)->toBeNull();
+
+            $syncItem = createStateSyncItem('delete', '5556667777', null, null);
+            $payload = createStateSyncPayload([$syncItem]);
+
+            $job = new ProcessWebhookJob($payload, $organization->id, 'smb_app_state_sync');
+            $job->handle();
+
+            $contact->refresh();
+            expect($contact->deleted_at)->not->toBeNull();
+        });
+
+        it('handles delete for non-existent contact gracefully', function () {
+            $organization = createOrganizationWithSyncEnabled(true);
+
+            $syncItem = createStateSyncItem('delete', '8888888888', null, null);
+            $payload = createStateSyncPayload([$syncItem]);
+
+            $job = new ProcessWebhookJob($payload, $organization->id, 'smb_app_state_sync');
+
+            // Should not throw exception
+            expect(fn () => $job->handle())->not->toThrow(\Exception::class);
+        });
+    });
+
+    describe('AC-1.11.5: Ticket Assignment for New Contacts', function () {
+        it('does not crash when ticket assignment is called for new contact', function () {
+            $organization = createOrganizationWithSyncEnabled(true);
+
+            // Enable ticketing in org metadata
+            $metadata = json_decode($organization->metadata, true);
+            $metadata['tickets'] = [
+                'active' => true,
+                'auto_assignment' => false,
+            ];
+            $metadata['sync_contacts'] = 1;
+            $organization->metadata = json_encode($metadata);
+            $organization->save();
+
+            $syncItem = createStateSyncItem('create', '5557778888', 'Ticket', 'Test Contact');
+            $payload = createStateSyncPayload([$syncItem]);
+
+            $job = new ProcessWebhookJob($payload, $organization->id, 'smb_app_state_sync');
+
+            // Should complete without exception (ticket assignment is non-blocking)
+            expect(fn () => $job->handle())->not->toThrow(\Exception::class);
+
+            // Contact should be created
+            expect(Contact::where('organization_id', $organization->id)
+                ->where('phone', 'like', '%5557778888%')
+                ->exists())->toBeTrue();
+        });
+    });
+
+    describe('SMB App State Sync Edge Cases', function () {
+        it('handles empty state_sync array gracefully', function () {
+            $organization = createOrganizationWithSyncEnabled(true);
+
+            $payload = createStateSyncPayload([]);
+
+            $job = new ProcessWebhookJob($payload, $organization->id, 'smb_app_state_sync');
+
+            expect(fn () => $job->handle())->not->toThrow(\Exception::class);
+        });
+
+        it('handles missing phone_number field', function () {
+            $organization = createOrganizationWithSyncEnabled(true);
+
+            $syncItem = [
+                'type' => 'contact',
+                'action' => 'create',
+                'contact' => [
+                    'first_name' => 'NoPhone',
+                    // phone_number missing
+                ],
+            ];
+            $payload = createStateSyncPayload([$syncItem]);
+
+            $job = new ProcessWebhookJob($payload, $organization->id, 'smb_app_state_sync');
+
+            expect(fn () => $job->handle())->not->toThrow(\Exception::class);
+
+            // No contact should be created
+            expect(Contact::where('organization_id', $organization->id)
+                ->where('first_name', 'NoPhone')
+                ->exists())->toBeFalse();
+        });
+
+        it('skips non-contact type sync items', function () {
+            $organization = createOrganizationWithSyncEnabled(true);
+
+            $syncItem = [
+                'type' => 'other_type', // Not 'contact'
+                'action' => 'create',
+                'data' => ['something' => 'else'],
+            ];
+            $payload = createStateSyncPayload([$syncItem]);
+
+            $job = new ProcessWebhookJob($payload, $organization->id, 'smb_app_state_sync');
+
+            expect(fn () => $job->handle())->not->toThrow(\Exception::class);
+        });
+
+        it('handles unknown action gracefully', function () {
+            $organization = createOrganizationWithSyncEnabled(true);
+
+            $syncItem = [
+                'type' => 'contact',
+                'action' => 'unknown_action',
+                'contact' => [
+                    'phone_number' => '1112223333',
+                    'first_name' => 'Unknown',
+                ],
+            ];
+            $payload = createStateSyncPayload([$syncItem]);
+
+            $job = new ProcessWebhookJob($payload, $organization->id, 'smb_app_state_sync');
+
+            expect(fn () => $job->handle())->not->toThrow(\Exception::class);
+        });
+
+        it('processes multiple contacts in single payload', function () {
+            $organization = createOrganizationWithSyncEnabled(true);
+
+            $syncItems = [
+                createStateSyncItem('create', '1111111111', 'First', 'First Contact'),
+                createStateSyncItem('create', '2222222222', 'Second', 'Second Contact'),
+                createStateSyncItem('create', '3333333333', 'Third', 'Third Contact'),
+            ];
+            $payload = createStateSyncPayload($syncItems);
+
+            $job = new ProcessWebhookJob($payload, $organization->id, 'smb_app_state_sync');
+            $job->handle();
+
+            // All 3 contacts should be created
+            expect(Contact::where('organization_id', $organization->id)->count())->toBe(3);
+        });
+
+        it('handles mixed actions in single payload', function () {
+            $organization = createOrganizationWithSyncEnabled(true);
+
+            // Create existing contact for update and delete
+            $updateContact = Contact::create([
+                'organization_id' => $organization->id,
+                'phone' => '+4444444444',
+                'first_name' => '',
+                'is_subscribed' => 1,
+                'created_by' => 0,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            $deleteContact = Contact::create([
+                'organization_id' => $organization->id,
+                'phone' => '+5555555555',
+                'first_name' => 'ToDelete',
+                'is_subscribed' => 1,
+                'created_by' => 0,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            $syncItems = [
+                createStateSyncItem('create', '6666666666', 'New', 'New Contact'),
+                createStateSyncItem('update', '4444444444', 'Updated', null),
+                createStateSyncItem('delete', '5555555555', null, null),
+            ];
+            $payload = createStateSyncPayload($syncItems);
+
+            $job = new ProcessWebhookJob($payload, $organization->id, 'smb_app_state_sync');
+            $job->handle();
+
+            // New contact created
+            expect(Contact::where('organization_id', $organization->id)
+                ->where('phone', 'like', '%6666666666%')
+                ->exists())->toBeTrue();
+
+            // Update contact should have updated name
+            $updateContact->refresh();
+            expect($updateContact->first_name)->toBe('Updated');
+
+            // Delete contact should be soft-deleted
+            $deleteContact->refresh();
+            expect($deleteContact->deleted_at)->not->toBeNull();
+        });
+    });
+});
+
+// =============================================================================
+// STORY 1.12: History Webhook Processing
+// =============================================================================
+
+/**
+ * Helper to create organization with sync_history enabled.
+ */
+function createOrganizationWithSyncHistory(bool $syncEnabled = true, string $location = 'root'): Organization
+{
+    $organization = createOrganizationWithSubscription();
+
+    $metadata = json_decode($organization->metadata, true) ?? [];
+
+    // Store sync_history in specified location
+    if ($location === 'root') {
+        $metadata['sync_history'] = $syncEnabled ? 1 : 0;
+    } elseif ($location === 'whatsapp') {
+        $metadata['whatsapp']['sync_history'] = $syncEnabled ? 1 : 0;
+    }
+
+    $organization->metadata = json_encode($metadata);
+    $organization->save();
+
+    return $organization;
+}
+
+/**
+ * Helper to create a valid history webhook payload.
+ */
+function createHistoryPayload(
+    array $threads = [],
+    array $chunkMetadata = [],
+    int $chunkCount = 1
+): array {
+    $history = [];
+
+    for ($i = 0; $i < $chunkCount; $i++) {
+        $history[] = [
+            'threads' => $threads,
+            'metadata' => $chunkMetadata,
+        ];
+    }
+
+    return [
+        'field' => 'history',
+        'value' => [
+            'history' => $history,
+        ],
+    ];
+}
+
+/**
+ * Helper to create a single history thread with messages.
+ */
+function createHistoryThread(
+    string $threadId,
+    array $messages = []
+): array {
+    return [
+        'id' => $threadId,
+        'messages' => $messages,
+    ];
+}
+
+/**
+ * Helper to create a single history message.
+ */
+function createHistoryMessage(
+    string $wamId = null,
+    string $direction = 'inbound',
+    string $type = 'text',
+    int $timestamp = null,
+    array $additionalData = []
+): array {
+    $wamId = $wamId ?? 'wamid_history_'.uniqid();
+    $timestamp = $timestamp ?? time();
+
+    $message = [
+        'id' => $wamId,
+        'direction' => $direction,
+        'type' => $type,
+        'timestamp' => (string) $timestamp,
+    ];
+
+    // Add type-specific data
+    switch ($type) {
+        case 'text':
+            $message['text'] = ['body' => $additionalData['body'] ?? 'Historical message'];
+            break;
+        case 'image':
+            $message['image'] = [
+                'id' => $additionalData['media_id'] ?? 'media_history_img_'.uniqid(),
+                'mime_type' => 'image/jpeg',
+                'sha256' => 'abc123',
+            ];
+            break;
+        case 'video':
+            $message['video'] = [
+                'id' => $additionalData['media_id'] ?? 'media_history_vid_'.uniqid(),
+                'mime_type' => 'video/mp4',
+            ];
+            break;
+        case 'document':
+            $message['document'] = [
+                'id' => $additionalData['media_id'] ?? 'media_history_doc_'.uniqid(),
+                'mime_type' => 'application/pdf',
+                'filename' => 'document.pdf',
+            ];
+            break;
+        case 'audio':
+            $message['audio'] = [
+                'id' => $additionalData['media_id'] ?? 'media_history_audio_'.uniqid(),
+                'mime_type' => 'audio/ogg',
+            ];
+            break;
+    }
+
+    return $message;
+}
+
+/**
+ * Story 1.12 Tests: History Webhook Processing
+ *
+ * Tests for implementing history webhook processing to enable historical message
+ * import from WhatsApp Business App when organizations migrate to coexistence mode.
+ *
+ * @see docs/sprint-artifacts/1-12-implement-history-webhook-processing.md
+ */
+describe('AC-1.12.1: Sync History Flag Check', function () {
+    it('skips processing when sync_history flag is disabled', function () {
+        $organization = createOrganizationWithSyncHistory(false);
+        $threadId = '1234567890';
+
+        $messages = [createHistoryMessage()];
+        $threads = [createHistoryThread($threadId, $messages)];
+        $payload = createHistoryPayload($threads);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'history');
+        $job->handle();
+
+        // No chat should be created when sync_history is disabled
+        expect(Chat::where('organization_id', $organization->id)->count())->toBe(0);
+    });
+
+    it('processes when metadata.sync_history is enabled (root location)', function () {
+        $organization = createOrganizationWithSyncHistory(true, 'root');
+        $threadId = '5551234567';
+
+        $messages = [createHistoryMessage()];
+        $threads = [createHistoryThread($threadId, $messages)];
+        $payload = createHistoryPayload($threads);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'history');
+        $job->handle();
+
+        // Chat should be created when sync_history is enabled
+        expect(Chat::where('organization_id', $organization->id)->count())->toBe(1);
+    });
+
+    it('processes when metadata.whatsapp.sync_history is enabled (nested location)', function () {
+        $organization = createOrganizationWithSyncHistory(true, 'whatsapp');
+        $threadId = '5559876543';
+
+        $messages = [createHistoryMessage()];
+        $threads = [createHistoryThread($threadId, $messages)];
+        $payload = createHistoryPayload($threads);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'history');
+        $job->handle();
+
+        // Chat should be created when sync_history is enabled at whatsapp location
+        expect(Chat::where('organization_id', $organization->id)->count())->toBe(1);
+    });
+});
+
+describe('AC-1.12.3: Contact Creation from Thread IDs', function () {
+    it('creates new contact from thread ID (phone number)', function () {
+        $organization = createOrganizationWithSyncHistory(true);
+        $threadId = '5557778888';
+
+        $messages = [createHistoryMessage()];
+        $threads = [createHistoryThread($threadId, $messages)];
+        $payload = createHistoryPayload($threads);
+
+        // Verify contact doesn't exist
+        expect(Contact::where('organization_id', $organization->id)
+            ->where('phone', 'like', "%{$threadId}%")
+            ->exists())->toBeFalse();
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'history');
+        $job->handle();
+
+        // Verify contact was created
+        $contact = Contact::where('organization_id', $organization->id)
+            ->where('phone', 'like', "%{$threadId}%")
+            ->first();
+
+        expect($contact)->not->toBeNull();
+    });
+
+    it('uses existing contact when thread phone exists', function () {
+        $organization = createOrganizationWithSyncHistory(true);
+
+        // Create existing contact
+        $existingContact = Contact::create([
+            'organization_id' => $organization->id,
+            'phone' => '+1112223333',
+            'first_name' => 'Existing',
+            'last_name' => 'Contact',
+            'is_subscribed' => 1,
+            'created_by' => 0,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $messages = [createHistoryMessage()];
+        $threads = [createHistoryThread('1112223333', $messages)];
+        $payload = createHistoryPayload($threads);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'history');
+        $job->handle();
+
+        // Verify no new contact was created
+        $contactCount = Contact::where('organization_id', $organization->id)->count();
+        expect($contactCount)->toBe(1);
+
+        // Verify chat references existing contact
+        $chat = Chat::where('organization_id', $organization->id)->first();
+        expect($chat->contact_id)->toBe($existingContact->id);
+    });
+});
+
+describe('AC-1.12.4: Original Timestamp Preservation', function () {
+    it('imports messages with original timestamps', function () {
+        $organization = createOrganizationWithSyncHistory(true);
+        $threadId = '4445556666';
+
+        // Use a specific historical timestamp (1 month ago)
+        $historicalTimestamp = time() - (30 * 24 * 60 * 60);
+
+        $messages = [createHistoryMessage(null, 'inbound', 'text', $historicalTimestamp)];
+        $threads = [createHistoryThread($threadId, $messages)];
+        $payload = createHistoryPayload($threads);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'history');
+        $job->handle();
+
+        $chat = Chat::where('organization_id', $organization->id)->first();
+
+        // created_at should match the historical timestamp (within 1 second tolerance)
+        $expectedDate = \Carbon\Carbon::createFromTimestamp($historicalTimestamp);
+        $chatCreatedAt = \Carbon\Carbon::parse($chat->created_at);
+        expect($chatCreatedAt->diffInSeconds($expectedDate))->toBeLessThanOrEqual(1);
+    });
+
+    it('creates ChatLog entry with original timestamp', function () {
+        $organization = createOrganizationWithSyncHistory(true);
+        $threadId = '7778889999';
+
+        $historicalTimestamp = time() - (15 * 24 * 60 * 60);
+
+        $messages = [createHistoryMessage(null, 'inbound', 'text', $historicalTimestamp)];
+        $threads = [createHistoryThread($threadId, $messages)];
+        $payload = createHistoryPayload($threads);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'history');
+        $job->handle();
+
+        $chat = Chat::where('organization_id', $organization->id)->first();
+        $chatLog = ChatLog::where('entity_type', 'chat')
+            ->where('entity_id', $chat->id)
+            ->first();
+
+        expect($chatLog)->not->toBeNull();
+
+        $expectedDate = \Carbon\Carbon::createFromTimestamp($historicalTimestamp);
+        $chatLogCreatedAt = \Carbon\Carbon::parse($chatLog->created_at);
+        expect($chatLogCreatedAt->diffInSeconds($expectedDate))->toBeLessThanOrEqual(1);
+    });
+});
+
+describe('AC-1.12.5: Inbound and Outbound Direction Handling', function () {
+    it('creates chat with type=inbound for inbound history messages', function () {
+        $organization = createOrganizationWithSyncHistory(true);
+        $threadId = '1231231234';
+
+        $messages = [createHistoryMessage(null, 'inbound', 'text')];
+        $threads = [createHistoryThread($threadId, $messages)];
+        $payload = createHistoryPayload($threads);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'history');
+        $job->handle();
+
+        $chat = Chat::where('organization_id', $organization->id)->first();
+
+        expect($chat->type)->toBe('inbound');
+        expect($chat->status)->toBe('received');
+        expect($chat->is_read)->toBe(0);
+    });
+
+    it('creates chat with type=outbound for outbound history messages', function () {
+        $organization = createOrganizationWithSyncHistory(true);
+        $threadId = '3213214321';
+
+        $messages = [createHistoryMessage(null, 'outbound', 'text')];
+        $threads = [createHistoryThread($threadId, $messages)];
+        $payload = createHistoryPayload($threads);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'history');
+        $job->handle();
+
+        $chat = Chat::where('organization_id', $organization->id)->first();
+
+        expect($chat->type)->toBe('outbound');
+        expect($chat->status)->toBe('sent');
+        expect($chat->is_read)->toBe(1);
+    });
+
+    it('defaults to inbound when direction is missing', function () {
+        $organization = createOrganizationWithSyncHistory(true);
+        $threadId = '6546546543';
+
+        // Create message without direction field
+        $message = [
+            'id' => 'wamid_no_direction_'.uniqid(),
+            'type' => 'text',
+            'timestamp' => (string) time(),
+            'text' => ['body' => 'No direction specified'],
+        ];
+
+        $threads = [createHistoryThread($threadId, [$message])];
+        $payload = createHistoryPayload($threads);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'history');
+        $job->handle();
+
+        $chat = Chat::where('organization_id', $organization->id)->first();
+        expect($chat->type)->toBe('inbound'); // Default
+    });
+});
+
+describe('AC-1.12.6: Duplicate Messages Skipped', function () {
+    it('skips duplicate history message with same wam_id', function () {
+        $organization = createOrganizationWithSyncHistory(true);
+        $threadId = '9998887776';
+        $wamId = 'wamid_duplicate_history_'.uniqid();
+
+        // First import
+        $messages1 = [createHistoryMessage($wamId, 'inbound', 'text')];
+        $threads1 = [createHistoryThread($threadId, $messages1)];
+        $payload1 = createHistoryPayload($threads1);
+
+        $job1 = new ProcessWebhookJob($payload1, $organization->id, 'history');
+        $job1->handle();
+
+        $chatCountAfterFirst = Chat::where('organization_id', $organization->id)->count();
+        expect($chatCountAfterFirst)->toBe(1);
+
+        // Reset queue fake
+        Queue::fake([DownloadWebhookMediaJob::class, ProcessWebhookNotificationsJob::class]);
+
+        // Second import with same wam_id - should be skipped
+        $messages2 = [createHistoryMessage($wamId, 'inbound', 'text')];
+        $threads2 = [createHistoryThread($threadId, $messages2)];
+        $payload2 = createHistoryPayload($threads2);
+
+        $job2 = new ProcessWebhookJob($payload2, $organization->id, 'history');
+        $job2->handle();
+
+        $chatCountAfterSecond = Chat::where('organization_id', $organization->id)->count();
+        expect($chatCountAfterSecond)->toBe(1); // Still only 1 chat
+
+        // No notification job should be dispatched for duplicate
+        Queue::assertNotPushed(ProcessWebhookNotificationsJob::class);
+    });
+
+    it('creates separate chats for different wam_ids', function () {
+        $organization = createOrganizationWithSyncHistory(true);
+        $threadId = '1111111111';
+
+        $messages = [
+            createHistoryMessage('wamid_history_unique_1'),
+            createHistoryMessage('wamid_history_unique_2'),
+        ];
+        $threads = [createHistoryThread($threadId, $messages)];
+        $payload = createHistoryPayload($threads);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'history');
+        $job->handle();
+
+        $chatCount = Chat::where('organization_id', $organization->id)->count();
+        expect($chatCount)->toBe(2);
+    });
+});
+
+describe('AC-1.12.7: Progress Metadata Logging', function () {
+    it('job completes successfully with progress metadata', function () {
+        $organization = createOrganizationWithSyncHistory(true);
+        $threadId = '2222222222';
+
+        $messages = [createHistoryMessage()];
+        $threads = [createHistoryThread($threadId, $messages)];
+
+        // Include progress metadata
+        $chunkMetadata = [
+            'phase' => 'initial',
+            'progress' => '0.25',
+        ];
+        $payload = createHistoryPayload($threads, $chunkMetadata);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'history');
+
+        // Should complete without exception
+        expect(fn () => $job->handle())->not->toThrow(\Exception::class);
+
+        // Chat should be created
+        expect(Chat::where('organization_id', $organization->id)->count())->toBe(1);
+    });
+
+    it('handles incremental phase metadata', function () {
+        $organization = createOrganizationWithSyncHistory(true);
+        $threadId = '3333333333';
+
+        $messages = [createHistoryMessage()];
+        $threads = [createHistoryThread($threadId, $messages)];
+
+        $chunkMetadata = [
+            'phase' => 'incremental',
+            'progress' => '0.75',
+        ];
+        $payload = createHistoryPayload($threads, $chunkMetadata);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'history');
+
+        expect(fn () => $job->handle())->not->toThrow(\Exception::class);
+    });
+
+    it('handles final phase metadata', function () {
+        $organization = createOrganizationWithSyncHistory(true);
+        $threadId = '4444444444';
+
+        $messages = [createHistoryMessage()];
+        $threads = [createHistoryThread($threadId, $messages)];
+
+        $chunkMetadata = [
+            'phase' => 'final',
+            'progress' => '1.0',
+        ];
+        $payload = createHistoryPayload($threads, $chunkMetadata);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'history');
+
+        expect(fn () => $job->handle())->not->toThrow(\Exception::class);
+    });
+});
+
+describe('History Media Job Dispatch', function () {
+    it('dispatches DownloadWebhookMediaJob for image history', function () {
+        $organization = createOrganizationWithSyncHistory(true);
+        $threadId = '5555555555';
+        $mediaId = 'media_history_image_test';
+
+        $messages = [createHistoryMessage(null, 'inbound', 'image', null, ['media_id' => $mediaId])];
+        $threads = [createHistoryThread($threadId, $messages)];
+        $payload = createHistoryPayload($threads);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'history');
+        $job->handle();
+
+        Queue::assertPushed(DownloadWebhookMediaJob::class, function ($job) use ($organization, $mediaId) {
+            return $job->organizationId === $organization->id
+                && $job->mediaData['media_id'] === $mediaId
+                && $job->mediaData['type'] === 'image';
+        });
+    });
+
+    it('dispatches DownloadWebhookMediaJob for video history', function () {
+        $organization = createOrganizationWithSyncHistory(true);
+        $threadId = '6666666666';
+
+        $messages = [createHistoryMessage(null, 'inbound', 'video')];
+        $threads = [createHistoryThread($threadId, $messages)];
+        $payload = createHistoryPayload($threads);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'history');
+        $job->handle();
+
+        Queue::assertPushed(DownloadWebhookMediaJob::class, function ($job) {
+            return $job->mediaData['type'] === 'video';
+        });
+    });
+
+    it('dispatches DownloadWebhookMediaJob for document history', function () {
+        $organization = createOrganizationWithSyncHistory(true);
+        $threadId = '7777777777';
+
+        $messages = [createHistoryMessage(null, 'inbound', 'document')];
+        $threads = [createHistoryThread($threadId, $messages)];
+        $payload = createHistoryPayload($threads);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'history');
+        $job->handle();
+
+        Queue::assertPushed(DownloadWebhookMediaJob::class, function ($job) {
+            return $job->mediaData['type'] === 'document';
+        });
+    });
+
+    it('dispatches DownloadWebhookMediaJob for audio history', function () {
+        $organization = createOrganizationWithSyncHistory(true);
+        $threadId = '8888888888';
+
+        $messages = [createHistoryMessage(null, 'inbound', 'audio')];
+        $threads = [createHistoryThread($threadId, $messages)];
+        $payload = createHistoryPayload($threads);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'history');
+        $job->handle();
+
+        Queue::assertPushed(DownloadWebhookMediaJob::class, function ($job) {
+            return $job->mediaData['type'] === 'audio';
+        });
+    });
+
+    it('does NOT dispatch DownloadWebhookMediaJob for text history', function () {
+        $organization = createOrganizationWithSyncHistory(true);
+        $threadId = '9999999999';
+
+        $messages = [createHistoryMessage(null, 'inbound', 'text')];
+        $threads = [createHistoryThread($threadId, $messages)];
+        $payload = createHistoryPayload($threads);
+
+        // Reset queue fake to ensure clean state
+        Queue::fake([DownloadWebhookMediaJob::class, ProcessWebhookNotificationsJob::class]);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'history');
+        $job->handle();
+
+        Queue::assertNotPushed(DownloadWebhookMediaJob::class);
+    });
+});
+
+describe('History Notification Job Dispatch', function () {
+    it('dispatches ProcessWebhookNotificationsJob for history message', function () {
+        $organization = createOrganizationWithSyncHistory(true);
+        $threadId = '1010101010';
+
+        $messages = [createHistoryMessage()];
+        $threads = [createHistoryThread($threadId, $messages)];
+        $payload = createHistoryPayload($threads);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'history');
+        $job->handle();
+
+        Queue::assertPushed(ProcessWebhookNotificationsJob::class, function ($job) use ($organization) {
+            return $job->organizationId === $organization->id;
+        });
+    });
+
+    it('dispatches ProcessWebhookNotificationsJob to webhook-high queue', function () {
+        $organization = createOrganizationWithSyncHistory(true);
+        $threadId = '2020202020';
+
+        $messages = [createHistoryMessage()];
+        $threads = [createHistoryThread($threadId, $messages)];
+        $payload = createHistoryPayload($threads);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'history');
+        $job->handle();
+
+        Queue::assertPushed(ProcessWebhookNotificationsJob::class, function ($job) {
+            return $job->queue === 'webhook-high';
+        });
+    });
+});
+
+describe('History Edge Cases', function () {
+    it('handles empty history array gracefully', function () {
+        $organization = createOrganizationWithSyncHistory(true);
+
+        $payload = [
+            'field' => 'history',
+            'value' => [
+                'history' => [],
+            ],
+        ];
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'history');
+
+        expect(fn () => $job->handle())->not->toThrow(\Exception::class);
+        expect(Chat::where('organization_id', $organization->id)->count())->toBe(0);
+    });
+
+    it('handles empty threads array gracefully', function () {
+        $organization = createOrganizationWithSyncHistory(true);
+
+        $payload = createHistoryPayload([]);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'history');
+
+        expect(fn () => $job->handle())->not->toThrow(\Exception::class);
+        expect(Chat::where('organization_id', $organization->id)->count())->toBe(0);
+    });
+
+    it('handles empty messages array gracefully', function () {
+        $organization = createOrganizationWithSyncHistory(true);
+        $threadId = '3030303030';
+
+        $threads = [createHistoryThread($threadId, [])];
+        $payload = createHistoryPayload($threads);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'history');
+
+        expect(fn () => $job->handle())->not->toThrow(\Exception::class);
+        expect(Chat::where('organization_id', $organization->id)->count())->toBe(0);
+    });
+
+    it('handles missing thread ID gracefully', function () {
+        $organization = createOrganizationWithSyncHistory(true);
+
+        $threads = [
+            [
+                // Missing 'id' field
+                'messages' => [createHistoryMessage()],
+            ],
+        ];
+        $payload = createHistoryPayload($threads);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'history');
+
+        expect(fn () => $job->handle())->not->toThrow(\Exception::class);
+        expect(Chat::where('organization_id', $organization->id)->count())->toBe(0);
+    });
+
+    it('handles missing wam_id gracefully', function () {
+        $organization = createOrganizationWithSyncHistory(true);
+        $threadId = '4040404040';
+
+        $message = [
+            // Missing 'id' (wam_id) field
+            'direction' => 'inbound',
+            'type' => 'text',
+            'timestamp' => (string) time(),
+            'text' => ['body' => 'No wam_id'],
+        ];
+
+        $threads = [createHistoryThread($threadId, [$message])];
+        $payload = createHistoryPayload($threads);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'history');
+
+        expect(fn () => $job->handle())->not->toThrow(\Exception::class);
+        expect(Chat::where('organization_id', $organization->id)->count())->toBe(0);
+    });
+
+    it('processes multiple threads in single webhook', function () {
+        $organization = createOrganizationWithSyncHistory(true);
+
+        $threads = [
+            createHistoryThread('1111111111', [createHistoryMessage()]),
+            createHistoryThread('2222222222', [createHistoryMessage()]),
+            createHistoryThread('3333333333', [createHistoryMessage()]),
+        ];
+        $payload = createHistoryPayload($threads);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'history');
+        $job->handle();
+
+        // Should create 3 chats (one per thread)
+        expect(Chat::where('organization_id', $organization->id)->count())->toBe(3);
+
+        // Should create 3 contacts
+        expect(Contact::where('organization_id', $organization->id)->count())->toBe(3);
+    });
+
+    it('processes multiple messages per thread', function () {
+        $organization = createOrganizationWithSyncHistory(true);
+        $threadId = '5050505050';
+
+        $messages = [
+            createHistoryMessage('wamid_multi_1', 'inbound'),
+            createHistoryMessage('wamid_multi_2', 'outbound'),
+            createHistoryMessage('wamid_multi_3', 'inbound'),
+        ];
+        $threads = [createHistoryThread($threadId, $messages)];
+        $payload = createHistoryPayload($threads);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'history');
+        $job->handle();
+
+        // Should create 3 chats (one per message)
+        expect(Chat::where('organization_id', $organization->id)->count())->toBe(3);
+
+        // Should create only 1 contact
+        expect(Contact::where('organization_id', $organization->id)->count())->toBe(1);
+    });
+
+    it('processes multiple chunks in single webhook', function () {
+        $organization = createOrganizationWithSyncHistory(true);
+
+        // Create payload with 3 chunks, each with unique messages
+        $payload = [
+            'field' => 'history',
+            'value' => [
+                'history' => [
+                    [
+                        'threads' => [createHistoryThread('6060606060', [createHistoryMessage('chunk1_msg')])],
+                        'metadata' => ['phase' => 'initial', 'progress' => '0.33'],
+                    ],
+                    [
+                        'threads' => [createHistoryThread('6060606060', [createHistoryMessage('chunk2_msg')])],
+                        'metadata' => ['phase' => 'incremental', 'progress' => '0.66'],
+                    ],
+                    [
+                        'threads' => [createHistoryThread('6060606060', [createHistoryMessage('chunk3_msg')])],
+                        'metadata' => ['phase' => 'final', 'progress' => '1.0'],
+                    ],
+                ],
+            ],
+        ];
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'history');
+        $job->handle();
+
+        // Should create 3 chats (one per chunk with unique wam_ids)
+        expect(Chat::where('organization_id', $organization->id)->count())->toBe(3);
+
+        // Should only create 1 contact (same thread ID across chunks)
+        expect(Contact::where('organization_id', $organization->id)->count())->toBe(1);
+    });
+
+    it('handles non-existent organization gracefully', function () {
+        $payload = createHistoryPayload([createHistoryThread('1234567890', [createHistoryMessage()])]);
+
+        // Use non-existent organization ID
+        $job = new ProcessWebhookJob($payload, 99999, 'history');
+
+        // Should complete without exception (logs warning)
+        expect(fn () => $job->handle())->not->toThrow(\Exception::class);
+    });
+
+    it('external webhook trigger failure does not fail job', function () {
+        $organization = createOrganizationWithSyncHistory(true);
+        $threadId = '7070707070';
+
+        $messages = [createHistoryMessage()];
+        $threads = [createHistoryThread($threadId, $messages)];
+        $payload = createHistoryPayload($threads);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'history');
+
+        // Fire-and-forget pattern means job should complete even if webhook fails
+        expect(fn () => $job->handle())->not->toThrow(\Exception::class);
+
+        // Chat should still be created
+        $chat = Chat::where('organization_id', $organization->id)->first();
+        expect($chat)->not->toBeNull();
+    });
+});
