@@ -21,11 +21,8 @@ use App\Models\Contact;
 use App\Models\Organization;
 use App\Services\ApiNotificationService;
 use App\Services\ChatService;
-use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
 use Illuminate\Support\Facades\Log;
-
-uses(RefreshDatabase::class);
 
 beforeEach(function () {
     Event::fake([NewChatEvent::class]);
