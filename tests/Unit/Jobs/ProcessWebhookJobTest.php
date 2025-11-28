@@ -21,6 +21,8 @@ use App\Models\Chat;
 use App\Models\ChatLog;
 use App\Models\Contact;
 use App\Models\Organization;
+use App\Models\Subscription;
+use App\Models\SubscriptionPlan;
 use App\Models\WebhookFailure;
 use App\Services\ContactService;
 use Illuminate\Support\Facades\Queue;
@@ -31,6 +33,34 @@ beforeEach(function () {
         ProcessWebhookNotificationsJob::class,
     ]);
 });
+
+/**
+ * Helper to create an organization with an active subscription.
+ * Required for most tests since subscription limits are now enforced.
+ */
+function createOrganizationWithSubscription(): Organization
+{
+    $organization = Organization::factory()->withoutAppSecret()->create();
+
+    // Create subscription plan with unlimited messages
+    $plan = SubscriptionPlan::create([
+        'name' => 'Test Plan',
+        'price' => 100,
+        'period' => 'monthly',
+        'metadata' => json_encode(['message_limit' => -1]), // Unlimited
+    ]);
+
+    // Create active subscription
+    Subscription::create([
+        'organization_id' => $organization->id,
+        'plan_id' => $plan->id,
+        'status' => 'active',
+        'valid_until' => now()->addMonth(),
+        'start_date' => now(),
+    ]);
+
+    return $organization;
+}
 
 /**
  * Helper to create a valid message webhook payload.
@@ -120,7 +150,7 @@ function createMessagePayload(
 
 describe('AC-1.2.1: Contact Creation via ContactService', function () {
     it('creates new contact when phone number does not exist', function () {
-        $organization = Organization::factory()->withoutAppSecret()->create();
+        $organization = createOrganizationWithSubscription();
         $phone = '1234567890';
         $contactName = 'New Test User';
 
@@ -144,7 +174,7 @@ describe('AC-1.2.1: Contact Creation via ContactService', function () {
     });
 
     it('uses existing contact when phone number exists', function () {
-        $organization = Organization::factory()->withoutAppSecret()->create();
+        $organization = createOrganizationWithSubscription();
 
         // Create existing contact
         $existingContact = Contact::create([
@@ -176,7 +206,7 @@ describe('AC-1.2.1: Contact Creation via ContactService', function () {
 
 describe('AC-1.2.2: Chat Creation', function () {
     it('creates chat record with correct data', function () {
-        $organization = Organization::factory()->withoutAppSecret()->create();
+        $organization = createOrganizationWithSubscription();
         $wamId = 'wamid_test_'.uniqid();
         $messageBody = 'Test message content';
 
@@ -200,7 +230,7 @@ describe('AC-1.2.2: Chat Creation', function () {
     });
 
     it('creates ChatLog entry for chat thread view', function () {
-        $organization = Organization::factory()->withoutAppSecret()->create();
+        $organization = createOrganizationWithSubscription();
         $payload = createMessagePayload('text');
 
         $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
@@ -218,7 +248,7 @@ describe('AC-1.2.2: Chat Creation', function () {
 
 describe('AC-1.2.3: DownloadWebhookMediaJob Dispatch', function () {
     it('dispatches DownloadWebhookMediaJob for image message', function () {
-        $organization = Organization::factory()->withoutAppSecret()->create();
+        $organization = createOrganizationWithSubscription();
         $mediaId = 'media_image_'.uniqid();
         $payload = createMessagePayload('image', null, '1234567890', 'Test User', ['media_id' => $mediaId]);
 
@@ -233,7 +263,7 @@ describe('AC-1.2.3: DownloadWebhookMediaJob Dispatch', function () {
     });
 
     it('dispatches DownloadWebhookMediaJob for video message', function () {
-        $organization = Organization::factory()->withoutAppSecret()->create();
+        $organization = createOrganizationWithSubscription();
         $payload = createMessagePayload('video');
 
         $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
@@ -245,7 +275,7 @@ describe('AC-1.2.3: DownloadWebhookMediaJob Dispatch', function () {
     });
 
     it('dispatches DownloadWebhookMediaJob for document message', function () {
-        $organization = Organization::factory()->withoutAppSecret()->create();
+        $organization = createOrganizationWithSubscription();
         $payload = createMessagePayload('document');
 
         $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
@@ -257,7 +287,7 @@ describe('AC-1.2.3: DownloadWebhookMediaJob Dispatch', function () {
     });
 
     it('dispatches DownloadWebhookMediaJob for audio message', function () {
-        $organization = Organization::factory()->withoutAppSecret()->create();
+        $organization = createOrganizationWithSubscription();
         $payload = createMessagePayload('audio');
 
         $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
@@ -269,7 +299,7 @@ describe('AC-1.2.3: DownloadWebhookMediaJob Dispatch', function () {
     });
 
     it('does NOT dispatch DownloadWebhookMediaJob for text message', function () {
-        $organization = Organization::factory()->withoutAppSecret()->create();
+        $organization = createOrganizationWithSubscription();
         $payload = createMessagePayload('text');
 
         $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
@@ -279,7 +309,7 @@ describe('AC-1.2.3: DownloadWebhookMediaJob Dispatch', function () {
     });
 
     it('does NOT dispatch DownloadWebhookMediaJob for location message', function () {
-        $organization = Organization::factory()->withoutAppSecret()->create();
+        $organization = createOrganizationWithSubscription();
         $payload = createMessagePayload('location');
 
         $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
@@ -291,7 +321,7 @@ describe('AC-1.2.3: DownloadWebhookMediaJob Dispatch', function () {
 
 describe('AC-1.2.4: ProcessWebhookNotificationsJob Dispatch', function () {
     it('dispatches ProcessWebhookNotificationsJob after chat creation', function () {
-        $organization = Organization::factory()->withoutAppSecret()->create();
+        $organization = createOrganizationWithSubscription();
         $payload = createMessagePayload('text');
 
         $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
@@ -303,7 +333,7 @@ describe('AC-1.2.4: ProcessWebhookNotificationsJob Dispatch', function () {
     });
 
     it('dispatches ProcessWebhookNotificationsJob to webhook-high queue', function () {
-        $organization = Organization::factory()->withoutAppSecret()->create();
+        $organization = createOrganizationWithSubscription();
         $payload = createMessagePayload('text');
 
         $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
@@ -315,7 +345,7 @@ describe('AC-1.2.4: ProcessWebhookNotificationsJob Dispatch', function () {
     });
 
     it('passes isNewContact=true for new contacts', function () {
-        $organization = Organization::factory()->withoutAppSecret()->create();
+        $organization = createOrganizationWithSubscription();
         $payload = createMessagePayload('text', null, '9999999999', 'Brand New Contact');
 
         $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
@@ -327,7 +357,7 @@ describe('AC-1.2.4: ProcessWebhookNotificationsJob Dispatch', function () {
     });
 
     it('passes isNewContact=false for existing contacts', function () {
-        $organization = Organization::factory()->withoutAppSecret()->create();
+        $organization = createOrganizationWithSubscription();
 
         // Create existing contact
         Contact::create([
@@ -354,7 +384,7 @@ describe('AC-1.2.4: ProcessWebhookNotificationsJob Dispatch', function () {
 
 describe('AC-1.2.5: Idempotency Check', function () {
     it('skips duplicate message with same wam_id', function () {
-        $organization = Organization::factory()->withoutAppSecret()->create();
+        $organization = createOrganizationWithSubscription();
         $wamId = 'wamid_duplicate_test_'.uniqid();
 
         // First message - should create chat
@@ -381,7 +411,7 @@ describe('AC-1.2.5: Idempotency Check', function () {
     });
 
     it('creates separate chats for different wam_ids', function () {
-        $organization = Organization::factory()->withoutAppSecret()->create();
+        $organization = createOrganizationWithSubscription();
 
         $payload1 = createMessagePayload('text', 'wamid_unique_1', '1234567890');
         $payload2 = createMessagePayload('text', 'wamid_unique_2', '1234567890');
@@ -399,7 +429,7 @@ describe('AC-1.2.5: Idempotency Check', function () {
 
 describe('AC-1.2.6: Performance - All Webhook Types Handled', function () {
     it('handles text message type', function () {
-        $organization = Organization::factory()->withoutAppSecret()->create();
+        $organization = createOrganizationWithSubscription();
         $payload = createMessagePayload('text');
 
         $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
@@ -411,7 +441,7 @@ describe('AC-1.2.6: Performance - All Webhook Types Handled', function () {
     });
 
     it('handles image message type', function () {
-        $organization = Organization::factory()->withoutAppSecret()->create();
+        $organization = createOrganizationWithSubscription();
         $payload = createMessagePayload('image');
 
         $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
@@ -424,7 +454,7 @@ describe('AC-1.2.6: Performance - All Webhook Types Handled', function () {
     });
 
     it('handles video message type', function () {
-        $organization = Organization::factory()->withoutAppSecret()->create();
+        $organization = createOrganizationWithSubscription();
         $payload = createMessagePayload('video');
 
         $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
@@ -436,7 +466,7 @@ describe('AC-1.2.6: Performance - All Webhook Types Handled', function () {
     });
 
     it('handles document message type', function () {
-        $organization = Organization::factory()->withoutAppSecret()->create();
+        $organization = createOrganizationWithSubscription();
         $payload = createMessagePayload('document');
 
         $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
@@ -448,7 +478,7 @@ describe('AC-1.2.6: Performance - All Webhook Types Handled', function () {
     });
 
     it('handles audio message type', function () {
-        $organization = Organization::factory()->withoutAppSecret()->create();
+        $organization = createOrganizationWithSubscription();
         $payload = createMessagePayload('audio');
 
         $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
@@ -460,7 +490,7 @@ describe('AC-1.2.6: Performance - All Webhook Types Handled', function () {
     });
 
     it('handles location message type', function () {
-        $organization = Organization::factory()->withoutAppSecret()->create();
+        $organization = createOrganizationWithSubscription();
         $payload = createMessagePayload('location');
 
         $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
@@ -473,7 +503,7 @@ describe('AC-1.2.6: Performance - All Webhook Types Handled', function () {
     });
 
     it('handles contacts message type', function () {
-        $organization = Organization::factory()->withoutAppSecret()->create();
+        $organization = createOrganizationWithSubscription();
         $payload = createMessagePayload('contacts');
 
         $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
@@ -485,7 +515,7 @@ describe('AC-1.2.6: Performance - All Webhook Types Handled', function () {
     });
 
     it('handles interactive message type', function () {
-        $organization = Organization::factory()->withoutAppSecret()->create();
+        $organization = createOrganizationWithSubscription();
         $payload = createMessagePayload('interactive');
 
         $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
@@ -524,7 +554,7 @@ describe('Job Configuration', function () {
 
 describe('Edge Cases', function () {
     it('handles missing contact info gracefully', function () {
-        $organization = Organization::factory()->withoutAppSecret()->create();
+        $organization = createOrganizationWithSubscription();
 
         // Payload without contact profile name
         $payload = [
@@ -554,7 +584,7 @@ describe('Edge Cases', function () {
     });
 
     it('handles invalid message data without crashing', function () {
-        $organization = Organization::factory()->withoutAppSecret()->create();
+        $organization = createOrganizationWithSubscription();
 
         // Payload with missing required fields
         $payload = [
@@ -576,7 +606,7 @@ describe('Edge Cases', function () {
     });
 
     it('handles empty messages array', function () {
-        $organization = Organization::factory()->withoutAppSecret()->create();
+        $organization = createOrganizationWithSubscription();
 
         $payload = [
             'field' => 'messages',
@@ -819,7 +849,7 @@ describe('AC-1.7.3: Duplicate Status Skipped', function () {
 
 describe('AC-1.7.4: Retroactive Processing', function () {
     it('processes pending MissedChatStatusUpdates when chat is created', function () {
-        $organization = Organization::factory()->withoutAppSecret()->create();
+        $organization = createOrganizationWithSubscription();
         $wamId = 'wamid_retroactive_'.uniqid();
 
         // First: Create MissedChatStatusUpdate (status arrives before chat)
@@ -850,7 +880,7 @@ describe('AC-1.7.4: Retroactive Processing', function () {
     });
 
     it('processes multiple pending statuses in order', function () {
-        $organization = Organization::factory()->withoutAppSecret()->create();
+        $organization = createOrganizationWithSubscription();
         $wamId = 'wamid_multi_retroactive_'.uniqid();
 
         // Create multiple MissedChatStatusUpdates in order
@@ -898,7 +928,7 @@ describe('AC-1.7.4: Retroactive Processing', function () {
 
 describe('AC-1.7.5: Processed Records Marked Correctly', function () {
     it('marks MissedChatStatusUpdate as PROCESSED after chat creation', function () {
-        $organization = Organization::factory()->withoutAppSecret()->create();
+        $organization = createOrganizationWithSubscription();
         $wamId = 'wamid_processed_'.uniqid();
 
         // Create MissedChatStatusUpdate
@@ -1000,6 +1030,252 @@ describe('AC-1.7.6: External Webhook Trigger', function () {
 
         // Fire-and-forget pattern means job should complete even if webhook fails
         expect(fn () => $job->handle())->not->toThrow(\Exception::class);
+    });
+});
+
+/**
+ * Story 1.8 Tests: Subscription Limit Checks
+ *
+ * Tests for restoring subscription limit checks during webhook processing
+ * to prevent organizations from exceeding their plan's message quotas.
+ *
+ * @see docs/sprint-artifacts/1-8-restore-subscription-limit-checks.md
+ */
+describe('AC-1.8.1, AC-1.8.2: Inbound Subscription Limit Check', function () {
+    it('skips message processing when subscription limit is reached', function () {
+        // Create organization without subscription (limit will be reached)
+        $organization = Organization::factory()->withoutAppSecret()->create();
+
+        $payload = createMessagePayload('text', 'wamid_limit_test_'.uniqid(), '1234567890', 'Test User');
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
+        $job->handle();
+
+        // No chat should be created when subscription limit is reached
+        $chatCount = Chat::where('organization_id', $organization->id)->count();
+        expect($chatCount)->toBe(0);
+
+        // No notifications should be dispatched
+        Queue::assertNotPushed(ProcessWebhookNotificationsJob::class);
+    });
+
+    it('skips message processing when subscription is expired', function () {
+        $organization = Organization::factory()->withoutAppSecret()->create();
+
+        // Create expired subscription
+        $plan = \App\Models\SubscriptionPlan::create([
+            'name' => 'Test Plan',
+            'price' => 100,
+            'period' => 'monthly',
+            'metadata' => json_encode(['message_limit' => 1000]),
+        ]);
+
+        \App\Models\Subscription::create([
+            'organization_id' => $organization->id,
+            'plan_id' => $plan->id,
+            'status' => 'active',
+            'valid_until' => now()->subDay(), // Expired yesterday
+            'start_date' => now()->subMonth(),
+        ]);
+
+        $payload = createMessagePayload('text', 'wamid_expired_'.uniqid());
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
+        $job->handle();
+
+        // No chat should be created when subscription is expired
+        $chatCount = Chat::where('organization_id', $organization->id)->count();
+        expect($chatCount)->toBe(0);
+    });
+
+    it('processes messages normally when subscription is active', function () {
+        $organization = Organization::factory()->withoutAppSecret()->create();
+
+        // Create active subscription
+        $plan = \App\Models\SubscriptionPlan::create([
+            'name' => 'Active Plan',
+            'price' => 100,
+            'period' => 'monthly',
+            'metadata' => json_encode(['message_limit' => 1000]),
+        ]);
+
+        \App\Models\Subscription::create([
+            'organization_id' => $organization->id,
+            'plan_id' => $plan->id,
+            'status' => 'active',
+            'valid_until' => now()->addMonth(), // Valid for a month
+            'start_date' => now(),
+        ]);
+
+        $wamId = 'wamid_active_sub_'.uniqid();
+        $payload = createMessagePayload('text', $wamId);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
+        $job->handle();
+
+        // Chat should be created when subscription is active
+        $chat = Chat::where('organization_id', $organization->id)->where('wam_id', $wamId)->first();
+        expect($chat)->not->toBeNull();
+    });
+});
+
+describe('AC-1.8.3: Job Completes Successfully', function () {
+    it('job completes successfully even when subscription limit is reached (200 OK pattern)', function () {
+        $organization = Organization::factory()->withoutAppSecret()->create();
+        // No subscription = limit reached
+
+        $payload = createMessagePayload('text');
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
+
+        // Should NOT throw any exception - maintains 200 OK pattern
+        expect(fn () => $job->handle())->not->toThrow(\Exception::class);
+    });
+});
+
+describe('AC-1.8.4, AC-1.8.5: Auto-Reply Limit Check', function () {
+    it('skips auto-reply when message limit is reached but still stores chat', function () {
+        $organization = Organization::factory()->withoutAppSecret()->create();
+
+        // Create subscription with message limit of 0 (limit reached immediately)
+        $plan = \App\Models\SubscriptionPlan::create([
+            'name' => 'Limited Plan',
+            'price' => 50,
+            'period' => 'monthly',
+            'metadata' => json_encode(['message_limit' => 0]), // Limit is 0
+        ]);
+
+        \App\Models\Subscription::create([
+            'organization_id' => $organization->id,
+            'plan_id' => $plan->id,
+            'status' => 'active',
+            'valid_until' => now()->addMonth(),
+            'start_date' => now(),
+        ]);
+
+        $wamId = 'wamid_msg_limit_'.uniqid();
+        $payload = createMessagePayload('text', $wamId);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
+        $job->handle();
+
+        // Chat should still be stored
+        $chat = Chat::where('organization_id', $organization->id)->where('wam_id', $wamId)->first();
+        expect($chat)->not->toBeNull();
+        expect($chat->type)->toBe('inbound');
+    });
+
+    it('skips auto-reply when contact bot_enable is false', function () {
+        $organization = Organization::factory()->withoutAppSecret()->create();
+
+        // Create active subscription with unlimited messages
+        $plan = \App\Models\SubscriptionPlan::create([
+            'name' => 'Unlimited Plan',
+            'price' => 100,
+            'period' => 'monthly',
+            'metadata' => json_encode(['message_limit' => -1]), // Unlimited
+        ]);
+
+        \App\Models\Subscription::create([
+            'organization_id' => $organization->id,
+            'plan_id' => $plan->id,
+            'status' => 'active',
+            'valid_until' => now()->addMonth(),
+            'start_date' => now(),
+        ]);
+
+        // Create contact with bot_enable = false
+        $contact = Contact::create([
+            'organization_id' => $organization->id,
+            'phone' => '+1234567890',
+            'first_name' => 'Bot',
+            'last_name' => 'Disabled',
+            'is_subscribed' => 1,
+            'bot_enable' => false, // Bot disabled
+            'created_by' => 0,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $wamId = 'wamid_bot_disabled_'.uniqid();
+        $payload = createMessagePayload('text', $wamId, '1234567890', 'Bot Disabled');
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
+        $job->handle();
+
+        // Chat should still be created
+        $chat = Chat::where('wam_id', $wamId)->first();
+        expect($chat)->not->toBeNull();
+        expect($chat->contact_id)->toBe($contact->id);
+    });
+
+    it('processes auto-reply when subscription OK, bot enabled, and supported message type', function () {
+        $organization = Organization::factory()->withoutAppSecret()->create();
+
+        // Create active subscription with unlimited messages
+        $plan = \App\Models\SubscriptionPlan::create([
+            'name' => 'Full Access Plan',
+            'price' => 200,
+            'period' => 'monthly',
+            'metadata' => json_encode(['message_limit' => -1]), // Unlimited
+        ]);
+
+        \App\Models\Subscription::create([
+            'organization_id' => $organization->id,
+            'plan_id' => $plan->id,
+            'status' => 'active',
+            'valid_until' => now()->addMonth(),
+            'start_date' => now(),
+        ]);
+
+        $wamId = 'wamid_full_access_'.uniqid();
+        $payload = createMessagePayload('text', $wamId, '9876543210', 'Full Access User');
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
+
+        // Job should complete without error (auto-reply will be attempted)
+        expect(fn () => $job->handle())->not->toThrow(\Exception::class);
+
+        // Chat should be created
+        $chat = Chat::where('wam_id', $wamId)->first();
+        expect($chat)->not->toBeNull();
+
+        // Contact should have bot_enable = 1 (truthy) by default
+        $contact = Contact::find($chat->contact_id);
+        expect((bool) $contact->bot_enable)->toBeTrue();
+    });
+
+    it('skips auto-reply for unsupported message types (image, video, document, etc.)', function () {
+        $organization = Organization::factory()->withoutAppSecret()->create();
+
+        // Create active subscription
+        $plan = \App\Models\SubscriptionPlan::create([
+            'name' => 'Media Plan',
+            'price' => 100,
+            'period' => 'monthly',
+            'metadata' => json_encode(['message_limit' => -1]),
+        ]);
+
+        \App\Models\Subscription::create([
+            'organization_id' => $organization->id,
+            'plan_id' => $plan->id,
+            'status' => 'active',
+            'valid_until' => now()->addMonth(),
+            'start_date' => now(),
+        ]);
+
+        // Test with image message (not in auto-reply types)
+        $wamId = 'wamid_image_no_reply_'.uniqid();
+        $payload = createMessagePayload('image', $wamId);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
+        $job->handle();
+
+        // Chat should be created but auto-reply is skipped for image
+        $chat = Chat::where('wam_id', $wamId)->first();
+        expect($chat)->not->toBeNull();
+        $metadata = json_decode($chat->metadata, true);
+        expect($metadata['type'])->toBe('image');
     });
 });
 

@@ -11,6 +11,7 @@ use App\Models\WebhookFailure;
 use App\Services\AutoReplyService;
 use App\Services\ChatService;
 use App\Services\ContactService;
+use App\Services\SubscriptionService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -160,6 +161,17 @@ class ProcessWebhookJob implements ShouldQueue
      */
     protected function processMessages(): void
     {
+        // AC-1.8.1: Check subscription limit before processing inbound messages
+        // AC-1.8.2: If limit reached, log warning and skip processing
+        // AC-1.8.3: Job completes successfully (no exception) to maintain 200 OK pattern
+        if (SubscriptionService::isSubscriptionLimitReachedForInboundMessages($this->organizationId)) {
+            Log::channel('webhook')->warning('Subscription limit reached - skipping message processing', [
+                'organization_id' => $this->organizationId,
+            ]);
+
+            return;
+        }
+
         $value = $this->payload['value'] ?? [];
         $messages = $value['messages'] ?? [];
         $contacts = $value['contacts'] ?? [];
@@ -292,17 +304,45 @@ class ProcessWebhookJob implements ShouldQueue
         // Handle ticket assignment (moved to notification job to avoid blocking)
         // The ChatService::handleTicketAssignment will be called by notification job
 
+        // AC-1.8.4: Check message limit before auto-reply
+        // AC-1.8.5: Chat is already stored above; only auto-reply is conditional
+        $isMessageLimitReached = SubscriptionService::isSubscriptionFeatureLimitReached(
+            $this->organizationId,
+            'message_limit'
+        );
+
         // Auto-reply integration - check triggers after chat creation
         // This is fire-and-forget; failures don't fail the main job
-        try {
-            $autoReplyService = new AutoReplyService();
-            $autoReplyService->checkAutoReply($chat, $isNewContact);
-        } catch (\Throwable $e) {
-            Log::channel('webhook')->warning('Auto-reply check failed (non-blocking)', [
+        // Only process auto-reply for supported message types (text, button, audio, interactive)
+        $autoReplyTypes = ['text', 'button', 'audio', 'interactive'];
+
+        if ($isMessageLimitReached) {
+            Log::channel('webhook')->info('Auto-reply skipped - message limit reached', [
+                'organization_id' => $this->organizationId,
                 'chat_id' => $chat->id,
-                'error' => $e->getMessage(),
+                'contact_id' => $contact->id,
             ]);
-            // Don't re-throw - auto-reply failure shouldn't fail the job
+        } elseif (! $contact->bot_enable) {
+            Log::channel('webhook')->info('Auto-reply skipped - bot disabled for contact', [
+                'chat_id' => $chat->id,
+                'contact_id' => $contact->id,
+            ]);
+        } elseif (! in_array($messageType, $autoReplyTypes)) {
+            Log::channel('webhook')->debug('Auto-reply skipped - unsupported message type', [
+                'chat_id' => $chat->id,
+                'message_type' => $messageType,
+            ]);
+        } else {
+            try {
+                $autoReplyService = new AutoReplyService();
+                $autoReplyService->checkAutoReply($chat, $isNewContact);
+            } catch (\Throwable $e) {
+                Log::channel('webhook')->warning('Auto-reply check failed (non-blocking)', [
+                    'chat_id' => $chat->id,
+                    'error' => $e->getMessage(),
+                ]);
+                // Don't re-throw - auto-reply failure shouldn't fail the job
+            }
         }
     }
 
