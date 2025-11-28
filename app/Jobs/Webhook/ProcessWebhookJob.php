@@ -7,11 +7,13 @@ use App\Models\Chat;
 use App\Models\ChatLog;
 use App\Models\ChatStatusLog;
 use App\Models\MissedChatStatusUpdate;
+use App\Models\Organization;
 use App\Models\WebhookFailure;
 use App\Services\AutoReplyService;
 use App\Services\ChatService;
 use App\Services\ContactService;
 use App\Services\SubscriptionService;
+use App\Services\UnsubscribeChecker;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -236,6 +238,31 @@ class ProcessWebhookJob implements ShouldQueue
         $result = $contactService->findOrCreateFromWebhook($senderPhone, $contactName);
         $contact = $result['contact'];
         $isNewContact = $result['isNew'];
+
+        // AC-1.9.1, AC-1.9.2: Check for unsubscribe keywords in text and button messages
+        // AC-1.9.4: Wrapped in try-catch to isolate failures - job continues on error
+        try {
+            // Extract message text from text.body or button.text
+            $messageText = $message['text']['body'] ?? null;
+            $buttonText = $message['button']['text'] ?? null;
+
+            $textToCheck = $messageText ?? $buttonText;
+
+            if ($textToCheck) {
+                $organization = Organization::find($this->organizationId);
+                if ($organization) {
+                    $unsubscribeChecker = new UnsubscribeChecker();
+                    $unsubscribeChecker->check($organization, $textToCheck, $contact->id);
+                }
+            }
+        } catch (\Throwable $e) {
+            // AC-1.9.4: Log warning but don't fail the job
+            Log::channel('webhook')->warning('UnsubscribeChecker failed (non-blocking)', [
+                'organization_id' => $this->organizationId,
+                'contact_id' => $contact->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
 
         // Build metadata for the chat
         $metadata = $this->buildMessageMetadata($message, $messageType);

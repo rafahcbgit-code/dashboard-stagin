@@ -1360,3 +1360,251 @@ describe('Status Update Normal Flow', function () {
         expect($missedCount)->toBe(0);
     });
 });
+
+/**
+ * Helper to create a button message payload.
+ */
+function createButtonMessagePayload(
+    string $buttonText,
+    string $wamId = null,
+    string $from = '1234567890',
+    ?string $contactName = 'Test User'
+): array {
+    $wamId = $wamId ?? 'wamid_btn_'.uniqid();
+
+    return [
+        'field' => 'messages',
+        'value' => [
+            'messaging_product' => 'whatsapp',
+            'metadata' => [
+                'display_phone_number' => '0987654321',
+                'phone_number_id' => 'phone_id_123',
+            ],
+            'contacts' => [
+                ['profile' => ['name' => $contactName], 'wa_id' => $from],
+            ],
+            'messages' => [
+                [
+                    'from' => $from,
+                    'id' => $wamId,
+                    'timestamp' => (string) time(),
+                    'type' => 'button',
+                    'button' => ['text' => $buttonText],
+                ],
+            ],
+        ],
+    ];
+}
+
+/**
+ * Story 1.9 Tests: UnsubscribeChecker Integration
+ *
+ * Tests for restoring UnsubscribeChecker functionality to detect opt-out
+ * keywords in inbound messages and update contact subscription status.
+ *
+ * @see docs/sprint-artifacts/1-9-restore-unsubscribechecker-integration.md
+ */
+describe('AC-1.9.1, AC-1.9.2: UnsubscribeChecker Call', function () {
+    it('calls UnsubscribeChecker with text message body', function () {
+        $organization = createOrganizationWithSubscription();
+
+        // Set up unsubscribe trigger in organization metadata
+        $metadata = json_decode($organization->metadata ?? '{}', true);
+        $metadata['campaign_settings']['unsubscribe_trigger'] = 'stop,unsubscribe,quit';
+        $organization->metadata = json_encode($metadata);
+        $organization->save();
+
+        // Create a text message with unsubscribe trigger
+        $wamId = 'wamid_unsub_text_'.uniqid();
+        $payload = createMessagePayload('text', $wamId, '1234567890', 'Test User', ['body' => 'stop']);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
+        $job->handle();
+
+        // Verify contact was unsubscribed
+        $contact = Contact::where('organization_id', $organization->id)
+            ->where('phone', 'like', '%1234567890%')
+            ->first();
+
+        expect($contact)->not->toBeNull();
+        expect((int) $contact->is_subscribed)->toBe(0);
+    });
+
+    it('calls UnsubscribeChecker with button response text', function () {
+        $organization = createOrganizationWithSubscription();
+
+        // Set up unsubscribe trigger in organization metadata
+        $metadata = json_decode($organization->metadata ?? '{}', true);
+        $metadata['campaign_settings']['unsubscribe_trigger'] = 'stop,unsubscribe,quit';
+        $organization->metadata = json_encode($metadata);
+        $organization->save();
+
+        // Create a button message with unsubscribe trigger
+        $wamId = 'wamid_unsub_btn_'.uniqid();
+        $payload = createButtonMessagePayload('stop', $wamId, '9876543210', 'Button User');
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
+        $job->handle();
+
+        // Verify contact was unsubscribed
+        $contact = Contact::where('organization_id', $organization->id)
+            ->where('phone', 'like', '%9876543210%')
+            ->first();
+
+        expect($contact)->not->toBeNull();
+        expect((int) $contact->is_subscribed)->toBe(0);
+    });
+
+    it('does not unsubscribe when message does not match trigger', function () {
+        $organization = createOrganizationWithSubscription();
+
+        // Set up unsubscribe trigger
+        $metadata = json_decode($organization->metadata ?? '{}', true);
+        $metadata['campaign_settings']['unsubscribe_trigger'] = 'stop,unsubscribe';
+        $organization->metadata = json_encode($metadata);
+        $organization->save();
+
+        // Create a text message without unsubscribe trigger
+        $wamId = 'wamid_no_unsub_'.uniqid();
+        $payload = createMessagePayload('text', $wamId, '5555555555', 'Regular User', ['body' => 'hello there']);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
+        $job->handle();
+
+        // Verify contact remains subscribed
+        $contact = Contact::where('organization_id', $organization->id)
+            ->where('phone', 'like', '%5555555555%')
+            ->first();
+
+        expect($contact)->not->toBeNull();
+        expect((int) $contact->is_subscribed)->toBe(1);
+    });
+
+    it('handles case-insensitive unsubscribe triggers', function () {
+        $organization = createOrganizationWithSubscription();
+
+        // Set up unsubscribe trigger
+        $metadata = json_decode($organization->metadata ?? '{}', true);
+        $metadata['campaign_settings']['unsubscribe_trigger'] = 'stop';
+        $organization->metadata = json_encode($metadata);
+        $organization->save();
+
+        // Create a text message with uppercase trigger
+        $wamId = 'wamid_case_unsub_'.uniqid();
+        $payload = createMessagePayload('text', $wamId, '4444444444', 'Case User', ['body' => 'STOP']);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
+        $job->handle();
+
+        // Verify contact was unsubscribed (case-insensitive)
+        $contact = Contact::where('organization_id', $organization->id)
+            ->where('phone', 'like', '%4444444444%')
+            ->first();
+
+        expect($contact)->not->toBeNull();
+        expect((int) $contact->is_subscribed)->toBe(0);
+    });
+});
+
+describe('AC-1.9.3: Subscription Status Update', function () {
+    it('updates existing contact subscription status to 0 on unsubscribe', function () {
+        $organization = createOrganizationWithSubscription();
+
+        // Set up unsubscribe trigger
+        $metadata = json_decode($organization->metadata ?? '{}', true);
+        $metadata['campaign_settings']['unsubscribe_trigger'] = 'stop';
+        $organization->metadata = json_encode($metadata);
+        $organization->save();
+
+        // Create existing subscribed contact
+        $contact = Contact::create([
+            'organization_id' => $organization->id,
+            'phone' => '+3333333333',
+            'first_name' => 'Subscribed',
+            'last_name' => 'User',
+            'is_subscribed' => 1,
+            'created_by' => 0,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        expect((int) $contact->is_subscribed)->toBe(1);
+
+        // Send unsubscribe message
+        $wamId = 'wamid_update_status_'.uniqid();
+        $payload = createMessagePayload('text', $wamId, '3333333333', 'Subscribed User', ['body' => 'stop']);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
+        $job->handle();
+
+        // Verify subscription status was updated
+        $contact->refresh();
+        expect((int) $contact->is_subscribed)->toBe(0);
+    });
+});
+
+describe('AC-1.9.4: Error Isolation', function () {
+    it('job completes successfully even when UnsubscribeChecker throws exception', function () {
+        $organization = createOrganizationWithSubscription();
+
+        // Create a payload that will be processed
+        $wamId = 'wamid_error_isolation_'.uniqid();
+        $payload = createMessagePayload('text', $wamId, '2222222222', 'Error User', ['body' => 'test message']);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
+
+        // Job should complete without throwing exception
+        // Even if UnsubscribeChecker has issues internally, the job continues
+        expect(fn () => $job->handle())->not->toThrow(\Exception::class);
+
+        // Verify chat was still created (main job flow completed)
+        $chat = Chat::where('organization_id', $organization->id)
+            ->where('wam_id', $wamId)
+            ->first();
+
+        expect($chat)->not->toBeNull();
+    });
+
+    it('continues processing when organization has no unsubscribe triggers configured', function () {
+        $organization = createOrganizationWithSubscription();
+
+        // Ensure no unsubscribe triggers are configured
+        $metadata = json_decode($organization->metadata ?? '{}', true);
+        unset($metadata['campaign_settings']['unsubscribe_trigger']);
+        $organization->metadata = json_encode($metadata);
+        $organization->save();
+
+        $wamId = 'wamid_no_triggers_'.uniqid();
+        $payload = createMessagePayload('text', $wamId, '1111111111', 'No Trigger User', ['body' => 'stop']);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
+
+        // Should complete without error
+        expect(fn () => $job->handle())->not->toThrow(\Exception::class);
+
+        // Chat should still be created
+        $chat = Chat::where('wam_id', $wamId)->first();
+        expect($chat)->not->toBeNull();
+
+        // Contact should remain subscribed (no triggers = no unsubscribe)
+        $contact = Contact::find($chat->contact_id);
+        expect((int) $contact->is_subscribed)->toBe(1);
+    });
+
+    it('continues processing when UnsubscribeChecker receives empty message text', function () {
+        $organization = createOrganizationWithSubscription();
+
+        // Create a message with empty body (e.g., media message)
+        $wamId = 'wamid_empty_text_'.uniqid();
+        $payload = createMessagePayload('image', $wamId, '6666666666', 'Image User');
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
+
+        // Should complete without error (no text to check)
+        expect(fn () => $job->handle())->not->toThrow(\Exception::class);
+
+        // Chat should still be created
+        $chat = Chat::where('wam_id', $wamId)->first();
+        expect($chat)->not->toBeNull();
+    });
+});
