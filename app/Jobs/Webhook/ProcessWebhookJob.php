@@ -2,9 +2,11 @@
 
 namespace App\Jobs\Webhook;
 
+use App\Helpers\WebhookHelper;
 use App\Models\Chat;
 use App\Models\ChatLog;
 use App\Models\ChatStatusLog;
+use App\Models\MissedChatStatusUpdate;
 use App\Models\WebhookFailure;
 use App\Services\AutoReplyService;
 use App\Services\ChatService;
@@ -245,6 +247,9 @@ class ProcessWebhookJob implements ShouldQueue
             'entity_id' => $chat->id,
             'created_at' => now(),
         ]);
+
+        // AC-1.7.4: Process any pending MissedChatStatusUpdates for this wam_id
+        $this->processPendingStatusUpdates($chat, $contact);
 
         Log::channel('webhook')->info('Chat created', [
             'organization_id' => $this->organizationId,
@@ -498,13 +503,36 @@ class ProcessWebhookJob implements ShouldQueue
             ->first();
 
         if (! $chat) {
-            // Chat not found - might be for outbound message not yet synced
-            // Store for later processing (missed status update pattern)
-            Log::channel('webhook')->debug('Status update for unknown chat', [
-                'organization_id' => $this->organizationId,
-                'wam_id' => $wamId,
-                'status' => $statusType,
-            ]);
+            // AC-1.7.1: Status update for unknown chat - store for later processing
+            // AC-1.7.3: Check for duplicate before creating
+            $exists = MissedChatStatusUpdate::where('organization_id', $this->organizationId)
+                ->where('wam_id', $wamId)
+                ->where('status', $statusType)
+                ->exists();
+
+            if (! $exists) {
+                // AC-1.7.2: Create MissedChatStatusUpdate record
+                MissedChatStatusUpdate::create([
+                    'wam_id' => $wamId,
+                    'organization_id' => $this->organizationId,
+                    'payload' => json_encode($status),
+                    'status' => $statusType,
+                    'state' => MissedChatStatusUpdate::STATE_NOT_PROCESSED,
+                    'created_at' => now(),
+                ]);
+
+                Log::channel('webhook')->info('MissedChatStatusUpdate created', [
+                    'organization_id' => $this->organizationId,
+                    'wam_id' => $wamId,
+                    'status' => $statusType,
+                ]);
+            } else {
+                Log::channel('webhook')->debug('Duplicate MissedChatStatusUpdate skipped', [
+                    'organization_id' => $this->organizationId,
+                    'wam_id' => $wamId,
+                    'status' => $statusType,
+                ]);
+            }
 
             return;
         }
@@ -513,11 +541,14 @@ class ProcessWebhookJob implements ShouldQueue
         $chat->update(['status' => $statusType]);
 
         // Create status log entry
+        // Note: chat_status_logs table only has: id, chat_id, metadata, created_at
+        // Store status and timestamp in metadata JSON
         ChatStatusLog::create([
             'chat_id' => $chat->id,
-            'status' => $statusType,
-            'timestamp' => $timestamp,
-            'metadata' => json_encode($status),
+            'metadata' => json_encode(array_merge($status, [
+                'status' => $statusType,
+                'timestamp' => $timestamp,
+            ])),
             'created_at' => now(),
         ]);
 
@@ -526,6 +557,26 @@ class ProcessWebhookJob implements ShouldQueue
             'wam_id' => $wamId,
             'status' => $statusType,
         ]);
+
+        // AC-1.7.6: Trigger external webhook for status update (fire-and-forget)
+        try {
+            WebhookHelper::triggerWebhookEvent('message.status.update', [
+                'data' => [
+                    'status' => $statusType,
+                    'wam_id' => $wamId,
+                    'chat_id' => $chat->id,
+                    'contact_id' => $chat->contact_id,
+                    'timestamp' => $timestamp,
+                ],
+            ], $this->organizationId);
+        } catch (\Throwable $e) {
+            // Fire-and-forget - don't fail on webhook error
+            Log::channel('webhook')->warning('External webhook trigger failed (non-blocking)', [
+                'event' => 'message.status.update',
+                'chat_id' => $chat->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**
@@ -582,6 +633,102 @@ class ProcessWebhookJob implements ShouldQueue
             'webhook_type' => $this->webhookType,
             'payload' => $this->payload,
         ]);
+    }
+
+    /**
+     * Process pending MissedChatStatusUpdates when chat is created.
+     *
+     * AC-1.7.4: When chat is created, pending MissedChatStatusUpdates are processed.
+     * AC-1.7.5: Processed MissedChatStatusUpdates are marked state=PROCESSED.
+     * AC-1.7.6: External webhook 'message.status.update' triggered after status update.
+     *
+     * @param  Chat  $chat The newly created chat record
+     * @param  \App\Models\Contact  $contact The contact associated with the chat
+     */
+    protected function processPendingStatusUpdates(Chat $chat, $contact): void
+    {
+        // Query for pending status updates for this wam_id
+        $pendingUpdates = MissedChatStatusUpdate::where('organization_id', $this->organizationId)
+            ->where('wam_id', $chat->wam_id)
+            ->where('state', MissedChatStatusUpdate::STATE_NOT_PROCESSED)
+            ->orderBy('created_at', 'asc')
+            ->get();
+
+        if ($pendingUpdates->isEmpty()) {
+            return;
+        }
+
+        Log::channel('webhook')->info('Processing pending MissedChatStatusUpdates', [
+            'chat_id' => $chat->id,
+            'wam_id' => $chat->wam_id,
+            'count' => $pendingUpdates->count(),
+        ]);
+
+        $latestStatus = null;
+
+        foreach ($pendingUpdates as $pendingUpdate) {
+            try {
+                // AC-1.7.5: Create ChatStatusLog entry
+                // Note: chat_status_logs table only has: id, chat_id, metadata, created_at
+                $payload = json_decode($pendingUpdate->payload, true);
+                $timestamp = $payload['timestamp'] ?? time();
+
+                ChatStatusLog::create([
+                    'chat_id' => $chat->id,
+                    'metadata' => json_encode(array_merge($payload, [
+                        'status' => $pendingUpdate->status,
+                        'timestamp' => $timestamp,
+                    ])),
+                    'created_at' => now(),
+                ]);
+
+                // Track the latest status to update chat
+                $latestStatus = $pendingUpdate->status;
+
+                // AC-1.7.5: Mark as PROCESSED
+                $pendingUpdate->update([
+                    'state' => MissedChatStatusUpdate::STATE_PROCESSED,
+                    'updated_at' => now(),
+                ]);
+
+                Log::channel('webhook')->debug('MissedChatStatusUpdate processed', [
+                    'id' => $pendingUpdate->id,
+                    'wam_id' => $pendingUpdate->wam_id,
+                    'status' => $pendingUpdate->status,
+                ]);
+            } catch (\Throwable $e) {
+                Log::channel('webhook')->warning('Failed to process MissedChatStatusUpdate (non-blocking)', [
+                    'id' => $pendingUpdate->id,
+                    'error' => $e->getMessage(),
+                ]);
+                // Continue processing other updates - don't fail the main job
+            }
+        }
+
+        // Update chat status to the latest received status
+        if ($latestStatus) {
+            $chat->update(['status' => $latestStatus]);
+
+            // AC-1.7.6: Trigger external webhook for the status update
+            try {
+                WebhookHelper::triggerWebhookEvent('message.status.update', [
+                    'data' => [
+                        'status' => $latestStatus,
+                        'wam_id' => $chat->wam_id,
+                        'chat_id' => $chat->id,
+                        'contact_id' => $contact->id,
+                        'timestamp' => time(),
+                    ],
+                ], $this->organizationId);
+            } catch (\Throwable $e) {
+                // Fire-and-forget - don't fail on webhook error
+                Log::channel('webhook')->warning('External webhook trigger failed (non-blocking)', [
+                    'event' => 'message.status.update',
+                    'chat_id' => $chat->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
     }
 
     /**

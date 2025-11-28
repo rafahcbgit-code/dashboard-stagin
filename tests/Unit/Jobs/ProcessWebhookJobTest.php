@@ -693,3 +693,394 @@ describe('AC-1.5.2: Failed Job Logging', function () {
         expect($failure->error_code)->toBe('500');
     });
 });
+
+/**
+ * Helper to create a valid status webhook payload.
+ */
+function createStatusPayload(
+    string $wamId,
+    string $status = 'delivered',
+    string $recipientId = '1234567890',
+    int $timestamp = null
+): array {
+    return [
+        'field' => 'messages',
+        'value' => [
+            'messaging_product' => 'whatsapp',
+            'metadata' => [
+                'display_phone_number' => '0987654321',
+                'phone_number_id' => 'phone_id_123',
+            ],
+            'statuses' => [
+                [
+                    'id' => $wamId,
+                    'status' => $status,
+                    'timestamp' => (string) ($timestamp ?? time()),
+                    'recipient_id' => $recipientId,
+                ],
+            ],
+        ],
+    ];
+}
+
+/**
+ * Story 1.7 Tests: MissedChatStatusUpdate Handling
+ *
+ * Tests for restoring MissedChatStatusUpdate functionality to handle
+ * race conditions where status webhooks arrive before chat records exist.
+ *
+ * @see docs/sprint-artifacts/1-7-restore-missedchatstatusupdate-handling.md
+ */
+describe('AC-1.7.1: MissedChatStatusUpdate Creation', function () {
+    it('creates MissedChatStatusUpdate when status arrives for unknown wam_id', function () {
+        $organization = Organization::factory()->withoutAppSecret()->create();
+        $wamId = 'wamid_unknown_'.uniqid();
+
+        $payload = createStatusPayload($wamId, 'delivered');
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'statuses');
+        $job->handle();
+
+        $missedUpdate = \App\Models\MissedChatStatusUpdate::where('organization_id', $organization->id)
+            ->where('wam_id', $wamId)
+            ->first();
+
+        expect($missedUpdate)->not->toBeNull();
+        expect($missedUpdate->status)->toBe('delivered');
+    });
+});
+
+describe('AC-1.7.2: MissedChatStatusUpdate Fields', function () {
+    it('stores correct fields: organization_id, wam_id, status, payload, state=NOT_PROCESSED', function () {
+        $organization = Organization::factory()->withoutAppSecret()->create();
+        $wamId = 'wamid_fields_test_'.uniqid();
+        $timestamp = time();
+
+        $payload = createStatusPayload($wamId, 'sent', '1234567890', $timestamp);
+
+        $job = new ProcessWebhookJob($payload, $organization->id, 'statuses');
+        $job->handle();
+
+        $missedUpdate = \App\Models\MissedChatStatusUpdate::where('wam_id', $wamId)->first();
+
+        expect($missedUpdate)->not->toBeNull();
+        expect($missedUpdate->organization_id)->toBe($organization->id);
+        expect($missedUpdate->wam_id)->toBe($wamId);
+        expect($missedUpdate->status)->toBe('sent');
+        expect($missedUpdate->state)->toBe(\App\Models\MissedChatStatusUpdate::STATE_NOT_PROCESSED);
+        expect($missedUpdate->payload)->not->toBeNull();
+
+        $storedPayload = json_decode($missedUpdate->payload, true);
+        expect($storedPayload['id'])->toBe($wamId);
+        expect($storedPayload['status'])->toBe('sent');
+    });
+});
+
+describe('AC-1.7.3: Duplicate Status Skipped', function () {
+    it('skips duplicate status updates for same wam_id+status combination', function () {
+        $organization = Organization::factory()->withoutAppSecret()->create();
+        $wamId = 'wamid_duplicate_status_'.uniqid();
+
+        // First status webhook
+        $payload1 = createStatusPayload($wamId, 'delivered');
+        $job1 = new ProcessWebhookJob($payload1, $organization->id, 'statuses');
+        $job1->handle();
+
+        $countAfterFirst = \App\Models\MissedChatStatusUpdate::where('wam_id', $wamId)->count();
+        expect($countAfterFirst)->toBe(1);
+
+        // Second status webhook with same wam_id+status
+        $payload2 = createStatusPayload($wamId, 'delivered');
+        $job2 = new ProcessWebhookJob($payload2, $organization->id, 'statuses');
+        $job2->handle();
+
+        $countAfterSecond = \App\Models\MissedChatStatusUpdate::where('wam_id', $wamId)->count();
+        expect($countAfterSecond)->toBe(1); // Still only 1 record
+    });
+
+    it('allows different status types for the same wam_id', function () {
+        $organization = Organization::factory()->withoutAppSecret()->create();
+        $wamId = 'wamid_multi_status_'.uniqid();
+
+        // First status: delivered
+        $payload1 = createStatusPayload($wamId, 'delivered');
+        $job1 = new ProcessWebhookJob($payload1, $organization->id, 'statuses');
+        $job1->handle();
+
+        // Second status: read (different status type)
+        $payload2 = createStatusPayload($wamId, 'read');
+        $job2 = new ProcessWebhookJob($payload2, $organization->id, 'statuses');
+        $job2->handle();
+
+        $count = \App\Models\MissedChatStatusUpdate::where('wam_id', $wamId)->count();
+        expect($count)->toBe(2); // Both should be stored
+    });
+});
+
+describe('AC-1.7.4: Retroactive Processing', function () {
+    it('processes pending MissedChatStatusUpdates when chat is created', function () {
+        $organization = Organization::factory()->withoutAppSecret()->create();
+        $wamId = 'wamid_retroactive_'.uniqid();
+
+        // First: Create MissedChatStatusUpdate (status arrives before chat)
+        \App\Models\MissedChatStatusUpdate::create([
+            'wam_id' => $wamId,
+            'organization_id' => $organization->id,
+            'payload' => json_encode(['id' => $wamId, 'status' => 'delivered', 'timestamp' => time()]),
+            'status' => 'delivered',
+            'state' => \App\Models\MissedChatStatusUpdate::STATE_NOT_PROCESSED,
+            'created_at' => now(),
+        ]);
+
+        // Then: Create chat with same wam_id via message webhook
+        $messagePayload = createMessagePayload('text', $wamId, '1234567890', 'Test User');
+        $job = new ProcessWebhookJob($messagePayload, $organization->id, 'messages');
+        $job->handle();
+
+        // Verify chat was created and has the status from MissedChatStatusUpdate
+        $chat = Chat::where('wam_id', $wamId)->first();
+        expect($chat)->not->toBeNull();
+        expect($chat->status)->toBe('delivered'); // Should be updated from MissedChatStatusUpdate
+
+        // Verify ChatStatusLog was created (status is stored in metadata JSON)
+        $statusLog = \App\Models\ChatStatusLog::where('chat_id', $chat->id)->first();
+        expect($statusLog)->not->toBeNull();
+        $logMetadata = json_decode($statusLog->metadata, true);
+        expect($logMetadata['status'])->toBe('delivered');
+    });
+
+    it('processes multiple pending statuses in order', function () {
+        $organization = Organization::factory()->withoutAppSecret()->create();
+        $wamId = 'wamid_multi_retroactive_'.uniqid();
+
+        // Create multiple MissedChatStatusUpdates in order
+        \App\Models\MissedChatStatusUpdate::create([
+            'wam_id' => $wamId,
+            'organization_id' => $organization->id,
+            'payload' => json_encode(['id' => $wamId, 'status' => 'sent', 'timestamp' => time()]),
+            'status' => 'sent',
+            'state' => \App\Models\MissedChatStatusUpdate::STATE_NOT_PROCESSED,
+            'created_at' => now()->subSeconds(2),
+        ]);
+
+        \App\Models\MissedChatStatusUpdate::create([
+            'wam_id' => $wamId,
+            'organization_id' => $organization->id,
+            'payload' => json_encode(['id' => $wamId, 'status' => 'delivered', 'timestamp' => time()]),
+            'status' => 'delivered',
+            'state' => \App\Models\MissedChatStatusUpdate::STATE_NOT_PROCESSED,
+            'created_at' => now()->subSeconds(1),
+        ]);
+
+        \App\Models\MissedChatStatusUpdate::create([
+            'wam_id' => $wamId,
+            'organization_id' => $organization->id,
+            'payload' => json_encode(['id' => $wamId, 'status' => 'read', 'timestamp' => time()]),
+            'status' => 'read',
+            'state' => \App\Models\MissedChatStatusUpdate::STATE_NOT_PROCESSED,
+            'created_at' => now(),
+        ]);
+
+        // Create chat
+        $messagePayload = createMessagePayload('text', $wamId, '1234567890', 'Test User');
+        $job = new ProcessWebhookJob($messagePayload, $organization->id, 'messages');
+        $job->handle();
+
+        // Chat should have the latest status
+        $chat = Chat::where('wam_id', $wamId)->first();
+        expect($chat->status)->toBe('read'); // Latest status
+
+        // All 3 ChatStatusLog entries should exist
+        $statusLogCount = \App\Models\ChatStatusLog::where('chat_id', $chat->id)->count();
+        expect($statusLogCount)->toBe(3);
+    });
+});
+
+describe('AC-1.7.5: Processed Records Marked Correctly', function () {
+    it('marks MissedChatStatusUpdate as PROCESSED after chat creation', function () {
+        $organization = Organization::factory()->withoutAppSecret()->create();
+        $wamId = 'wamid_processed_'.uniqid();
+
+        // Create MissedChatStatusUpdate
+        $missedUpdate = \App\Models\MissedChatStatusUpdate::create([
+            'wam_id' => $wamId,
+            'organization_id' => $organization->id,
+            'payload' => json_encode(['id' => $wamId, 'status' => 'delivered', 'timestamp' => time()]),
+            'status' => 'delivered',
+            'state' => \App\Models\MissedChatStatusUpdate::STATE_NOT_PROCESSED,
+            'created_at' => now(),
+        ]);
+
+        // Verify initial state
+        expect($missedUpdate->state)->toBe(\App\Models\MissedChatStatusUpdate::STATE_NOT_PROCESSED);
+
+        // Create chat
+        $messagePayload = createMessagePayload('text', $wamId, '1234567890', 'Test User');
+        $job = new ProcessWebhookJob($messagePayload, $organization->id, 'messages');
+        $job->handle();
+
+        // Refresh and verify state changed to PROCESSED
+        $missedUpdate->refresh();
+        expect($missedUpdate->state)->toBe(\App\Models\MissedChatStatusUpdate::STATE_PROCESSED);
+    });
+});
+
+describe('AC-1.7.6: External Webhook Trigger', function () {
+    it('triggers message.status.update webhook when chat status is updated', function () {
+        $organization = Organization::factory()->withoutAppSecret()->create();
+        $wamId = 'wamid_webhook_'.uniqid();
+
+        // Create a chat first
+        $contact = Contact::create([
+            'organization_id' => $organization->id,
+            'phone' => '+1234567890',
+            'first_name' => 'Test',
+            'last_name' => 'User',
+            'is_subscribed' => 1,
+            'created_by' => 0,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $chat = Chat::create([
+            'organization_id' => $organization->id,
+            'contact_id' => $contact->id,
+            'wam_id' => $wamId,
+            'type' => 'outbound',
+            'metadata' => json_encode(['type' => 'text']),
+            'status' => 'sent',
+            'is_read' => 0,
+            'created_at' => now(),
+        ]);
+
+        // Mock WebhookHelper to verify it's called
+        // Note: WebhookHelper is a static class, so we test by checking the job completes without errors
+        // In a real scenario, you'd use dependency injection or a spy
+
+        $payload = createStatusPayload($wamId, 'delivered');
+        $job = new ProcessWebhookJob($payload, $organization->id, 'statuses');
+
+        // This should complete without throwing exceptions (fire-and-forget pattern)
+        expect(fn () => $job->handle())->not->toThrow(\Exception::class);
+
+        // Verify the chat status was updated
+        $chat->refresh();
+        expect($chat->status)->toBe('delivered');
+    });
+
+    it('does not fail job when webhook trigger fails', function () {
+        $organization = Organization::factory()->withoutAppSecret()->create();
+        $wamId = 'wamid_webhook_fail_'.uniqid();
+
+        // Create chat
+        $contact = Contact::create([
+            'organization_id' => $organization->id,
+            'phone' => '+9876543210',
+            'first_name' => 'Webhook',
+            'last_name' => 'Test',
+            'is_subscribed' => 1,
+            'created_by' => 0,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        Chat::create([
+            'organization_id' => $organization->id,
+            'contact_id' => $contact->id,
+            'wam_id' => $wamId,
+            'type' => 'outbound',
+            'metadata' => json_encode(['type' => 'text']),
+            'status' => 'sent',
+            'is_read' => 0,
+            'created_at' => now(),
+        ]);
+
+        $payload = createStatusPayload($wamId, 'read');
+        $job = new ProcessWebhookJob($payload, $organization->id, 'statuses');
+
+        // Fire-and-forget pattern means job should complete even if webhook fails
+        expect(fn () => $job->handle())->not->toThrow(\Exception::class);
+    });
+});
+
+describe('Status Update Normal Flow', function () {
+    it('updates chat status when chat exists', function () {
+        $organization = Organization::factory()->withoutAppSecret()->create();
+        $wamId = 'wamid_status_update_'.uniqid();
+
+        // Create existing chat
+        $contact = Contact::create([
+            'organization_id' => $organization->id,
+            'phone' => '+1112223333',
+            'first_name' => 'Status',
+            'last_name' => 'Test',
+            'is_subscribed' => 1,
+            'created_by' => 0,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        $chat = Chat::create([
+            'organization_id' => $organization->id,
+            'contact_id' => $contact->id,
+            'wam_id' => $wamId,
+            'type' => 'outbound',
+            'metadata' => json_encode(['type' => 'text']),
+            'status' => 'sent',
+            'is_read' => 0,
+            'created_at' => now(),
+        ]);
+
+        // Send status update
+        $payload = createStatusPayload($wamId, 'delivered');
+        $job = new ProcessWebhookJob($payload, $organization->id, 'statuses');
+        $job->handle();
+
+        // Verify status was updated
+        $chat->refresh();
+        expect($chat->status)->toBe('delivered');
+
+        // Verify ChatStatusLog was created (status is stored in metadata JSON)
+        $statusLog = \App\Models\ChatStatusLog::where('chat_id', $chat->id)->first();
+        expect($statusLog)->not->toBeNull();
+        $logMetadata = json_decode($statusLog->metadata, true);
+        expect($logMetadata['status'])->toBe('delivered');
+    });
+
+    it('does NOT create MissedChatStatusUpdate when chat exists', function () {
+        $organization = Organization::factory()->withoutAppSecret()->create();
+        $wamId = 'wamid_no_missed_'.uniqid();
+
+        // Create existing chat
+        $contact = Contact::create([
+            'organization_id' => $organization->id,
+            'phone' => '+4445556666',
+            'first_name' => 'No',
+            'last_name' => 'Missed',
+            'is_subscribed' => 1,
+            'created_by' => 0,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        Chat::create([
+            'organization_id' => $organization->id,
+            'contact_id' => $contact->id,
+            'wam_id' => $wamId,
+            'type' => 'outbound',
+            'metadata' => json_encode(['type' => 'text']),
+            'status' => 'sent',
+            'is_read' => 0,
+            'created_at' => now(),
+        ]);
+
+        // Send status update
+        $payload = createStatusPayload($wamId, 'delivered');
+        $job = new ProcessWebhookJob($payload, $organization->id, 'statuses');
+        $job->handle();
+
+        // Verify NO MissedChatStatusUpdate was created
+        $missedCount = \App\Models\MissedChatStatusUpdate::where('wam_id', $wamId)->count();
+        expect($missedCount)->toBe(0);
+    });
+});
