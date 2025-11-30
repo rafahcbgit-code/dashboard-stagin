@@ -19,6 +19,7 @@ use App\Services\SubscriptionService;
 use App\Models\OtpConfig;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
+use App\Models\Team;
 
 class DashboardController extends BaseController
 {
@@ -30,6 +31,8 @@ class DashboardController extends BaseController
 
     public function index(Request $request){
         $organizationId = session()->get('current_organization');
+        $team = Team::where('organization_id', $organizationId)->where('user_id', auth()->user()->id)->first();
+        $data['role'] = $team->role;
 
         $phone = OtpConfig::value('contact_phone');
         $phone = ltrim($phone, '+');

@@ -8,6 +8,7 @@ use App\Http\Requests\StoreCampaign;
 use App\Http\Resources\CampaignResource;
 use App\Http\Resources\CampaignLogResource;
 use App\Models\Campaign;
+use App\Models\Team;
 use App\Models\CampaignLog;
 use App\Models\ContactGroup;
 use App\Models\Organization;
@@ -31,6 +32,8 @@ class CampaignController extends BaseController
 
     public function index(Request $request, $uuid = null){
         $organizationId = session()->get('current_organization');
+        $team = Team::where('organization_id', $organizationId)->where('user_id', auth()->user()->id)->first();
+
         if($uuid == null){
             $searchTerm = $request->query('search');
             $settings = Organization::where('id', $organizationId)->first();
@@ -48,7 +51,7 @@ class CampaignController extends BaseController
                     ->paginate(10)
             );
 
-            return Inertia::render('User/Campaign/Index', [ 'title'=> __('Campaigns'), 'allowCreate' => true, 'rows' => $rows, 'filters' => request()->all(['search']), 'settings' => $settings ]);
+            return Inertia::render('User/Campaign/Index', [ 'title'=> __('Campaigns'), 'allowCreate' => true, 'rows' => $rows, 'filters' => request()->all(['search']), 'settings' => $settings, 'role' => $team->role]);
         } else if($uuid == 'create'){
             $data['settings'] = Organization::where('id', $organizationId)->first();
             $data['templates'] = Template::where('organization_id', $organizationId)
