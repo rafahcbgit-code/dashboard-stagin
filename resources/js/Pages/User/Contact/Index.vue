@@ -15,7 +15,7 @@
                         </div>
                     </div>
                 </div>
-                <ContactTable :rows="props.rows" :filters="props.filters" :type="'contact'" @callback="handleContact"/>
+                <ContactTable :rows="props.rows" :filters="props.filters" :role="props.role" :type="'contact'" @callback="handleContact"/>
             </div>
             <div class="md:w-[70%] bg-cover md:h-[100vh] md:overflow-y-hidden">
                 <div v-if="contact">
@@ -36,10 +36,17 @@
                                 <h2 class="text-center text-slate-600">{{ $t('Or') }}</h2>
                                 <div class="flex justify-center">
                                     <div class="border-r border-slate-500 h-10"></div>
-                                </div>
+                                </div>  
                                 <div class="flex justify-center space-s-4 mt-6">
                                     <Link href="/contacts/add" class="bg-primary rounded-lg text-sm text-white p-2 px-8 text-center">{{ $t('Add contact') }}</Link>
-                                    <button @click="isOpenModal = true" class="bg-primary rounded-lg text-sm text-white p-2 px-8 text-center">{{ $t('Bulk upload') }}</button>
+                                    
+                                    <button 
+                                        v-if="props.role !== 'agent'" 
+                                        @click="isOpenModal = true" 
+                                        class="bg-primary rounded-lg text-sm text-white p-2 px-8 text-center"
+                                    >
+                                        {{ $t('Bulk upload') }}
+                                    </button>
                                 </div>
                             </div>
                         </div>
@@ -61,7 +68,7 @@
     import ContactTable from '@/Components/Tables/ContactTable.vue';
     import { router } from '@inertiajs/vue3';
 
-    const props = defineProps({ rows: Object, filters: Object, rowCount: Number, contactGroups: Object, contact: Object, editContact: Boolean, fields: Object, locationSettings: String, flash: Object });
+    const props = defineProps({ rows: Object, filters: Object, rowCount: Number, contactGroups: Object, contact: Object, editContact: Boolean, fields: Object, locationSettings: String, flash: Object, role: String});
     const isOpenModal = ref(false);
 
     const handleContact = (value) => {

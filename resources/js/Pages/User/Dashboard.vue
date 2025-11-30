@@ -9,7 +9,7 @@
                     </p>
                 </div>
             </div>
-            <div class="flex space-s-2 mb-8 text-xs md:text-sm">
+            <div v-if="props.role !== 'agent'" class="flex space-s-2 mb-8 text-xs md:text-sm">
                 <Link href="/contacts/add" class="bg-primary py-2 px-3 rounded-lg text-white">{{ $t('Add contact') }}</Link>
                 <Link href="/campaigns/create" class="bg-primary py-2 px-3 rounded-lg text-white">{{ $t('Create campaign') }}</Link>
                 <Link href="/templates/create" class="bg-primary py-2 px-3 rounded-lg text-white">{{ $t('Create template') }}</Link>
@@ -210,14 +210,15 @@
                         <div>
                             <h2>{{ $t('Campaigns') }}</h2>
                             <p class="text-sm">{{ $t('Below are your outgoing or scheduled campaigns') }}</p>
-                            <div v-if="props.campaigns.length === 0" class="p-5 border-2 border-dashed mt-4">
-                                <p class="text-sm text-center">{{ $t('You do not have any outgoing or scheduled campaigns') }}</p>
-                                <div class="flex justify-center items-center">
-                                    <Link href="/campaigns/create" class="bg-primary text-white p-2 rounded-lg text-sm mt-5 flex px-3 w-fit">
-                                        {{ $t('Create campaign') }}
-                                    </Link>
-                                </div>
-                            </div>
+<div v-if="props.role !== 'agent' && props.campaigns.length === 0" class="p-5 border-2 border-dashed mt-4">
+    <p class="text-sm text-center">{{ $t('You do not have any outgoing or scheduled campaigns') }}</p>
+    
+    <div v-if="props.role !== 'agent'" class="flex justify-center items-center">
+        <Link href="/campaigns/create" class="bg-primary text-white p-2 rounded-lg text-sm mt-5 flex px-3 w-fit">
+            {{ $t('Create campaign') }}
+        </Link>
+    </div>
+</div>
                             <div v-else class="space-y-1">
                                 <div v-for="(item, index) in props.campaigns" :key="index" class="mt-4 border-l-4 bg-gray-50 flex justify-between p-2 text-sm">
                                     <div class="capitalize">{{ item.name }}</div>
@@ -272,6 +273,7 @@
             type: String,
             default: () => "https://calendly.com/chatberry-info/chatberry-whatsapp-meeting-clone?month=2025-07", 
         },
+        role : String
     });
 
     const chartOptions = {

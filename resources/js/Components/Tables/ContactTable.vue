@@ -11,7 +11,7 @@
     import Pagination from '@/Components/Pagination.vue';
     import { trans } from 'laravel-vue-i18n';
 
-    const props = defineProps(['rows', 'filters', 'type']);
+    const props = defineProps(['rows', 'filters', 'type', 'role']);
 
     const params = ref({
         id: props.filters?.id,
@@ -218,7 +218,7 @@
                         </span>
                     </button>
                     <template #items>
-                        <DropdownItemGroup>
+                        <DropdownItemGroup v-if="props.role !== 'agent'">
                             <DropdownItem as="button" @click="isOpenModal = true">{{ $t('Import rows') }}</DropdownItem>
                             <DropdownItem as="button" @click="isExportModalOpen = true">{{ $t('Export') }}</DropdownItem>
                             <DropdownItem v-if="selectedCount > 0" as="button" @click="deleteItems()">{{ $t('Delete selected') }}</DropdownItem>
