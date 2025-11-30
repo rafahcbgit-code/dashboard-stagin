@@ -151,7 +151,7 @@ class ProcessWebhookNotificationsJob implements ShouldQueue
         $startTime = microtime(true);
 
         try {
-            event(new NewChatEvent($chat, $this->organizationId));
+            event(new NewChatEvent($chat, $this->organizationId, $chat->contact_id));
 
             $duration = (microtime(true) - $startTime) * 1000;
 

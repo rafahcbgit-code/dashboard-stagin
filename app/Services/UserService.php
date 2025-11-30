@@ -11,7 +11,7 @@ use App\Models\Subscription;
 use App\Models\Team;
 use App\Models\User;
 use App\Services\OrganizationService;
-use DB;
+use Illuminate\Support\Facades\DB;
 use Str;
 use Propaganistas\LaravelPhone\PhoneNumber;
 
@@ -99,6 +99,7 @@ class UserService
                 'email' => $request->input('email'),
                 'avatar' => $avatarPath,
                 'role' => $role,
+                'code_verified' => 0,
                 'phone' => $request->input('phone') ? phone($request->input('phone'))->formatE164() : null,
                 'address' => json_encode([
                     'street' => $request->input('street'),

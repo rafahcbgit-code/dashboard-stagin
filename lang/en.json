@@ -790,5 +790,9 @@
     "Not installed": "Not installed",
     "Search": "Search",
     "Assigned to Me": "Assigned to Me",
-    "Assigned_to_me": "Assigned to Me"
+    "Assigned_to_me": "Assigned to Me",
+    "trial_alert": {
+        "message": "Your trial version is currently active.",
+        "cta": "Contact us to start your subscription"
+    }
 }

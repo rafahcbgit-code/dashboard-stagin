@@ -40,6 +40,7 @@ class Kernel extends HttpKernel
             \App\Http\Middleware\HandleInertiaRequests::class,
             \App\Http\Middleware\SetOrganizationFromSession::class,
             \App\Http\Middleware\Localization::class,
+           // \App\Http\Middleware\IsTrial::class,
         ],
 
         'api' => [
@@ -77,5 +78,6 @@ class Kernel extends HttpKernel
         'redirectIfAuthenticated' => \App\Http\Middleware\RedirectIfAuthenticated::class,
         'check.organization_selected' => \App\Http\Middleware\CheckSelectedOrganization::class,
         'sanctum.auth' => \App\Http\Middleware\EnsureSanctumAuth::class,
+        'isTrial' => \App\Http\Middleware\IsTrial::class,
     ];
 }

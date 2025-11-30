@@ -5,7 +5,7 @@ namespace App\Http\Controllers\User;
 use App\Http\Controllers\Controller as BaseController;
 use App\Models\Contact;
 use App\Models\ContactField;
-use App\Models\ContactGroup;
+use App\Models\Team;
 use App\Models\Organization;
 use App\Exports\ContactsExport;
 use App\Http\Requests\StoreContact;
@@ -53,6 +53,7 @@ class ContactController extends BaseController
             $contactGroups = $contactModel->getAllContactGroups($organizationId);
             $contact = Contact::with('contactGroups')->where('uuid', $uuid)->where('deleted_at', null)->first();
             $contactFields = ContactField::where('organization_id', $organizationId)->where('deleted_at', null)->get();
+            $team = Team::where('organization_id', $organizationId)->where('user_id', auth()->user()->id)->first();
 
             return Inertia::render('User/Contact/Index', [
                 'title' => __('Contacts'),
@@ -63,7 +64,8 @@ class ContactController extends BaseController
                 'contactGroups' => $contactGroups,
                 'filters' => request()->all(),
                 'locationSettings' => $this->getLocationSettings(),
-                'editContact' => $editContact
+                'editContact' => $editContact,
+                'role' => $team->role
             ]);
         }
     }

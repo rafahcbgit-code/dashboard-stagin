@@ -90,6 +90,21 @@ Route::middleware(['guest', 'redirectIfAuthenticated:user,admin'])->group(functi
     Route::post('/reset-password', [App\Http\Controllers\AuthController::class, 'resetPassword']);
 });
 
+Route::middleware(['auth'])->group(function () {
+    Route::get('/VerifyAccount', [App\Http\Controllers\AuthController::class, 'VerifyAccount'])
+        ->name('VerifyAccount');
+    
+     Route::post('/verify-account-code', [App\Http\Controllers\AuthController::class, 'verifyAccountCode'])
+        ->name('VerifyAccountCode');
+        
+        Route::get('/otp-email', [App\Http\Controllers\AuthController::class, 'showOtpEmailForm']);
+      
+        Route::post('/send-verification-code', [App\Http\Controllers\AuthController::class, 'sendVerificationCodeToEmail']);
+
+        Route::post('/resend-verification-code', [App\Http\Controllers\AuthController::class, 'resendVerificationCode'])
+        ;
+});
+
 Route::middleware(['auth:user,admin'])->group(function () {
     Route::put('/profile', [App\Http\Controllers\ProfileController::class, 'update']);
     Route::put('/profile/password', [App\Http\Controllers\ProfileController::class, 'updatePassword']);
@@ -113,7 +128,7 @@ Route::middleware(['auth:user'])->group(function () {
         Route::post('/select-organization', [App\Http\Controllers\User\OrganizationController::class, 'selectOrganization'])->name('user.organization.selectOrganization');
         Route::post('/organization', [App\Http\Controllers\User\OrganizationController::class, 'store'])->name('user.organization.store');
 
-        Route::group(['middleware' => ['check.organization']], function () {
+        Route::group(['middleware' => ['check.organization', 'isTrial']], function () {
             //User Panel Routes
             Route::match(['get', 'post'], '/dashboard', [App\Http\Controllers\User\DashboardController::class, 'index'])->name('dashboard');
 
@@ -126,7 +141,7 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::get('/subscription/coupon/remove/{id}', [App\Http\Controllers\User\SubscriptionController::class, 'removeCoupon']);
             });
 
-            Route::group(['middleware' => 'check.subscription'], function () {
+            Route::group(['middleware' => ['check.organization', 'isTrial']], function () {
                 Route::get('/chats/{uuid?}', [App\Http\Controllers\User\ChatController::class, 'index']);
                 Route::get('/chats/{id}/media', [App\Http\Controllers\User\ChatController::class, 'getMedia']);
                 Route::post('/chats', [App\Http\Controllers\User\ChatController::class, 'sendMessage']);
@@ -262,6 +277,7 @@ Route::prefix('admin')->middleware(['auth:admin'])->group(function () {
     Route::resource('team/roles', App\Http\Controllers\Admin\RoleController::class);
     Route::resource('billing', App\Http\Controllers\Admin\BillingController::class);
     Route::resource('addons', App\Http\Controllers\Admin\AddonController::class);
+    Route::resource('otp-config', App\Http\Controllers\Admin\OtpConfigController::class);
     Route::post('addons/install', [App\Http\Controllers\Admin\AddonController::class, 'install']);
     Route::post('addons/update', [App\Http\Controllers\Admin\AddonController::class, 'update']);
     Route::post('/addons/setup/google-recaptcha', [App\Http\Controllers\Admin\AddonController::class, 'store']);

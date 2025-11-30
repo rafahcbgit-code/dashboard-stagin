@@ -98,7 +98,8 @@
             preserveScroll: true,
             onFinish: () => {
                 isLoading.value = false;
-            }
+            },
+            onSuccess: () => window.location = '/VerifyAccount'
         });
     };
 
