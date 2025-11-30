@@ -143,6 +143,11 @@ class ProcessWebhookNotificationsJob implements ShouldQueue
      *
      * AC-1.4.1: Pusher broadcast sends NewChatEvent for real-time chat updates.
      *
+     * The payload structure must match the frontend's expectation:
+     * [['type' => 'chat', 'value' => ChatLog->relatedEntities]]
+     *
+     * This uses ChatLog->relatedEntities which loads Chat::with('media', 'user', 'logs').
+     *
      * @param  Chat  $chat The chat to broadcast
      * @return float Duration in milliseconds
      */
@@ -151,7 +156,27 @@ class ProcessWebhookNotificationsJob implements ShouldQueue
         $startTime = microtime(true);
 
         try {
-            event(new NewChatEvent($chat, $this->organizationId, $chat->contact_id));
+            // Get ChatLog for this chat to use relatedEntities accessor
+            // This matches the OLD WebhookController payload structure
+            $chatLog = \App\Models\ChatLog::where('entity_type', 'chat')
+                ->where('entity_id', $chat->id)
+                ->first();
+
+            if ($chatLog) {
+                // Match OLD payload structure expected by frontend:
+                // [['type' => 'chat', 'value' => Chat::with('media', 'user', 'logs')]]
+                $chatArray = [[
+                    'type' => 'chat',
+                    'value' => $chatLog->relatedEntities,
+                ]];
+                event(new NewChatEvent($chatArray, $this->organizationId, $chat->contact_id));
+            } else {
+                // Fallback: broadcast raw chat if no ChatLog exists (edge case)
+                Log::channel('webhook')->warning('ChatLog not found for Pusher broadcast, using raw chat', [
+                    'chat_id' => $chat->id,
+                ]);
+                event(new NewChatEvent($chat, $this->organizationId, $chat->contact_id));
+            }
 
             $duration = (microtime(true) - $startTime) * 1000;
 
