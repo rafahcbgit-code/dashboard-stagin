@@ -169,13 +169,13 @@ class ProcessWebhookNotificationsJob implements ShouldQueue
                     'type' => 'chat',
                     'value' => $chatLog->relatedEntities,
                 ]];
-                event(new NewChatEvent($chatArray, $this->organizationId, $chat->contact_id));
+                event(new NewChatEvent($chatArray, $this->organizationId, $chat->contact->uuid));
             } else {
                 // Fallback: broadcast raw chat if no ChatLog exists (edge case)
                 Log::channel('webhook')->warning('ChatLog not found for Pusher broadcast, using raw chat', [
                     'chat_id' => $chat->id,
                 ]);
-                event(new NewChatEvent($chat, $this->organizationId, $chat->contact_id));
+                event(new NewChatEvent($chat, $this->organizationId, $chat->contact->uuid));
             }
 
             $duration = (microtime(true) - $startTime) * 1000;
