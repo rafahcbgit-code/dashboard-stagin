@@ -10,11 +10,11 @@ use App\Models\Setting;
 use App\Models\Team;
 use App\Models\User;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Config;
 use Inertia\Middleware;
-use RobThree\Auth\TwoFactorAuth;
 use RobThree\Auth\Providers\Qr\BaconQrCodeProvider;
-use Illuminate\Support\Facades\App;
+use RobThree\Auth\TwoFactorAuth;
 
 class HandleInertiaRequests extends Middleware
 {
@@ -22,6 +22,7 @@ class HandleInertiaRequests extends Middleware
      * The root template that's loaded on the first page visit.
      *
      * @see https://inertiajs.com/server-side-setup#root-template
+     *
      * @var string
      */
     protected $rootView = 'app';
@@ -30,8 +31,6 @@ class HandleInertiaRequests extends Middleware
      * Determines the current asset version.
      *
      * @see https://inertiajs.com/asset-versioning
-     * @param  \Illuminate\Http\Request  $request
-     * @return string|null
      */
     public function version(Request $request): ?string
     {
@@ -42,13 +41,11 @@ class HandleInertiaRequests extends Middleware
      * Defines the props that are shared by default.
      *
      * @see https://inertiajs.com/shared-data
-     * @param  \Illuminate\Http\Request  $request
-     * @return array
      */
     public function share(Request $request): array
     {
-        $organization = array();
-        $organizations = array();
+        $organization = [];
+        $organizations = [];
         $user = $request->user();
         $language = session('locale') ?? 'en';
         $unreadMessages = 0;
@@ -58,21 +55,22 @@ class HandleInertiaRequests extends Middleware
 
         // two-factor stuff
         if ($user) {
-            $googleAuth = Addon::where('name', 'Google Authenticator')->first()->is_active;
-            $tfaActive = $googleAuth == 1 ? true : false;
+            $googleAuthAddon = Addon::where('name', 'Google Authenticator')->first();
+            $googleAuth = $googleAuthAddon?->is_active ?? false;
+            $tfaActive = $googleAuth == 1;
 
-            if($googleAuth == 1){
+            if ($googleAuth == 1) {
                 $secret = $user->tfa_secret;
                 $tfa = new TwoFactorAuth(new BaconQrCodeProvider());
-        
-                if (!$secret) {
+
+                if (! $secret) {
                     $secret = $tfa->createSecret();
-            
+
                     User::where('id', $user->id)->update([
                         'tfa_secret' => $secret,
                     ]);
                 }
-        
+
                 $qrcode = $tfa->getQRCodeImageAsDataUri(preg_replace('#^https?://#', '', config('app.url')), $secret);
             }
         }
@@ -87,22 +85,22 @@ class HandleInertiaRequests extends Middleware
             $organization = Organization::where('id', $organizationId)->first();
             $unreadMessages = Chat::where('organization_id', $organizationId)
                 ->where('type', 'inbound')
-                ->where('deleted_at', NULL)
+                ->where('deleted_at', null)
                 ->where('is_read', 0)
                 ->count();
         }
 
-        if($this->isInstalled()){
-            $keys = ['favicon', 'logo', 'company_name', 'address', 'currency' , 'email', 'phone', 'socials', 'trial_period', 'recaptcha_site_key', 'recaptcha_active', 'google_analytics_tracking_id', 'google_maps_api_key','pusher_app_key','pusher_app_cluster', 'google_auth_active', 'enable_api_key_input', 'enable_model_selection', 'default_open_ai_text_model', 'default_open_ai_audio_model'];
+        if ($this->isInstalled()) {
+            $keys = ['favicon', 'logo', 'company_name', 'address', 'currency', 'email', 'phone', 'socials', 'trial_period', 'recaptcha_site_key', 'recaptcha_active', 'google_analytics_tracking_id', 'google_maps_api_key', 'pusher_app_key', 'pusher_app_cluster', 'google_auth_active', 'enable_api_key_input', 'enable_model_selection', 'default_open_ai_text_model', 'default_open_ai_audio_model'];
             $config = Setting::whereIn('key', $keys)->get();
             $languages = Language::where('deleted_at', null)
-                               ->where('status', 'active')
-                               ->get();
+                ->where('status', 'active')
+                ->get();
             $currentLanguage = Language::where('code', session('locale') ?? App::getLocale())->first();
             $isRtl = $currentLanguage ? $currentLanguage->is_rtl : false;
         } else {
-            $config = array();
-            $languages = array();
+            $config = [];
+            $languages = [];
             $isRtl = false;
         }
 
@@ -117,7 +115,7 @@ class HandleInertiaRequests extends Middleware
             'organization' => $organization,
             'organizations' => $organizations,
             'flash' => [
-                'status'=> session('status')
+                'status' => session('status'),
             ],
             'response_data' => fn () => $request->session()->get('response_data'),
             'languages' => $languages,
@@ -135,8 +133,6 @@ class HandleInertiaRequests extends Middleware
 
     /**
      * Checks if the application has been installed.
-     *
-     * @return bool
      */
     public function isInstalled(): bool
     {

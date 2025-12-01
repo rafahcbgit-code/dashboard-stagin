@@ -5,11 +5,9 @@ namespace App\Services;
 use App\Helpers\WebhookHelper;
 use App\Models\Chat;
 use App\Models\Contact;
-use App\Models\ContactContactGroup;
 use App\Models\ContactGroup;
 use App\Models\Setting;
 use Illuminate\Support\Facades\Storage;
-use App\Services\PhoneService;
 
 class ContactService
 {
@@ -20,7 +18,72 @@ class ContactService
         $this->organizationId = $organizationId;
     }
 
-    public function store(object $request, $uuid = null){
+    /**
+     * Find or create a contact from webhook data.
+     *
+     * Used by ProcessWebhookJob for simpler contact lookup/creation
+     * without requiring a full request object.
+     *
+     * WhatsApp sends phone numbers without + prefix (e.g., "14155551234").
+     * This method handles normalization and lookup.
+     *
+     * @param  string  $phone The phone number (will be normalized to E.164 format)
+     * @param  string|null  $name The contact's display name from WhatsApp profile
+     * @return array{contact: Contact, isNew: bool}
+     */
+    public function findOrCreateFromWebhook(string $phone, string $name = null): array
+    {
+        // Normalize phone: WhatsApp sends without + prefix, add it for E.164 format
+        $normalizedPhone = PhoneService::getE164Format($phone);
+
+        // If E.164 validation fails, try with + prefix
+        if ($normalizedPhone === null) {
+            $normalizedPhone = PhoneService::getE164Format('+'.$phone);
+        }
+
+        // If still null, use normalized format (+ prefix)
+        if ($normalizedPhone === null) {
+            $normalizedPhone = PhoneService::normalize($phone);
+        }
+
+        // Look for existing contact - try multiple formats for compatibility
+        $contact = Contact::where('organization_id', $this->organizationId)
+            ->where(function ($query) use ($normalizedPhone, $phone) {
+                $query->where('phone', $normalizedPhone)
+                    ->orWhere('phone', '+'.$phone)
+                    ->orWhere('phone', $phone);
+            })
+            ->first();
+
+        if ($contact) {
+            return ['contact' => $contact, 'isNew' => false];
+        }
+
+        // Parse name into first/last name
+        $nameParts = $name ? explode(' ', $name, 2) : [];
+        $firstName = $nameParts[0] ?? $normalizedPhone;
+        $lastName = $nameParts[1] ?? '';
+
+        $contact = Contact::create([
+            'organization_id' => $this->organizationId,
+            'phone' => $normalizedPhone,
+            'first_name' => $firstName,
+            'last_name' => $lastName,
+            'is_subscribed' => 1,
+            'created_by' => 0, // System created
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        // Trigger webhook for new contact
+        $cleanContact = $contact->makeHidden(['id', 'organization_id', 'created_by']);
+        WebhookHelper::triggerWebhookEvent('contact.created', $cleanContact, $this->organizationId);
+
+        return ['contact' => $contact, 'isNew' => true];
+    }
+
+    public function store(object $request, $uuid = null)
+    {
         $contact = $uuid === null ? new Contact() : Contact::where('uuid', $uuid)->firstOrFail();
         $contact->first_name = $request->first_name;
         $contact->last_name = $request->last_name;
@@ -29,26 +92,26 @@ class ContactService
 
         $contact->phone = PhoneService::getE164Format($request->phone);
 
-        if($request->hasFile('file')){
+        if ($request->hasFile('file')) {
             $storage = Setting::where('key', 'storage_system')->first()->value;
             $fileName = $request->file('file')->getClientOriginalName();
             $fileContent = $request->file('file');
 
-            if($storage === 'local'){
+            if ($storage === 'local') {
                 $file = Storage::disk('local')->put('public', $fileContent);
                 $mediaFilePath = $file;
 
-                $contact->avatar = '/media/' . ltrim($mediaFilePath, '/');
-            } else if($storage === 'aws') {
+                $contact->avatar = '/media/'.ltrim($mediaFilePath, '/');
+            } elseif ($storage === 'aws') {
                 $file = $request->file('file');
-                $uploadedFile = $file->store('uploads/media/contacts/' . $this->organizationId, 's3');
+                $uploadedFile = $file->store('uploads/media/contacts/'.$this->organizationId, 's3');
                 $mediaFilePath = Storage::disk('s3')->url($uploadedFile);
 
                 $contact->avatar = $mediaFilePath;
             }
         }
 
-        if($uuid === null){
+        if ($uuid === null) {
             $contact->organization_id = $this->organizationId;
             $contact->created_by = auth()->user() ? auth()->user()->id : 0;
             $contact->created_at = now();
@@ -61,7 +124,7 @@ class ContactService
             'zip' => $request->zip,
             'country' => $request->country,
         ]);
-       
+
         $contact->address = $address;
         $contact->metadata = json_encode($request->metadata);
         $contact->updated_at = now();
@@ -72,7 +135,7 @@ class ContactService
             $contact->contactGroups()->detach();
         }
 
-        if($request->group){
+        if ($request->group) {
             $groupUuids = array_map('trim', $request->group);
             $groupIds = ContactGroup::whereIn('uuid', $groupUuids)->pluck('id')->toArray();
             $contact->contactGroups()->sync($groupIds);
@@ -88,7 +151,7 @@ class ContactService
     }
 
     //A new method was added because the store method requires sending all fields, whereas here only a single field is being updated
-    
+
     public function updatePartial($uuid, array $data)
     {
         $contact = Contact::where('id', $uuid)->firstOrFail();
@@ -107,14 +170,16 @@ class ContactService
         return $contact;
     }
 
-    public function favorite(object $request, $uuid){
+    public function favorite(object $request, $uuid)
+    {
         $contact = Contact::where('uuid', $uuid)->firstOrFail();
         $contact->is_favorite = $request->favorite;
         $contact->updated_at = date('Y-m-d H:i:s');
         $contact->save();
     }
 
-    public function delete($uuids){
+    public function delete($uuids)
+    {
         $deletedContacts = [];
 
         if (empty($uuids)) {
@@ -136,11 +201,11 @@ class ContactService
                 ->whereNull('deleted_at')
                 ->where('is_read', 0)
                 ->update([
-                    'is_read' => 1
+                    'is_read' => 1,
                 ]);
         } else {
             // Delete contacts by UUIDs (soft delete)
-            foreach($uuids as $uuid){
+            foreach ($uuids as $uuid) {
                 $contact = Contact::where('uuid', $uuid)->firstOrFail();
 
                 // Prepare deleted contact for the webhook
@@ -155,7 +220,7 @@ class ContactService
                     ->whereNull('deleted_at')
                     ->where('is_read', 0)
                     ->update([
-                        'is_read' => 1
+                        'is_read' => 1,
                     ]);
             }
 
@@ -164,7 +229,7 @@ class ContactService
 
         // Trigger webhook with deleted contacts
         WebhookHelper::triggerWebhookEvent('contact.deleted', [
-            'list' => $deletedContacts
+            'list' => $deletedContacts,
         ], $this->organizationId);
     }
 }

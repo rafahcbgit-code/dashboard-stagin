@@ -2,46 +2,36 @@
 
 namespace App\Http\Controllers\Admin;
 
-use Carbon\Carbon;
-use DB;
+use App\Helpers\CurrencyHelper;
 use App\Http\Controllers\Controller as BaseController;
 use App\Http\Resources\BillingResource;
-use App\Http\Resources\BillingSummaryResource;
-use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
-use Illuminate\Support\Str;
-use Illuminate\Support\Facades\Password;
-use Illuminate\Validation\Rule;
-use Inertia\Inertia;
 use App\Models\BillingTransaction;
 use App\Models\Chat;
 use App\Models\Ticket;
 use App\Models\User;
-use App\Models\UserAdmin;
-use App\Helpers\CurrencyHelper;
-use Hash;
-use Helper;
-use Session;
-use Validator;
+use Carbon\Carbon;
+use Illuminate\Http\Request;
+use Inertia\Inertia;
 
 class DashboardController extends BaseController
 {
-    public function index(Request $request){
+    public function index(Request $request)
+    {
         $billingRows = BillingTransaction::whereHas('organization', function ($query) {
-                $query->whereNull('deleted_at');
-            })
+            $query->whereNull('deleted_at');
+        })
             ->with('organization')
             ->limit(5)
             ->orderBy('created_at', 'desc')
             ->get();
         $totalRevenue = BillingTransaction::whereHas('organization', function ($query) {
-                $query->whereNull('deleted_at');
-            })->where('entity_type', '=', 'payment')->sum('amount');
+            $query->whereNull('deleted_at');
+        })->where('entity_type', '=', 'payment')->sum('amount');
         $data['totalRevenue'] = CurrencyHelper::formatCurrency($totalRevenue);
-        $data['userCount'] = User::where('role', '=', 'user')->where('deleted_at', NULL)->count();
+        $data['userCount'] = User::where('role', '=', 'user')->where('deleted_at', null)->count();
         $data['openTickets'] = Ticket::whereHas('user', function ($query) {
-                $query->whereNull('deleted_at');
-            })->where('status', '=', 'open')->count();
+            $query->whereNull('deleted_at');
+        })->where('status', '=', 'open')->count();
         $data['totalMessages'] = Chat::count();
         $data['payments'] = BillingResource::collection($billingRows);
         $data['period'] = $this->period();
@@ -52,7 +42,8 @@ class DashboardController extends BaseController
         return Inertia::render('Admin/Dashboard', $data);
     }
 
-    private function period(){
+    private function period()
+    {
         $currentDate = Carbon::now();
         $dateArray = [];
 
@@ -67,10 +58,11 @@ class DashboardController extends BaseController
         return $dateArray;
     }
 
-    private function newUsers(){
+    private function newUsers()
+    {
         $userCounts = [];
 
-        foreach($this->period() as $dateString){
+        foreach ($this->period() as $dateString) {
             $date = Carbon::parse($dateString);
             $userCount = User::whereDate('created_at', $date->toDateString())->count();
             $userCounts[] = $userCount;
@@ -79,17 +71,18 @@ class DashboardController extends BaseController
         return $userCounts;
     }
 
-    private function revenue(){
+    private function revenue()
+    {
         $billingCounts = [];
 
-        foreach($this->period() as $dateString){
+        foreach ($this->period() as $dateString) {
             $date = Carbon::parse($dateString);
             $billingCount = BillingTransaction::whereHas('organization', function ($query) {
-                    $query->whereNull('deleted_at');
-                })->where('entity_type', '=', 'payment')
+                $query->whereNull('deleted_at');
+            })->where('entity_type', '=', 'payment')
                 ->whereDate('updated_at', $date->toDateString())
                 ->count();
-                
+
             $billingCounts[] = $billingCount;
         }
 
