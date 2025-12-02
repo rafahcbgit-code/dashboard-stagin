@@ -59,6 +59,12 @@ class ProcessWebhookNotificationsJob implements ShouldQueue
     public bool $isNewContact;
 
     /**
+     * The raw WhatsApp webhook payload for external webhook compatibility.
+     * This preserves the original Meta payload structure for external integrations.
+     */
+    public ?array $rawWhatsAppPayload;
+
+    /**
      * The number of times the job may be attempted.
      * Set to 1 for fire-and-forget pattern (no retries).
      */
@@ -76,13 +82,20 @@ class ProcessWebhookNotificationsJob implements ShouldQueue
 
     /**
      * Create a new job instance.
+     *
+     * @param  int  $chatId The chat ID to broadcast
+     * @param  int  $contactId The contact ID for ticket assignment
+     * @param  int  $organizationId The organization ID for scoping
+     * @param  bool  $isNewContact Whether this is a new contact
+     * @param  array|null  $rawWhatsAppPayload The raw WhatsApp webhook payload for external integrations
      */
-    public function __construct(int $chatId, int $contactId, int $organizationId, bool $isNewContact)
+    public function __construct(int $chatId, int $contactId, int $organizationId, bool $isNewContact, array $rawWhatsAppPayload = null)
     {
         $this->chatId = $chatId;
         $this->contactId = $contactId;
         $this->organizationId = $organizationId;
         $this->isNewContact = $isNewContact;
+        $this->rawWhatsAppPayload = $rawWhatsAppPayload;
         $this->onQueue('webhook-high');
     }
 
@@ -247,6 +260,9 @@ class ProcessWebhookNotificationsJob implements ShouldQueue
      *
      * AC-1.4.3: External webhooks fire via WebhookHelper::triggerWebhookEvent().
      *
+     * IMPORTANT: Preserves backward-compatible payload structure for external integrations.
+     * The 'data' field contains the raw WhatsApp payload as it was before the async refactor.
+     *
      * @param  Chat  $chat The chat to trigger webhook for
      * @return float Duration in milliseconds
      */
@@ -257,8 +273,11 @@ class ProcessWebhookNotificationsJob implements ShouldQueue
         try {
             $metadata = json_decode($chat->metadata, true) ?? [];
 
+            // Build webhook data with raw WhatsApp payload for backward compatibility
+            // External workflows expect the original Meta payload structure in 'data'
             $webhookData = [
-                'event' => 'message.received',
+                'data' => $this->rawWhatsAppPayload,
+                // Additional convenience fields for modern integrations
                 'chat_id' => $chat->uuid,
                 'contact_id' => $chat->contact->uuid ?? null,
                 'contact_phone' => $chat->contact->phone ?? null,
@@ -275,6 +294,7 @@ class ProcessWebhookNotificationsJob implements ShouldQueue
                 'chat_id' => $this->chatId,
                 'organization_id' => $this->organizationId,
                 'event' => 'message.received',
+                'has_raw_payload' => $this->rawWhatsAppPayload !== null,
                 'duration_ms' => round($duration, 2),
             ]);
 

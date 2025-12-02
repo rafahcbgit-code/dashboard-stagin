@@ -319,11 +319,13 @@ class ProcessWebhookJob implements ShouldQueue
 
         // AC-1.2.4: Dispatch ProcessWebhookNotificationsJob for real-time updates
         // Uses webhook-high queue for priority processing (fire-and-forget pattern)
+        // Pass raw WhatsApp payload for backward-compatible external webhooks
         ProcessWebhookNotificationsJob::dispatch(
             $chat->id,
             $contact->id,
             $this->organizationId,
-            $isNewContact
+            $isNewContact,
+            $this->payload
         )->onQueue('webhook-high');
 
         Log::channel('webhook')->info('ProcessWebhookNotificationsJob dispatched', [
@@ -801,11 +803,13 @@ class ProcessWebhookJob implements ShouldQueue
         }
 
         // AC-1.10.5: Dispatch ProcessWebhookNotificationsJob for real-time UI updates
+        // Pass raw WhatsApp payload for backward-compatible external webhooks
         ProcessWebhookNotificationsJob::dispatch(
             $chat->id,
             $contact->id,
             $this->organizationId,
-            $isNewContact
+            $isNewContact,
+            $this->payload
         )->onQueue('webhook-high');
 
         Log::channel('webhook')->info('ProcessWebhookNotificationsJob dispatched for SMB echo', [
@@ -1445,11 +1449,13 @@ class ProcessWebhookJob implements ShouldQueue
         }
 
         // Dispatch ProcessWebhookNotificationsJob for real-time UI updates
+        // Pass raw WhatsApp payload for backward-compatible external webhooks
         ProcessWebhookNotificationsJob::dispatch(
             $chat->id,
             $contact->id,
             $this->organizationId,
-            $isNewContact
+            $isNewContact,
+            $this->payload
         )->onQueue('webhook-high');
 
         // Trigger external webhook for history message (fire-and-forget)
