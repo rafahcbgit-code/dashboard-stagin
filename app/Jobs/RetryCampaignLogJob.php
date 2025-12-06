@@ -16,13 +16,16 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
-class RetryCampaignLogJob implements ShouldQueue, ShouldBeUnique
+class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, TemplateTrait;
 
     public $timeout = 300;
+
     private $organizationId;
+
     private $campaignLogId;
+
     protected $retryIndex;
 
     public function __construct(int $organizationId, int $campaignLogId, int $retryIndex)
@@ -34,7 +37,7 @@ class RetryCampaignLogJob implements ShouldQueue, ShouldBeUnique
 
     public function uniqueId()
     {
-        return $this->campaignLogId . '-' . $this->retryIndex;
+        return $this->campaignLogId.'-'.$this->retryIndex;
     }
 
     public function handle()
@@ -45,15 +48,15 @@ class RetryCampaignLogJob implements ShouldQueue, ShouldBeUnique
         $maxRetries = count($retryIntervals);
         $retryCount = $log->retries()->count();
 
-        if (!$log || $log->status !== 'failed') {
+        if (! $log || $log->status !== 'failed') {
             return;
         }
 
-        if($log->campaign->status == 'completed') {
+        if ($log->campaign->status == 'completed') {
             return; //Don't process if the campaign has been marked as completed
         }
 
-        if($retryCount >= $maxRetries){
+        if ($retryCount >= $maxRetries) {
             return; //Don't process if retry count limit reached
         }
 
@@ -102,19 +105,24 @@ class RetryCampaignLogJob implements ShouldQueue, ShouldBeUnique
                 $intervals = $campaignSettings['resend_intervals'] ?? [];
 
                 if (isset($intervals[$this->retryIndex])) {
-                    if($this->retryIndex + 1 < $maxRetries){
+                    if ($this->retryIndex + 1 < $maxRetries) {
                         $nextInterval = $intervals[$this->retryIndex + 1];
-                        self::dispatch($this->organizationId, $log->id, $this->retryIndex + 1)->onQueue('campaign-messages')->delay(now()->addMinutes($nextInterval));
+                        // Dispatch to org-specific queue (Story 2.1: AC-2.1.1)
+                        $orgQueue = config('queue.campaign_prefix', 'campaign-org-').$this->organizationId;
+                        self::dispatch($this->organizationId, $log->id, $this->retryIndex + 1)
+                            ->onQueue($orgQueue)
+                            ->delay(now()->addMinutes($nextInterval));
                     }
-                } 
-                
-                if (!empty($campaignSettings['move_failed_contacts_to_group']) && $retryCount >= $maxRetries) {
+                }
+
+                if (! empty($campaignSettings['move_failed_contacts_to_group']) && $retryCount >= $maxRetries) {
                     $groupUuid = $campaignSettings['failed_campaign_group'];
                     $failedGroupId = DB::table('contact_groups')->where('uuid', $groupUuid)->value('id');
 
                     // Check if the group exists in the contact_groups table by UUID
-                    if (!$failedGroupId) {
-                        Log::warning('Failed to move contact: Group with UUID ' . $groupUuid . ' does not exist.');
+                    if (! $failedGroupId) {
+                        Log::warning('Failed to move contact: Group with UUID '.$groupUuid.' does not exist.');
+
                         return;
                     }
 
@@ -136,13 +144,13 @@ class RetryCampaignLogJob implements ShouldQueue, ShouldBeUnique
             DB::commit();
         } catch (\Exception $e) {
             DB::rollBack();
-            Log::error("Retry failed for campaign_log {$this->campaignLogId}: " . $e->getMessage());
+            Log::error("Retry failed for campaign_log {$this->campaignLogId}: ".$e->getMessage());
         }
     }
 
     private function initializeWhatsappService()
     {
-        $config = cache()->remember("organization.{$this->organizationId}.metadata", 3600, function() {
+        $config = cache()->remember("organization.{$this->organizationId}.metadata", 3600, function () {
             return Organization::find($this->organizationId)->metadata ?? [];
         });
 
@@ -156,11 +164,11 @@ class RetryCampaignLogJob implements ShouldQueue, ShouldBeUnique
         $wabaId = $config['whatsapp']['waba_id'] ?? null;
 
         $this->whatsappService = new WhatsappService(
-            $accessToken, 
-            $apiVersion, 
-            $appId, 
-            $phoneNumberId, 
-            $wabaId, 
+            $accessToken,
+            $apiVersion,
+            $appId,
+            $phoneNumberId,
+            $wabaId,
             $this->organizationId
         );
     }
