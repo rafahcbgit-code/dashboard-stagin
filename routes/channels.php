@@ -20,3 +20,24 @@ Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
 Broadcast::channel('chats', function ($user) {
     return true; // Adjust authentication logic if needed
 });
+
+/*
+|--------------------------------------------------------------------------
+| Campaign Progress Channel
+|--------------------------------------------------------------------------
+|
+| Private channel for real-time campaign progress updates.
+| User must belong to the organization that owns the campaign.
+|
+*/
+Broadcast::channel('campaign.{uuid}', function ($user, $uuid) {
+    $campaign = \App\Models\Campaign::where('uuid', $uuid)->first();
+    if (! $campaign) {
+        return false;
+    }
+
+    // User must belong to organization that owns this campaign
+    return $user->teams()
+        ->where('organization_id', $campaign->organization_id)
+        ->exists();
+});
