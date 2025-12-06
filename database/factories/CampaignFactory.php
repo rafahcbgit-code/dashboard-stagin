@@ -71,6 +71,13 @@ class CampaignFactory extends Factory
         ]);
     }
 
+    public function cancelled(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'status' => 'cancelled',
+        ]);
+    }
+
     /**
      * Campaign scheduled for the future (should NOT be picked up).
      */

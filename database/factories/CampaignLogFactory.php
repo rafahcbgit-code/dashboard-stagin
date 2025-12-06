@@ -75,6 +75,13 @@ class CampaignLogFactory extends Factory
         ]);
     }
 
+    public function cancelled(): static
+    {
+        return $this->state(fn (array $attributes) => [
+            'status' => 'cancelled',
+        ]);
+    }
+
     /**
      * Log for a specific campaign.
      */
