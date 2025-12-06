@@ -68,7 +68,9 @@ class ProcessCampaignMessagesJob implements ShouldQueue
 
             // Process logs in chunks - now org-scoped (Task 2.1: AC-2.1.1, AC-2.1.2)
             // Task 2.2: AC-2.2.3 - Selective column loading for reduced data transfer
+            // Task 2.8: AC-2.8.3 - Use withCount('retries') to avoid N+1 query pattern
             CampaignLog::select(['id', 'campaign_id', 'contact_id', 'status'])
+                ->withCount('retries')
                 ->with([
                     'campaign' => fn ($q) => $q->select(['id', 'organization_id', 'status', 'uuid', 'created_by']),
                     'contact',
@@ -106,8 +108,8 @@ class ProcessCampaignMessagesJob implements ShouldQueue
                             continue;
                         }
 
-                        // Get actual retry count from database relationship
-                        $retryCount = $log->retries()->count();
+                        // Task 2.8: AC-2.8.1 - Use pre-loaded retries_count instead of N+1 query
+                        $retryCount = $log->retries_count;
 
                         // Add job if pending or failed with retries remaining
                         if ($log->status === 'pending' ||
@@ -221,13 +223,15 @@ class ProcessCampaignMessagesJob implements ShouldQueue
         $failedLogsCanRetry = false;
 
         if ($retryEnabled) {
+            // Task 2.8: AC-2.8.3 - Use withCount('retries') to avoid N+1 query pattern
             $failedLogs = CampaignLog::where('campaign_id', $campaignId)
                 ->where('status', 'failed')
+                ->withCount('retries')
                 ->get();
 
             foreach ($failedLogs as $log) {
-                $retryCount = $log->retries()->count();
-                if ($retryCount < $maxRetries) {
+                // Task 2.8: AC-2.8.1 - Use pre-loaded retries_count instead of N+1 query
+                if ($log->retries_count < $maxRetries) {
                     $failedLogsCanRetry = true;
                     break;
                 }

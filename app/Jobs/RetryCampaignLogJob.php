@@ -48,16 +48,20 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
             return;
         }
 
+        // Task 2.8: AC-2.8.5 - Load retry count efficiently for single model
+        $log->loadCount('retries');
+
         if ($log->campaign->status == 'completed') {
             return; // Don't process if the campaign has been marked as completed
         }
 
-        // Story 2.4: Use cached metadata with config fallback (AC-2.4.1)
+        // Task 2.4: Use cached metadata with config fallback (AC-2.4.1)
         $metadata = OrganizationService::getCachedMetadata($this->organizationId);
         $campaignSettings = $metadata['campaigns'] ?? [];
         $retryIntervals = $this->getRetryIntervals($campaignSettings);
         $maxRetries = count($retryIntervals);
-        $retryCount = $log->retries()->count();
+        // Task 2.8: AC-2.8.5 - Use pre-loaded retries_count instead of N+1 query
+        $retryCount = $log->retries_count;
 
         if ($retryCount >= $maxRetries) {
             return; // Don't process if retry count limit reached
@@ -107,7 +111,7 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
             if ($retryLog->status === 'failed') {
                 $newRetryCount = $retryCount + 1; // After this retry
 
-                // Story 2.4: Check if max retries reached (AC-2.4.3)
+                // Task 2.4: Check if max retries reached (AC-2.4.3)
                 if ($newRetryCount >= $maxRetries) {
                     $this->handlePermanentFailure($log, $newRetryCount, $maxRetries, $response, $campaignSettings);
                 } else {
@@ -125,7 +129,7 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
 
     /**
      * Get retry intervals with config fallback.
-     * Story 2.4: AC-2.4.1 - Use org metadata intervals or fall back to config defaults.
+     * Task 2.4: AC-2.4.1 - Use org metadata intervals or fall back to config defaults.
      */
     private function getRetryIntervals(array $campaignSettings): array
     {
@@ -142,13 +146,13 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
 
     /**
      * Schedule the next retry attempt.
-     * Story 2.4: AC-2.4.1 - Apply exponential backoff using intervals array.
+     * Task 2.4: AC-2.4.1 - Apply exponential backoff using intervals array.
      */
     private function scheduleNextRetry(CampaignLog $log, array $intervals, int $maxRetries): void
     {
         if ($this->retryIndex + 1 < $maxRetries && isset($intervals[$this->retryIndex + 1])) {
             $nextInterval = $intervals[$this->retryIndex + 1];
-            // Dispatch to org-specific queue (Story 2.1: AC-2.1.1)
+            // Dispatch to org-specific queue (Task 2.1: AC-2.1.1)
             $orgQueue = config('queue.campaign_prefix', 'campaign-org-').$this->organizationId;
             self::dispatch($this->organizationId, $log->id, $this->retryIndex + 1)
                 ->onQueue($orgQueue)
@@ -158,7 +162,7 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
 
     /**
      * Handle permanent failure after max retries exhausted.
-     * Story 2.4: AC-2.4.3 - Mark as permanently failed, AC-2.4.4 - Log for review.
+     * Task 2.4: AC-2.4.3 - Mark as permanently failed, AC-2.4.4 - Log for review.
      */
     private function handlePermanentFailure(
         CampaignLog $log,
@@ -225,7 +229,7 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
 
     /**
      * Initialize WhatsApp service using cached organization metadata.
-     * Story 2.4: Fixed bug where metadata was cached but then immediately overwritten.
+     * Task 2.4: Fixed bug where metadata was cached but then immediately overwritten.
      *
      * @param  array  $metadata  Cached organization metadata from OrganizationService::getCachedMetadata()
      */

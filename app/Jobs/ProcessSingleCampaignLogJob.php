@@ -135,10 +135,14 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
         }
 
         if ($retryEnabled) {
-            $logs = CampaignLog::where('campaign_id', $campaignId)->get();
+            // Task 2.8: AC-2.8.4 - Use withCount('retries') to avoid N+1 query pattern
+            $logs = CampaignLog::where('campaign_id', $campaignId)
+                ->withCount('retries')
+                ->get();
 
             foreach ($logs as $log) {
-                $retryCount = $log->retries()->count();
+                // Task 2.8: AC-2.8.1 - Use pre-loaded retries_count instead of N+1 query
+                $retryCount = $log->retries_count;
                 $maxRetries = count($retryIntervals);
 
                 // Skip if already retried max times
