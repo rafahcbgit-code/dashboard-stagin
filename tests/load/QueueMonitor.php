@@ -3,6 +3,7 @@
 /**
  * Queue Depth Monitor for Load Testing
  *
+ * Story 1.6: Task 4.4 - Queue depth monitoring during test execution
  * AC-1.6.2: All 100 messages processed within 5 seconds total
  *
  * Usage:
