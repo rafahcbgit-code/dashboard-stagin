@@ -93,16 +93,15 @@ Route::middleware(['guest', 'redirectIfAuthenticated:user,admin'])->group(functi
 Route::middleware(['auth'])->group(function () {
     Route::get('/VerifyAccount', [App\Http\Controllers\AuthController::class, 'VerifyAccount'])
         ->name('VerifyAccount');
-    
-     Route::post('/verify-account-code', [App\Http\Controllers\AuthController::class, 'verifyAccountCode'])
-        ->name('VerifyAccountCode');
-        
-        Route::get('/otp-email', [App\Http\Controllers\AuthController::class, 'showOtpEmailForm']);
-      
-        Route::post('/send-verification-code', [App\Http\Controllers\AuthController::class, 'sendVerificationCodeToEmail']);
 
-        Route::post('/resend-verification-code', [App\Http\Controllers\AuthController::class, 'resendVerificationCode'])
-        ;
+    Route::post('/verify-account-code', [App\Http\Controllers\AuthController::class, 'verifyAccountCode'])
+        ->name('VerifyAccountCode');
+
+    Route::get('/otp-email', [App\Http\Controllers\AuthController::class, 'showOtpEmailForm']);
+
+    Route::post('/send-verification-code', [App\Http\Controllers\AuthController::class, 'sendVerificationCodeToEmail']);
+
+    Route::post('/resend-verification-code', [App\Http\Controllers\AuthController::class, 'resendVerificationCode']);
 });
 
 Route::middleware(['auth:user,admin'])->group(function () {
@@ -181,6 +180,7 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::post('/campaigns', [App\Http\Controllers\User\CampaignController::class, 'store']);
                 Route::get('/campaigns/export/{uuid?}', [App\Http\Controllers\User\CampaignController::class, 'export']);
                 Route::delete('/campaigns/{uuid?}', [App\Http\Controllers\User\CampaignController::class, 'delete']);
+                Route::post('/campaigns/{uuid}/cancel', [App\Http\Controllers\User\CampaignController::class, 'cancel'])->name('campaigns.cancel');
 
                 Route::match(['get', 'post'], '/templates/create', [App\Http\Controllers\User\TemplateController::class, 'create']);
                 Route::get('/templates/{uuid?}', [App\Http\Controllers\User\TemplateController::class, 'index']);
