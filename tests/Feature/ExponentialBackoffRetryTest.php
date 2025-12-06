@@ -35,9 +35,9 @@ beforeEach(function () {
 });
 
 /**
- * Helper to create organization with specific retry settings.
+ * Helper to create organization with specific retry settings for Story 2.4 tests.
  */
-function createTestOrg(array $campaignSettings = [], array $whatsappSettings = []): Organization
+function createRetryTestOrg(array $campaignSettings = [], array $whatsappSettings = []): Organization
 {
     $defaultCampaignSettings = [
         'enable_resend' => true,
@@ -71,7 +71,7 @@ function createTestOrg(array $campaignSettings = [], array $whatsappSettings = [
 
 describe('AC-2.4.1: Retry Intervals', function () {
     it('uses resend_intervals from organization metadata', function () {
-        $org = createTestOrg(['resend_intervals' => [10, 30, 90]]);
+        $org = createRetryTestOrg(['resend_intervals' => [10, 30, 90]]);
         $campaign = Campaign::factory()->forOrganization($org)->ongoing()->create();
         $contact = Contact::factory()->create(['organization_id' => $org->id]);
         $log = CampaignLog::factory()->forCampaign($campaign)->forContact($contact)->failed()->create();
@@ -93,7 +93,7 @@ describe('AC-2.4.1: Retry Intervals', function () {
         // Set up config defaults
         Config::set('campaigns.retry.default_intervals', [5, 15, 60]);
 
-        $org = createTestOrg(['resend_intervals' => null]);
+        $org = createRetryTestOrg(['resend_intervals' => null]);
         $campaign = Campaign::factory()->forOrganization($org)->ongoing()->create();
         $contact = Contact::factory()->create(['organization_id' => $org->id]);
         $log = CampaignLog::factory()->forCampaign($campaign)->forContact($contact)->failed()->create();
@@ -110,7 +110,7 @@ describe('AC-2.4.1: Retry Intervals', function () {
     });
 
     it('validates and filters invalid interval values', function () {
-        $org = createTestOrg(['resend_intervals' => [5, -10, 'invalid', 0, 30]]);
+        $org = createRetryTestOrg(['resend_intervals' => [5, -10, 'invalid', 0, 30]]);
         $campaign = Campaign::factory()->forOrganization($org)->ongoing()->create();
         $contact = Contact::factory()->create(['organization_id' => $org->id]);
         $log = CampaignLog::factory()->forCampaign($campaign)->forContact($contact)->failed()->create();
@@ -129,7 +129,7 @@ describe('AC-2.4.1: Retry Intervals', function () {
     });
 
     it('uses cached metadata from OrganizationService', function () {
-        $org = createTestOrg(['resend_intervals' => [5, 15, 60]]);
+        $org = createRetryTestOrg(['resend_intervals' => [5, 15, 60]]);
 
         // Pre-populate cache
         $cachedMetadata = OrganizationService::getCachedMetadata($org->id);
@@ -159,7 +159,7 @@ describe('AC-2.4.2: Retry Count Tracking', function () {
     });
 
     it('tracks retry count through CampaignLog relationship', function () {
-        $org = createTestOrg();
+        $org = createRetryTestOrg();
         $campaign = Campaign::factory()->forOrganization($org)->ongoing()->create();
         $contact = Contact::factory()->create(['organization_id' => $org->id]);
         $log = CampaignLog::factory()->forCampaign($campaign)->forContact($contact)->failed()->create();
@@ -191,7 +191,7 @@ describe('AC-2.4.3: Permanent Failure Status', function () {
             $this->markTestSkipped('permanently_failed status not in ENUM - verify migration 2025_12_06_124227 has been applied');
         }
 
-        $org = createTestOrg();
+        $org = createRetryTestOrg();
         $campaign = Campaign::factory()->forOrganization($org)->ongoing()->create();
         $contact = Contact::factory()->create(['organization_id' => $org->id]);
 
@@ -205,7 +205,7 @@ describe('AC-2.4.3: Permanent Failure Status', function () {
     });
 
     it('skips retry when max retries already reached', function () {
-        $org = createTestOrg(['resend_intervals' => [5, 15]]); // Max 2 retries
+        $org = createRetryTestOrg(['resend_intervals' => [5, 15]]); // Max 2 retries
         $campaign = Campaign::factory()->forOrganization($org)->ongoing()->create();
         $contact = Contact::factory()->create(['organization_id' => $org->id]);
         $log = CampaignLog::factory()->forCampaign($campaign)->forContact($contact)->failed()->create();
@@ -263,7 +263,7 @@ describe('AC-2.4.4: Permanent Failure Logging', function () {
             });
 
         // Call the handlePermanentFailure method directly via reflection
-        $org = createTestOrg(['resend_intervals' => [5]]);
+        $org = createRetryTestOrg(['resend_intervals' => [5]]);
         $campaign = Campaign::factory()->forOrganization($org)->ongoing()->create();
         $contact = Contact::factory()->create(['organization_id' => $org->id]);
         $log = CampaignLog::factory()->forCampaign($campaign)->forContact($contact)->failed()->create();
@@ -317,7 +317,7 @@ describe('Config Defaults', function () {
 
 describe('Retry Scheduling', function () {
     it('does not schedule retry when at max attempts', function () {
-        $org = createTestOrg(['resend_intervals' => [5]]); // Only 1 retry
+        $org = createRetryTestOrg(['resend_intervals' => [5]]); // Only 1 retry
         $campaign = Campaign::factory()->forOrganization($org)->ongoing()->create();
         $contact = Contact::factory()->create(['organization_id' => $org->id]);
         $log = CampaignLog::factory()->forCampaign($campaign)->forContact($contact)->failed()->create();
@@ -339,7 +339,7 @@ describe('Retry Scheduling', function () {
     });
 
     it('schedules retry to org-specific queue', function () {
-        $org = createTestOrg(['resend_intervals' => [5, 15, 60]]);
+        $org = createRetryTestOrg(['resend_intervals' => [5, 15, 60]]);
         $campaign = Campaign::factory()->forOrganization($org)->ongoing()->create();
         $contact = Contact::factory()->create(['organization_id' => $org->id]);
         $log = CampaignLog::factory()->forCampaign($campaign)->forContact($contact)->failed()->create();
@@ -369,7 +369,7 @@ describe('Failed Contact Group Movement', function () {
     it('moves contact to failed group when configured and max retries exhausted', function () {
         $failedGroup = ContactGroup::factory()->create();
 
-        $org = createTestOrg([
+        $org = createRetryTestOrg([
             'resend_intervals' => [5],
             'move_failed_contacts_to_group' => true,
             'failed_campaign_group' => $failedGroup->uuid,
@@ -391,7 +391,7 @@ describe('Failed Contact Group Movement', function () {
         ]);
 
         // Verify contact was added to failed group
-        $contactGroups = \DB::table('contact_contact_group')
+        $contactGroups = DB::table('contact_contact_group')
             ->where('contact_id', $contact->id)
             ->where('contact_group_id', $failedGroup->id)
             ->count();
@@ -400,7 +400,7 @@ describe('Failed Contact Group Movement', function () {
     });
 
     it('does not move contact when move_failed_contacts_to_group is false', function () {
-        $org = createTestOrg([
+        $org = createRetryTestOrg([
             'resend_intervals' => [5],
             'move_failed_contacts_to_group' => false,
         ]);
@@ -420,7 +420,7 @@ describe('Failed Contact Group Movement', function () {
         ]);
 
         // Verify no group assignment
-        $contactGroups = \DB::table('contact_contact_group')
+        $contactGroups = DB::table('contact_contact_group')
             ->where('contact_id', $contact->id)
             ->count();
 
