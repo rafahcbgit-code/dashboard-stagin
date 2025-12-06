@@ -4,6 +4,7 @@ namespace App\Console;
 
 use App\Jobs\CreateCampaignLogsJob;
 use App\Jobs\ProcessCampaignMessagesJob;
+use App\Models\Campaign;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Console\Kernel as ConsoleKernel;
 
@@ -18,9 +19,22 @@ class Kernel extends ConsoleKernel
             ->everyTwoMinutes()
             ->withoutOverlapping();
 
-        $schedule->job(new ProcessCampaignMessagesJob(), 'campaign-messages')
-            ->everyTwoMinutes()
-            ->withoutOverlapping();
+        // Story 2.1: Dispatch ProcessCampaignMessagesJob per organization (AC-2.1.2, AC-2.1.3)
+        // Only dispatch for orgs with ongoing campaigns that have pending/failed logs
+        $schedule->call(function () {
+            $activeOrgIds = Campaign::where('status', 'ongoing')
+                ->whereHas('campaignLogs', function ($logQuery) {
+                    $logQuery->whereIn('status', ['pending', 'failed']);
+                })
+                ->distinct()
+                ->pluck('organization_id');
+
+            foreach ($activeOrgIds as $orgId) {
+                ProcessCampaignMessagesJob::dispatchForOrganization($orgId);
+            }
+        })->everyTwoMinutes()
+            ->withoutOverlapping()
+            ->name('process-campaign-messages-per-org');
 
         // Process missed status updates every 3 minutes
         $schedule->job(new \App\Jobs\ProcessMissedStatusUpdatesJob(), 'webhook-status')
@@ -31,17 +45,16 @@ class Kernel extends ConsoleKernel
         $schedule->job(new \App\Jobs\EnsureTicketsExistJob())
             ->everyFiveMinutes()
             ->withoutOverlapping();
-        
 
         /*$schedule->command('queue:work --queue=campaign-messages,campaign-logs --stop-when-empty')
             ->everyMinute()
             ->withoutOverlapping();*/
-        
+
         // Monitor queue health
         $schedule->command('queue:restart')
             ->hourly()
             ->evenInMaintenanceMode();
-        
+
         // Clean failed jobs table
         $schedule->command('queue:prune-failed --hours=24')
             ->daily()
@@ -49,23 +62,23 @@ class Kernel extends ConsoleKernel
 
         $schedule->command('queue:prune-batches --hours=48 --unfinished=72')
             ->daily();
-        
+
         $schedule->command('model:prune', [
             '--model' => [\App\Models\CampaignLog::class],
             '--hours' => 72,
         ])->daily();
-        
+
         // // Clean old processed missed status updates (keep for 7 days)
         $schedule->command('model:prune', [
             '--model' => [\App\Models\MissedChatStatusUpdate::class],
             '--hours' => 168, // 7 days
         ])->daily()
-        ->when(function () {
-            // Only run if there are processed records older than 7 days
-            return \App\Models\MissedChatStatusUpdate::where('state', 'processed')
-                ->where('created_at', '<', now()->subDays(7))
-                ->exists();
-        });
+            ->when(function () {
+                // Only run if there are processed records older than 7 days
+                return \App\Models\MissedChatStatusUpdate::where('state', 'processed')
+                    ->where('created_at', '<', now()->subDays(7))
+                    ->exists();
+            });
 
         // Monitor queue size
         //$schedule->command('monitor:queue-size')->everyFiveMinutes();
