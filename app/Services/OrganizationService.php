@@ -17,12 +17,55 @@ use App\Models\SubscriptionPlan;
 use App\Models\Team;
 use App\Models\Template;
 use App\Models\User;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Str;
 use Propaganistas\LaravelPhone\PhoneNumber;
 
 class OrganizationService
 {
+    /**
+     * Cache key prefix for organization metadata.
+     * Story 2.2: AC-2.2.2
+     */
+    private const CACHE_KEY_PREFIX = 'org-metadata-';
+
+    /**
+     * Cache TTL for organization metadata (1 hour).
+     * Story 2.2: AC-2.2.2
+     */
+    private const CACHE_TTL = 3600;
+
+    /**
+     * Get cached organization metadata.
+     * Story 2.2: AC-2.2.2 - Organization metadata cached for 1 hour with proper invalidation.
+     *
+     * @param  int  $organizationId
+     * @return array Decoded metadata array
+     */
+    public static function getCachedMetadata(int $organizationId): array
+    {
+        return Cache::remember(
+            self::CACHE_KEY_PREFIX.$organizationId,
+            self::CACHE_TTL,
+            fn () => json_decode(
+                Organization::find($organizationId)?->metadata ?? '{}',
+                true
+            ) ?? []
+        );
+    }
+
+    /**
+     * Invalidate cached organization metadata.
+     * Story 2.2: AC-2.2.2 - Called when organization metadata is updated.
+     *
+     * @param  int  $organizationId
+     */
+    public static function invalidateMetadataCache(int $organizationId): void
+    {
+        Cache::forget(self::CACHE_KEY_PREFIX.$organizationId);
+    }
+
     /**
      * Get all organizations based on the provided request filters.
      *

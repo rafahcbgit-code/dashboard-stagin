@@ -4,7 +4,7 @@ namespace App\Jobs;
 
 use App\Models\Campaign;
 use App\Models\CampaignLog;
-use App\Models\Organization;
+use App\Services\OrganizationService;
 use App\Services\WhatsappService;
 use App\Traits\TemplateTrait;
 use Illuminate\Bus\Batchable;
@@ -92,7 +92,9 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
     protected function checkAndUpdateCampaignStatus($campaignId)
     {
         $campaign = Campaign::find($campaignId);
-        $orgMetadata = json_decode($campaign->organization->metadata ?? '{}', true);
+
+        // Story 2.2: AC-2.2.2 - Use cached metadata instead of loading via relationship
+        $orgMetadata = OrganizationService::getCachedMetadata($this->organizationId);
         $retryEnabled = $orgMetadata['campaigns']['enable_resend'] ?? false;
         $retryIntervals = $orgMetadata['campaigns']['resend_intervals'] ?? [];
 
@@ -143,12 +145,8 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
 
     private function initializeWhatsappService()
     {
-        $config = cache()->remember("organization.{$this->organizationId}.metadata", 3600, function () {
-            return Organization::find($this->organizationId)->metadata ?? [];
-        });
-
-        $config = Organization::where('id', $this->organizationId)->first()->metadata;
-        $config = $config ? json_decode($config, true) : [];
+        // Story 2.2: AC-2.2.2 - Use centralized cached metadata (fixes redundant fetch bug)
+        $config = OrganizationService::getCachedMetadata($this->organizationId);
 
         $accessToken = $config['whatsapp']['access_token'] ?? null;
         $apiVersion = 'v18.0';
@@ -165,25 +163,4 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
             $this->organizationId
         );
     }
-
-    /*private function initializeWhatsappService()
-    {
-        $config = Organization::where('id', $this->organizationId)->first()->metadata;
-        $config = $config ? json_decode($config, true) : [];
-
-        $accessToken = $config['whatsapp']['access_token'] ?? null;
-        $apiVersion = 'v18.0';
-        $appId = $config['whatsapp']['app_id'] ?? null;
-        $phoneNumberId = $config['whatsapp']['phone_number_id'] ?? null;
-        $wabaId = $config['whatsapp']['waba_id'] ?? null;
-
-        $this->whatsappService = new WhatsappService(
-            $accessToken,
-            $apiVersion,
-            $appId,
-            $phoneNumberId,
-            $wabaId,
-            $this->organizationId
-        );
-    }*/
 }
