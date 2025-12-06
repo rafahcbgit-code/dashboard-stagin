@@ -68,4 +68,45 @@ class OrganizationFactory extends Factory
             ];
         });
     }
+
+    /**
+     * Task 2.7: State for load test organization with LoadTest- prefix.
+     * Includes campaign batch settings for testing.
+     */
+    public function loadTest(int $number = 1): static
+    {
+        return $this->state(function (array $attributes) use ($number) {
+            $metadata = json_decode($attributes['metadata'], true);
+            $metadata['campaigns'] = [
+                'batch_size' => 500,
+                'enable_resend' => false,
+                'resend_intervals' => [],
+            ];
+
+            return [
+                'identifier' => 'LoadTest-'.Str::random(8),
+                'name' => "LoadTest-Org-{$number}",
+                'metadata' => json_encode($metadata),
+            ];
+        });
+    }
+
+    /**
+     * Task 2.7: State for organization with custom campaign batch settings.
+     */
+    public function withCampaignSettings(int $batchSize = 500, bool $enableResend = false, array $resendIntervals = []): static
+    {
+        return $this->state(function (array $attributes) use ($batchSize, $enableResend, $resendIntervals) {
+            $metadata = json_decode($attributes['metadata'], true);
+            $metadata['campaigns'] = [
+                'batch_size' => $batchSize,
+                'enable_resend' => $enableResend,
+                'resend_intervals' => $resendIntervals,
+            ];
+
+            return [
+                'metadata' => json_encode($metadata),
+            ];
+        });
+    }
 }
