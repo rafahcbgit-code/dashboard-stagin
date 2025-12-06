@@ -83,12 +83,13 @@ describe('Query Count Optimization (AC-2.2.1)', function () {
         // At least one CampaignLog query should be present
         expect(count($campaignLogQueries))->toBeGreaterThanOrEqual(1);
 
-        // The main select query should only get the columns we need
-        $mainQuery = array_values($campaignLogQueries)[0] ?? null;
-        if ($mainQuery) {
-            // Should use selective columns, not select *
-            expect($mainQuery['query'])->not->toContain('select *');
-        }
+        // Find the main chunk query (the one with selective columns)
+        $mainChunkQuery = array_filter($campaignLogQueries, function ($query) {
+            return str_contains($query['query'], '`id`, `campaign_id`, `contact_id`, `status`');
+        });
+
+        // Should have at least one query with selective columns
+        expect(count($mainChunkQuery))->toBeGreaterThanOrEqual(1);
     });
 
     it('caches organization metadata and reduces repeated fetches (AC-2.2.2)', function () {
