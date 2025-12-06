@@ -1,5 +1,17 @@
 <?php
 
+/**
+ * CampaignProgressBroadcastTest - Task 2.5 Real-Time Progress Tests
+ *
+ * Tests for real-time campaign progress broadcasting.
+ *
+ * @see Task 2.5: Add Real-Time Campaign Progress Tracking
+ * @see AC-2.5.1: CampaignProgressEvent broadcast to private-campaign.{uuid} channel
+ * @see AC-2.5.2: Payload includes total, sent, failed, pending, percentComplete
+ * @see AC-2.5.3: Updates throttled to every 10 messages OR 5 seconds
+ * @see AC-2.5.5: Estimated completion time displayed
+ * @see AC-2.5.6: Private channel authorization
+ */
 
 use App\Events\CampaignProgressEvent;
 use App\Jobs\ProcessSingleCampaignLogJob;
@@ -47,6 +59,9 @@ function createProgressTestOrg(array $settings = []): Organization
     ]);
 }
 
+/**
+ * Task 2.5: AC-2.5.3 - Throttle logic tests
+ */
 describe('Progress broadcasting throttle logic (AC-2.5.3)', function () {
     it('broadcasts after 10 messages are processed when time threshold not met', function () {
         Event::fake([CampaignProgressEvent::class]);
@@ -117,6 +132,9 @@ describe('Progress broadcasting throttle logic (AC-2.5.3)', function () {
     });
 });
 
+/**
+ * Task 2.5: AC-2.5.5 - Estimated completion calculation tests
+ */
 describe('Estimated completion calculation (AC-2.5.5)', function () {
     it('returns Calculating when elapsed time is less than 10 seconds', function () {
         $org = createProgressTestOrg();
@@ -225,6 +243,11 @@ describe('Estimated completion calculation (AC-2.5.5)', function () {
     });
 });
 
+/**
+ * Task 2.5: AC-2.5.6 - Private channel authorization logic tests
+ * Note: Full HTTP tests for /broadcasting/auth require Pusher configuration.
+ * These tests verify the authorization callback logic.
+ */
 describe('Private channel authorization logic (AC-2.5.6)', function () {
     it('channel callback returns true for user belonging to campaign organization', function () {
         $org = createProgressTestOrg();
@@ -270,6 +293,9 @@ describe('Private channel authorization logic (AC-2.5.6)', function () {
     });
 });
 
+/**
+ * Task 2.5: AC-2.5.1, AC-2.5.2 - Event dispatch tests
+ */
 describe('CampaignProgressEvent dispatch (AC-2.5.1, AC-2.5.2)', function () {
     it('dispatches event with correct payload structure', function () {
         Event::fake([CampaignProgressEvent::class]);
@@ -359,6 +385,9 @@ describe('CampaignProgressEvent dispatch (AC-2.5.1, AC-2.5.2)', function () {
     });
 });
 
+/**
+ * Task 2.5: Static state management tests
+ */
 describe('Progress state management', function () {
     it('resets progress state for specific campaign', function () {
         $campaignId = 123;

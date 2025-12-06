@@ -1,5 +1,23 @@
 <?php
 
+/**
+ * CampaignCancellationTest - Task 2.6 Graceful Campaign Cancellation
+ *
+ * Tests for the campaign cancellation feature including:
+ * - Cancel endpoint functionality
+ * - Authorization and validation
+ * - Job cancellation checks
+ * - Stats calculation
+ *
+ * @see Task 2.6: Implement Graceful Campaign Cancellation
+ * @see AC-2.6.1: POST /campaigns/{uuid}/cancel endpoint functional and returns 200 OK
+ * @see AC-2.6.2: Campaign status changes to 'cancelled'
+ * @see AC-2.6.3: All pending CampaignLog records marked as 'cancelled'
+ * @see AC-2.6.4: In-flight messages (already dispatched jobs) complete normally
+ * @see AC-2.6.5: Final stats returned: sent count, cancelled count, failed count
+ * @see AC-2.6.6: Only org admins can cancel their own organization's campaigns
+ * @see AC-2.6.7: Cancel only allowed for campaigns with status 'ongoing'
+ */
 
 use App\Http\Middleware\CheckOrganizationId;
 use App\Http\Middleware\IsTrial;
@@ -67,6 +85,9 @@ function createUserWithOrg(Organization $org): User
     return $user;
 }
 
+/**
+ * Task 2.6: AC-2.6.1, AC-2.6.2 - Cancel Endpoint Basic Functionality
+ */
 describe('Cancel Endpoint Returns 200 and Updates Status (AC-2.6.1, AC-2.6.2)', function () {
     it('returns 200 OK and updates campaign status to cancelled for ongoing campaign', function () {
         $org = createCancelTestOrg();
@@ -96,6 +117,9 @@ describe('Cancel Endpoint Returns 200 and Updates Status (AC-2.6.1, AC-2.6.2)', 
     });
 });
 
+/**
+ * Task 2.6: AC-2.6.3 - Pending Logs Marked as Cancelled
+ */
 describe('Pending Logs Marked as Cancelled (AC-2.6.3)', function () {
     it('marks all pending CampaignLog records as cancelled', function () {
         $org = createCancelTestOrg();
@@ -156,6 +180,9 @@ describe('Pending Logs Marked as Cancelled (AC-2.6.3)', function () {
     });
 });
 
+/**
+ * Task 2.6: AC-2.6.5 - Final Stats Returned
+ */
 describe('Final Stats Returned (AC-2.6.5)', function () {
     it('returns correct sent, cancelled, and failed counts in response', function () {
         $org = createCancelTestOrg();
@@ -206,6 +233,9 @@ describe('Final Stats Returned (AC-2.6.5)', function () {
     });
 });
 
+/**
+ * Task 2.6: AC-2.6.6 - Authorization Tests
+ */
 describe('Authorization - Only Org Admins Can Cancel (AC-2.6.6)', function () {
     it('returns 404 when campaign belongs to different organization', function () {
         $org = createCancelTestOrg();
@@ -241,6 +271,9 @@ describe('Authorization - Only Org Admins Can Cancel (AC-2.6.6)', function () {
     });
 });
 
+/**
+ * Task 2.6: AC-2.6.7 - Status Validation Tests
+ */
 describe('Status Validation - Only Ongoing Campaigns (AC-2.6.7)', function () {
     it('returns 400 for completed campaign', function () {
         $org = createCancelTestOrg();
@@ -291,6 +324,9 @@ describe('Status Validation - Only Ongoing Campaigns (AC-2.6.7)', function () {
     });
 });
 
+/**
+ * Task 2.6: AC-2.6.4 - Job Cancellation Check Tests
+ */
 describe('ProcessSingleCampaignLogJob Cancellation Check (AC-2.6.4)', function () {
     it('skips sending when campaign is cancelled', function () {
         $org = createCancelTestOrg();
@@ -352,6 +388,9 @@ describe('ProcessSingleCampaignLogJob Cancellation Check (AC-2.6.4)', function (
     });
 });
 
+/**
+ * Task 2.6: AC-2.6.4 - ProcessCampaignMessagesJob Cancellation Check
+ */
 describe('ProcessCampaignMessagesJob Cancellation Check (AC-2.6.4)', function () {
     it('does not dispatch jobs for campaigns that become cancelled mid-batch', function () {
         // This tests the scenario where a campaign is cancelled while the batch job is running
@@ -379,6 +418,9 @@ describe('ProcessCampaignMessagesJob Cancellation Check (AC-2.6.4)', function ()
     });
 });
 
+/**
+ * Task 2.6: Edge Cases
+ */
 describe('Edge Cases', function () {
     it('handles campaign with no logs gracefully', function () {
         $org = createCancelTestOrg();
