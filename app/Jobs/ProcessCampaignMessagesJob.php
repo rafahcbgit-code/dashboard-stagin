@@ -46,7 +46,7 @@ class ProcessCampaignMessagesJob implements ShouldQueue
 
     public function handle()
     {
-        // Story 2.2: Query count and timing instrumentation (AC-2.2.1, AC-2.2.4)
+        // Task 2.2: Query count and timing instrumentation (AC-2.2.1, AC-2.2.4)
         $startTime = microtime(true);
         DB::enableQueryLog();
         $initialQueryCount = count(DB::getQueryLog());
@@ -55,19 +55,19 @@ class ProcessCampaignMessagesJob implements ShouldQueue
             // Track campaigns to check completion later
             $campaignsProcessed = [];
 
-            // Story 2.2: AC-2.2.2 - Fetch cached metadata once per job (not per log)
+            // Task 2.2: AC-2.2.2 - Fetch cached metadata once per job (not per log)
             $orgMetadata = OrganizationService::getCachedMetadata($this->organizationId);
             $retryEnabled = $orgMetadata['campaigns']['enable_resend'] ?? false;
             $retryIntervals = $orgMetadata['campaigns']['resend_intervals'] ?? [];
             $maxRetries = count($retryIntervals);
 
-            // Story 2.3: AC-2.3.1, AC-2.3.2, AC-2.3.3 - Configurable batch size with org override
+            // Task 2.3: AC-2.3.1, AC-2.3.2, AC-2.3.3 - Configurable batch size with org override
             $batchSize = $this->getBatchSize($orgMetadata);
             $batchNumber = 0;
             $totalProcessed = 0;
 
-            // Process logs in chunks - now org-scoped (Story 2.1: AC-2.1.1, AC-2.1.2)
-            // Story 2.2: AC-2.2.3 - Selective column loading for reduced data transfer
+            // Process logs in chunks - now org-scoped (Task 2.1: AC-2.1.1, AC-2.1.2)
+            // Task 2.2: AC-2.2.3 - Selective column loading for reduced data transfer
             CampaignLog::select(['id', 'campaign_id', 'contact_id', 'status'])
                 ->with([
                     'campaign' => fn ($q) => $q->select(['id', 'organization_id', 'status', 'uuid', 'created_by']),
@@ -80,7 +80,7 @@ class ProcessCampaignMessagesJob implements ShouldQueue
                 })
                 ->chunk($batchSize, function ($logs) use (&$campaignsProcessed, &$batchNumber, &$totalProcessed, $batchSize, $retryEnabled, $maxRetries) {
                     $batchNumber++;
-                    // Story 2.3: AC-2.3.4 - Log batch progress at start of each chunk
+                    // Task 2.3: AC-2.3.4 - Log batch progress at start of each chunk
                     Log::info('ProcessCampaignMessagesJob batch started', [
                         'organization_id' => $this->organizationId,
                         'batch_number' => $batchNumber,
@@ -89,7 +89,23 @@ class ProcessCampaignMessagesJob implements ShouldQueue
                     ]);
                     $jobs = [];
 
+                    // Task 2.6: Track campaigns that were cancelled mid-batch
+                    $cancelledCampaigns = [];
+
                     foreach ($logs as $log) {
+                        // Task 2.6: AC-2.6.4 - Skip if campaign was cancelled mid-batch
+                        if ($log->campaign && $log->campaign->status === 'cancelled') {
+                            if (! in_array($log->campaign_id, $cancelledCampaigns)) {
+                                $cancelledCampaigns[] = $log->campaign_id;
+                                Log::info('Skipping batch dispatch for cancelled campaign', [
+                                    'campaign_id' => $log->campaign_id,
+                                    'organization_id' => $this->organizationId,
+                                ]);
+                            }
+
+                            continue;
+                        }
+
                         // Get actual retry count from database relationship
                         $retryCount = $log->retries()->count();
 
@@ -105,7 +121,7 @@ class ProcessCampaignMessagesJob implements ShouldQueue
                         }
                     }
 
-                    // Dispatch jobs to org-specific queue (Story 2.1: AC-2.1.1)
+                    // Dispatch jobs to org-specific queue (Task 2.1: AC-2.1.1)
                     if (! empty($jobs)) {
                         Bus::batch($jobs)
                             ->allowFailures()
@@ -113,11 +129,11 @@ class ProcessCampaignMessagesJob implements ShouldQueue
                             ->dispatch();
                     }
 
-                    // Story 2.3: AC-2.3.4 - Track total processed
+                    // Task 2.3: AC-2.3.4 - Track total processed
                     $totalProcessed += count($logs);
                 });
 
-            // Story 2.3: AC-2.3.4 - Log total processed count after all batches complete
+            // Task 2.3: AC-2.3.4 - Log total processed count after all batches complete
             Log::info('ProcessCampaignMessagesJob batches completed', [
                 'organization_id' => $this->organizationId,
                 'total_batches' => $batchNumber,
@@ -129,7 +145,7 @@ class ProcessCampaignMessagesJob implements ShouldQueue
                 $this->markCampaignAsCompleted($campaignId);
             }
 
-            // Story 2.2: Log query metrics for performance baseline (AC-2.2.1, AC-2.2.4)
+            // Task 2.2: Log query metrics for performance baseline (AC-2.2.1, AC-2.2.4)
             $this->logQueryMetrics($startTime, $initialQueryCount, count($campaignsProcessed));
 
         } catch (\Exception $e) {
@@ -140,7 +156,7 @@ class ProcessCampaignMessagesJob implements ShouldQueue
 
     /**
      * Log query count and timing metrics for performance analysis.
-     * Story 2.2: AC-2.2.1 (query count), AC-2.2.4 (processing time)
+     * Task 2.2: AC-2.2.1 (query count), AC-2.2.4 (processing time)
      */
     private function logQueryMetrics(float $startTime, int $initialQueryCount, int $campaignsProcessed): void
     {
@@ -158,7 +174,7 @@ class ProcessCampaignMessagesJob implements ShouldQueue
 
     /**
      * Get batch size for campaign processing.
-     * Story 2.3: AC-2.3.1, AC-2.3.2, AC-2.3.3
+     * Task 2.3: AC-2.3.1, AC-2.3.2, AC-2.3.3
      *
      * Priority: org metadata override > config default
      * All values capped at max_batch_size for safety.
@@ -170,7 +186,7 @@ class ProcessCampaignMessagesJob implements ShouldQueue
         $defaultSize = config('campaigns.batch_size', 500);
         $maxSize = config('campaigns.max_batch_size', 1000);
 
-        // Story 2.3: AC-2.3.3 - Check org metadata for override
+        // Task 2.3: AC-2.3.3 - Check org metadata for override
         $orgSize = $orgMetadata['campaigns']['batch_size'] ?? null;
 
         if ($orgSize !== null) {
@@ -188,7 +204,7 @@ class ProcessCampaignMessagesJob implements ShouldQueue
             return;
         }
 
-        // Story 2.2: AC-2.2.2 - Use cached metadata instead of loading via relationship
+        // Task 2.2: AC-2.2.2 - Use cached metadata instead of loading via relationship
         $orgMetadata = OrganizationService::getCachedMetadata($this->organizationId);
         $retryEnabled = $orgMetadata['campaigns']['enable_resend'] ?? false;
         $retryIntervals = $orgMetadata['campaigns']['resend_intervals'] ?? [];
