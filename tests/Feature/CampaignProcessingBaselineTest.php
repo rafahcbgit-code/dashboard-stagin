@@ -353,7 +353,8 @@ describe('ProcessCampaignMessagesJob - Campaign Completion', function () {
         // Create one pending log that will be processed
         $pendingLog = CampaignLog::factory()->forCampaign($campaign)->forContact($contact)->pending()->create();
 
-        $job = new ProcessCampaignMessagesJob();
+        // Story 2.1: Now requires organizationId parameter
+        $job = new ProcessCampaignMessagesJob($org->id);
         $job->handle();
 
         // The campaign is added to $campaignsProcessed because we processed a log
@@ -377,7 +378,8 @@ describe('ProcessCampaignMessagesJob - Campaign Completion', function () {
         CampaignLog::factory()->forCampaign($campaign)->forContact($contact)->success()->create();
         CampaignLog::factory()->forCampaign($campaign)->forContact($contact)->pending()->create();
 
-        $job = new ProcessCampaignMessagesJob();
+        // Story 2.1: Now requires organizationId parameter
+        $job = new ProcessCampaignMessagesJob($org->id);
         $job->handle();
 
         $campaign->refresh();
@@ -392,7 +394,8 @@ describe('ProcessCampaignMessagesJob - Campaign Completion', function () {
         // Create failed log with retries remaining
         CampaignLog::factory()->forCampaign($campaign)->forContact($contact)->failed()->create();
 
-        $job = new ProcessCampaignMessagesJob();
+        // Story 2.1: Now requires organizationId parameter
+        $job = new ProcessCampaignMessagesJob($org->id);
         $job->handle();
 
         $campaign->refresh();
