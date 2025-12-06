@@ -2,13 +2,12 @@
 
 namespace App\Jobs;
 
-use Carbon\Carbon;
 use App\Models\Campaign;
 use App\Models\CampaignLog;
 use App\Models\Contact;
+use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Database\Query\Builder;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
@@ -19,6 +18,7 @@ class CreateCampaignLogsJob implements ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
     public $timeout = 3600;
+
     public $tries = 3;
 
     public function handle()
@@ -38,14 +38,16 @@ class CreateCampaignLogsJob implements ShouldQueue
                 }
             }
         } catch (\Exception $e) {
-            Log::error('Error in CreateCampaignLogsJob: ' . $e->getMessage());
+            Log::error('Error in CreateCampaignLogsJob: '.$e->getMessage());
             throw $e;
         }
     }
 
     protected function getOrganizationTimezone($organization)
     {
-        if (!$organization) return 'UTC';
+        if (! $organization) {
+            return 'UTC';
+        }
 
         $metadata = $organization->metadata;
         $metadata = isset($metadata) ? json_decode($metadata, true) : null;
@@ -56,11 +58,15 @@ class CreateCampaignLogsJob implements ShouldQueue
     protected function processCampaign(Campaign $campaign)
     {
         $contacts = $this->getContactsForCampaign($campaign);
-        
+
         if ($this->createCampaignLogs($campaign, $contacts)) {
             Campaign::where('uuid', $campaign->uuid)->update(['status' => 'ongoing']);
             Log::info("Campaign {$campaign->uuid} marked ongoing.");
-        }else{
+
+            // Dispatch ProcessCampaignMessagesJob for this org (Story 2.1: AC-2.1.1)
+            ProcessCampaignMessagesJob::dispatchForOrganization($campaign->organization_id);
+            Log::info("ProcessCampaignMessagesJob dispatched for org {$campaign->organization_id}.");
+        } else {
             Log::info("Campaign {$campaign->uuid} not marked ongoing.");
         }
     }
@@ -77,9 +83,9 @@ class CreateCampaignLogsJob implements ShouldQueue
         return Contact::whereHas('contactGroups', function ($query) use ($campaign) {
             $query->where('contact_groups.id', $campaign->contact_group_id);
         })
-        ->whereNull('deleted_at')
-        ->where('is_subscribed', 1)
-        ->get();
+            ->whereNull('deleted_at')
+            ->where('is_subscribed', 1)
+            ->get();
     }
 
     protected function createCampaignLogs(Campaign $campaign, $contacts)
@@ -103,10 +109,10 @@ class CreateCampaignLogsJob implements ShouldQueue
         $campaignLogs = $newContacts->map(function ($contactId) use ($campaign) {
             return [
                 'campaign_id' => $campaign->id,
-                'contact_id'  => $contactId,
-                'status'      => 'pending',
-                'created_at'  => now(),
-                'updated_at'  => now(),
+                'contact_id' => $contactId,
+                'status' => 'pending',
+                'created_at' => now(),
+                'updated_at' => now(),
             ];
         })->toArray();
 
@@ -117,5 +123,4 @@ class CreateCampaignLogsJob implements ShouldQueue
 
         return true;
     }
-
 }
