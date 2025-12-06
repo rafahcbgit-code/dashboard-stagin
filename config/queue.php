@@ -106,4 +106,19 @@ return [
         'table' => 'failed_jobs',
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Campaign Queue Configuration (Story 2.1)
+    |--------------------------------------------------------------------------
+    |
+    | Configuration for organization-isolated campaign processing queues.
+    | Each organization gets its own queue channel: {prefix}{org_id}
+    |
+    | For Supervisor configuration, include org-specific queues:
+    | --queue=campaign-org-1,campaign-org-2,...,default
+    |
+    */
+
+    'campaign_prefix' => env('QUEUE_CAMPAIGN_PREFIX', 'campaign-org-'),
+
 ];
