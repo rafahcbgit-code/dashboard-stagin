@@ -474,7 +474,8 @@ Stored in `organizations.metadata` JSON field:
   "campaigns": {
     "enable_resend": true,
     "resend_intervals": [60, 120, 240],
-    "move_failed_contacts_to_group": true
+    "move_failed_contacts_to_group": true,
+    "batch_size": 500
   },
   "automation": {
     "response_sequence": ["Basic Replies", "AI Reply"]
