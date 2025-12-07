@@ -4,7 +4,7 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Campaign Batch Processing (Story 2.3)
+    | Campaign Batch Processing
     |--------------------------------------------------------------------------
     |
     | Default batch size for processing campaign logs. This controls how many
@@ -31,7 +31,7 @@ return [
 
     /*
     |--------------------------------------------------------------------------
-    | Retry Configuration (Story 2.4)
+    | Retry Configuration
     |--------------------------------------------------------------------------
     |
     | Configuration for exponential backoff retries on failed campaign messages.
