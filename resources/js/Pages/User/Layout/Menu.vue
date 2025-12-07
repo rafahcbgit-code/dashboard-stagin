@@ -39,7 +39,7 @@
                         <span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Contacts') }}</span>
                     </Link>
                 </li>
-                <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate" :class="$page.url.startsWith('/campaign') ? 'bg-slate-50 text-black' : ''">
+                <li v-if="!isAgent" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate" :class="$page.url.startsWith('/campaign') ? 'bg-slate-50 text-black' : ''">
                     <Link rel="noopener noreferrer" href="/campaigns" class="flex items-center p-2 space-s-3 rounded-md">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 256 256"><path fill="currentColor" d="M216 80h-32V48a16 16 0 0 0-16-16H40a16 16 0 0 0-16 16v128a8 8 0 0 0 13 6.22L72 154v30a16 16 0 0 0 16 16h93.59L219 230.22a8 8 0 0 0 5 1.78a8 8 0 0 0 8-8V96a16 16 0 0 0-16-16M66.55 137.78L40 159.25V48h128v88H71.58a8 8 0 0 0-5.03 1.78M216 207.25l-26.55-21.47a8 8 0 0 0-5-1.78H88v-32h80a16 16 0 0 0 16-16V96h32Z"/></svg>
                         <span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Campaigns') }}</span>
@@ -57,7 +57,7 @@
                         <span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Saved Replies') }}</span>
                     </Link>
                 </li>
-                <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate" :class="$page.url.startsWith('/automation') ? 'bg-slate-50 text-black' : ''">
+                <li v-if="!isAgent" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate" :class="$page.url.startsWith('/automation') ? 'bg-slate-50 text-black' : ''">
                     <Link rel="noopener noreferrer" href="/automation/basic" class="flex items-center p-2 space-s-3 rounded-md">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 32 32"><path fill="currentColor" d="M16 27c-3.6 0-7.1-1.8-9.2-5H12v-2H4v8h2v-3.7c2.5 3 6.1 4.7 10 4.7zm15-4v-2h-2.1c-.1-.6-.4-1.2-.7-1.8l1.5-1.5l-1.4-1.4l-1.5 1.5c-.5-.3-1.1-.6-1.8-.7V15h-2v2.1c-.6.1-1.2.4-1.8.7l-1.5-1.5l-1.4 1.4l1.5 1.5c-.3.5-.6 1.1-.7 1.8H17v2h2.1c.1.6.4 1.2.7 1.8l-1.5 1.5l1.4 1.4l1.5-1.5c.5.3 1.1.6 1.8.7V29h2v-2.1c.6-.1 1.2-.4 1.8-.7l1.5 1.5l1.4-1.4l-1.5-1.5c.3-.5.6-1.1.7-1.8zm-7 2c-1.7 0-3-1.3-3-3s1.3-3 3-3s3 1.3 3 3s-1.3 3-3 3m-4-15h5.2C21.9 4.9 15.1 3.5 10 6.8c-3.1 2-5 5.5-5 9.2H3C3 8.8 8.8 3 16 3c3.9 0 7.5 1.7 10 4.7V4h2v8h-8z"/></svg>
                         <span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Automation') }}</span>
@@ -76,7 +76,7 @@
                         <span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Team') }}</span>
                     </Link>
                 </li>
-                <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate" :class="$page.url.startsWith('/settings') ? 'bg-slate-50 text-black' : ''">
+                <li v-if="!isAgent" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate" :class="$page.url.startsWith('/settings') ? 'bg-slate-50 text-black' : ''">
                     <Link rel="noopener noreferrer" href="/settings" class="md:flex items-center p-2 space-s-3 rounded-md hidden">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 16 16"><path fill="currentColor" fill-rule="evenodd" d="M3.5 2h-1v5h1zm6.1 5H6.4L6 6.45v-1L6.4 5h3.2l.4.5v1zm-5 3H1.4L1 9.5v-1l.4-.5h3.2l.4.5v1zm3.9-8h-1v2h1zm-1 6h1v6h-1zm-4 3h-1v3h1zm7.9 0h3.19l.4-.5v-.95l-.4-.5H11.4l-.4.5v.95zm2.1-9h-1v6h1zm-1 10h1v2h-1z" clip-rule="evenodd"/></svg>
                         <span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Settings') }}</span>
@@ -86,7 +86,7 @@
                         <span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Settings') }}</span>
                     </Link>
                 </li>
-                <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate" :class="$page.url.startsWith('/billing') || $page.url.startsWith('/subscription') ? 'bg-slate-50 text-black' : ''">
+                <li v-if="!isAgent" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate" :class="$page.url.startsWith('/billing') || $page.url.startsWith('/subscription') ? 'bg-slate-50 text-black' : ''">
                     <Link rel="noopener noreferrer" href="/billing" class="flex items-center p-2 space-s-3 rounded-md">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 11v4.8c0 1.12 0 1.68.218 2.108a2 2 0 0 0 .874.874c.427.218.987.218 2.105.218h11.606c1.118 0 1.677 0 2.104-.218c.377-.192.683-.498.875-.874c.218-.428.218-.986.218-2.104V11M3 11V9m0 2h18M3 9v-.8c0-1.12 0-1.68.218-2.108c.192-.377.497-.682.874-.874C4.52 5 5.08 5 6.2 5h11.6c1.12 0 1.68 0 2.107.218c.377.192.683.497.875.874c.218.427.218.987.218 2.105V9M3 9h18M7 15h4m10-4V9"/></svg>
                         <span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Billing and subscription') }}</span>
@@ -182,6 +182,12 @@
 
     const languages = computed(() => usePage().props.languages);
     const currentLanguage = computed(() => usePage().props.currentLanguage);
+    //this value get from HandleInertiaRequests file
+    const isAgent = computed(() => {
+        const p = usePage().props;
+        const val = (p.value && (p.value.isAgent ?? p.value.is_agent)) ?? (props.user && (props.user.is_agent ?? (props.user.teams && props.user.teams[0] && props.user.teams[0].role === 'agent')));
+        return Boolean(val);
+    });
     const isOpen = ref(false);
     const isLocationSwitchModalOpen = ref(false);
     const showDropdown1 = ref(false);
