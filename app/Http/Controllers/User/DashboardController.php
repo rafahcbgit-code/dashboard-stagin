@@ -43,12 +43,12 @@ class DashboardController extends BaseController
         $data['subscription'] = Subscription::with('plan')->where('organization_id', $organizationId)->first();
         $data['subscriptionDetails'] = SubscriptionService::calculateSubscriptionBillingDetails($organizationId, $data['subscription']->plan_id);
         $data['subscriptionIsActive'] = SubscriptionService::isSubscriptionActive($organizationId);
-        $data['chatCount'] = Chat::where('organization_id', $organizationId)
+        /*$data['chatCount'] = Chat::where('organization_id', $organizationId)
             ->whereNull('deleted_at')
             ->whereHas('contact', function ($query) {
                 $query->whereNull('deleted_at');
             })
-            ->count();
+            ->count();*/
         $data['campaignCount'] = Campaign::where('organization_id', $organizationId)->whereNull('deleted_at')->count();
         $data['contactCount'] = Contact::where('organization_id', $organizationId)->whereNull('deleted_at')->count();
         $data['templateCount'] = Template::where('organization_id', $organizationId)->whereNull('deleted_at')->count();
@@ -66,8 +66,8 @@ class DashboardController extends BaseController
             ->get();
         $data['setupWhatsapp'] = isset($config['whatsapp']) ? false : true;;
         $data['period'] = $this->period();
-        $data['inbound'] = $this->getChatCounts('inbound');
-        $data['outbound'] = $this->getChatCounts('outbound');
+        //$data['inbound'] = $this->getChatCounts('inbound');
+        //$data['outbound'] = $this->getChatCounts('outbound');
         $data['embeddedSignupActive'] = CustomHelper::isModuleEnabled('Embedded Signup');
         $data['appId'] = $settings->get('whatsapp_client_id', null);
         $data['configId'] = $settings->get('whatsapp_config_id', null);

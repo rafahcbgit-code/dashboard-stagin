@@ -1,6 +1,6 @@
 <template>
     <SettingLayout :modules="props.modules">
-        <div class="md:h-[90vh] overflow-y-auto">
+        <div class="md:h-[90vh] overflow-y-auto pb-20">
              <div class="flex justify-center items-center">
                 <div class="md:w-[60em]">
 
@@ -137,7 +137,7 @@
                     </div> 
 
                     <!-- Allow agents to view all chats -->
-                    <div v-if="form.active" class="bg-white border border-slate-200 rounded-lg pt-2 text-sm mb-4 px-4 mb-32">
+                    <div v-if="form.active" class="bg-white border border-slate-200 rounded-lg pt-2 text-sm mb-4 px-4">
                         <div class="w-full py-2 mb-4 mt-2">
                             <div class="flex w-full items-start gap-4">
                                 <div class="flex-1 text-md">

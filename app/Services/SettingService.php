@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use dacoto\EnvSet\Facades\EnvSet;
-use DB;
+use Illuminate\Support\Facades\DB;
 
 class SettingService
 {
@@ -77,6 +77,7 @@ class SettingService
                         Log::error($e->getMessage());
                     }*/
                 } else if($key == 'trial_limits') { 
+                    
                     $trial_limits = $request->all()['trial_limits'];
 
                     try {
