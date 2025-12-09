@@ -355,9 +355,7 @@ describe('Retry Scheduling', function () {
         // At retry index 0 with max 3 retries, should schedule next
         $method->invoke($job, $log, [5, 15, 60], 3);
 
-        $expectedQueue = config('queue.campaign_prefix', 'campaign-org-').$org->id;
-
-        Queue::assertPushedOn($expectedQueue, RetryCampaignLogJob::class);
+        Queue::assertPushedOn('campaign-messages', RetryCampaignLogJob::class);
     });
 });
 

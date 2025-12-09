@@ -101,26 +101,32 @@ describe('Organization Queue Isolation (AC-2.7.1)', function () {
         ProcessCampaignMessagesJob::dispatchForOrganization($orgAData['organization']->id);
         ProcessCampaignMessagesJob::dispatchForOrganization($orgBData['organization']->id);
 
-        // Assert: Each org's job goes to its own queue
+        // Assert: Both jobs go to the unified campaign-messages queue
         Queue::assertPushedOn(
-            'campaign-org-'.$orgAData['organization']->id,
-            ProcessCampaignMessagesJob::class
+            'campaign-messages',
+            ProcessCampaignMessagesJob::class,
+            function ($job) use ($orgAData) {
+                return $job->organizationId === $orgAData['organization']->id;
+            }
         );
         Queue::assertPushedOn(
-            'campaign-org-'.$orgBData['organization']->id,
-            ProcessCampaignMessagesJob::class
+            'campaign-messages',
+            ProcessCampaignMessagesJob::class,
+            function ($job) use ($orgBData) {
+                return $job->organizationId === $orgBData['organization']->id;
+            }
         );
     });
 
-    test('job constructor sets correct org-specific queue', function () {
+    test('job constructor sets campaign-messages queue', function () {
         $org = Organization::factory()->create();
 
         $job = new ProcessCampaignMessagesJob($org->id);
 
-        expect($job->queue)->toBe('campaign-org-'.$org->id);
+        expect($job->queue)->toBe('campaign-messages');
     });
 
-    test('five organizations can have independent queue channels', function () {
+    test('five organizations get separate job instances on same queue', function () {
         // Arrange: Create 5 organizations
         $orgs = collect();
         for ($i = 1; $i <= 5; $i++) {
@@ -133,11 +139,14 @@ describe('Organization Queue Isolation (AC-2.7.1)', function () {
             ProcessCampaignMessagesJob::dispatchForOrganization($org->id);
         }
 
-        // Assert: 5 separate queue channels
+        // Assert: All 5 jobs go to campaign-messages queue with unique org IDs
         foreach ($orgs as $org) {
             Queue::assertPushedOn(
-                'campaign-org-'.$org->id,
-                ProcessCampaignMessagesJob::class
+                'campaign-messages',
+                ProcessCampaignMessagesJob::class,
+                function ($job) use ($org) {
+                    return $job->organizationId === $org->id;
+                }
             );
         }
     });

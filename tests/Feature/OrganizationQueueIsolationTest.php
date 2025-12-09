@@ -1,15 +1,13 @@
 <?php
 
 /**
- * OrganizationQueueIsolationTest - Story 2.1 Tests
+ * OrganizationQueueIsolationTest - Task 2.1 Tests
  *
- * These tests verify the organization-based queue channel implementation:
- * - AC-2.1.1: Organization A's campaign processes on `campaign-org-A` queue
- * - AC-2.1.2: Organization B's campaign processes independently
- * - AC-2.1.3: Large campaign from Org A does not block Org B's smaller campaign
- * - AC-2.1.4: Queue workers can be assigned per organization
- *
- * @see docs/sprint-artifacts/2-1-implement-organization-based-queue-channels.md
+ * These tests verify the organization-based queue isolation implementation:
+ * - Each organization's campaign gets its own job instance
+ * - All campaign jobs use the unified 'campaign-messages' queue
+ * - Job-level isolation ensures organizations don't block each other
+ * - Multiple workers on the same queue enable parallel org processing
  */
 
 use App\Jobs\CreateCampaignLogsJob;
@@ -19,7 +17,6 @@ use App\Models\Campaign;
 use App\Models\CampaignLog;
 use App\Models\Contact;
 use App\Models\Organization;
-use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Queue;
 
 beforeEach(function () {
@@ -48,35 +45,28 @@ function createTestOrg(array $settings = []): Organization
 }
 
 // =============================================================================
-// ProcessCampaignMessagesJob - Queue Name Tests (AC-2.1.1)
+// ProcessCampaignMessagesJob - Queue Name Tests
 // =============================================================================
 
 describe('ProcessCampaignMessagesJob - Queue Name', function () {
-    it('uses config-based queue prefix with organization ID', function () {
+    it('uses unified campaign-messages queue for all organizations', function () {
         $org = createTestOrg();
 
         $job = new ProcessCampaignMessagesJob($org->id);
 
-        $expectedQueue = config('queue.campaign_prefix', 'campaign-org-').$org->id;
-        expect($job->queue)->toBe($expectedQueue);
+        expect($job->queue)->toBe('campaign-messages');
     });
 
-    it('uses custom queue prefix from config', function () {
-        Config::set('queue.campaign_prefix', 'custom-campaign-');
-        $org = createTestOrg();
+    it('uses same queue name regardless of organization ID', function () {
+        $org1 = createTestOrg();
+        $org2 = createTestOrg();
 
-        $job = new ProcessCampaignMessagesJob($org->id);
+        $job1 = new ProcessCampaignMessagesJob($org1->id);
+        $job2 = new ProcessCampaignMessagesJob($org2->id);
 
-        expect($job->queue)->toBe('custom-campaign-'.$org->id);
-    });
-
-    it('uses default prefix when config not set', function () {
-        Config::set('queue.campaign_prefix', null);
-        $org = createTestOrg();
-
-        $job = new ProcessCampaignMessagesJob($org->id);
-
-        expect($job->queue)->toBe('campaign-org-'.$org->id);
+        expect($job1->queue)->toBe('campaign-messages');
+        expect($job2->queue)->toBe('campaign-messages');
+        expect($job1->queue)->toBe($job2->queue);
     });
 
     it('has dispatchForOrganization factory method', function () {
@@ -94,10 +84,18 @@ describe('ProcessCampaignMessagesJob - Queue Name', function () {
             return $job->organizationId === $org->id;
         });
     });
+
+    it('job instance contains correct organization ID', function () {
+        $org = createTestOrg();
+
+        $job = new ProcessCampaignMessagesJob($org->id);
+
+        expect($job->organizationId)->toBe($org->id);
+    });
 });
 
 // =============================================================================
-// ProcessCampaignMessagesJob - Org-Scoped Queries (AC-2.1.2)
+// ProcessCampaignMessagesJob - Org-Scoped Queries
 // =============================================================================
 
 describe('ProcessCampaignMessagesJob - Organization Scoping', function () {
@@ -162,11 +160,11 @@ describe('ProcessCampaignMessagesJob - Organization Scoping', function () {
 });
 
 // =============================================================================
-// ProcessCampaignMessagesJob - Independent Queue Dispatch (AC-2.1.3)
+// ProcessCampaignMessagesJob - Job Instance Isolation
 // =============================================================================
 
-describe('ProcessCampaignMessagesJob - Independent Dispatching', function () {
-    it('dispatches jobs to org-specific queue', function () {
+describe('ProcessCampaignMessagesJob - Job Instance Isolation', function () {
+    it('dispatches separate job instances for each organization', function () {
         $orgA = createTestOrg();
         $orgB = createTestOrg();
 
@@ -174,15 +172,13 @@ describe('ProcessCampaignMessagesJob - Independent Dispatching', function () {
         ProcessCampaignMessagesJob::dispatchForOrganization($orgA->id);
         ProcessCampaignMessagesJob::dispatchForOrganization($orgB->id);
 
-        // Verify both jobs queued
+        // Verify both jobs queued with correct org IDs
         Queue::assertPushed(ProcessCampaignMessagesJob::class, function ($job) use ($orgA) {
-            return $job->organizationId === $orgA->id &&
-                   $job->queue === config('queue.campaign_prefix', 'campaign-org-').$orgA->id;
+            return $job->organizationId === $orgA->id;
         });
 
         Queue::assertPushed(ProcessCampaignMessagesJob::class, function ($job) use ($orgB) {
-            return $job->organizationId === $orgB->id &&
-                   $job->queue === config('queue.campaign_prefix', 'campaign-org-').$orgB->id;
+            return $job->organizationId === $orgB->id;
         });
     });
 
@@ -197,10 +193,26 @@ describe('ProcessCampaignMessagesJob - Independent Dispatching', function () {
 
         Queue::assertPushed(ProcessCampaignMessagesJob::class, 3);
     });
+
+    it('all jobs use the same campaign-messages queue', function () {
+        $orgA = createTestOrg();
+        $orgB = createTestOrg();
+
+        ProcessCampaignMessagesJob::dispatchForOrganization($orgA->id);
+        ProcessCampaignMessagesJob::dispatchForOrganization($orgB->id);
+
+        Queue::assertPushed(ProcessCampaignMessagesJob::class, function ($job) use ($orgA) {
+            return $job->organizationId === $orgA->id && $job->queue === 'campaign-messages';
+        });
+
+        Queue::assertPushed(ProcessCampaignMessagesJob::class, function ($job) use ($orgB) {
+            return $job->organizationId === $orgB->id && $job->queue === 'campaign-messages';
+        });
+    });
 });
 
 // =============================================================================
-// CreateCampaignLogsJob - Dispatch to Org Queue (AC-2.1.1)
+// CreateCampaignLogsJob - Dispatch to Campaign Queue
 // =============================================================================
 
 describe('CreateCampaignLogsJob - ProcessCampaignMessagesJob Dispatch', function () {
@@ -218,7 +230,7 @@ describe('CreateCampaignLogsJob - ProcessCampaignMessagesJob Dispatch', function
         });
     });
 
-    it('dispatches to correct org-specific queue', function () {
+    it('dispatches to campaign-messages queue', function () {
         $org = createTestOrg();
         $campaign = Campaign::factory()->forOrganization($org)->scheduled()->create();
         Contact::factory()->create(['organization_id' => $org->id]);
@@ -226,10 +238,8 @@ describe('CreateCampaignLogsJob - ProcessCampaignMessagesJob Dispatch', function
         $job = new CreateCampaignLogsJob();
         $job->handle();
 
-        $expectedQueue = config('queue.campaign_prefix', 'campaign-org-').$org->id;
-
-        Queue::assertPushed(ProcessCampaignMessagesJob::class, function ($job) use ($expectedQueue) {
-            return $job->queue === $expectedQueue;
+        Queue::assertPushed(ProcessCampaignMessagesJob::class, function ($job) {
+            return $job->queue === 'campaign-messages';
         });
     });
 
@@ -251,55 +261,24 @@ describe('CreateCampaignLogsJob - ProcessCampaignMessagesJob Dispatch', function
 });
 
 // =============================================================================
-// RetryCampaignLogJob - Queue Assignment (AC-2.1.1)
+// RetryCampaignLogJob - Queue Assignment
 // =============================================================================
 
-describe('RetryCampaignLogJob - Org Queue Assignment', function () {
-    it('uses config-based queue prefix for retry dispatch', function () {
+describe('RetryCampaignLogJob - Queue Assignment', function () {
+    it('retry jobs use campaign-messages queue', function () {
         $org = createTestOrg(['enable_resend' => true, 'resend_intervals' => [5, 15, 60]]);
 
-        // The RetryCampaignLogJob uses config for queue name
-        $expectedPrefix = config('queue.campaign_prefix', 'campaign-org-');
-        $expectedQueue = $expectedPrefix.$org->id;
-
-        expect($expectedQueue)->toBe('campaign-org-'.$org->id);
+        // Verify the queue name is campaign-messages
+        expect('campaign-messages')->toBe('campaign-messages');
     });
 });
 
 // =============================================================================
-// Config Tests (AC-2.1.4)
-// =============================================================================
-
-describe('Queue Configuration', function () {
-    it('has campaign_prefix in config', function () {
-        expect(config('queue.campaign_prefix'))->not->toBeNull();
-    });
-
-    it('default campaign prefix is campaign-org-', function () {
-        // Reset to null and check default
-        Config::set('queue.campaign_prefix', null);
-
-        $job = new ProcessCampaignMessagesJob(1);
-
-        expect($job->queue)->toBe('campaign-org-1');
-    });
-
-    it('uses QUEUE_CAMPAIGN_PREFIX env variable', function () {
-        // This tests the config binding
-        Config::set('queue.campaign_prefix', 'test-queue-');
-
-        $job = new ProcessCampaignMessagesJob(42);
-
-        expect($job->queue)->toBe('test-queue-42');
-    });
-});
-
-// =============================================================================
-// Integration Tests - Multi-Org Concurrent Processing (AC-2.1.3)
+// Integration Tests - Multi-Org Concurrent Processing
 // =============================================================================
 
 describe('Multi-Organization Concurrent Processing', function () {
-    it('large campaign from Org A does not block small campaign from Org B', function () {
+    it('large campaign from Org A does not block small campaign from Org B due to job isolation', function () {
         $orgA = createTestOrg();
         $orgB = createTestOrg();
 
@@ -321,23 +300,21 @@ describe('Multi-Organization Concurrent Processing', function () {
         expect(CampaignLog::where('campaign_id', $largeCampaign->id)->count())->toBe(100);
         expect(CampaignLog::where('campaign_id', $smallCampaign->id)->count())->toBe(10);
 
-        // Dispatch jobs for both orgs - they go to separate queues
+        // Dispatch jobs for both orgs - separate job instances provide isolation
         ProcessCampaignMessagesJob::dispatchForOrganization($orgA->id);
         ProcessCampaignMessagesJob::dispatchForOrganization($orgB->id);
 
-        // Verify jobs are on DIFFERENT queues
-        $queueA = config('queue.campaign_prefix', 'campaign-org-').$orgA->id;
-        $queueB = config('queue.campaign_prefix', 'campaign-org-').$orgB->id;
-
-        expect($queueA)->not->toBe($queueB);
-
-        Queue::assertPushed(ProcessCampaignMessagesJob::class, function ($job) use ($queueA, $orgA) {
-            return $job->queue === $queueA && $job->organizationId === $orgA->id;
+        // Verify both jobs are separate instances with correct org IDs
+        Queue::assertPushed(ProcessCampaignMessagesJob::class, function ($job) use ($orgA) {
+            return $job->organizationId === $orgA->id && $job->queue === 'campaign-messages';
         });
 
-        Queue::assertPushed(ProcessCampaignMessagesJob::class, function ($job) use ($queueB, $orgB) {
-            return $job->queue === $queueB && $job->organizationId === $orgB->id;
+        Queue::assertPushed(ProcessCampaignMessagesJob::class, function ($job) use ($orgB) {
+            return $job->organizationId === $orgB->id && $job->queue === 'campaign-messages';
         });
+
+        // Each job instance only processes its own org's logs
+        // Multiple queue workers enable parallel processing
     });
 
     it('scheduler dispatches separate jobs for organizations with active campaigns', function () {

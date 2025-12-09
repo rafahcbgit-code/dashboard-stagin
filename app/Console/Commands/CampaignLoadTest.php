@@ -183,7 +183,7 @@ class CampaignLoadTest extends Command
             $organizations->push($org);
             $this->metrics['organizations'][$org->id] = [
                 'name' => $org->name,
-                'queue' => 'campaign-org-'.$org->id,
+                'queue' => 'campaign-messages',
             ];
 
             $this->output->write('.');
@@ -376,10 +376,7 @@ class CampaignLoadTest extends Command
         $this->newLine();
         $this->info('Dispatched campaigns for '.count($organizations).' organizations.');
         $this->warn('Note: Queue workers must be running to process campaigns.');
-        $this->warn('Run: php artisan queue:work --queue='.implode(',', array_map(
-            fn ($org) => 'campaign-org-'.$org->id,
-            $organizations->toArray()
-        )).',default');
+        $this->warn('Run: php artisan queue:work --queue=campaign-messages,default');
     }
 
     /**
@@ -845,7 +842,7 @@ class CampaignLoadTest extends Command
         $this->line("2. Create {$contactCount} contacts per organization");
         $this->line("3. Create {$orgCount} campaigns (one per org)");
         $this->line('4. Create '.($orgCount * $contactCount).' campaign logs total');
-        $this->line('5. Dispatch to queues: '.implode(', ', array_map(fn ($i) => "campaign-org-{$i}", range(1, $orgCount))));
+        $this->line('5. Dispatch to queue: campaign-messages');
         $this->line('6. Monitor progress until completion');
         $this->line('7. Verify data integrity');
         $this->line('8. Report results');
@@ -868,7 +865,7 @@ class CampaignLoadTest extends Command
                 $org->name,
                 $org->id,
                 $campaigns->firstWhere('organization_id', $org->id)?->uuid ?? 'N/A',
-                'campaign-org-'.$org->id,
+                'campaign-messages',
             ])->toArray()
         );
 

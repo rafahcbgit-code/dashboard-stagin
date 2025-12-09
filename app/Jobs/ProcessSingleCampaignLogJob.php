@@ -155,10 +155,8 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
                     $delayHours = $retryIntervals[$retryCount] ?? null;
 
                     if ($delayHours !== null) {
-                        // Dispatch to org-specific queue (Task 2.1: AC-2.1.1)
-                        $orgQueue = config('queue.campaign_prefix', 'campaign-org-').$campaign->organization_id;
                         RetryCampaignLogJob::dispatch($campaign->organization_id, $log->id, $retryCount)
-                            ->onQueue($orgQueue)
+                            ->onQueue('campaign-messages')
                             ->delay(now()->addMinutes($delayHours));
                     }
                 }

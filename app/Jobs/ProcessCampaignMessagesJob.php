@@ -31,7 +31,7 @@ class ProcessCampaignMessagesJob implements ShouldQueue
     public function __construct(
         public int $organizationId
     ) {
-        $this->queue = (config('queue.campaign_prefix') ?? 'campaign-org-').$this->organizationId;
+        $this->queue = 'campaign-messages';
     }
 
     /**

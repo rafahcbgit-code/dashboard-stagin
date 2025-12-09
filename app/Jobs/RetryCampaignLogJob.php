@@ -152,10 +152,8 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
     {
         if ($this->retryIndex + 1 < $maxRetries && isset($intervals[$this->retryIndex + 1])) {
             $nextInterval = $intervals[$this->retryIndex + 1];
-            // Dispatch to org-specific queue (Task 2.1: AC-2.1.1)
-            $orgQueue = config('queue.campaign_prefix', 'campaign-org-').$this->organizationId;
             self::dispatch($this->organizationId, $log->id, $this->retryIndex + 1)
-                ->onQueue($orgQueue)
+                ->onQueue('campaign-messages')
                 ->delay(now()->addMinutes($nextInterval));
         }
     }
