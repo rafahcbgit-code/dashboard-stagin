@@ -7,6 +7,7 @@ use App\Models\Contact;
 use App\Models\Organization;
 use App\Services\WhatsappService;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 use Modules\FlowBuilder\Models\Flow;
 use Modules\FlowBuilder\Models\FlowLog;
 use Modules\FlowBuilder\Models\FlowMedia;
@@ -46,7 +47,102 @@ class FlowExecutionService
      * @param string $message
      * @return FlowStep|null
      */
+
     public function executeFlow($chat, $isNewContact, $message)
+{ 
+    if(CustomHelper::isModuleEnabled('Flow builder', $chat->organization_id)){
+        
+        $flowData = FlowUserData::where('contact_id', $chat->contact_id)->first();
+        $flowId = null;
+
+        if($flowData && $flowData->exists){
+            $flow = Flow::find($flowData->flow_id);
+            
+            if(!$flow){
+                Log::warning("DELETION POINT 1: Flow not found, deleting FlowUserData for contact {$chat->contact_id}");
+                FlowUserData::where('contact_id', $chat->contact_id)->delete();
+                $flowData = null;
+            } else {
+                $flowId = $flowData->flow_id;
+                $result = $this->processFlow($chat, $isNewContact, $flowData, $chat->contact_id, strtolower(trim($message)));
+                
+                if ($result === 'validation_failed' || $result === 'delayed') {
+                    return false; 
+                }
+                
+                return $result;
+            }
+        }
+
+        if(!$flowData){
+            $msg = strtolower(trim($message)); 
+            $flowQuery = Flow::where('organization_id', $chat->organization_id)->where('status', 'active');
+            $flow = null;
+
+            if($isNewContact){
+                $flow = $flowQuery->where('trigger', 'new_contact')->first();
+            } 
+            
+            if(!$flow){        
+                Log::warning("inside exact_match");
+                
+           
+                $flow = (clone $flowQuery)
+                    ->where('trigger', 'exact_match')
+                    ->where('keywords', $msg) 
+                    ->first();
+
+                    Log::warning("Exact match flow search for message '{$msg}': " . ($flow ? "found flow ID {$flow->id}" : "no match found"));
+                
+            }
+            if (!$flow) {
+
+                Log::warning("inside keywords");
+                $words = explode(' ', $msg); 
+                $conditions = [];
+                $bindings = [];
+
+                $conditions[] = "FIND_IN_SET(?, keywords)";
+                $bindings[] = $msg; 
+
+                foreach ($words as $word) {
+                    $word = strtolower(trim($word));
+                    $conditions[] = "FIND_IN_SET(?, keywords)";
+                    $bindings[] = $word;
+                }
+
+                $flow = DB::table('flows')->whereRaw(
+                    '( `trigger` = ? AND organization_id = ?) AND (' . implode(' OR ', $conditions) . ')',
+                    array_merge(['keywords', $chat->organization_id], $bindings)
+                )->first();
+            }
+
+            if ($flow) {
+                $flowId = $flow->id;
+            }
+
+            if ($flowId) {
+                $flowData = new FlowUserData();
+                $flowData->fill([
+                    'contact_id' => $chat->contact_id,
+                    'flow_id' => $flowId,
+                    'current_step' => 1
+                ])->save();
+                
+                $result = $this->processFlow($chat, $isNewContact, $flowData, $chat->contact_id, $msg);
+                
+                if ($result === 'validation_failed' || $result === 'delayed') {
+                    return false; 
+                }
+                
+                return $result;
+            }
+        }
+
+        return false;
+    }
+}
+    /*public function executeFlow($chat, $isNewContact, $message)
     {
         if(CustomHelper::isModuleEnabled('Flow builder', $chat->organization_id)){
             // Find the current step for the user in the flow
@@ -149,7 +245,7 @@ class FlowExecutionService
 
             return false;
         }
-    }
+    }*/
 
     public function hasActiveFlow($chat){
         $activeFlow = FlowUserData::where('contact_id', $chat->contact_id)->first();
