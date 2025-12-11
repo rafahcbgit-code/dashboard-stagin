@@ -70,6 +70,7 @@ class ContactService
             'first_name' => $firstName,
             'last_name' => $lastName,
             'is_subscribed' => 1,
+            'bot_enable' => 1,
             'created_by' => 0, // System created
             'created_at' => now(),
             'updated_at' => now(),
