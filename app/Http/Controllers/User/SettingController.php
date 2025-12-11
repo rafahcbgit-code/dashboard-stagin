@@ -591,6 +591,15 @@ public function campaign(Request $request)
                 'buttons' => [],
             ];
         }
+
+        if (!isset($metadata['working_hour_reply'])) {
+            $metadata['working_hour_reply'] = [
+                'active'  => 0,
+                'message' => '',
+                'buttons' => [],
+            ];
+        }
+
         $settings->metadata = json_encode($metadata, JSON_UNESCAPED_UNICODE);
 
         return Inertia::render('User/Settings/GlobalReply', [
@@ -651,6 +660,59 @@ public function campaign(Request $request)
             ]
         );
     }
+
+        public function updateAfterHoursReply(Request $request){
+        // Validation
+        $rules = [
+            'active'                 => ['required', 'boolean'],
+            'message'                => ['required_if:active,1', 'nullable', 'string', 'max:1000'],
+            'buttons'                => ['required_if:active,1', 'array', 'min:1', 'max:3'],
+            'buttons.*.title'        => ['required', 'string', 'max:20'],
+            //  'buttons.*.payload'      => ['required', 'string', 'max:256'],
+        ];
+
+        $messages = [
+            'buttons.required_if' => __('At least one button is required when global reply is active.'),
+            'buttons.min'         => __('Add at least one button.'),
+            'buttons.max'         => __('Maximum 3 buttons allowed.'),
+        ];
+
+        $this->validate($request, $rules, $messages);
+
+        $organizationId   = session()->get('current_organization');
+        $organization     = Organization::where('id', $organizationId)->firstOrFail();
+        $metadataArray    = $organization->metadata ? json_decode($organization->metadata, true) : [];
+
+        // Sanitize & clamp to 3 buttons
+        $buttons = collect($request->input('buttons', []))
+            ->take(3)
+            ->map(function ($btn) {
+                return [
+                    'title'   => trim(mb_substr((string)($btn['title'] ?? ''), 0, 20)),
+                    'payload' => trim(mb_substr((string)($btn['title'] ?? ''), 0, 256)),
+                ];
+            })
+            ->values()
+            ->all();
+
+        $metadataArray['working_hour_reply'] = [
+            'active'  => $request->boolean('active') ? 1 : 0,
+            'message' => trim((string)$request->input('message', '')),
+            'buttons' => $buttons,
+        ];
+
+        $organization->metadata = json_encode($metadataArray, JSON_UNESCAPED_UNICODE);
+        $organization->save();
+
+        return back()->with(
+            'status',
+            [
+                'type'    => 'success',
+                'message' => __('Working Hour reply settings updated successfully.'),
+            ]
+        );
+    }
+
 
     public function labels(Request $request){
         $organizationId = session()->get('current_organization');
