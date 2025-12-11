@@ -43,12 +43,9 @@ class DashboardController extends BaseController
         $data['subscription'] = Subscription::with('plan')->where('organization_id', $organizationId)->first();
         $data['subscriptionDetails'] = SubscriptionService::calculateSubscriptionBillingDetails($organizationId, $data['subscription']->plan_id);
         $data['subscriptionIsActive'] = SubscriptionService::isSubscriptionActive($organizationId);
-        $data['chatCount'] = Chat::where('organization_id', $organizationId)
-            ->whereNull('deleted_at')
-            ->whereHas('contact', function ($query) {
-                $query->whereNull('deleted_at');
-            })
-            ->count();
+        //$data['chatCount'] = $this->chatCount($organizationId);
+        $data['chatCount'] = $this->chatCount($organizationId);
+        
         $data['campaignCount'] = Campaign::where('organization_id', $organizationId)->whereNull('deleted_at')->count();
         $data['contactCount'] = Contact::where('organization_id', $organizationId)->whereNull('deleted_at')->count();
         $data['templateCount'] = Template::where('organization_id', $organizationId)->whereNull('deleted_at')->count();
@@ -68,6 +65,7 @@ class DashboardController extends BaseController
         $data['period'] = $this->period();
         $data['inbound'] = $this->getChatCounts('inbound');
         $data['outbound'] = $this->getChatCounts('outbound');
+       
         $data['embeddedSignupActive'] = CustomHelper::isModuleEnabled('Embedded Signup');
         $data['appId'] = $settings->get('whatsapp_client_id', null);
         $data['configId'] = $settings->get('whatsapp_config_id', null);
@@ -114,7 +112,7 @@ class DashboardController extends BaseController
         return $dateArray;
     }
 
-    private function getChatCounts($type){
+    /*private function getChatCounts($type){
         $organizationId = session()->get('current_organization');
         $chatCounts = [];
 
@@ -129,5 +127,46 @@ class DashboardController extends BaseController
         }
 
         return $chatCounts;
+    }*/
+
+     private function getChatCounts($type) {
+        $organizationId = session()->get('current_organization');
+        $period = $this->period(); 
+
+        $startDate = Carbon::parse($period[0])->startOfDay();
+        $endDate   = Carbon::parse(end($period))->endOfDay();
+
+        $stats = Chat::where('organization_id', $organizationId)
+            ->where('type', $type)
+            ->whereNull('deleted_at')
+            ->whereBetween('created_at', [$startDate, $endDate])
+            ->selectRaw('DATE(created_at) as date, COUNT(*) as count') 
+            ->groupBy('date')
+            ->pluck('count', 'date'); 
+
+        $chatCounts = [];
+        foreach ($period as $dateString) {
+            $dateKey = Carbon::parse($dateString)->format('Y-m-d');
+            
+            $chatCounts[] = $stats[$dateKey] ?? 0;
+        }
+
+        return $chatCounts;
+}
+
+    private function chatCount($organizationId){
+         return Chat::query()
+                ->join('contacts', 'chats.contact_id', '=', 'contacts.id') 
+                ->where('chats.organization_id', $organizationId)
+                ->whereNull('chats.deleted_at')    
+                ->whereNull('contacts.deleted_at')   
+                ->count();
+
+                /*Chat::where('organization_id', $organizationId)
+            ->whereNull('deleted_at')
+            ->whereHas('contact', function ($query) {
+                $query->whereNull('deleted_at');
+            })
+            ->count();*/
     }
 }

@@ -57,6 +57,50 @@
                         </div>
                     </div>
 
+                    <div class="bg-white border border-slate-200 rounded-lg py-2 text-sm mb-4">
+                        <div class="px-4 pt-2 pb-4">
+                            <h2 class="text-[17px]">{{ $t('Working Hours') }}</h2>
+                            <span class="flex items-center mt-1">
+                                <svg class="mr-2" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11v5m0 5a9 9 0 1 1 0-18a9 9 0 0 1 0 18Zm.05-13v.1h-.1V8h.1Z"/></svg>
+                                {{ $t('Set your business working hours') }}
+                            </span>
+                        </div>
+                        <div class="flex space-s-10 w-full px-4 py-6 border-b">
+                            <div class="w-[80%]">
+                                <span class="text-slate-600">{{ $t('Enable working hours') }}</span>
+                                <div class="text-xs text-slate-700 flex items-center">
+                                    <svg class="mr-1" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11v5m0 5a9 9 0 1 1 0-18a9 9 0 0 1 0 18Zm.05-13v.1h-.1V8h.1Z"/></svg>
+                                    <span>{{ $t('Define your business operating hours') }}</span>
+                                </div>
+                            </div>
+                            <div class="w-[20%] flex justify-end">
+                                <FormToggleSwitch v-model="form2.enable_working_hours" />
+                            </div>
+                        </div>
+                        <div v-if="form2.enable_working_hours === true" class="w-full px-4 py-6">
+                            <div class="space-y-4">
+                                <div v-for="(day, index) in workingDays" :key="index" class="flex items-center space-x-4 pb-4 border-b last:border-b-0">
+                                    <div class="w-[15%]">
+                                        <div class="flex items-center">
+                                            <input type="checkbox" :id="`day-${index}`" v-model="form2.working_hours[index].active" class="rounded border-gray-300" />
+                                            <label :for="`day-${index}`" class="ml-2 text-slate-600 cursor-pointer font-medium">{{ $t(day) }}</label>
+                                        </div>
+                                    </div>
+                                    <div v-if="form2.working_hours[index].active" class="flex-1 flex items-center space-x-4">
+                                        <div class="flex-1">
+                                            <label class="block text-xs text-slate-600 mb-1">{{ $t('From') }}</label>
+                                            <input type="time" v-model="form2.working_hours[index].from" class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"/>
+                                        </div>
+                                        <div class="flex-1">
+                                            <label class="block text-xs text-slate-600 mb-1">{{ $t('To') }}</label>
+                                            <input type="time" v-model="form2.working_hours[index].to" class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"/>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                     <div class="bg-white border border-slate-200 rounded-lg py-2 text-sm pb-4 mb-4">
                         <div class="px-4 pt-2 pb-4">
                             <h2 class="text-[17px]">{{ $t('Notifications') }}</h2>
@@ -223,6 +267,22 @@
         }));
     };
 
+    const workingDays = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+    const initializeWorkingHours = () => {
+        const defaultWorkingHours = workingDays.map((day, index) => ({
+            day: day,
+            active: index < 5, // تفعيل أيام الأسبوع بشكل افتراضي (الاثنين إلى الجمعة)
+            from: '09:00',
+            to: '17:00'
+        }));
+
+        if (settings.value && settings.value.working_hours) {
+            return settings.value.working_hours;
+        }
+        return defaultWorkingHours;
+    };
+
     const getAddressDetail = (value, key) => {
         if(value){
             const address = JSON.parse(value);
@@ -240,6 +300,8 @@
         zip: getAddressDetail(props.settings?.address, 'zip'),
         country: getAddressDetail(props.settings?.address, 'country'),
         timezone:  settings.value && settings.value.timezone ? settings.value.timezone : 'UTC',
+        enable_working_hours: settings.value && settings.value.working_hours ? true : false,
+        working_hours: initializeWorkingHours(),
         enable_sound_notification: settings.value && settings.value.notifications ? settings.value.notifications.enable_sound : false,
         volume: settings.value && settings.value.notifications ? settings.value.notifications.volume : 1,
         tone: settings.value && settings.value.notifications ? settings.value.notifications.tone : null,

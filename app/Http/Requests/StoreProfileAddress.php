@@ -33,6 +33,12 @@ class StoreProfileAddress extends FormRequest
             'resend_intervals' => 'nullable|array',
             'resend_intervals.*' => 'integer|min:1|max:24',
             'failed_campaign_group' => 'required_if:move_failed_contacts_to_group,true|nullable|exists:contact_groups,uuid',
+            'working_hours' => 'array',
+            'working_hours.*.day' => 'required|string',
+            'working_hours.*.active' => 'boolean',
+            'working_hours.*.from' => 'nullable|date_format:H:i',
+            'working_hours.*.to' => 'nullable|date_format:H:i',
+
         ];
 
         return $rules;
