@@ -32,9 +32,10 @@ class Kernel extends ConsoleKernel
             foreach ($activeOrgIds as $orgId) {
                 ProcessCampaignMessagesJob::dispatchForOrganization($orgId);
             }
-        })->everyTwoMinutes()
-            ->withoutOverlapping()
-            ->name('process-campaign-messages-per-org');
+        })
+        ->name('process-campaign-messages-per-org')
+        ->everyTwoMinutes()
+        ->withoutOverlapping();
 
         // Process missed status updates every 3 minutes
         $schedule->job(new \App\Jobs\ProcessMissedStatusUpdatesJob(), 'webhook-status')
