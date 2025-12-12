@@ -1,11 +1,13 @@
 <?php
 
 /**
+ * WebhookPerformanceTest - Story 1.6 Performance Validation Tests
  *
  * Tests for performance acceptance criteria:
  * - AC-1.6.1: 100 webhooks in 60 seconds all return HTTP 200 within 200ms
  * - AC-1.6.3: Zero messages lost or duplicated
  *
+ * @see docs/sprint-artifacts/1-6-webhook-load-testing-and-validation.md
  */
 
 use App\Jobs\Webhook\ProcessWebhookJob;

@@ -11,6 +11,10 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (Schema::hasTable('webhook_failures')) {
+            return; // Table already exists
+        }
+
         Schema::create('webhook_failures', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('organization_id')->index();
