@@ -121,10 +121,15 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
     {
         $campaign = Campaign::find($campaignId);
 
-        // Task 2.2: AC-2.2.2 - Use cached metadata instead of loading via relationship
+        if (! $campaign || $campaign->status !== 'ongoing') {
+            return;
+        }
+
+        // Use cached metadata instead of loading via relationship
         $orgMetadata = OrganizationService::getCachedMetadata($this->organizationId);
         $retryEnabled = $orgMetadata['campaigns']['enable_resend'] ?? false;
         $retryIntervals = $orgMetadata['campaigns']['resend_intervals'] ?? [];
+        $maxRetries = count($retryIntervals);
 
         $pendingOrOngoing = CampaignLog::where('campaign_id', $campaignId)
             ->whereIn('status', ['pending', 'ongoing'])
@@ -134,42 +139,42 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
             return; // Still processing logs
         }
 
+        // Track if any failed logs can still be retried
+        $hasRetriableLogs = false;
+
         if ($retryEnabled) {
-            // Task 2.8: AC-2.8.4 - Use withCount('retries') to avoid N+1 query pattern
-            $logs = CampaignLog::where('campaign_id', $campaignId)
+            // Use withCount('retries') to avoid N+1 query pattern
+            $failedLogs = CampaignLog::where('campaign_id', $campaignId)
+                ->where('status', 'failed')
                 ->withCount('retries')
                 ->get();
 
-            foreach ($logs as $log) {
-                // Task 2.8: AC-2.8.1 - Use pre-loaded retries_count instead of N+1 query
+            foreach ($failedLogs as $log) {
                 $retryCount = $log->retries_count;
-                $maxRetries = count($retryIntervals);
 
                 // Skip if already retried max times
                 if ($retryCount >= $maxRetries) {
                     continue;
                 }
 
-                // If log failed and hasn't reached max retries, schedule retry
-                if ($log->status === 'failed' && $retryCount < $maxRetries) {
-                    $delayHours = $retryIntervals[$retryCount] ?? null;
+                // This log can still be retried
+                $hasRetriableLogs = true;
 
-                    if ($delayHours !== null) {
-                        RetryCampaignLogJob::dispatch($campaign->organization_id, $log->id, $retryCount)
-                            ->onQueue('campaign-messages')
-                            ->delay(now()->addMinutes($delayHours));
-                    }
+                // Schedule retry job
+                $delayMinutes = $retryIntervals[$retryCount] ?? null;
+
+                if ($delayMinutes !== null) {
+                    RetryCampaignLogJob::dispatch($campaign->organization_id, $log->id, $retryCount)
+                        ->onQueue('campaign-messages')
+                        ->delay(now()->addMinutes($delayMinutes));
                 }
             }
-        } else {
-            // Check again after potential changes
-            $unprocessed = CampaignLog::where('campaign_id', $campaignId)
-                ->whereIn('status', ['pending', 'ongoing'])
-                ->exists();
+        }
 
-            if (! $unprocessed) {
-                $campaign->update(['status' => 'completed']);
-            }
+        // Mark campaign as completed if no pending/ongoing logs AND no retriable failed logs
+        if (! $hasRetriableLogs) {
+            $campaign->update(['status' => 'completed']);
+            Log::info("Campaign {$campaignId} marked as completed.");
         }
     }
 
