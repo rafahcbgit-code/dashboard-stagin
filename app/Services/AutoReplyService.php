@@ -16,11 +16,18 @@ use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\ValidationException;
-use DB;
+use Illuminate\Support\Facades\DB;
 use Validator;
-
+use App\Models\ChatSystemMessage;
+use App\Services\WorkingHoursService;
 class AutoReplyService
 {
+    protected $workingHoursService;
+    
+    public function __construct(){
+        $this->workingHoursService = new WorkingHoursService();
+    }
+    
     public function getRows(object $request)
     {
         $organizationId = session()->get('current_organization');
@@ -107,7 +114,7 @@ class AutoReplyService
     }
 
     public function checkAutoReply(Chat $chat, $isNewContact)
-    {
+    {Log::warning(' inside checkAutoReply');
         $organizationId = $chat->organization_id;
 
         $this->replySequence($organizationId, $chat, $isNewContact);
@@ -205,9 +212,10 @@ class AutoReplyService
                 }
             }
         }
+        $isWithinWorkingHours = $this->workingHoursService->isWithinWorkingHours($organizationId);
 
         // NEW: Check for global reply if no auto-reply matched
-        if ($this->sendGlobalReply($chat)) {
+        if ($this->sendGlobalReply($chat) && $isWithinWorkingHours) {
             return true;
         }
 
@@ -451,4 +459,156 @@ class AutoReplyService
         
         return true;
     }
+
+    private function alreadySentOutsideWorkingHours(Chat $chat): bool
+{
+    try {
+        // Get the last system message of type "outside_working_hours" for this contact
+        $last = ChatSystemMessage::where('contact_id', $chat->contact_id)
+            ->where('type', 'outside_working_hours')
+            ->orderByDesc('sent_at')
+            ->first();
+
+        // If no previous message exists, it was not sent before
+        if (! $last) {
+            return false;
+        }
+
+        // Return true only if:
+        // 1. The message was sent today
+        // 2. We are still outside working hours
+        return $last->sent_at->isToday()
+            && ! $this->workingHoursService
+                ->isWithinWorkingHours($chat->organization_id);
+
+    } catch (\Throwable $e) {
+        Log::warning('alreadySentOutsideWorkingHours check failed', [
+            'error' => $e->getMessage(),
+        ]);
+
+        return false;
+    }
+}
+
+
+public function sendOutsideWorkingHours($chat)
+{
+    try {
+        // Do not send anything if we are currently within working hours
+        if ($this->workingHoursService->isWithinWorkingHours($chat->organization_id)) {
+            Log::warning('sendOutsideWorkingHours skipped - within working hours', [
+                'organization_id' => $chat->organization_id,
+            ]);
+            return false;
+        }
+
+        // Do not resend the outside working hours message
+        // if it was already sent during the current outside-hours period
+        if ($this->alreadySentOutsideWorkingHours($chat)) {
+            Log::warning('sendOutsideWorkingHours skipped - already sent', [
+                'contact_id' => $chat->contact_id,
+            ]);
+            return false;
+        }
+
+        // Load organization and its metadata
+        $organization = Organization::find($chat->organization_id);
+        if (! $organization || ! $organization->metadata) {
+            Log::warning('sendOutsideWorkingHours aborted - organization or metadata missing', [
+                'organization_id' => $chat->organization_id,
+            ]);
+            return false;
+        }
+
+        $metadata = json_decode($organization->metadata, true);
+
+        // Validate working hour auto-reply configuration
+        if (
+            ! isset($metadata['working_hour_reply']) ||
+            ! ($metadata['working_hour_reply']['active'] ?? false) ||
+            empty($metadata['working_hour_reply']['message'])
+        ) {
+            Log::warning('sendOutsideWorkingHours aborted - working_hour_reply not configured or inactive', [
+                'organization_id' => $chat->organization_id,
+            ]);
+            return false;
+        }
+
+        $reply = $metadata['working_hour_reply'];
+
+        // Load contact
+        $contact = Contact::find($chat->contact_id);
+        if (! $contact) {
+            Log::warning('sendOutsideWorkingHours aborted - contact not found', [
+                'contact_id' => $chat->contact_id,
+            ]);
+            return false;
+        }
+
+        // Send WhatsApp message (interactive buttons or plain text)
+        if (! empty($reply['buttons'])) {
+            $buttons = [];
+
+            foreach ($reply['buttons'] as $button) {
+                $buttons[] = [
+                    'id'    => $button['payload'],
+                    'title' => $button['title'],
+                ];
+            }
+
+            $this->initializeWhatsappService($chat->organization_id)
+                ->sendMessage(
+                    $contact->uuid,
+                    $reply['message'],
+                    null,
+                    'interactive buttons',
+                    $buttons
+                );
+        } else {
+            $this->initializeWhatsappService($chat->organization_id)
+                ->sendMessage(
+                    $contact->uuid,
+                    $reply['message']
+                );
+        }
+
+        // Persist system message to prevent duplicate sends
+        try {
+            Log::channel('webhook')->info('Creating ChatSystemMessage (outside_working_hours)', [
+                'contact_id' => $chat->contact_id,
+            ]);
+
+            $created = ChatSystemMessage::create([
+                'contact_id' => $chat->contact_id,
+                'type'       => 'outside_working_hours',
+                'sent_at'    => now(),
+            ]);
+
+            Log::channel('webhook')->info('ChatSystemMessage created successfully', [
+                'id'         => $created->id ?? null,
+                'contact_id' => $created->contact_id ?? null,
+                'sent_at'    => $created->sent_at ?? null,
+            ]);
+        } catch (\Throwable $e) {
+            // Failing to save the system message should NOT block the user reply
+            Log::channel('webhook')->error('Failed to create ChatSystemMessage (outside_working_hours)', [
+                'error'      => $e->getMessage(),
+                'contact_id'=> $chat->contact_id,
+            ]);
+        }
+
+        return true;
+
+    } catch (\Throwable $e) {
+        // Catch any unexpected exception to avoid breaking the message flow
+        Log::channel('webhook')->error('sendOutsideWorkingHours failed unexpectedly', [
+            'chat_id'         => $chat->id ?? null,
+            'contact_id'      => $chat->contact_id ?? null,
+            'organization_id' => $chat->organization_id ?? null,
+            'error'           => $e->getMessage(),
+        ]);
+
+        return false;
+    }
+}
 }
