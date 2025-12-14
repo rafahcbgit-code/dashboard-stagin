@@ -1,7 +1,8 @@
 <template>
   <SettingLayout :modules="props.modules">
-    <div class="md:h-[90vh] flex justify-center">
-      <div class="md:w-[60em]">
+    <div class="flex justify-center overflow-auto h-[calc(100vh-64px)] pb-24">
+
+      <div class="md:w-[60em] min-h-full pb-24">
         <div class="bg-white border border-slate-200 rounded-lg py-2 text-sm mb-4">
           <div class="flex items-center justify-between px-4 pt-2 pb-4">
             <div>
@@ -18,7 +19,7 @@
 
           <form @submit.prevent="submit" class="px-4 pb-4">
             <!-- Active toggle -->
-            <div class="flex items-center space-x-3 mb-5">
+            <div class="flex items-center space-x-3 mb-1">
               <div
                 @click="form.active = form.active ? 0 : 1"
                 class="w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-300"
@@ -102,6 +103,88 @@
             </div>
           </form>
         </div>
+        <!-- After Hours Reply Settings -->
+        <div class="bg-white border border-slate-200 rounded-lg py-1 text-sm mb-4 px-4">
+          <div class="flex items-center justify-between px-4 pt-2 pb-4">
+            <div>
+              <h2 class="text-[17px]">{{ $t('After Hours Reply Settings') }}</h2>
+              <span class="flex items-center mt-1">
+                <svg class="mr-2" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24">
+                  <path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                        d="M12 11v5m0 5a9 9 0 1 1 0-18a9 9 0 0 1 0 18Zm.05-13v.1h-.1V8h.1Z"/>
+                </svg>
+                {{ $t('Auto-reply for messages received outside working hours (max 3 buttons).') }}
+              </span>
+            </div>
+          </div>
+
+          <form @submit.prevent="submitAfter" class="px-4 pb-4">
+            <!-- Active toggle -->
+            <div class="flex items-center space-x-3 mb-5">
+              <div
+                @click="toggleAfterActive"
+                class="w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-300"
+                :class="formAfter.active ? 'bg-green-500' : 'bg-gray-300'"
+              >
+                <div
+                  class="bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out"
+                  :class="formAfter.active ? 'translate-x-6' : 'translate-x-0'"
+                ></div>
+              </div>
+              <span class="text-sm">{{ $t('Active') }}</span>
+              <div v-if="formAfter.errors.active" class="text-xs text-red-600">{{ formAfter.errors.active }}</div>
+            </div>            
+            <!-- Message -->
+            <div class="mb-6">
+              <label class="block text-slate-600 mb-1">{{ $t('Reply message') }}</label>
+              <FormTextArea v-model="formAfter.message" :error="formAfter.errors.message" :name="''" :type="'text'" :class="'sm:col-span-6'"/>
+              <p class="text-xs text-slate-500 mt-1">{{ $t('Shown above your buttons in WhatsApp.') }}</p>
+            </div>
+
+            <!-- Buttons -->
+            <div class="mb-3">
+              <div class="flex items-center justify-between mb-2">
+                <label class="text-slate-600">{{ $t('Interactive buttons') }}</label>
+                <button
+                  type="button"
+                  class="bg-primary text-white text-xs px-3 py-1 rounded hover:shadow disabled:opacity-50"
+                  @click="addButtonAfter"
+                  :disabled="formAfter.buttons.length >= 3"
+                >
+                  + {{ $t('Add button') }}
+                </button>
+              </div>
+
+              <div v-if="formAfter.errors.buttons" class="text-xs text-red-600 mb-2">{{ formAfter.errors.buttons }}</div>
+
+              <div v-for="(button, i) in formAfter.buttons" :key="i" class="grid grid-cols-6 gap-3 mb-3 items-center">
+                <div class="col-span-80">
+                  <FormInput v-model="button.title" :error="formAfter.errors[`buttons.${i}.title`]" :name="$t('Title')" :type="'text'"/>
+                  <p class="text-[11px] text-slate-500 mt-1">{{ $t('Max 20 chars') }}</p>
+                </div>
+
+                <div class="col-span-6 flex justify-end">
+                  <button type="button" class="text-red-600 text-xs" @click="removeButtonAfter(i)">
+                    {{ $t('Remove') }}
+                  </button>
+                </div>
+              </div>
+
+              <p class="text-xs text-slate-500">
+                {{ $t('At least 1 and at most 3 buttons when active.') }}
+              </p>
+            </div>
+
+            <!-- Save -->
+            <div class="mt-6 mb-6">
+              <div class="mt-6 mb-6 sticky bottom-0 bg-white py-4">
+  <button type="submit" class="rounded-md bg-primary px-3 py-2 text-sm text-white shadow-sm">
+    {{ $t('Save') }}
+  </button>
+</div>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
   </SettingLayout>
@@ -113,7 +196,9 @@ import FormInput from "@/Components/FormInput.vue";
 import FormTextArea from "@/Components/FormTextArea.vue";
 import { useForm } from "@inertiajs/vue3";
 import { ref } from "vue";
+import { useI18n } from 'vue-i18n';
 
+const { t } = useI18n();
 const props = defineProps(['settings','modules']);
 const raw = ref(props.settings.metadata);
 const config = ref(raw.value ? JSON.parse(raw.value) : {});
@@ -125,6 +210,16 @@ const form = useForm({
   buttons: Array.isArray(initial.buttons) ? initial.buttons : [],
 });
 
+// After Hours / Out of working hours reply
+// NOTE: backend stores this under the key `working_hour_reply` (typo kept for compatibility)
+const initialAfter = config.value?.working_hour_reply ?? { active: 0, message: '', buttons: [] };
+
+const formAfter = useForm({
+  active: initialAfter.active ? 1 : 0,
+  message: initialAfter.message || '',
+  buttons: Array.isArray(initialAfter.buttons) ? initialAfter.buttons : [],
+});
+
 function addButton() {
   if (form.buttons.length < 3) form.buttons.push({ title: '', payload: '' });
 }
@@ -133,5 +228,25 @@ function removeButton(i) {
 }
 function submit() {
   form.post('/settings/global-reply', { preserveScroll: true });
+}
+function addButtonAfter() {
+  if (formAfter.buttons.length < 3) formAfter.buttons.push({ title: '', payload: '' });
+}
+function removeButtonAfter(i) {
+  formAfter.buttons.splice(i, 1);
+}
+function submitAfter() {
+  formAfter.post('/settings/after-hours-reply', { preserveScroll: true });
+}
+
+// Toggle After Hours active state only when working hours are enabled in config
+function toggleAfterActive() {
+  // If working hours feature is disabled, prevent enabling After Hours reply
+  if (!config.value?.enable_working_hours && !formAfter.active) {
+    // Arabic message asking user to enable working hours in general settings
+ alert(t('enable_working_hours_first'));
+     return;
+  }
+  formAfter.active = formAfter.active ? 0 : 1;
 }
 </script>

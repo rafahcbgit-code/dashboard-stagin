@@ -97,6 +97,25 @@ class ProfileController extends BaseController
         $metadataArray['campaigns']['resend_intervals'] = $request->input('resend_intervals');
         $metadataArray['campaigns']['failed_campaign_group'] = $request->input('failed_campaign_group');
 
+        // Store working hours settings in metadata
+        $enableWorking = $request->input('enable_working_hours');
+        $incomingWorkingHours = $request->input('working_hours');
+        $metadataArray['enable_working_hours'] = !empty($enableWorking) ? true : false;
+
+        if (is_array($incomingWorkingHours)) {
+            // Normalize the structure to expected shape
+            $normalized = array_map(function ($item) {
+                return [
+                    'day' => isset($item['day']) ? $item['day'] : null,
+                    'active' => !empty($item['active']) ? true : false,
+                    'from' => isset($item['from']) && $item['from'] !== '' ? $item['from'] : null,
+                    'to' => isset($item['to']) && $item['to'] !== '' ? $item['to'] : null,
+                ];
+            }, $incomingWorkingHours);
+
+            $metadataArray['working_hours'] = $normalized;
+        }
+
         $addressArray['street'] = $request->input('address');
         $addressArray['city'] = $request->input('city');
         $addressArray['state'] = $request->input('state');

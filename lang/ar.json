@@ -927,7 +927,7 @@
 "Title is required" : "العنوان مطلوب",
 
 "Message body is required" : "نص الرسالة مطلوب",
-
+"enable_working_hours_first": "الرجاء تفعيل ساعات العمل من الإعدادات العامة أولاً.",
 "Button text is required" : "نص الزر مطلوب",
 "Select Here": "اختار هنا",
 "Link button text is required" : "نص زر الرابط مطلوب",

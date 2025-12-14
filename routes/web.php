@@ -236,6 +236,8 @@ Route::middleware(['auth:user'])->group(function () {
                     Route::get('/settings/global-reply', [App\Http\Controllers\User\SettingController::class, 'viewGlobalReplySettings']);
                     Route::post('/settings/global-reply', [App\Http\Controllers\User\SettingController::class, 'updateGlobalReply']);
 
+                    Route::post('/settings/after-hours-reply', [App\Http\Controllers\User\SettingController::class, 'updateAfterHoursReply']);
+
                     Route::match(['get', 'post'], '/settings/contacts', [App\Http\Controllers\User\SettingController::class, 'contacts']);
                     Route::match(['get', 'post'], '/settings/tickets', [App\Http\Controllers\User\SettingController::class, 'tickets']);
                     Route::match(['get', 'post'], '/settings/automation', [App\Http\Controllers\User\SettingController::class, 'automation']);

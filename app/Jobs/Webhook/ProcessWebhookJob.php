@@ -22,6 +22,7 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
+use App\Services\WorkingHoursService;
 
 /**
  * ProcessWebhookJob - Async webhook processing job.
@@ -365,15 +366,46 @@ class ProcessWebhookJob implements ShouldQueue
                 'message_type' => $messageType,
             ]);
         } else {
+
             try {
-                $autoReplyService = new AutoReplyService();
-                $autoReplyService->checkAutoReply($chat, $isNewContact);
+                // Initialize required services
+                $workingHoursService = new WorkingHoursService();
+                $autoReplyService    = new AutoReplyService();
+
+                // Check whether the current time is within the organization's working hours
+                $isWithinWorkingHours = $workingHoursService
+                    ->isWithinWorkingHours($this->organizationId);
+
+                if ($isWithinWorkingHours) {
+
+                    // Inside working hours:
+                    // Always allow normal auto-reply logic
+                    $autoReplyService->checkAutoReply($chat, $isNewContact);
+                } else {
+
+                    // Outside working hours:
+                    // Try to send the outside working hours notification
+                    $sent = $autoReplyService->sendOutsideWorkingHours($chat);
+
+                    // If the outside working hours message was NOT sent
+                    // (because it was already sent earlier),
+                    // then fall back to normal auto-reply logic
+                    if ($sent === false) {
+                        Log::warning('Outside working hours message already sent, running auto-reply instead', [
+                            'chat_id' => $chat->id,
+                        ]);
+
+                        $autoReplyService->checkAutoReply($chat, $isNewContact);
+                    }
+                }
             } catch (\Throwable $e) {
-                Log::channel('webhook')->warning('Auto-reply check failed (non-blocking)', [
+                // Catch any unexpected exception to ensure the message flow
+                // is not interrupted by auto-reply logic failures
+                Log::warning('Auto-reply check failed (non-blocking)', [
                     'chat_id' => $chat->id,
-                    'error' => $e->getMessage(),
+                    'file'    => $e->getFile(),
+                    'line'    => $e->getLine(),
                 ]);
-                // Don't re-throw - auto-reply failure shouldn't fail the job
             }
         }
     }
@@ -946,7 +978,7 @@ class ProcessWebhookJob implements ShouldQueue
         $contact = \App\Models\Contact::where('organization_id', $this->organizationId)
             ->where(function ($query) use ($formattedPhone, $phone) {
                 $query->where('phone', $formattedPhone)
-                    ->orWhere('phone', '+'.$phone)
+                    ->orWhere('phone', '+' . $phone)
                     ->orWhere('phone', $phone);
             })
             ->first();
