@@ -114,7 +114,7 @@ class AutoReplyService
     }
 
     public function checkAutoReply(Chat $chat, $isNewContact)
-    {Log::warning(' inside checkAutoReply');
+    {
         $organizationId = $chat->organization_id;
 
         $this->replySequence($organizationId, $chat, $isNewContact);
