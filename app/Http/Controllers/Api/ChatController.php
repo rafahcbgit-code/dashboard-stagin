@@ -227,8 +227,57 @@ class ChatController extends Controller
             $messageText = '😊 Sticker';
         } elseif ($messageType === 'location') {
             $messageText = '📍 Location';
-        } else {
-            $messageText = 'Message';
+        }
+        // Button Reply (User clicked a button)
+        elseif ($messageType === 'button') {
+            if (isset($metadata['button']['text'])) {
+                $messageText = '🔘 ' . $metadata['button']['text'];
+            } else {
+                $messageText = '🔘 Button response';
+            }
+        }
+        // Interactive Message (Buttons or List)
+        elseif ($messageType === 'interactive') {
+            // Check if it's a button reply
+            if (isset($metadata['interactive']['button_reply']['title'])) {
+                $messageText = '🔘 ' . $metadata['interactive']['button_reply']['title'];
+            }
+            // Check if it's a list reply
+            elseif (isset($metadata['interactive']['list_reply']['title'])) {
+                $messageText = '📋 ' . $metadata['interactive']['list_reply']['title'];
+            }
+            // Fallback: try to get body text
+            elseif (isset($metadata['interactive']['body']['text'])) {
+                $messageText = $metadata['interactive']['body']['text'];
+            }
+            // Last resort
+            else {
+                $messageText = '📱 Interactive message';
+            }
+        }
+        // Template (sent by business)
+        elseif ($messageType === 'template') {
+            $messageText = '📄 Template message';
+        }
+        // Contacts
+        elseif ($messageType === 'contacts') {
+            $messageText = '👤 Contact';
+        }
+        // Reaction
+        elseif ($messageType === 'reaction') {
+            if (isset($metadata['reaction']['emoji'])) {
+                $messageText = '❤️ Reacted: ' . $metadata['reaction']['emoji'];
+            } else {
+                $messageText = '❤️ Reaction';
+            }
+        }
+        // Order (WhatsApp Business)
+        elseif ($messageType === 'order') {
+            $messageText = '🛒 Order';
+        }
+        // Unsupported or unknown type
+         else {
+            $messageText = '💬 Message';
         }
 
         return [
