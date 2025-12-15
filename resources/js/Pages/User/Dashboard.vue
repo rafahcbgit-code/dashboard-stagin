@@ -34,7 +34,7 @@
                         </Link>
                     </div>
                 </div>
-                <div class="bg-slate-100 md:bg-white col-span-1 rounded-lg p-3">
+                <div class="bg-slate-100 md:bg-white col-span-1 rounded-lg p-3" v-if="props.role !== 'agent'">
                     <div class="flex justify-between items-center">
                         <div>
                             <h2>{{ $t('Campaigns') }}</h2>
@@ -207,18 +207,18 @@
                         </div>
                     </div>
                     <div class="bg-white rounded-lg py-4 md:px-4">
-                        <div>
+                        <div v-if="props.role !== 'agent'">
                             <h2>{{ $t('Campaigns') }}</h2>
                             <p class="text-sm">{{ $t('Below are your outgoing or scheduled campaigns') }}</p>
-<div v-if="props.role !== 'agent' && props.campaigns.length === 0" class="p-5 border-2 border-dashed mt-4">
-    <p class="text-sm text-center">{{ $t('You do not have any outgoing or scheduled campaigns') }}</p>
-    
-    <div v-if="props.role !== 'agent'" class="flex justify-center items-center">
-        <Link href="/campaigns/create" class="bg-primary text-white p-2 rounded-lg text-sm mt-5 flex px-3 w-fit">
-            {{ $t('Create campaign') }}
-        </Link>
-    </div>
-</div>
+                <div v-if="props.role !== 'agent' && props.campaigns.length === 0" class="p-5 border-2 border-dashed mt-4">
+                    <p class="text-sm text-center">{{ $t('You do not have any outgoing or scheduled campaigns') }}</p>
+                    
+                    <div v-if="props.role !== 'agent'" class="flex justify-center items-center">
+                        <Link href="/campaigns/create" class="bg-primary text-white p-2 rounded-lg text-sm mt-5 flex px-3 w-fit">
+                            {{ $t('Create campaign') }}
+                        </Link>
+                    </div>
+                </div>
                             <div v-else class="space-y-1">
                                 <div v-for="(item, index) in props.campaigns" :key="index" class="mt-4 border-l-4 bg-gray-50 flex justify-between p-2 text-sm">
                                     <div class="capitalize">{{ item.name }}</div>
