@@ -609,6 +609,12 @@ class ChatController extends Controller
                 'payload' => $metadata['button']['payload'] ?? null,
             ];
         }
+        elseif ($messageType === 'reaction') {
+            $emoji = $metadata['reaction']['emoji'] ?? '❤️';
+            $message['content'] = [
+                'text' => 'Reacted with ' . $emoji
+            ];
+        }
 
         return $message;
     }
