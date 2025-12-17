@@ -266,9 +266,9 @@ class ChatController extends Controller
         // Reaction
         elseif ($messageType === 'reaction') {
             if (isset($metadata['reaction']['emoji'])) {
-                $messageText = '❤️ Reacted: ' . $metadata['reaction']['emoji'];
+                $messageText = 'Reacted: ' . $metadata['reaction']['emoji'];
             } else {
-                $messageText = '❤️ Reaction';
+                $messageText = 'Reaction';
             }
         }
         // Order (WhatsApp Business)
