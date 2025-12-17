@@ -581,7 +581,7 @@ class ChatController extends Controller
         elseif ($messageType === 'sticker') {
             $message['content'] = [
                 //'media' => $this->getMediaInfo($chat->media)
-                'text' => '😊 Sticker'
+                'text' => 'Sticker'
             ];
         }
         // Location
