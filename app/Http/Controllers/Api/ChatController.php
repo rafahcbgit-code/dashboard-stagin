@@ -615,6 +615,30 @@ class ChatController extends Controller
                 'text' => 'Reacted with ' . $emoji
             ];
         }
+        elseif ($messageType === 'unsupported') {
+            $errorMessage = 'Unsupported message';
+            
+            // Try to get actual error message from WhatsApp
+            if (isset($metadata['raw']['errors'][0]['title'])) {
+                $errorMessage = $metadata['raw']['errors'][0]['title'];
+            } elseif (isset($metadata['raw']['errors'][0]['message'])) {
+                $errorMessage = $metadata['raw']['errors'][0]['message'];
+            }
+            
+            $message['content'] = [
+                'text' => '⚠️ ' . $errorMessage
+            ];
+            
+            // Optional Include error code for debugging
+            /* if (isset($metadata['raw']['errors'][0]['code'])) {
+                $message['error_code'] = $metadata['raw']['errors'][0]['code'];
+            } */
+        }
+        else {
+            $message['content'] = [
+                'text' => 'Unsupported message type'
+            ];
+        }
 
         return $message;
     }
