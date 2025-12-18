@@ -600,14 +600,42 @@ class WhatsappService
         return $response;
     }
 
-    function getMediaSizeInBytesFromUrl($url) {
-        $imageContent = file_get_contents($url);
-    
-        if ($imageContent !== false) {
-            return strlen($imageContent);
+function getMediaSizeInBytesFromUrl($url)
+    {
+        if (! is_string($url) || trim($url) === '') {
+            Log::warning('getMediaSizeInBytesFromUrl: missing url');
+            return null;
         }
-    
-        return null;
+
+        try {
+            // Prefer HEAD to avoid downloading the entire media
+            $response = Http::timeout(10)->head($url);
+
+            if ($response->successful()) {
+                $contentLength = $response->header('Content-Length');
+                if ($contentLength !== null && is_numeric($contentLength)) {
+                    return (int) $contentLength;
+                }
+
+                Log::warning('getMediaSizeInBytesFromUrl: Content-Length header missing', [
+                    'url' => $url,
+                ]);
+                return null;
+            }
+
+            Log::warning('getMediaSizeInBytesFromUrl: HEAD request not successful', [
+                'url' => $url,
+                'status' => $response->status(),
+            ]);
+            return null;
+        } catch (\Throwable $e) {
+            Log::warning('getMediaSizeInBytesFromUrl failed', [
+                'url' => $url,
+                'error' => $e->getMessage(),
+                'exception' => get_class($e),
+            ]);
+            return null;
+        }
     }
 
     /**
