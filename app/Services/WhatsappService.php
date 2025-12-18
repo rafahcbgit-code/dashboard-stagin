@@ -600,1097 +600,1097 @@ class WhatsappService
         return $response;
     }
 
-function getMediaSizeInBytesFromUrl($url)
-    {
-        if (! is_string($url) || trim($url) === '') {
-            Log::warning('getMediaSizeInBytesFromUrl: missing url');
-            return null;
-        }
-
-        try {
-            // Prefer HEAD to avoid downloading the entire media
-            $response = Http::timeout(10)->head($url);
-
-            if ($response->successful()) {
-                $contentLength = $response->header('Content-Length');
-                if ($contentLength !== null && is_numeric($contentLength)) {
-                    return (int) $contentLength;
-                }
-
-                Log::warning('getMediaSizeInBytesFromUrl: Content-Length header missing', [
-                    'url' => $url,
-                ]);
+    function getMediaSizeInBytesFromUrl($url)
+        {
+            if (! is_string($url) || trim($url) === '') {
+                Log::warning('getMediaSizeInBytesFromUrl: missing url');
                 return null;
             }
 
-            Log::warning('getMediaSizeInBytesFromUrl: HEAD request not successful', [
-                'url' => $url,
-                'status' => $response->status(),
-            ]);
-            return null;
-        } catch (\Throwable $e) {
-            Log::warning('getMediaSizeInBytesFromUrl failed', [
-                'url' => $url,
-                'error' => $e->getMessage(),
-                'exception' => get_class($e),
-            ]);
-            return null;
-        }
-    }
+            try {
+                // Prefer HEAD to avoid downloading the entire media
+                $response = Http::timeout(10)->head($url);
 
-    /**
-     * This function allows you to react to a specific message with an emoji via a POST request to Facebook's messaging API.
-     *
-     * @param string $phoneNumber The phone number of the recipient.
-     * @param string $wamId The ID of the message you want to react to.
-     * @param string $emoji The emoji you want to use as a reaction.
-     * @return mixed Returns the response from the HTTP request.
-     */
-    public function reactToMessage($phoneNumber, $wamId, $emoji)
-    {
-        $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}/messages";
-        $headers = $this->setHeaders();
-
-        $requestData['messaging_product'] = 'whatsapp';
-        $requestData['recipient_type'] = 'individual';
-        $requestData['to'] = $phoneNumber;
-        $requestData['type'] = 'reaction';
-        $requestData['reaction']['message_id'] = $wamId;
-        $requestData['reaction']['emoji'] = $emoji;
-
-        $responseObject = $this->sendHttpRequest('POST', $url, $requestData, $headers);
-
-        dd($responseObject);
-    }
-
-    /**
-     * This function sends a location to a specific phone number via a POST request using Facebook's messaging API.
-     *
-     * @param string $phoneNumber The phone number of the recipient.
-     * @param object $location The location object containing longitude, latitude, name, and address.
-     * @return mixed Returns the response from the HTTP request.
-     */
-    public function sendLocation($phoneNumber, $location)
-    {
-        $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}/messages";
-        $headers = $this->setHeaders();
-
-        $requestData['messaging_product'] = 'whatsapp';
-        $requestData['to'] = $phoneNumber;
-        $requestData['type'] = 'location';
-        $requestData['location']['longitude'] = $location->longitude;
-        $requestData['location']['latitude'] = $location->latitude;
-        $requestData['location']['name'] = $location->name;
-        $requestData['location']['address'] = $location->address;
-
-        $responseObject = $this->sendHttpRequest('POST', $url, $requestData, $headers);
-
-        dd($responseObject);
-    }
-
-    public function createTemplate(Request $request)
-    {
-        $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->wabaId}/message_templates";
-        
-        $requestData = [
-            "name" => $request->name,
-            "language" => $request->language,
-            "category" => $request->category,
-        ];
-
-        if($request->customize_ttl && $request->message_send_ttl_seconds){
-            $requestData['message_send_ttl_seconds'] = $request->message_send_ttl_seconds;
-        }
-
-        if($request->category != 'AUTHENTICATION'){
-            if($request->header['format'] === 'TEXT'){
-                if(isset($request->header['text'])){
-                    $headerComponent = [];
-
-                    $headerComponent['type'] = "HEADER";
-                    $headerComponent['format'] = $request->header['format'];
-                    $headerComponent['text'] = $request->header['text'];
-
-                    if (!empty($request->header['example'])) {
-                        $headerComponent['example']['header_text'] = $request->header['example'];
+                if ($response->successful()) {
+                    $contentLength = $response->header('Content-Length');
+                    if ($contentLength !== null && is_numeric($contentLength)) {
+                        return (int) $contentLength;
                     }
 
-                    $requestData['components'][] = $headerComponent;
-                }
-            }
-        
-
-            if(($request->header['format'] === 'IMAGE' || $request->header['format'] === 'VIDEO' || $request->header['format'] === 'DOCUMENT')){
-                if(isset($request->header['example'])){
-                    $fileUploadResponse = $this->initiateResumableUploadSession($request->header['example']);
-
-                    if(!$fileUploadResponse->success){
-                        return $fileUploadResponse;
-                    }
-
-                    $requestData['components'][] = [
-                        "type" => "HEADER",
-                        "format" => $request->header['format'],
-                        "example" => [
-                            "header_handle" => [
-                                $fileUploadResponse->data->h
-                            ]
-                        ]
-                    ];
-                }
-            }
-        }
-        
-        if($request->category == 'AUTHENTICATION'){
-            $bodyComponent = [];
-            $bodyComponent['type'] = "BODY";
-            $bodyComponent['add_security_recommendation'] = $request->body['add_security_recommendation'];
-
-            $requestData['components'][] = $bodyComponent;
-        } else {
-            $bodyComponent = [];
-
-            if($request->body['text'] != null){
-                $bodyComponent['type'] = "BODY";
-                $bodyComponent['text'] = $request->body['text'];
-
-                if (!empty($request->body['example'])) {
-                    $bodyComponent['example']['body_text'][] = $request->body['example'];
+                    Log::warning('getMediaSizeInBytesFromUrl: Content-Length header missing', [
+                        'url' => $url,
+                    ]);
+                    return null;
                 }
 
-                $requestData['components'][] = $bodyComponent;
+                Log::warning('getMediaSizeInBytesFromUrl: HEAD request not successful', [
+                    'url' => $url,
+                    'status' => $response->status(),
+                ]);
+                return null;
+            } catch (\Throwable $e) {
+                Log::warning('getMediaSizeInBytesFromUrl failed', [
+                    'url' => $url,
+                    'error' => $e->getMessage(),
+                    'exception' => get_class($e),
+                ]);
+                return null;
             }
         }
 
-        if ($request->has('footer')) {
+        /**
+         * This function allows you to react to a specific message with an emoji via a POST request to Facebook's messaging API.
+         *
+         * @param string $phoneNumber The phone number of the recipient.
+         * @param string $wamId The ID of the message you want to react to.
+         * @param string $emoji The emoji you want to use as a reaction.
+         * @return mixed Returns the response from the HTTP request.
+         */
+        public function reactToMessage($phoneNumber, $wamId, $emoji)
+        {
+            $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}/messages";
+            $headers = $this->setHeaders();
+
+            $requestData['messaging_product'] = 'whatsapp';
+            $requestData['recipient_type'] = 'individual';
+            $requestData['to'] = $phoneNumber;
+            $requestData['type'] = 'reaction';
+            $requestData['reaction']['message_id'] = $wamId;
+            $requestData['reaction']['emoji'] = $emoji;
+
+            $responseObject = $this->sendHttpRequest('POST', $url, $requestData, $headers);
+
+            dd($responseObject);
+        }
+
+        /**
+         * This function sends a location to a specific phone number via a POST request using Facebook's messaging API.
+         *
+         * @param string $phoneNumber The phone number of the recipient.
+         * @param object $location The location object containing longitude, latitude, name, and address.
+         * @return mixed Returns the response from the HTTP request.
+         */
+        public function sendLocation($phoneNumber, $location)
+        {
+            $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}/messages";
+            $headers = $this->setHeaders();
+
+            $requestData['messaging_product'] = 'whatsapp';
+            $requestData['to'] = $phoneNumber;
+            $requestData['type'] = 'location';
+            $requestData['location']['longitude'] = $location->longitude;
+            $requestData['location']['latitude'] = $location->latitude;
+            $requestData['location']['name'] = $location->name;
+            $requestData['location']['address'] = $location->address;
+
+            $responseObject = $this->sendHttpRequest('POST', $url, $requestData, $headers);
+
+            dd($responseObject);
+        }
+
+        public function createTemplate(Request $request)
+        {
+            $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->wabaId}/message_templates";
+            
+            $requestData = [
+                "name" => $request->name,
+                "language" => $request->language,
+                "category" => $request->category,
+            ];
+
+            if($request->customize_ttl && $request->message_send_ttl_seconds){
+                $requestData['message_send_ttl_seconds'] = $request->message_send_ttl_seconds;
+            }
+
             if($request->category != 'AUTHENTICATION'){
-                if(isset($request->footer['text']) &&  $request->footer['text'] != null){
-                    $requestData['components'][] = [
-                        "type" => "FOOTER",
-                        "text" => $request->footer['text']
-                    ];
-                }
-            } else {
-                $requestData['components'][] = [
-                    "type" => "FOOTER",
-                    "code_expiration_minutes" => $request->footer['code_expiration_minutes']
-                ];
-            }
-        }
+                if($request->header['format'] === 'TEXT'){
+                    if(isset($request->header['text'])){
+                        $headerComponent = [];
 
-        if($request->category != 'AUTHENTICATION'){
-            if ($request->has('buttons')) {
-                if (!isset($requestData['components'])) {
-                    $requestData['components'] = [];
+                        $headerComponent['type'] = "HEADER";
+                        $headerComponent['format'] = $request->header['format'];
+                        $headerComponent['text'] = $request->header['text'];
+
+                        if (!empty($request->header['example'])) {
+                            $headerComponent['example']['header_text'] = $request->header['example'];
+                        }
+
+                        $requestData['components'][] = $headerComponent;
+                    }
                 }
             
-                $requestData['components'][] = [
-                    'type' => 'BUTTONS',
-                    'buttons' => []
-                ];
 
-                $quickReplyButtons = [];
+                if(($request->header['format'] === 'IMAGE' || $request->header['format'] === 'VIDEO' || $request->header['format'] === 'DOCUMENT')){
+                    if(isset($request->header['example'])){
+                        $fileUploadResponse = $this->initiateResumableUploadSession($request->header['example']);
 
-                foreach ($request->buttons as $button) {
-                    if ($button['type'] === 'QUICK_REPLY') {
-                        $quickReplyButtons[] = [
-                            'type' => $button['type'],
-                            'text' => $button['text'],
+                        if(!$fileUploadResponse->success){
+                            return $fileUploadResponse;
+                        }
+
+                        $requestData['components'][] = [
+                            "type" => "HEADER",
+                            "format" => $request->header['format'],
+                            "example" => [
+                                "header_handle" => [
+                                    $fileUploadResponse->data->h
+                                ]
+                            ]
                         ];
                     }
                 }
+            }
             
-                foreach ($request->buttons as $button) {
-                    if ($button['type'] !== 'QUICK_REPLY') {
-                        if ($button['type'] === 'URL') {
-                            $requestData['components'][count($requestData['components']) - 1]['buttons'][] = [
+            if($request->category == 'AUTHENTICATION'){
+                $bodyComponent = [];
+                $bodyComponent['type'] = "BODY";
+                $bodyComponent['add_security_recommendation'] = $request->body['add_security_recommendation'];
+
+                $requestData['components'][] = $bodyComponent;
+            } else {
+                $bodyComponent = [];
+
+                if($request->body['text'] != null){
+                    $bodyComponent['type'] = "BODY";
+                    $bodyComponent['text'] = $request->body['text'];
+
+                    if (!empty($request->body['example'])) {
+                        $bodyComponent['example']['body_text'][] = $request->body['example'];
+                    }
+
+                    $requestData['components'][] = $bodyComponent;
+                }
+            }
+
+            if ($request->has('footer')) {
+                if($request->category != 'AUTHENTICATION'){
+                    if(isset($request->footer['text']) &&  $request->footer['text'] != null){
+                        $requestData['components'][] = [
+                            "type" => "FOOTER",
+                            "text" => $request->footer['text']
+                        ];
+                    }
+                } else {
+                    $requestData['components'][] = [
+                        "type" => "FOOTER",
+                        "code_expiration_minutes" => $request->footer['code_expiration_minutes']
+                    ];
+                }
+            }
+
+            if($request->category != 'AUTHENTICATION'){
+                if ($request->has('buttons')) {
+                    if (!isset($requestData['components'])) {
+                        $requestData['components'] = [];
+                    }
+                
+                    $requestData['components'][] = [
+                        'type' => 'BUTTONS',
+                        'buttons' => []
+                    ];
+
+                    $quickReplyButtons = [];
+
+                    foreach ($request->buttons as $button) {
+                        if ($button['type'] === 'QUICK_REPLY') {
+                            $quickReplyButtons[] = [
                                 'type' => $button['type'],
                                 'text' => $button['text'],
-                                'url' => $button['url'],
-                            ];
-                        } elseif ($button['type'] === 'PHONE_NUMBER') {
-                            $requestData['components'][count($requestData['components']) - 1]['buttons'][] = [
-                                'type' => $button['type'],
-                                'text' => $button['text'],
-                                'phone_number' => $button['country'].$button['phone_number'],
-                            ];
-                        } elseif ($button['type'] === 'COPY_CODE') {
-                            $requestData['components'][count($requestData['components']) - 1]['buttons'][] = [
-                                'type' => $button['type'],
-                                'example' => $button['example'],
                             ];
                         }
                     }
-                }
-
-                // Add the quick reply buttons at the start
-                if (!empty($quickReplyButtons)) {
-                    $requestData['components'][count($requestData['components']) - 1]['buttons'] = array_merge($quickReplyButtons, $requestData['components'][count($requestData['components']) - 1]['buttons']);
-                }
-            }
-        } else {
-            $button = [
-                'type' => $request->authentication_button['type'],
-                'otp_type' => $request->authentication_button['otp_type'],
-                'text' => $request->authentication_button['text'],
-            ];
-
-            if($request->authentication_button['otp_type'] != 'copy_code'){
-                $button['autofill_text'] = $request->authentication_button['autofill_text'];
-                $button['supported_apps'] = $request->authentication_button['supported_apps'];
-            }
-
-            if ($request->authentication_button['otp_type'] === 'zero_tap') {
-                $button['zero_tap_terms_accepted'] = $request->authentication_button['zero_tap_terms_accepted'];
-            }
-
-            $requestData['components'][] = [
-                'type' => 'BUTTONS',
-                'buttons' => [$button],
-            ];
-        }
-
-        $client = new Client();
-        $responseObject = new \stdClass();
-
-        //\Log::info($requestData);
-
-        try {
-            $response = $client->post($url, [
-                'headers' => [
-                    'Authorization' => 'Bearer ' . $this->accessToken,
-                    'Content-Type' => 'application/json',
-                ],
-                'json' => $requestData,
-            ]);
-
-            $responseObject->success = true;
-            $responseObject->data = json_decode($response->getBody()->getContents());
-
-            //Save Template To Database
-            $template = new Template();
-            $template->organization_id = session()->get('current_organization');
-            $template->meta_id = $responseObject->data->id;
-            $template->name = $request->name;
-            $template->category = $request->category;
-            $template->language = $request->language;
-            $template->metadata = json_encode($requestData);
-            $template->status = $responseObject->data->status;
-            $template->created_by = auth()->user()->id;
-            $template->created_at = now();
-            $template->updated_at = now();
-            $template->save();
-        } catch (ConnectException $e) {
-            $responseObject->success = false;
-            $responseObject->data = new \stdClass();
-            $responseObject->data->error = new \stdClass();
-            $responseObject->message = $e->getMessage();
-        } catch (GuzzleException $e) {
-            $response = $e->getResponse();
-            $responseObject->success = false;
-            $responseObject->data = json_decode($response->getBody()->getContents());
-
-            if (isset($responseObject->data->error->error_user_msg)) {
-                $responseObject->message = $responseObject->data->error->error_user_msg;
-            } else {
-                $responseObject->message = $responseObject->data->error->message;
-            }
-        } catch (Exception $e) {
-            $responseObject->success = false;
-            $responseObject->data = new \stdClass();
-            $responseObject->data->error = new \stdClass();
-            $responseObject->data->error->message = $e->getMessage();
-        }
-
-        return $responseObject;
-    }
-
-    public function updateTemplate(Request $request, $uuid)
-    {
-        $template = Template::where('uuid', $uuid)->first();
-        $url = "https://graph.facebook.com/{$this->apiVersion}/{$template->meta_id}";
-        
-        $requestData = [
-            //"name" => $request->name,
-            //"language" => $request->language,
-            "category" => $template->status == 'APPROVED' ? $template->category : $request->category,
-        ];
-
-        if($request->customize_ttl && $request->message_send_ttl_seconds){
-            $requestData['message_send_ttl_seconds'] = $request->message_send_ttl_seconds;
-        }
-
-        if($request->category != 'AUTHENTICATION'){
-            if($request->header['format'] === 'TEXT'){
-                if(isset($request->header['text'])){
-                    $headerComponent = [];
-
-                    $headerComponent['type'] = "HEADER";
-                    $headerComponent['format'] = $request->header['format'];
-                    $headerComponent['text'] = $request->header['text'];
-
-                    if (!empty($request->header['example'])) {
-                        $headerComponent['example']['header_text'] = $request->header['example'];
-                    }
-
-                    $requestData['components'][] = $headerComponent;
-                }
-            }
-
-            if(($request->header['format'] === 'IMAGE' || $request->header['format'] === 'VIDEO' || $request->header['format'] === 'DOCUMENT')){
-                if(isset($request->header['example'])){
-                    $fileUploadResponse = $this->initiateResumableUploadSession($request->header['example']);
-
-                    if(!$fileUploadResponse->success){
-                        return $fileUploadResponse;
-                    }
-
-                    $requestData['components'][] = [
-                        "type" => "HEADER",
-                        "format" => $request->header['format'],
-                        "example" => [
-                            "header_handle" => [
-                                $fileUploadResponse->data->h
-                            ]
-                        ]
-                    ];
-                } else {
-                    // Decode existing metadata
-                    $metadata = json_decode($template->metadata, true);
-
-                    // Extract existing header if available
-                    $existingHeader = [];
-                    if (isset($metadata['components'])) {
-                        foreach ($metadata['components'] as $component) {
-                            if ($component['type'] === 'HEADER') {
-                                $existingHeader = $component;
-                                break;
+                
+                    foreach ($request->buttons as $button) {
+                        if ($button['type'] !== 'QUICK_REPLY') {
+                            if ($button['type'] === 'URL') {
+                                $requestData['components'][count($requestData['components']) - 1]['buttons'][] = [
+                                    'type' => $button['type'],
+                                    'text' => $button['text'],
+                                    'url' => $button['url'],
+                                ];
+                            } elseif ($button['type'] === 'PHONE_NUMBER') {
+                                $requestData['components'][count($requestData['components']) - 1]['buttons'][] = [
+                                    'type' => $button['type'],
+                                    'text' => $button['text'],
+                                    'phone_number' => $button['country'].$button['phone_number'],
+                                ];
+                            } elseif ($button['type'] === 'COPY_CODE') {
+                                $requestData['components'][count($requestData['components']) - 1]['buttons'][] = [
+                                    'type' => $button['type'],
+                                    'example' => $button['example'],
+                                ];
                             }
                         }
                     }
 
-                    $requestData['components'][] = $existingHeader;
-                }
-            }
-        }
-
-        if($request->category == 'AUTHENTICATION'){
-            $bodyComponent = [];
-            $bodyComponent['type'] = "BODY";
-            $bodyComponent['add_security_recommendation'] = $request->body['add_security_recommendation'];
-
-            $requestData['components'][] = $bodyComponent;
-        } else {
-            if($request->body['text'] != null){
-                $bodyComponent = [];
-
-                $bodyComponent['type'] = "BODY";
-                $bodyComponent['text'] = $request->body['text'];
-
-                if (!empty($request->body['example'])) {
-                    $bodyComponent['example']['body_text'][] = $request->body['example'];
-                }
-
-                $requestData['components'][] = $bodyComponent;
-            }
-        }
-
-        if ($request->has('footer')) {
-            if($request->category != 'AUTHENTICATION'){
-                if($request->footer['text'] != null){
-                    $requestData['components'][] = [
-                        "type" => "FOOTER",
-                        "text" => $request->footer['text']
-                    ];
-                }
-            } else {
-                $requestData['components'][] = [
-                    "type" => "FOOTER",
-                    "code_expiration_minutes" => $request->footer['code_expiration_minutes']
-                ];
-            }
-        }
-
-        if($request->category != 'AUTHENTICATION'){
-            if ($request->has('buttons')) {
-                if (!isset($requestData['components'])) {
-                    $requestData['components'] = [];
-                }
-            
-                $requestData['components'][] = [
-                    'type' => 'BUTTONS',
-                    'buttons' => []
-                ];
-
-                $quickReplyButtons = [];
-
-                foreach ($request->buttons as $button) {
-                    if ($button['type'] === 'QUICK_REPLY') {
-                        $quickReplyButtons[] = [
-                            'type' => $button['type'],
-                            'text' => $button['text'],
-                        ];
+                    // Add the quick reply buttons at the start
+                    if (!empty($quickReplyButtons)) {
+                        $requestData['components'][count($requestData['components']) - 1]['buttons'] = array_merge($quickReplyButtons, $requestData['components'][count($requestData['components']) - 1]['buttons']);
                     }
                 }
+            } else {
+                $button = [
+                    'type' => $request->authentication_button['type'],
+                    'otp_type' => $request->authentication_button['otp_type'],
+                    'text' => $request->authentication_button['text'],
+                ];
+
+                if($request->authentication_button['otp_type'] != 'copy_code'){
+                    $button['autofill_text'] = $request->authentication_button['autofill_text'];
+                    $button['supported_apps'] = $request->authentication_button['supported_apps'];
+                }
+
+                if ($request->authentication_button['otp_type'] === 'zero_tap') {
+                    $button['zero_tap_terms_accepted'] = $request->authentication_button['zero_tap_terms_accepted'];
+                }
+
+                $requestData['components'][] = [
+                    'type' => 'BUTTONS',
+                    'buttons' => [$button],
+                ];
+            }
+
+            $client = new Client();
+            $responseObject = new \stdClass();
+
+            //\Log::info($requestData);
+
+            try {
+                $response = $client->post($url, [
+                    'headers' => [
+                        'Authorization' => 'Bearer ' . $this->accessToken,
+                        'Content-Type' => 'application/json',
+                    ],
+                    'json' => $requestData,
+                ]);
+
+                $responseObject->success = true;
+                $responseObject->data = json_decode($response->getBody()->getContents());
+
+                //Save Template To Database
+                $template = new Template();
+                $template->organization_id = session()->get('current_organization');
+                $template->meta_id = $responseObject->data->id;
+                $template->name = $request->name;
+                $template->category = $request->category;
+                $template->language = $request->language;
+                $template->metadata = json_encode($requestData);
+                $template->status = $responseObject->data->status;
+                $template->created_by = auth()->user()->id;
+                $template->created_at = now();
+                $template->updated_at = now();
+                $template->save();
+            } catch (ConnectException $e) {
+                $responseObject->success = false;
+                $responseObject->data = new \stdClass();
+                $responseObject->data->error = new \stdClass();
+                $responseObject->message = $e->getMessage();
+            } catch (GuzzleException $e) {
+                $response = $e->getResponse();
+                $responseObject->success = false;
+                $responseObject->data = json_decode($response->getBody()->getContents());
+
+                if (isset($responseObject->data->error->error_user_msg)) {
+                    $responseObject->message = $responseObject->data->error->error_user_msg;
+                } else {
+                    $responseObject->message = $responseObject->data->error->message;
+                }
+            } catch (Exception $e) {
+                $responseObject->success = false;
+                $responseObject->data = new \stdClass();
+                $responseObject->data->error = new \stdClass();
+                $responseObject->data->error->message = $e->getMessage();
+            }
+
+            return $responseObject;
+        }
+
+        public function updateTemplate(Request $request, $uuid)
+        {
+            $template = Template::where('uuid', $uuid)->first();
+            $url = "https://graph.facebook.com/{$this->apiVersion}/{$template->meta_id}";
             
-                foreach ($request->buttons as $button) {
-                    if ($button['type'] !== 'QUICK_REPLY') {
-                        if ($button['type'] === 'URL') {
-                            $requestData['components'][count($requestData['components']) - 1]['buttons'][] = [
+            $requestData = [
+                //"name" => $request->name,
+                //"language" => $request->language,
+                "category" => $template->status == 'APPROVED' ? $template->category : $request->category,
+            ];
+
+            if($request->customize_ttl && $request->message_send_ttl_seconds){
+                $requestData['message_send_ttl_seconds'] = $request->message_send_ttl_seconds;
+            }
+
+            if($request->category != 'AUTHENTICATION'){
+                if($request->header['format'] === 'TEXT'){
+                    if(isset($request->header['text'])){
+                        $headerComponent = [];
+
+                        $headerComponent['type'] = "HEADER";
+                        $headerComponent['format'] = $request->header['format'];
+                        $headerComponent['text'] = $request->header['text'];
+
+                        if (!empty($request->header['example'])) {
+                            $headerComponent['example']['header_text'] = $request->header['example'];
+                        }
+
+                        $requestData['components'][] = $headerComponent;
+                    }
+                }
+
+                if(($request->header['format'] === 'IMAGE' || $request->header['format'] === 'VIDEO' || $request->header['format'] === 'DOCUMENT')){
+                    if(isset($request->header['example'])){
+                        $fileUploadResponse = $this->initiateResumableUploadSession($request->header['example']);
+
+                        if(!$fileUploadResponse->success){
+                            return $fileUploadResponse;
+                        }
+
+                        $requestData['components'][] = [
+                            "type" => "HEADER",
+                            "format" => $request->header['format'],
+                            "example" => [
+                                "header_handle" => [
+                                    $fileUploadResponse->data->h
+                                ]
+                            ]
+                        ];
+                    } else {
+                        // Decode existing metadata
+                        $metadata = json_decode($template->metadata, true);
+
+                        // Extract existing header if available
+                        $existingHeader = [];
+                        if (isset($metadata['components'])) {
+                            foreach ($metadata['components'] as $component) {
+                                if ($component['type'] === 'HEADER') {
+                                    $existingHeader = $component;
+                                    break;
+                                }
+                            }
+                        }
+
+                        $requestData['components'][] = $existingHeader;
+                    }
+                }
+            }
+
+            if($request->category == 'AUTHENTICATION'){
+                $bodyComponent = [];
+                $bodyComponent['type'] = "BODY";
+                $bodyComponent['add_security_recommendation'] = $request->body['add_security_recommendation'];
+
+                $requestData['components'][] = $bodyComponent;
+            } else {
+                if($request->body['text'] != null){
+                    $bodyComponent = [];
+
+                    $bodyComponent['type'] = "BODY";
+                    $bodyComponent['text'] = $request->body['text'];
+
+                    if (!empty($request->body['example'])) {
+                        $bodyComponent['example']['body_text'][] = $request->body['example'];
+                    }
+
+                    $requestData['components'][] = $bodyComponent;
+                }
+            }
+
+            if ($request->has('footer')) {
+                if($request->category != 'AUTHENTICATION'){
+                    if($request->footer['text'] != null){
+                        $requestData['components'][] = [
+                            "type" => "FOOTER",
+                            "text" => $request->footer['text']
+                        ];
+                    }
+                } else {
+                    $requestData['components'][] = [
+                        "type" => "FOOTER",
+                        "code_expiration_minutes" => $request->footer['code_expiration_minutes']
+                    ];
+                }
+            }
+
+            if($request->category != 'AUTHENTICATION'){
+                if ($request->has('buttons')) {
+                    if (!isset($requestData['components'])) {
+                        $requestData['components'] = [];
+                    }
+                
+                    $requestData['components'][] = [
+                        'type' => 'BUTTONS',
+                        'buttons' => []
+                    ];
+
+                    $quickReplyButtons = [];
+
+                    foreach ($request->buttons as $button) {
+                        if ($button['type'] === 'QUICK_REPLY') {
+                            $quickReplyButtons[] = [
                                 'type' => $button['type'],
                                 'text' => $button['text'],
-                                'url' => $button['url'],
-                            ];
-                        } elseif ($button['type'] === 'PHONE_NUMBER') {
-                            $requestData['components'][count($requestData['components']) - 1]['buttons'][] = [
-                                'type' => $button['type'],
-                                'text' => $button['text'],
-                                'phone_number' => $button['country'] ?? '' . $button['phone_number'],
-                            ];
-                        } elseif ($button['type'] === 'COPY_CODE') {
-                            $requestData['components'][count($requestData['components']) - 1]['buttons'][] = [
-                                'type' => $button['type'],
-                                'example' => $button['example'],
                             ];
                         }
                     }
+                
+                    foreach ($request->buttons as $button) {
+                        if ($button['type'] !== 'QUICK_REPLY') {
+                            if ($button['type'] === 'URL') {
+                                $requestData['components'][count($requestData['components']) - 1]['buttons'][] = [
+                                    'type' => $button['type'],
+                                    'text' => $button['text'],
+                                    'url' => $button['url'],
+                                ];
+                            } elseif ($button['type'] === 'PHONE_NUMBER') {
+                                $requestData['components'][count($requestData['components']) - 1]['buttons'][] = [
+                                    'type' => $button['type'],
+                                    'text' => $button['text'],
+                                    'phone_number' => $button['country'] ?? '' . $button['phone_number'],
+                                ];
+                            } elseif ($button['type'] === 'COPY_CODE') {
+                                $requestData['components'][count($requestData['components']) - 1]['buttons'][] = [
+                                    'type' => $button['type'],
+                                    'example' => $button['example'],
+                                ];
+                            }
+                        }
+                    }
+
+                    // Add the quick reply buttons at the start
+                    if (!empty($quickReplyButtons)) {
+                        $requestData['components'][count($requestData['components']) - 1]['buttons'] = array_merge($quickReplyButtons, $requestData['components'][count($requestData['components']) - 1]['buttons']);
+                    }
+                }
+            } else {
+                $button = [
+                    'type' => $request->authentication_button['type'],
+                    'otp_type' => $request->authentication_button['otp_type'],
+                    'text' => $request->authentication_button['text'],
+                ];
+
+                if($request->authentication_button['otp_type'] != 'copy_code'){
+                    $button['autofill_text'] = $request->authentication_button['autofill_text'];
+                    $button['supported_apps'] = $request->authentication_button['supported_apps'];
                 }
 
-                // Add the quick reply buttons at the start
-                if (!empty($quickReplyButtons)) {
-                    $requestData['components'][count($requestData['components']) - 1]['buttons'] = array_merge($quickReplyButtons, $requestData['components'][count($requestData['components']) - 1]['buttons']);
+                if ($request->authentication_button['otp_type'] === 'zero_tap') {
+                    $button['zero_tap_terms_accepted'] = $request->authentication_button['zero_tap_terms_accepted'];
                 }
-            }
-        } else {
-            $button = [
-                'type' => $request->authentication_button['type'],
-                'otp_type' => $request->authentication_button['otp_type'],
-                'text' => $request->authentication_button['text'],
-            ];
 
-            if($request->authentication_button['otp_type'] != 'copy_code'){
-                $button['autofill_text'] = $request->authentication_button['autofill_text'];
-                $button['supported_apps'] = $request->authentication_button['supported_apps'];
+                $requestData['components'][] = [
+                    'type' => 'BUTTONS',
+                    'buttons' => [$button],
+                ];
             }
 
-            if ($request->authentication_button['otp_type'] === 'zero_tap') {
-                $button['zero_tap_terms_accepted'] = $request->authentication_button['zero_tap_terms_accepted'];
-            }
+            $client = new Client();
+            $responseObject = new \stdClass();
 
-            $requestData['components'][] = [
-                'type' => 'BUTTONS',
-                'buttons' => [$button],
-            ];
-        }
-
-        $client = new Client();
-        $responseObject = new \stdClass();
-
-        try {
-            $response = $client->post($url, [
-                'headers' => [
-                    'Authorization' => 'Bearer ' . $this->accessToken,
-                    'Content-Type' => 'application/json',
-                ],
-                'json' => $requestData,
-            ]);
-
-            $responseObject->success = true;
-            $responseObject->data = json_decode($response->getBody()->getContents());
-
-            //Update Template In Database
-            if ($template) {
-                $template->organization_id = session()->get('current_organization');
-                $template->category = $template->status == 'APPROVED' ? $template->category : $request->category;
-                //$template->metadata = json_encode($requestData);
-                $template->status = 'PENDING';
-                $template->created_by = auth()->user()->id;
-                $template->updated_at = now(); // No need to set `created_at` when updating
-                $template->save();
-            } else {
-                // Handle case where template is not found (optional)
-                throw new \Exception('Template not found');
-            }
-        } catch (ConnectException $e) {
-            $responseObject->success = false;
-            $responseObject->data = new \stdClass();
-            $responseObject->data->error = new \stdClass();
-            $responseObject->message = $e->getMessage();
-        } catch (GuzzleException $e) {
-            $response = $e->getResponse();
-            $responseObject->success = false;
-            $responseObject->data = json_decode($response->getBody()->getContents());
-
-            if (isset($responseObject->data->error->error_user_msg)) {
-                $responseObject->message = $responseObject->data->error->error_user_msg;
-            } else {
-                $responseObject->message = $responseObject->data->error->message;
-            }
-        } catch (Exception $e) {
-            $responseObject->success = false;
-            $responseObject->data = new \stdClass();
-            $responseObject->data->error = new \stdClass();
-            $responseObject->data->error->message = $e->getMessage();
-        }
-
-        return $responseObject;
-    }
-
-    function syncTemplates()
-    {
-        $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->wabaId}/message_templates";
-
-        $client = new Client();
-        $responseObject = new \stdClass();
-
-        try {
-            do {
-                $response = $client->request('GET', $url, [
+            try {
+                $response = $client->post($url, [
                     'headers' => [
-                        'Authorization' => "OAuth {$this->accessToken}",
+                        'Authorization' => 'Bearer ' . $this->accessToken,
+                        'Content-Type' => 'application/json',
                     ],
+                    'json' => $requestData,
                 ]);
 
-                $responseObject = json_decode($response->getBody()->getContents());
+                $responseObject->success = true;
+                $responseObject->data = json_decode($response->getBody()->getContents());
 
-                //dd($responseObject);
-
-                foreach($responseObject->data as $templateData){
-                    $template = Template::where('organization_id', session()->get('current_organization'))
-                        ->where('meta_id', $templateData->id)->first();
-
-                    if($template){
-                        $template->metadata = json_encode($templateData);
-                        $template->status = $templateData->status;
-                        $template->updated_at = now();
-                        $template->deleted_at = NULL;
-                        $template->save();
-                    } else {
-                        $template = new Template();
-                        $template->organization_id = session()->get('current_organization');
-                        $template->meta_id = $templateData->id;
-                        $template->name = $templateData->name;
-                        $template->category = $templateData->category;
-                        $template->language = $templateData->language;
-                        $template->metadata = json_encode($templateData);
-                        $template->status = $templateData->status;
-                        $template->created_by = auth()->user()->id;
-                        $template->created_at = now();
-                        $template->updated_at = now();
-                        $template->save();
-                    }
-                };
-
-                if(isset($responseObject->paging) && isset($responseObject->paging->next)) {
-                    $url = $responseObject->paging->next;
+                //Update Template In Database
+                if ($template) {
+                    $template->organization_id = session()->get('current_organization');
+                    $template->category = $template->status == 'APPROVED' ? $template->category : $request->category;
+                    //$template->metadata = json_encode($requestData);
+                    $template->status = 'PENDING';
+                    $template->created_by = auth()->user()->id;
+                    $template->updated_at = now(); // No need to set `created_at` when updating
+                    $template->save();
                 } else {
-                    $url = null; // Break the loop if no next page URL is available
+                    // Handle case where template is not found (optional)
+                    throw new \Exception('Template not found');
                 }
-            } while($url);
-        } catch (ConnectException $e) {
-            $responseObject->success = false;
-            $responseObject->data = new \stdClass();
-            $responseObject->data->error = new \stdClass();
-            $responseObject->data->error->message = $e->getMessage();
-        } catch (GuzzleException $e) {
-            $response = $e->getResponse();
-            $responseObject->success = false;
-            $responseObject->data = json_decode($response->getBody()->getContents());
-
-            if (isset($responseObject->data->error->error_user_msg)) {
-                $responseObject->message = $responseObject->data->error->error_user_msg;
-            } else {
-                $responseObject->message = $responseObject->data->error->message;
-            }
-        } catch (Exception $e) {
-            $responseObject->success = false;
-            $responseObject->data = new \stdClass();
-            $responseObject->data->error = new \stdClass();
-            $responseObject->data->error->message = $e->getMessage();
-        }
-
-        return $responseObject;
-    }
-
-    /**
-     * This function deletes a template by its UUID via a DELETE request to Facebook's messaging API.
-     *
-     * @param string $uuid The UUID of the template to be deleted.
-     * @return mixed Returns the response from the HTTP request.
-     */
-    public function deleteTemplate($uuid)
-    {
-        $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->wabaId}/message_templates";
-        $headers = $this->setHeaders();
-
-        $template = Template::where('uuid', $uuid)->first();
-
-        $requestData['hsm_id'] = $template->meta_id;
-        $requestData['name'] = $template->name;
-
-        $responseObject = $this->sendHttpRequest('DELETE', $url, $requestData, $headers);
-
-        if($responseObject->success){
-            $template->deleted_at = now();
-            $template->save();
-        }
-
-        return $responseObject;
-    }
-
-    function getMedia($mediaId)
-    {
-        $url = "https://graph.facebook.com/{$this->apiVersion}/{$mediaId}";
-        $headers = $this->setHeaders();
-
-        $responseObject = $this->sendHttpRequest('GET', $url, NULL, $headers);
-
-        return $responseObject;
-    }
-
-    function checkHealth()
-    {
-        $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->wabaId}?fields=health_status";
-        $headers = $this->setHeaders();
-
-        $responseObject = $this->sendHttpRequest('GET', $url, NULL, $headers);
-
-        return $responseObject;
-    }
-
-    function subscribeToWaba()
-    {
-        $responseObject = new \stdClass();
-
-        try {
-            $response = Http::withHeaders([
-                'Authorization' => 'Bearer ' . $this->accessToken
-            ])->post("https://graph.facebook.com/{$this->apiVersion}/{$this->wabaId}/subscribed_apps")->throw()->json();
-
-            $responseObject->success = true;
-            $responseObject->data = new \stdClass();
-            $responseObject->data = (object) $response;
-        } catch (\Exception $e) {
-            $responseObject->success = false;
-            $responseObject->data = new \stdClass();
-            $responseObject->data->error = new \stdClass();
-            $responseObject->data->error->message = $e->getMessage();
-        }
-
-        return $responseObject;
-    }
-
-    function getWabaSubscriptions()
-    {
-        $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->wabaId}/subscribed_apps";
-        $headers = $this->setHeaders();
-
-        $responseObject = $this->sendHttpRequest('GET', $url, NULL, $headers);
-
-        return $responseObject;
-    }
-
-    function overrideCallbackUrl($callbackUrl, $verifyToken)
-    {
-        $responseObject = new \stdClass();
-
-        try {
-            $response = Http::withHeaders([
-                'Authorization' => 'Bearer ' . $this->accessToken
-            ])->post("https://graph.facebook.com/{$this->apiVersion}/{$this->wabaId}/subscribed_apps", [
-                'override_callback_uri' => $callbackUrl,
-                'verify_token' => $verifyToken
-            ])->throw()->json();
-
-            $responseObject->success = true;
-            $responseObject->data = new \stdClass();
-            $responseObject->data = (object) $response;
-        } catch (\Exception $e) {
-            $responseObject->success = false;
-            $responseObject->data = new \stdClass();
-            $responseObject->data->error = new \stdClass();
-            $responseObject->data->error->message = $e->getMessage();
-        }
-
-        return $responseObject;
-    }
-
-    function unSubscribeToWaba()
-    {
-        $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->wabaId}/subscribed_apps";
-        $headers = $this->setHeaders();
-
-        $responseObject = $this->sendHttpRequest('DELETE', $url, NULL, $headers);
-
-        return $responseObject;
-    }
-
-    public function getBusinessProfile(){
-        $responseObject = new \stdClass();
-
-        try {
-            $response = Http::withHeaders([
-                'Authorization' => 'Bearer ' . $this->accessToken
-            ])->get("https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}/whatsapp_business_profile", [
-                'fields' => 'about,address,description,email,profile_picture_url,websites,vertical',
-            ])->throw()->json();
-
-            if (isset($response['data']['error'])) {
+            } catch (ConnectException $e) {
                 $responseObject->success = false;
                 $responseObject->data = new \stdClass();
                 $responseObject->data->error = new \stdClass();
-                $responseObject->data->error->code = $response['data']['error']['code'];
-                $responseObject->data->error->message = $response['data']['error']['message'];
-            } else {    
-                $responseObject->success = true;
+                $responseObject->message = $e->getMessage();
+            } catch (GuzzleException $e) {
+                $response = $e->getResponse();
+                $responseObject->success = false;
+                $responseObject->data = json_decode($response->getBody()->getContents());
+
+                if (isset($responseObject->data->error->error_user_msg)) {
+                    $responseObject->message = $responseObject->data->error->error_user_msg;
+                } else {
+                    $responseObject->message = $responseObject->data->error->message;
+                }
+            } catch (Exception $e) {
+                $responseObject->success = false;
                 $responseObject->data = new \stdClass();
-                $responseObject->data = (object) $response['data'][0];
+                $responseObject->data->error = new \stdClass();
+                $responseObject->data->error->message = $e->getMessage();
             }
-        } catch (\Exception $e) {
-            $responseObject->success = false;
-            $responseObject->data = new \stdClass();
-            $responseObject->data->error = new \stdClass();
-            $responseObject->data->error->message = $e->getMessage();
+
+            return $responseObject;
         }
 
-        return $responseObject;
-    }
+        function syncTemplates()
+        {
+            $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->wabaId}/message_templates";
 
-    public function updateBusinessProfile(Request $request){
-        $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}/whatsapp_business_profile";
-        
-        $headers = $this->setHeaders();
+            $client = new Client();
+            $responseObject = new \stdClass();
 
-        $requestData['messaging_product'] = 'whatsapp';
-        $requestData['about'] = $request->about;
-        $requestData['address'] = $request->address;
-        $requestData['description'] = $request->description;
-        $requestData['vertical'] = $request->industry;
-        $requestData['email'] = $request->email;
+            try {
+                do {
+                    $response = $client->request('GET', $url, [
+                        'headers' => [
+                            'Authorization' => "OAuth {$this->accessToken}",
+                        ],
+                    ]);
+
+                    $responseObject = json_decode($response->getBody()->getContents());
+
+                    //dd($responseObject);
+
+                    foreach($responseObject->data as $templateData){
+                        $template = Template::where('organization_id', session()->get('current_organization'))
+                            ->where('meta_id', $templateData->id)->first();
+
+                        if($template){
+                            $template->metadata = json_encode($templateData);
+                            $template->status = $templateData->status;
+                            $template->updated_at = now();
+                            $template->deleted_at = NULL;
+                            $template->save();
+                        } else {
+                            $template = new Template();
+                            $template->organization_id = session()->get('current_organization');
+                            $template->meta_id = $templateData->id;
+                            $template->name = $templateData->name;
+                            $template->category = $templateData->category;
+                            $template->language = $templateData->language;
+                            $template->metadata = json_encode($templateData);
+                            $template->status = $templateData->status;
+                            $template->created_by = auth()->user()->id;
+                            $template->created_at = now();
+                            $template->updated_at = now();
+                            $template->save();
+                        }
+                    };
+
+                    if(isset($responseObject->paging) && isset($responseObject->paging->next)) {
+                        $url = $responseObject->paging->next;
+                    } else {
+                        $url = null; // Break the loop if no next page URL is available
+                    }
+                } while($url);
+            } catch (ConnectException $e) {
+                $responseObject->success = false;
+                $responseObject->data = new \stdClass();
+                $responseObject->data->error = new \stdClass();
+                $responseObject->data->error->message = $e->getMessage();
+            } catch (GuzzleException $e) {
+                $response = $e->getResponse();
+                $responseObject->success = false;
+                $responseObject->data = json_decode($response->getBody()->getContents());
+
+                if (isset($responseObject->data->error->error_user_msg)) {
+                    $responseObject->message = $responseObject->data->error->error_user_msg;
+                } else {
+                    $responseObject->message = $responseObject->data->error->message;
+                }
+            } catch (Exception $e) {
+                $responseObject->success = false;
+                $responseObject->data = new \stdClass();
+                $responseObject->data->error = new \stdClass();
+                $responseObject->data->error->message = $e->getMessage();
+            }
+
+            return $responseObject;
+        }
+
+        /**
+         * This function deletes a template by its UUID via a DELETE request to Facebook's messaging API.
+         *
+         * @param string $uuid The UUID of the template to be deleted.
+         * @return mixed Returns the response from the HTTP request.
+         */
+        public function deleteTemplate($uuid)
+        {
+            $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->wabaId}/message_templates";
+            $headers = $this->setHeaders();
+
+            $template = Template::where('uuid', $uuid)->first();
+
+            $requestData['hsm_id'] = $template->meta_id;
+            $requestData['name'] = $template->name;
+
+            $responseObject = $this->sendHttpRequest('DELETE', $url, $requestData, $headers);
+
+            if($responseObject->success){
+                $template->deleted_at = now();
+                $template->save();
+            }
+
+            return $responseObject;
+        }
+
+        function getMedia($mediaId)
+        {
+            $url = "https://graph.facebook.com/{$this->apiVersion}/{$mediaId}";
+            $headers = $this->setHeaders();
+
+            $responseObject = $this->sendHttpRequest('GET', $url, NULL, $headers);
+
+            return $responseObject;
+        }
+
+        function checkHealth()
+        {
+            $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->wabaId}?fields=health_status";
+            $headers = $this->setHeaders();
+
+            $responseObject = $this->sendHttpRequest('GET', $url, NULL, $headers);
+
+            return $responseObject;
+        }
+
+        function subscribeToWaba()
+        {
+            $responseObject = new \stdClass();
+
+            try {
+                $response = Http::withHeaders([
+                    'Authorization' => 'Bearer ' . $this->accessToken
+                ])->post("https://graph.facebook.com/{$this->apiVersion}/{$this->wabaId}/subscribed_apps")->throw()->json();
+
+                $responseObject->success = true;
+                $responseObject->data = new \stdClass();
+                $responseObject->data = (object) $response;
+            } catch (\Exception $e) {
+                $responseObject->success = false;
+                $responseObject->data = new \stdClass();
+                $responseObject->data->error = new \stdClass();
+                $responseObject->data->error->message = $e->getMessage();
+            }
+
+            return $responseObject;
+        }
+
+        function getWabaSubscriptions()
+        {
+            $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->wabaId}/subscribed_apps";
+            $headers = $this->setHeaders();
+
+            $responseObject = $this->sendHttpRequest('GET', $url, NULL, $headers);
+
+            return $responseObject;
+        }
+
+        function overrideCallbackUrl($callbackUrl, $verifyToken)
+        {
+            $responseObject = new \stdClass();
+
+            try {
+                $response = Http::withHeaders([
+                    'Authorization' => 'Bearer ' . $this->accessToken
+                ])->post("https://graph.facebook.com/{$this->apiVersion}/{$this->wabaId}/subscribed_apps", [
+                    'override_callback_uri' => $callbackUrl,
+                    'verify_token' => $verifyToken
+                ])->throw()->json();
+
+                $responseObject->success = true;
+                $responseObject->data = new \stdClass();
+                $responseObject->data = (object) $response;
+            } catch (\Exception $e) {
+                $responseObject->success = false;
+                $responseObject->data = new \stdClass();
+                $responseObject->data->error = new \stdClass();
+                $responseObject->data->error->message = $e->getMessage();
+            }
+
+            return $responseObject;
+        }
+
+        function unSubscribeToWaba()
+        {
+            $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->wabaId}/subscribed_apps";
+            $headers = $this->setHeaders();
+
+            $responseObject = $this->sendHttpRequest('DELETE', $url, NULL, $headers);
+
+            return $responseObject;
+        }
+
+        public function getBusinessProfile(){
+            $responseObject = new \stdClass();
+
+            try {
+                $response = Http::withHeaders([
+                    'Authorization' => 'Bearer ' . $this->accessToken
+                ])->get("https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}/whatsapp_business_profile", [
+                    'fields' => 'about,address,description,email,profile_picture_url,websites,vertical',
+                ])->throw()->json();
+
+                if (isset($response['data']['error'])) {
+                    $responseObject->success = false;
+                    $responseObject->data = new \stdClass();
+                    $responseObject->data->error = new \stdClass();
+                    $responseObject->data->error->code = $response['data']['error']['code'];
+                    $responseObject->data->error->message = $response['data']['error']['message'];
+                } else {    
+                    $responseObject->success = true;
+                    $responseObject->data = new \stdClass();
+                    $responseObject->data = (object) $response['data'][0];
+                }
+            } catch (\Exception $e) {
+                $responseObject->success = false;
+                $responseObject->data = new \stdClass();
+                $responseObject->data->error = new \stdClass();
+                $responseObject->data->error->message = $e->getMessage();
+            }
+
+            return $responseObject;
+        }
+
+        public function updateBusinessProfile(Request $request){
+            $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}/whatsapp_business_profile";
             
-        $profile_picture_url = NULL;
+            $headers = $this->setHeaders();
 
-        if($request->hasFile('profile_picture_url')){
-            $storage = Setting::where('key', 'storage_system')->first()->value;
-            $fileContent = $request->file('profile_picture_url');
+            $requestData['messaging_product'] = 'whatsapp';
+            $requestData['about'] = $request->about;
+            $requestData['address'] = $request->address;
+            $requestData['description'] = $request->description;
+            $requestData['vertical'] = $request->industry;
+            $requestData['email'] = $request->email;
+                
+            $profile_picture_url = NULL;
 
-            if($storage === 'local'){
-                $file = Storage::disk('local')->put('public', $fileContent);
-                $mediaFilePath = $file;
-                $profile_picture_url = rtrim(config('app.url'), '/') . '/media/' . ltrim($mediaFilePath, '/');
-            } else if($storage === 'aws') {
-                $file = $request->file('profile_picture_url');
-                $uploadedFile = $file->store('uploads/media/sent/' . $this->organizationId, 's3');
-                $mediaFilePath = Storage::disk('s3')->url($uploadedFile);
-                $profile_picture_url = $mediaFilePath;
+            if($request->hasFile('profile_picture_url')){
+                $storage = Setting::where('key', 'storage_system')->first()->value;
+                $fileContent = $request->file('profile_picture_url');
+
+                if($storage === 'local'){
+                    $file = Storage::disk('local')->put('public', $fileContent);
+                    $mediaFilePath = $file;
+                    $profile_picture_url = rtrim(config('app.url'), '/') . '/media/' . ltrim($mediaFilePath, '/');
+                } else if($storage === 'aws') {
+                    $file = $request->file('profile_picture_url');
+                    $uploadedFile = $file->store('uploads/media/sent/' . $this->organizationId, 's3');
+                    $mediaFilePath = Storage::disk('s3')->url($uploadedFile);
+                    $profile_picture_url = $mediaFilePath;
+                }
+
+                $fileUploadResponse = $this->initiateResumableUploadSession($request->file('profile_picture_url'));
+
+                if($fileUploadResponse->success){
+                    $requestData['profile_picture_handle'] = $fileUploadResponse->data->h;
+                }
             }
 
-            $fileUploadResponse = $this->initiateResumableUploadSession($request->file('profile_picture_url'));
+            $responseObject = $this->sendHttpRequest('POST', $url, $requestData, $headers);
 
-            if($fileUploadResponse->success){
-                $requestData['profile_picture_handle'] = $fileUploadResponse->data->h;
+            if($responseObject->success === true){
+                $organizationConfig = Organization::where('id', $this->organizationId)->first();
+                $metadataArray = $organizationConfig->metadata ? json_decode($organizationConfig->metadata, true) : [];
+
+                $metadataArray['whatsapp']['business_profile']['about'] = $request->about;
+                $metadataArray['whatsapp']['business_profile']['address'] = $request->address;
+                $metadataArray['whatsapp']['business_profile']['description'] = $request->description;
+                $metadataArray['whatsapp']['business_profile']['industry'] = $request->industry;
+                $metadataArray['whatsapp']['business_profile']['email'] = $request->email;
+                if($profile_picture_url != NULL){
+                    $metadataArray['whatsapp']['business_profile']['profile_picture_url'] = $profile_picture_url;
+                }
+
+                $updatedMetadataJson = json_encode($metadataArray);
+
+                $organizationConfig->metadata = $updatedMetadataJson;
+                $organizationConfig->save();
             }
+
+            return $responseObject;
         }
 
-        $responseObject = $this->sendHttpRequest('POST', $url, $requestData, $headers);
+        public function deRegisterPhone(){
+            $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}/deregister";
+            
+            $headers = $this->setHeaders();
 
-        if($responseObject->success === true){
-            $organizationConfig = Organization::where('id', $this->organizationId)->first();
-            $metadataArray = $organizationConfig->metadata ? json_decode($organizationConfig->metadata, true) : [];
+            $responseObject = $this->sendHttpRequest('POST', $url, NULL, $headers);
 
-            $metadataArray['whatsapp']['business_profile']['about'] = $request->about;
-            $metadataArray['whatsapp']['business_profile']['address'] = $request->address;
-            $metadataArray['whatsapp']['business_profile']['description'] = $request->description;
-            $metadataArray['whatsapp']['business_profile']['industry'] = $request->industry;
-            $metadataArray['whatsapp']['business_profile']['email'] = $request->email;
-            if($profile_picture_url != NULL){
-                $metadataArray['whatsapp']['business_profile']['profile_picture_url'] = $profile_picture_url;
+            if($responseObject->success === true){
+                dd($responseObject);
             }
 
-            $updatedMetadataJson = json_encode($metadataArray);
-
-            $organizationConfig->metadata = $updatedMetadataJson;
-            $organizationConfig->save();
-        }
-
-        return $responseObject;
-    }
-
-    public function deRegisterPhone(){
-        $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}/deregister";
-        
-        $headers = $this->setHeaders();
-
-        $responseObject = $this->sendHttpRequest('POST', $url, NULL, $headers);
-
-        if($responseObject->success === true){
             dd($responseObject);
+            return $responseObject;
         }
 
-        dd($responseObject);
-        return $responseObject;
-    }
+        public function getPhoneNumberId(){
+            $responseObject = new \stdClass();
 
-    public function getPhoneNumberId(){
-        $responseObject = new \stdClass();
+            try {
+                $fields = 'display_phone_number,certificate,name_status,new_certificate,new_name_status,verified_name,quality_rating,messaging_limit_tier';
 
-        try {
-            $fields = 'display_phone_number,certificate,name_status,new_certificate,new_name_status,verified_name,quality_rating,messaging_limit_tier';
-
-            $response = Http::get("https://graph.facebook.com/{$this->apiVersion}/{$this->wabaId}/phone_numbers", [
-                'fields' => $fields,
-                'access_token' => $this->accessToken,
-            ])->throw()->json();
-
-            if (isset($response['data']['error'])) {
-                $responseObject->success = false;
-                $responseObject->data = new \stdClass();
-                $responseObject->data->error = new \stdClass();
-                $responseObject->data->error->code = $response['data']['error']['code'];
-                $responseObject->data->error->message = $response['data']['error']['message'];
-            } else {    
-                $responseObject->success = true;
-                $responseObject->data = new \stdClass();
-                $responseObject->data = (object) $response['data'][0];
-        
-            }
-        } catch (\Exception $e) {
-            $responseObject->success = false;
-            $responseObject->data = new \stdClass();
-            $responseObject->data->error = new \stdClass();
-            $responseObject->data->error->message = $e->getMessage();
-        }
-
-        return $responseObject;
-    }
-
-    public function getPhoneNumberStatus(){
-        $responseObject = new \stdClass();
-
-        try {
-
-            $response = Http::withHeaders([
-                'Authorization' => 'Bearer ' . $this->accessToken
-            ])->get("https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}", [
-                'fields' => 'status, code_verification_status , quality_score, health_status,whatsapp_business_manager_messaging_limit',
-            ])->throw()->json();
-
-            if (isset($response['data']['error'])) {
-                $responseObject->success = false;
-                $responseObject->data = new \stdClass();
-                $responseObject->data->error = new \stdClass();
-                $responseObject->data->error->code = $response['data']['error']['code'];
-                $responseObject->data->error->message = $response['data']['error']['message'];
-            } else {    
-                $responseObject->success = true;
-                $responseObject->data = new \stdClass();
-                $responseObject->data = (object) $response;
-            }
-        } catch (\Exception $e) {
-            $responseObject->success = false;
-            $responseObject->data = new \stdClass();
-            $responseObject->data->error = new \stdClass();
-            $responseObject->data->error->message = $e->getMessage();
-        }
-
-        return $responseObject;
-    }
-
-    public function getAccountReviewStatus(){
-        $responseObject = new \stdClass();
-
-        try {
-            $response = Http::withHeaders([
-                'Authorization' => 'Bearer ' . $this->accessToken
-            ])->get("https://graph.facebook.com/{$this->apiVersion}/{$this->wabaId}", [
-                'fields' => 'account_review_status',
-            ])->throw()->json();
-
-            if (isset($response['data']['error'])) {
-                $responseObject->success = false;
-                $responseObject->data = new \stdClass();
-                $responseObject->data->error = new \stdClass();
-                $responseObject->data->error->code = $response['data']['error']['code'];
-                $responseObject->data->error->message = $response['data']['error']['message'];
-            } else {    
-                $responseObject->success = true;
-                $responseObject->data = new \stdClass();
-                $responseObject->data = (object) $response;
-            }
-        } catch (\Exception $e) {
-            $responseObject->success = false;
-            $responseObject->data = new \stdClass();
-            $responseObject->data->error = new \stdClass();
-            $responseObject->data->error->message = $e->getMessage();
-        }
-
-        return $responseObject;
-    }
-
-    function viewMedia($mediaId)
-    {
-        $response = $this->getMedia($mediaId);
-
-        if(!$response->success){
-            return $response;
-        }
-
-        $url = $response->data->url;
-        $headers = $this->setHeaders();
-
-        $responseObject = $this->sendHttpRequest('GET', $url, NULL, $headers);
-
-        dd($responseObject);
-
-        return $responseObject;
-    }
-
-    function initiateResumableUploadSession($file)
-    {
-        $sessionResponse = $this->createResumableUploadSession($file);
-
-        if(!$sessionResponse->success){
-            return $sessionResponse;
-        }
-
-        $uploadSessionId = $sessionResponse->data->id;
-        $fileName = $file->getPathname();
-        $url = "https://graph.facebook.com/{$this->apiVersion}/{$uploadSessionId}";
-
-        $client = new Client();
-        $responseObject = new \stdClass();
-
-        try {
-            $response = $client->request('POST', $url, [
-                'headers' => [
-                    'Authorization' => "OAuth {$this->accessToken}",
-                    'file_offset' => 0,
-                ],
-                'body' => fopen($fileName, 'r'),
-                'timeout' => 2,
-            ]);
-
-            $responseObject->success = true;
-            $responseObject->data = json_decode($response->getBody()->getContents());
-        } catch (ConnectException $e) {
-            $responseObject->success = false;
-            $responseObject->data = new \stdClass();
-            $responseObject->data->error = new \stdClass();
-            $responseObject->data->error->message = $e->getMessage();
-        } catch (GuzzleException $e) {
-            $response = $e->getResponse();
-            $responseObject->success = false;
-            $responseObject->data = json_decode($response->getBody()->getContents());
-
-            if (isset($responseObject->data->error->error_user_msg)) {
-                $responseObject->message = $responseObject->data->error->error_user_msg;
-            } else {
-                $responseObject->message = $responseObject->data->error->message;
-            }
-        } catch (Exception $e) {
-            $responseObject->success = false;
-            $responseObject->data = new \stdClass();
-            $responseObject->data->error = new \stdClass();
-            $responseObject->data->error->message = $e->getMessage();
-        }
-
-        return $responseObject;
-    }
-
-    function createResumableUploadSession($file)
-    {
-        $fileLength = $file->getSize();
-        $fileType = $file->getMimeType();
-        $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->appId}/uploads";
-
-        $client = new Client();
-        $responseObject = new \stdClass();
-
-        try {
-            $response = $client->request('POST', $url, [
-                'form_params' => [
-                    'file_length' => $fileLength,
-                    'file_type' => $fileType,
+                $response = Http::get("https://graph.facebook.com/{$this->apiVersion}/{$this->wabaId}/phone_numbers", [
+                    'fields' => $fields,
                     'access_token' => $this->accessToken,
-                ]
-            ]);
-        
-            $status = $response->getStatusCode();
-            $responseObject->success = true;
-            $responseObject->data = json_decode($response->getBody()->getContents());
-        } catch (ConnectException $e) {
-            $responseObject->success = false;
-            $responseObject->data = new \stdClass();
-            $responseObject->data->error = new \stdClass();
-            $responseObject->data->error->message = $e->getMessage();
-        } catch (GuzzleException $e) {
-            $response = $e->getResponse();
-            $responseObject->success = false;
-            $responseObject->data = json_decode($response->getBody()->getContents());
+                ])->throw()->json();
 
-            if (isset($responseObject->data->error->error_user_msg)) {
-                $responseObject->message = $responseObject->data->error->error_user_msg;
-            } else {
-                $responseObject->message = $responseObject->data->error->message;
+                if (isset($response['data']['error'])) {
+                    $responseObject->success = false;
+                    $responseObject->data = new \stdClass();
+                    $responseObject->data->error = new \stdClass();
+                    $responseObject->data->error->code = $response['data']['error']['code'];
+                    $responseObject->data->error->message = $response['data']['error']['message'];
+                } else {    
+                    $responseObject->success = true;
+                    $responseObject->data = new \stdClass();
+                    $responseObject->data = (object) $response['data'][0];
+            
+                }
+            } catch (\Exception $e) {
+                $responseObject->success = false;
+                $responseObject->data = new \stdClass();
+                $responseObject->data->error = new \stdClass();
+                $responseObject->data->error->message = $e->getMessage();
             }
-        } catch (Exception $e) {
-            $response = $e->getResponse();
-            $responseObject->success = false;
-            $responseObject->data = json_decode($response->getBody()->getContents());
+
+            return $responseObject;
         }
 
-        return $responseObject;
-    }
+        public function getPhoneNumberStatus(){
+            $responseObject = new \stdClass();
 
-    //Set the headers for request
-    public function setHeaders()
-    {
-        return [
-            'Authorization' => 'Bearer ' . $this->accessToken,
-            'Content-Type' => 'application/json',
-        ];
-    }
+            try {
 
-    // Private method to send an HTTP request
-    private function sendHttpRequest($method, $url, $data = [], $headers = [])
-    {
-        $client = new Client();
-        $responseObject = new \stdClass();
+                $response = Http::withHeaders([
+                    'Authorization' => 'Bearer ' . $this->accessToken
+                ])->get("https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}", [
+                    'fields' => 'status, code_verification_status , quality_score, health_status,whatsapp_business_manager_messaging_limit',
+                ])->throw()->json();
 
-        try {
-            $requestOptions = [
-                'headers' => $headers,
+                if (isset($response['data']['error'])) {
+                    $responseObject->success = false;
+                    $responseObject->data = new \stdClass();
+                    $responseObject->data->error = new \stdClass();
+                    $responseObject->data->error->code = $response['data']['error']['code'];
+                    $responseObject->data->error->message = $response['data']['error']['message'];
+                } else {    
+                    $responseObject->success = true;
+                    $responseObject->data = new \stdClass();
+                    $responseObject->data = (object) $response;
+                }
+            } catch (\Exception $e) {
+                $responseObject->success = false;
+                $responseObject->data = new \stdClass();
+                $responseObject->data->error = new \stdClass();
+                $responseObject->data->error->message = $e->getMessage();
+            }
+
+            return $responseObject;
+        }
+
+        public function getAccountReviewStatus(){
+            $responseObject = new \stdClass();
+
+            try {
+                $response = Http::withHeaders([
+                    'Authorization' => 'Bearer ' . $this->accessToken
+                ])->get("https://graph.facebook.com/{$this->apiVersion}/{$this->wabaId}", [
+                    'fields' => 'account_review_status',
+                ])->throw()->json();
+
+                if (isset($response['data']['error'])) {
+                    $responseObject->success = false;
+                    $responseObject->data = new \stdClass();
+                    $responseObject->data->error = new \stdClass();
+                    $responseObject->data->error->code = $response['data']['error']['code'];
+                    $responseObject->data->error->message = $response['data']['error']['message'];
+                } else {    
+                    $responseObject->success = true;
+                    $responseObject->data = new \stdClass();
+                    $responseObject->data = (object) $response;
+                }
+            } catch (\Exception $e) {
+                $responseObject->success = false;
+                $responseObject->data = new \stdClass();
+                $responseObject->data->error = new \stdClass();
+                $responseObject->data->error->message = $e->getMessage();
+            }
+
+            return $responseObject;
+        }
+
+        function viewMedia($mediaId)
+        {
+            $response = $this->getMedia($mediaId);
+
+            if(!$response->success){
+                return $response;
+            }
+
+            $url = $response->data->url;
+            $headers = $this->setHeaders();
+
+            $responseObject = $this->sendHttpRequest('GET', $url, NULL, $headers);
+
+            dd($responseObject);
+
+            return $responseObject;
+        }
+
+        function initiateResumableUploadSession($file)
+        {
+            $sessionResponse = $this->createResumableUploadSession($file);
+
+            if(!$sessionResponse->success){
+                return $sessionResponse;
+            }
+
+            $uploadSessionId = $sessionResponse->data->id;
+            $fileName = $file->getPathname();
+            $url = "https://graph.facebook.com/{$this->apiVersion}/{$uploadSessionId}";
+
+            $client = new Client();
+            $responseObject = new \stdClass();
+
+            try {
+                $response = $client->request('POST', $url, [
+                    'headers' => [
+                        'Authorization' => "OAuth {$this->accessToken}",
+                        'file_offset' => 0,
+                    ],
+                    'body' => fopen($fileName, 'r'),
+                    'timeout' => 2,
+                ]);
+
+                $responseObject->success = true;
+                $responseObject->data = json_decode($response->getBody()->getContents());
+            } catch (ConnectException $e) {
+                $responseObject->success = false;
+                $responseObject->data = new \stdClass();
+                $responseObject->data->error = new \stdClass();
+                $responseObject->data->error->message = $e->getMessage();
+            } catch (GuzzleException $e) {
+                $response = $e->getResponse();
+                $responseObject->success = false;
+                $responseObject->data = json_decode($response->getBody()->getContents());
+
+                if (isset($responseObject->data->error->error_user_msg)) {
+                    $responseObject->message = $responseObject->data->error->error_user_msg;
+                } else {
+                    $responseObject->message = $responseObject->data->error->message;
+                }
+            } catch (Exception $e) {
+                $responseObject->success = false;
+                $responseObject->data = new \stdClass();
+                $responseObject->data->error = new \stdClass();
+                $responseObject->data->error->message = $e->getMessage();
+            }
+
+            return $responseObject;
+        }
+
+        function createResumableUploadSession($file)
+        {
+            $fileLength = $file->getSize();
+            $fileType = $file->getMimeType();
+            $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->appId}/uploads";
+
+            $client = new Client();
+            $responseObject = new \stdClass();
+
+            try {
+                $response = $client->request('POST', $url, [
+                    'form_params' => [
+                        'file_length' => $fileLength,
+                        'file_type' => $fileType,
+                        'access_token' => $this->accessToken,
+                    ]
+                ]);
+            
+                $status = $response->getStatusCode();
+                $responseObject->success = true;
+                $responseObject->data = json_decode($response->getBody()->getContents());
+            } catch (ConnectException $e) {
+                $responseObject->success = false;
+                $responseObject->data = new \stdClass();
+                $responseObject->data->error = new \stdClass();
+                $responseObject->data->error->message = $e->getMessage();
+            } catch (GuzzleException $e) {
+                $response = $e->getResponse();
+                $responseObject->success = false;
+                $responseObject->data = json_decode($response->getBody()->getContents());
+
+                if (isset($responseObject->data->error->error_user_msg)) {
+                    $responseObject->message = $responseObject->data->error->error_user_msg;
+                } else {
+                    $responseObject->message = $responseObject->data->error->message;
+                }
+            } catch (Exception $e) {
+                $response = $e->getResponse();
+                $responseObject->success = false;
+                $responseObject->data = json_decode($response->getBody()->getContents());
+            }
+
+            return $responseObject;
+        }
+
+        //Set the headers for request
+        public function setHeaders()
+        {
+            return [
+                'Authorization' => 'Bearer ' . $this->accessToken,
+                'Content-Type' => 'application/json',
             ];
-
-            if (isset($data) && $method === 'POST' || $method === 'PUT' || $method === 'DELETE') {
-                $requestOptions['json'] = $data;
-            }
-
-            $response = $client->request($method, $url, $requestOptions);
-            $responseObject->success = true;
-            $responseObject->data = json_decode($response->getBody()->getContents());
-        } catch (ConnectException $e) {
-            $responseObject->success = false;
-            $responseObject->data = new \stdClass();
-            $responseObject->data->error = new \stdClass();
-            $responseObject->data->error->message = $e->getMessage();
-        } catch (GuzzleException $e) {
-            $response = $e->getResponse();
-            $responseObject->success = false;
-            $responseObject->data = json_decode($response->getBody()->getContents());
-
-            if (isset($responseObject->data->error->error_user_msg)) {
-                $responseObject->message = $responseObject->data->error->error_user_msg;
-            } else {
-                $responseObject->message = $responseObject->data->error->message;
-            }
-        } catch (Exception $e) {
-            $responseObject->success = false;
-            $responseObject->data = new \stdClass();
-            $responseObject->data->error = new \stdClass();
-            $responseObject->data->error->message = $e->getMessage();
         }
 
-        return $responseObject;
+        // Private method to send an HTTP request
+        private function sendHttpRequest($method, $url, $data = [], $headers = [])
+        {
+            $client = new Client();
+            $responseObject = new \stdClass();
+
+            try {
+                $requestOptions = [
+                    'headers' => $headers,
+                ];
+
+                if (isset($data) && $method === 'POST' || $method === 'PUT' || $method === 'DELETE') {
+                    $requestOptions['json'] = $data;
+                }
+
+                $response = $client->request($method, $url, $requestOptions);
+                $responseObject->success = true;
+                $responseObject->data = json_decode($response->getBody()->getContents());
+            } catch (ConnectException $e) {
+                $responseObject->success = false;
+                $responseObject->data = new \stdClass();
+                $responseObject->data->error = new \stdClass();
+                $responseObject->data->error->message = $e->getMessage();
+            } catch (GuzzleException $e) {
+                $response = $e->getResponse();
+                $responseObject->success = false;
+                $responseObject->data = json_decode($response->getBody()->getContents());
+
+                if (isset($responseObject->data->error->error_user_msg)) {
+                    $responseObject->message = $responseObject->data->error->error_user_msg;
+                } else {
+                    $responseObject->message = $responseObject->data->error->message;
+                }
+            } catch (Exception $e) {
+                $responseObject->success = false;
+                $responseObject->data = new \stdClass();
+                $responseObject->data->error = new \stdClass();
+                $responseObject->data->error->message = $e->getMessage();
+            }
+
+            return $responseObject;
+        }
     }
-}
