@@ -601,10 +601,21 @@ class WhatsappService
     }
 
     function getMediaSizeInBytesFromUrl($url) {
+         Log::info('Checking media URL start', [
+        'url' => $url,
+    ]);
+
         $imageContent = file_get_contents($url);
     
         if ($imageContent !== false) {
-            return strlen($imageContent);
+            $data = strlen($imageContent);
+            Log::info('Media loaded successfully', [
+                'url'  => $url,
+                'imageContent' => $imageContent,
+                'strlen' => $data
+            ]);
+            
+            return $data;
         }
     
         return null;

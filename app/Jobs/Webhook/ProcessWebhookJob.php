@@ -404,6 +404,8 @@ class ProcessWebhookJob implements ShouldQueue
                 Log::warning('Auto-reply check failed (non-blocking)', [
                     'chat_id' => $chat->id,
                     'file'    => $e->getFile(),
+                    'error'   => $e->getMessage(),
+                    'exception' => get_class($e),
                     'line'    => $e->getLine(),
                 ]);
             }
