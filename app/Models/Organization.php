@@ -49,11 +49,16 @@ class Organization extends Model
                 });
             })
             ->where(function ($query) use ($searchTerm) {
-                $query->where('name', 'like', '%' . $searchTerm . '%');
+                $query->where('name', 'like', '%' . $searchTerm . '%')
+                    ->orWhereHas('owner.user', function ($ownerQuery) use ($searchTerm) {
+                        $ownerQuery->where('first_name', 'like', '%' . $searchTerm . '%')
+                        ->orWhere('last_name', 'like', '%' . $searchTerm . '%')
+                                    ->orWhere('email', 'like', '%' . $searchTerm . '%');
+                    });
             })
             ->withCount('teams')
             ->latest()
-            ->paginate(10);
+            ->paginate(50);
 
         return $query;
     }
