@@ -78,15 +78,21 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
                 $this->organizationId = $this->campaignLog->campaign->organization_id;
                 $this->initializeWhatsappService();
 
-                $template = $this->buildTemplateRequest($this->campaignLog->campaign_id, $this->campaignLog->contact);
-                $responseObject = $this->whatsappService->sendTemplateMessage(
-                    $this->campaignLog->contact->uuid,
-                    $template,
-                    $campaign_user_id,
-                    $this->campaignLog->campaign_id
-                );
+                try {
+                    $template = $this->buildTemplateRequest($this->campaignLog->campaign_id, $this->campaignLog->contact);
+                    $responseObject = $this->whatsappService->sendTemplateMessage(
+                        $this->campaignLog->contact->uuid,
+                        $template,
+                        $campaign_user_id,
+                        $this->campaignLog->campaign_id
+                    );
 
-                $this->updateLogStatus($lockedLog, $responseObject);
+                    $this->updateLogStatus($lockedLog, $responseObject);
+                } catch (\Exception $e) {
+                    // Reset status to failed so the log can be retried, preventing stuck "ongoing" state
+                    $lockedLog->update(['status' => 'failed']);
+                    throw $e;
+                }
             }
             //});
         } catch (\Exception $e) {
