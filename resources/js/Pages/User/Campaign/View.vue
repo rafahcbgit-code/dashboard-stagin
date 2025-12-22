@@ -186,12 +186,21 @@
     const props = defineProps(['campaign', 'rows', 'filters', 'pusherSettings', 'organizationId']);
 
     // Story 2.5: AC-2.5.4 - Real-time progress state
+    // Calculate initial values from props (updated via Pusher events during campaign)
+    const initialTotal = props.campaign.total_message_count || 0;
+    const initialSent = props.campaign.total_sent_count || 0;
+    const initialFailed = props.campaign.total_failed_count || 0;
+    const initialPending = Math.max(0, initialTotal - initialSent - initialFailed);
+    const initialPercent = initialTotal > 0
+        ? Math.round(((initialSent + initialFailed) / initialTotal) * 100)
+        : 0;
+
     const progress = ref({
-        total: props.campaign.total_message_count || 0,
-        sent: props.campaign.total_sent_count || 0,
-        failed: props.campaign.total_failed_count || 0,
-        pending: 0,
-        percent: 0,
+        total: initialTotal,
+        sent: initialSent,
+        failed: initialFailed,
+        pending: initialPending,
+        percent: initialPercent,
         estimatedCompletion: null,
     });
 
