@@ -1145,6 +1145,7 @@ class WhatsappService
                     if($template){
                         $template->metadata = json_encode($templateData);
                         $template->status = $templateData->status;
+                        $template->category = $templateData->category;
                         $template->updated_at = now();
                         $template->deleted_at = NULL;
                         $template->save();
