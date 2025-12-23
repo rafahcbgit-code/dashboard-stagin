@@ -24,6 +24,10 @@ class ApiNotificationService
     public function sendNewMessageNotification($chat, $organizationId)
     {
         try {
+
+            if ($chat->type !== 'inbound') {
+                return;
+            }   
             $contact = $chat->contact;
             $metadata = json_decode($chat->metadata, true);
             $messageType = $metadata['type'] ?? 'text';
