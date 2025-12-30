@@ -2,11 +2,10 @@
 
 namespace App\Models;
 
-use App\Http\Traits\HasUuid;
-use Illuminate\Support\Carbon;
 use App\Helpers\DateTimeHelper;
-use Illuminate\Database\Eloquent\Model;
+use App\Http\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Model;
 
 class Chat extends Model {
     use HasFactory;
@@ -19,23 +18,10 @@ class Chat extends Model {
     {
         parent::boot();
 
-        static::creating(function ($chat) {
-            // Ensure created_at is always in UTC before saving
-            if (!isset($chat->created_at) || !$chat->created_at) {
-                $chat->created_at = now()->setTimezone('UTC')->toDateTimeString();
-            } else {
-                // If created_at is set (from webhook), ensure it's in UTC
-                $chat->created_at = Carbon::parse($chat->created_at)
-                    ->setTimezone('UTC')
-                    ->toDateTimeString();
-            }
-        });
-
         static::created(function ($chat) {
-        $contact = $chat->contact;
-        if ($contact) {
-                // Store in UTC (don't convert, it's already UTC from creating event)
-                $contact->latest_chat_created_at = $chat->getRawOriginal('created_at'); // Get raw UTC value
+            $contact = $chat->contact;
+            if ($contact) {
+                $contact->latest_chat_created_at = $chat->created_at;
                 $contact->save();
             }
         });

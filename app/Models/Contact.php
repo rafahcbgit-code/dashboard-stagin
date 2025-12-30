@@ -300,11 +300,4 @@ class Contact extends Model {
             'assigned_to'   
         )->latest('chat_tickets.id'); 
     }
-
-    public function getLatestChatCreatedAtAttribute($value)
-    {
-        if (!$value) return null;
-        // Don't convert - keep it as-is for sorting (it's already in UTC)
-        return $value;
-    }
 }
