@@ -128,6 +128,7 @@ class WhatsappService
                 'user_id' => $userId,
                 'metadata' => json_encode($response),
                 'status' => 'delivered',
+                'created_at' => now(),
             ]);
 
             $chat = Chat::with('contact','media')->where('id', $chat->id)->first();
@@ -522,7 +523,8 @@ class WhatsappService
                 'contact_id' => $contact->id,
                 'type' => 'outbound',
                 'metadata' => json_encode($mediaData),
-                'status' => 'sent'
+                'status' => 'sent',
+                'created_at' => now()
             ]);
 
             $chatlogId = ChatLog::insertGetId([
