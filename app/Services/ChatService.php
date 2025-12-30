@@ -117,36 +117,6 @@ class ChatService
         if ($assignedToMe) {
             $ticketState = 'all';
         }
-        
-        // Generate unique cache key - now including page number
-        $page = $request->get('page', 1);
-        $labelKey = !empty($labelFilters) ? md5(json_encode($labelFilters)) : 'none';
-        $searchKey = $searchTerm ? md5($searchTerm) : 'none';
-        $statusKey = $request->status ?? 'all';
-        
-        $cacheKey = sprintf(
-            'chat_list:%d:%s:%s:%s:%s:%s:%d',
-            $this->organizationId,
-            $statusKey,
-            $searchKey,
-            $labelKey,
-            $sortDirection,
-            $role,
-            $page
-        );
-        
-        // Check throttle for AJAX requests only
-        if (request()->expectsJson() && $uuid === null) {
-            $throttleCheck = $this->shouldThrottle($cacheKey);
-            
-            if ($throttleCheck['throttled']) {
-                return response()->json([
-                    'status' => 'wait',
-                    'wait_seconds' => $throttleCheck['wait'],
-                    'message' => 'Please wait before refreshing'
-                ], 200);
-            }
-        }
 
         $config = Organization::where('id', $this->organizationId)->first();
         $agents = Team::where('organization_id', $this->organizationId)->get();
@@ -160,59 +130,34 @@ class ChatService
 
             if(isset($settings->tickets) && $settings->tickets->active === true){
                 $ticketingActive = true;
-                
-                // ✅ REMOVED PERFORMANCE KILLER - Ticket creation moved to background job
-                // The old code looped through ALL contacts here - very slow!
-                
-                // Check if agents can view all chats
                 $allowAgentsToViewAllChats = $settings->tickets->allow_agents_to_view_all_chats;
             }
         }
 
-        // Get or cache the contact list for THIS specific page
-        $cachedData = Cache::remember($cacheKey, $this->cacheTtl, function() use (
-            $contact, 
+        // Direct query - NO CACHE
+        $contacts = $contact->contactsWithChats(
+            $this->organizationId, 
             $searchTerm, 
             $ticketingActive, 
             $ticketState, 
             $sortDirection, 
             $role, 
-            $allowAgentsToViewAllChats, 
+            $allowAgentsToViewAllChats,
             $labelFilters,
             $assignedToMe
-        ) {
-            $contacts = $contact->contactsWithChats(
-                $this->organizationId, 
-                $searchTerm, 
-                $ticketingActive, 
-                $ticketState, 
-                $sortDirection, 
-                $role, 
-                $allowAgentsToViewAllChats,
-                $labelFilters,
-                $assignedToMe
-            );
-            
-            $rowCount = $contact->contactsWithChatsCount(
-                $this->organizationId, 
-                $searchTerm, 
-                $ticketingActive, 
-                $ticketState, 
-                $sortDirection, 
-                $role, 
-                $allowAgentsToViewAllChats,
-                $labelFilters,
-                $assignedToMe
-            );
-
-            return [
-                'contacts' => $contacts,
-                'rowCount' => $rowCount
-            ];
-        });
-
-        $contacts = $cachedData['contacts'];
-        $rowCount = $cachedData['rowCount'];
+        );
+        
+        $rowCount = $contact->contactsWithChatsCount(
+            $this->organizationId, 
+            $searchTerm, 
+            $ticketingActive, 
+            $ticketState, 
+            $sortDirection, 
+            $role, 
+            $allowAgentsToViewAllChats,
+            $labelFilters,
+            $assignedToMe
+        );
 
         $pusherSettings = Setting::whereIn('key', [
             'pusher_app_id',
@@ -264,7 +209,7 @@ class ChatService
 
                 $contactFieldService = new ContactFieldService(session()->get('current_organization'));
                 $contactFields = $contactFieldService->get($request);
-               
+            
                 $labelColors = DB::table('labels')
                         ->join('contact_label', 'labels.id', '=', 'contact_label.label_id')
                         ->where('contact_label.contact_id', $contact->id)
@@ -303,18 +248,13 @@ class ChatService
             }
         }
 
-        // Mark this request as processed (for throttling)
-        if (request()->expectsJson()) {
-            $this->markRequestProcessed($cacheKey);
-        }
-
         if (request()->expectsJson()) {
             return response()->json([
                 'result' => ContactResource::collection($contacts)->response()->getData(),
             ], 200);
         } else {
             $settings = json_decode($config->metadata);
-     
+    
             return Inertia::render('User/Chat/Index', [
                 'title' => 'Chats',
                 'rows' => ContactResource::collection($contacts),
