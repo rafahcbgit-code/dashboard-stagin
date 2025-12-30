@@ -19,14 +19,11 @@ class Chat extends Model {
         parent::boot();
 
         static::created(function ($chat) {
-        if ($chat->contact_id && isset($chat->attributes['created_at'])) {
-            // Direct DB update - bypasses all Eloquent magic
-            \DB::table('contacts')
-                ->where('id', $chat->contact_id)
-                ->update([
-                    'latest_chat_created_at' => $chat->attributes['created_at']
-                ]);
-        }
+            $contact = $chat->contact;
+            if ($contact) {
+                $contact->latest_chat_created_at = $chat->created_at;
+                $contact->save();
+            }
         });
 
         /*static::updated(function ($chat) {
