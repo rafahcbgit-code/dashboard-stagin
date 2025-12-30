@@ -50,5 +50,32 @@ class DateTimeHelper
     {
         return $date->format('d M Y'); // Format without hours, minutes, and seconds
     }
+
+    public static function convertToUTC($date)
+    {
+        if (!$date) {
+            return null;
+        }
+
+        $timezone = 'UTC'; // Default timezone
+        $organizationId = session()->get('current_organization');
+
+        if ($organizationId) {
+            $organization = Organization::find($organizationId);
+            if ($organization) {
+                $metadata = $organization->metadata;
+                $metadata = isset($metadata) ? json_decode($metadata, true) : null;
+
+                if ($metadata && isset($metadata['timezone'])) {
+                    $timezone = $metadata['timezone'];
+                }
+            }
+        }
+
+        // Parse date in organization timezone and convert to UTC
+        return Carbon::parse($date, $timezone)
+            ->setTimezone('UTC')
+            ->toDateTimeString();
+    }
 }
 
