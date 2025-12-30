@@ -21,7 +21,20 @@ class Chat extends Model {
         static::created(function ($chat) {
             $contact = $chat->contact;
             if ($contact) {
-                $contact->latest_chat_created_at = $chat->created_at;
+                // For outbound: convert back to UTC before saving
+                if ($chat->type === 'outbound') {
+                    // The accessor already converted to org timezone, convert back to UTC
+                    $organizationTimezone = session()->get('organization_timezone') ?? 'UTC';
+                    $utcTime = \Carbon\Carbon::parse($chat->created_at, $organizationTimezone)
+                        ->setTimezone('UTC')
+                        ->toDateTimeString();
+                    
+                    $contact->latest_chat_created_at = $utcTime;
+                } else {
+                    // For inbound: already in UTC
+                    $contact->latest_chat_created_at = $chat->created_at;
+                }
+                
                 $contact->save();
             }
         });
