@@ -21,7 +21,7 @@ class Chat extends Model {
         static::created(function ($chat) {
             $contact = $chat->contact;
             if ($contact) {
-                $contact->latest_chat_created_at = $chat->created_at;
+                $contact->latest_chat_created_at = $chat->getRawOriginal('created_at');
                 $contact->save();
             }
         });
