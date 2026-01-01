@@ -23,6 +23,10 @@ class ChatController extends Controller
      * - sort: string (newest, oldest)
      * - page: integer
      * - per_page: integer (default: 20, max: 50)
+     * 
+     * Access Control:
+     * - owner/manager: sees all chats by default
+     * - agent: sees only assigned chats by default
      */
     public function index(Request $request)
     {
@@ -46,11 +50,34 @@ class ChatController extends Controller
             }
 
             $organizationId = $request->organization_id;
+            $currentUserId = $request->user('sanctum')->id;
             $searchTerm = $request->input('search');
             $labelFilter = $request->input('labels');
-            $ticketStatus = $request->input('ticket_status', 'all');
             $sort = $request->input('sort', 'newest');
             $perPage = $request->input('per_page', 20);
+
+            // GET USER ROLE IN ORGANIZATION
+            $userRole = \App\Models\Team::where('organization_id', $organizationId)
+                ->where('user_id', $currentUserId)
+                ->whereNull('deleted_at')
+                ->value('role');
+
+            if (!$userRole) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'User not part of this organization'
+                ], 403);
+            }
+
+            // DETERMINE DEFAULT TICKET STATUS BASED ON ROLE
+            $isAdminOrManager = in_array($userRole, ['owner', 'manager']);
+            $defaultTicketStatus = $isAdminOrManager ? 'all' : 'assigned_to_me';
+            $ticketStatus = $request->input('ticket_status', $defaultTicketStatus);
+
+            // AGENTS CANNOT ACCESS 'all' - SECURITY
+            if ($userRole === 'agent' && $ticketStatus === 'all') {
+                $ticketStatus = 'assigned_to_me';
+            }
 
             // Base query - Get contacts with chats
             $query = Contact::with(['labels', 'contactGroups'])
@@ -80,24 +107,32 @@ class ChatController extends Controller
                 }
             }
 
-            // Ticket status filter
-            if ($ticketStatus && $ticketStatus !== 'all') {
-                if ($ticketStatus === 'unassigned') {
-                    $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
-                        ->whereNull('chat_tickets.assigned_to');
-                } elseif ($ticketStatus === 'open') {
-                    $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
-                        ->where('chat_tickets.status', 'open');
-                } elseif ($ticketStatus === 'closed') {
-                    $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
-                        ->where('chat_tickets.status', 'closed');
-                } elseif ($ticketStatus === 'assigned_to_me') {
-                    $currentUserId = $request->user('sanctum')->id;
-                    $query->join('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
-                        ->where('chat_tickets.assigned_to', $currentUserId);
-                }
+            // TICKET STATUS FILTER
+            if ($ticketStatus === 'unassigned') {
+                // Show unassigned chats
+                $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
+                    ->whereNull('chat_tickets.assigned_to');
+                $query->select('contacts.*');
+                
+            } elseif ($ticketStatus === 'open') {
+                // Show open tickets
+                $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
+                    ->where('chat_tickets.status', 'open');
+                $query->select('contacts.*');
+                
+            } elseif ($ticketStatus === 'closed') {
+                // Show closed tickets
+                $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
+                    ->where('chat_tickets.status', 'closed');
+                $query->select('contacts.*');
+                
+            } elseif ($ticketStatus === 'assigned_to_me') {
+                // Show only chats assigned to current user
+                $query->join('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
+                    ->where('chat_tickets.assigned_to', $currentUserId);
                 $query->select('contacts.*');
             }
+            // If $ticketStatus === 'all', no filter (only for owner/manager)
 
             // Sort by last message time
             $sortDirection = $sort === 'oldest' ? 'asc' : 'desc';
@@ -173,6 +208,8 @@ class ChatController extends Controller
                 'success' => true,
                 'data' => [
                     'chats' => $chats,
+                    'user_role' => $userRole, // Include role in response
+                    'applied_filter' => $ticketStatus, // Show what filter was applied
                 ],
                 'meta' => [
                     'current_page' => $contacts->currentPage(),
