@@ -374,7 +374,7 @@ onUnmounted(() => {
                 <div class="mt-4 flex">
                     <button type="button" @click.self="isOpenModal = false"
                         class="inline-flex justify-center rounded-md border border-transparent bg-slate-50 px-4 py-2 text-sm text-slate-500 hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 mr-4">{{
-                        $t('Cancel') }}</button>
+                            $t('Cancel') }}</button>
                     <button
                         :class="['inline-flex justify-center rounded-md border border-transparent bg-primary px-4 py-2 text-sm text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2', { 'opacity-50': form2.processing }]"
                         :disabled="form2.processing">
