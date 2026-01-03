@@ -1,94 +1,38 @@
 <template>
   <AppLayout v-slot:default="slotProps">
     <div class="md:flex md:flex-grow md:overflow-visible">
-      <div
-        class="md:w-[30%] md:flex flex-col h-full bg-white border-r border-l"
-        :class="contact ? 'hidden' : ''"
-      >
-        <ChatTable
-          :rows="rows"
-          :filters="props.filters"
-          :rowCount="props.rowCount"
-          :ticketingIsEnabled="ticketingIsEnabled"
-          :status="props?.status"
-          :chatSortDirection="props.chat_sort_direction"
-          :teamRole="props.teamRole"
-        />
+      <div class="md:w-[30%] md:flex flex-col h-full bg-white border-r border-l" :class="contact ? 'hidden' : ''">
+        <ChatTable :rows="rows" :filters="props.filters" :rowCount="props.rowCount"
+          :ticketingIsEnabled="ticketingIsEnabled" :status="props?.status"
+          :chatSortDirection="props.chat_sort_direction" :teamRole="props.teamRole" />
       </div>
-      <div
-        class="min-w-0 bg-cover flex flex-col chat-bg"
-        :class="contact ? 'h-screen md:w-[70%]' : 'md:h-screen md:w-[70%]'"
-      >
-        <ChatHeader
-          v-if="contact"
-          :ticketingIsEnabled="ticketingIsEnabled"
-          :contact="contact"
-          :displayContactInfo="displayContactInfo"
-          :labelColors="labelColors"
-          :ticket="ticket"
-          :addon="addon"
-          :teamRole="props.teamRole"
-          @toggleView="toggleContactView"
-          @deleteThread="deleteThread"
-          @closeThread="closeThread"
-        />
-        <div
-          v-if="contact && !displayTemplate"
-          class="flex-1 overflow-y-auto"
-          ref="scrollContainer2"
-        >
-          <ChatThread
-            v-if="!displayContactInfo && !loadingThread && !displayTemplate"
-            :contactId="contact.id"
-            :initialMessages="chatThread"
-            :hasMoreMessages="hasMoreMessages"
-            :initialNextPage="nextPage"
-          />
-          <Contact
-            v-if="displayContactInfo && !displayTemplate"
-            class="bg-white h-full"
-            :fields="props.fields"
-            :contact="contact"
-            :locationSettings="props.locationSettings"
-          />
+      <div class="min-w-0 bg-cover flex flex-col chat-bg"
+        :class="contact ? 'h-screen md:w-[70%]' : 'md:h-screen md:w-[70%]'">
+        <ChatHeader v-if="contact" :ticketingIsEnabled="ticketingIsEnabled" :contact="contact"
+          :displayContactInfo="displayContactInfo" :labelColors="labelColors" :ticket="ticket" :addon="addon"
+          :teamRole="props.teamRole" :currentPage="rows.meta?.current_page" @toggleView="toggleContactView"
+          @deleteThread="deleteThread" @closeThread="closeThread" />
+        <div v-if="contact && !displayTemplate" class="flex-1 overflow-y-auto" ref="scrollContainer2">
+          <ChatThread v-if="!displayContactInfo && !loadingThread && !displayTemplate" :contactId="contact.id"
+            :initialMessages="chatThread" :hasMoreMessages="hasMoreMessages" :initialNextPage="nextPage" />
+          <Contact v-if="displayContactInfo && !displayTemplate" class="bg-white h-full" :fields="props.fields"
+            :contact="contact" :locationSettings="props.locationSettings" />
         </div>
-        <div
-          v-if="
-            contact && !displayContactInfo && !formLoading && !displayTemplate
-          "
-          class="w-full py-4"
-        >
-          <ChatForm
-            :contact="contact"
-            :simpleForm="simpleForm"
-            :chatLimitReached="isChatLimitReached"
-            @viewTemplate="displayTemplate = true"
-          />
+        <div v-if="
+          contact && !displayContactInfo && !formLoading && !displayTemplate
+        " class="w-full py-4">
+          <ChatForm :contact="contact" :simpleForm="simpleForm" :chatLimitReached="isChatLimitReached"
+            @viewTemplate="displayTemplate = true" />
         </div>
         <div v-if="displayTemplate" class="flex-1 overflow-y-hidden">
-          <CampaignForm
-            v-if="displayTemplate"
-            class="bg-white h-full"
-            :contact="contact.uuid"
-            :templates="templates"
-            :contactGroups="[]"
-            :settings="props.settings"
-            :displayCancelBtn="false"
-            :displayTitle="true"
-            :isCampaignFlow="false"
-            :scheduleTemplate="false"
-            :sendText="'Send Message'"
-            @viewTemplate="displayTemplate = false"
-            :contactFields="contactFields"
-          />
+          <CampaignForm v-if="displayTemplate" class="bg-white h-full" :contact="contact.uuid" :templates="templates"
+            :contactGroups="[]" :settings="props.settings" :displayCancelBtn="false" :displayTitle="true"
+            :isCampaignFlow="false" :scheduleTemplate="false" :sendText="'Send Message'"
+            @viewTemplate="displayTemplate = false" :contactFields="contactFields" />
         </div>
       </div>
     </div>
-    <button
-      class="hidden"
-      ref="toggleNavbarBtn"
-      @click="slotProps.toggleNavBar"
-    ></button>
+    <button class="hidden" ref="toggleNavbarBtn" @click="slotProps.toggleNavBar"></button>
   </AppLayout>
 </template>
 <script setup>
@@ -303,7 +247,20 @@ const scrollToBottom = () => {
 
 const closeThread = () => {
   toggleNavbarBtn.value.click();
-  contact.value = null;
+
+  // Preserve the current page in the URL when closing the thread so
+  // the user returns to the same page they were browsing (e.g., page 10).
+  try {
+    const currentPage = rows.value?.meta?.current_page || 1;
+    // Update route to include the page parameter without adding history entry
+    const url = '/chats?page=' + currentPage;
+    contact.value = null;
+    router.visit(url, { replace: true, preserveState: true, preserveScroll: true });
+  } catch (e) {
+    // Fallback: just clear contact if routing fails
+    contact.value = null;
+    debugLog('Error preserving page on closeThread:', e);
+  }
 };
 
 const deleteThread = async () => {
@@ -356,12 +313,34 @@ const performChatUpdate = async () => {
     }
 
     if (response?.data?.result) {
-      rows.value = response.data.result;
+      // Preserve current page to avoid jumping back to page 1 when new
+      // messages arrive and the side panel is updated.
+      const newResult = response.data.result;
+      try {
+        if (rows.value && rows.value.meta && rows.value.meta.current_page) {
+          const currentPage = rows.value.meta.current_page;
+          newResult.meta = newResult.meta || {};
+          // Preserve the user's current page
+          newResult.meta.current_page = currentPage;
+
+          // If the user is NOT on page 1, keep the current page data intact
+          // (don't replace the list shown) so new chats on page 1 don't
+          // force the UI to show page 1.
+          if (currentPage > 1 && rows.value.data) {
+            newResult.data = rows.value.data;
+          }
+        }
+      } catch (e) {
+        debugLog('Error preserving page meta/data:', e);
+      }
+
+      rows.value = newResult;
 
       if (broadcastChannel) {
+        // Broadcast the result that includes the preserved meta page
         broadcastChannel.postMessage({
           type: "ROWS_UPDATED",
-          data: response.data.result,
+          data: newResult,
           timestamp: Date.now(),
         });
         debugLog("Broadcasted to other tabs");
@@ -431,7 +410,22 @@ const setupBroadcastChannel = () => {
 
       if (Date.now() - timestamp < 2000) {
         if (type === "ROWS_UPDATED") {
-          rows.value = data;
+          // Preserve current page and page data when receiving broadcasted rows
+          const incoming = data;
+          try {
+            if (rows.value && rows.value.meta && rows.value.meta.current_page && incoming && incoming.meta) {
+              const currentPage = rows.value.meta.current_page;
+              incoming.meta.current_page = currentPage;
+
+              if (currentPage > 1 && rows.value.data) {
+                incoming.data = rows.value.data;
+              }
+            }
+          } catch (e) {
+            debugLog('Error preserving page on broadcast receive:', e);
+          }
+
+          rows.value = incoming;
           debugLog("Rows updated from broadcast");
         }
       } else {
