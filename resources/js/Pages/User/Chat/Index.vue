@@ -10,8 +10,8 @@
         :class="contact ? 'h-screen md:w-[70%]' : 'md:h-screen md:w-[70%]'">
         <ChatHeader v-if="contact" :ticketingIsEnabled="ticketingIsEnabled" :contact="contact"
           :displayContactInfo="displayContactInfo" :labelColors="labelColors" :ticket="ticket" :addon="addon"
-          :teamRole="props.teamRole" @toggleView="toggleContactView" @deleteThread="deleteThread"
-          @closeThread="closeThread" />
+          :teamRole="props.teamRole" :currentPage="rows.meta?.current_page" @toggleView="toggleContactView"
+          @deleteThread="deleteThread" @closeThread="closeThread" />
         <div v-if="contact && !displayTemplate" class="flex-1 overflow-y-auto" ref="scrollContainer2">
           <ChatThread v-if="!displayContactInfo && !loadingThread && !displayTemplate" :contactId="contact.id"
             :initialMessages="chatThread" :hasMoreMessages="hasMoreMessages" :initialNextPage="nextPage" />
@@ -247,7 +247,20 @@ const scrollToBottom = () => {
 
 const closeThread = () => {
   toggleNavbarBtn.value.click();
-  contact.value = null;
+
+  // Preserve the current page in the URL when closing the thread so
+  // the user returns to the same page they were browsing (e.g., page 10).
+  try {
+    const currentPage = rows.value?.meta?.current_page || 1;
+    // Update route to include the page parameter without adding history entry
+    const url = '/chats?page=' + currentPage;
+    contact.value = null;
+    router.visit(url, { replace: true, preserveState: true, preserveScroll: true });
+  } catch (e) {
+    // Fallback: just clear contact if routing fails
+    contact.value = null;
+    debugLog('Error preserving page on closeThread:', e);
+  }
 };
 
 const deleteThread = async () => {
