@@ -639,6 +639,47 @@ class ChatController extends Controller
                 'buttons' => $metadata['buttons'] ?? null,
             ];
         }
+        // Contacts
+        elseif ($messageType === 'contacts') {
+            $contacts = $metadata['contacts'] ?? [];
+            $formattedContacts = [];
+            
+            foreach ($contacts as $contact) {
+                $formattedContact = [];
+                
+                // Name
+                if (isset($contact['name']['formatted_name'])) {
+                    $formattedContact['name'] = $contact['name']['formatted_name'];
+                }
+                
+                // Phones
+                if (isset($contact['phones']) && is_array($contact['phones'])) {
+                    $formattedContact['phones'] = array_map(function($phone) {
+                        return [
+                            'phone' => $phone['phone'] ?? $phone['wa_id'] ?? null,
+                            'type' => $phone['type'] ?? null,
+                        ];
+                    }, $contact['phones']);
+                }
+                
+                // Emails (optional)
+                if (isset($contact['emails']) && is_array($contact['emails'])) {
+                    $formattedContact['emails'] = array_map(function($email) {
+                        return [
+                            'email' => $email['email'] ?? null,
+                            'type' => $email['type'] ?? null,
+                        ];
+                    }, $contact['emails']);
+                }
+                
+                $formattedContacts[] = $formattedContact;
+            }
+            
+            $message['content'] = [
+                'contacts' => $formattedContacts,
+                'text' => "📱 Contact"
+            ];
+        }
         // Button reply
         elseif ($messageType === 'button') {
             $message['content'] = [
