@@ -215,7 +215,7 @@ class AutoReplyService
         $isWithinWorkingHours = $this->workingHoursService->isWithinWorkingHours($organizationId);
 
         // NEW: Check for global reply if no auto-reply matched
-        if ($this->sendGlobalReply($chat) && $isWithinWorkingHours) {
+        if ($this->sendGlobalReply($chat)) {
             return true;
         }
 
