@@ -18,7 +18,6 @@
     "Delect option": "اختر خيار",
     "Upload image": "رفع صورة",
     "Are you sure you want to delete this row? This action can not be undone": "هل أنت متأكد من حذف هذا الصف؟ لا يمكن التراجع عن هذا الإجراء.",
-
     "Dashboard": "لوحة التحكم",
     "Welcome back": "مرحباً بعودتك",
     "Add contact": "إضافة جهة اتصال",
@@ -63,7 +62,6 @@
     "Add organization": "إضافة منظمة",
     "Add user": "إضافة مستخدم",
     "User": "المستخدم",
-
     "Billing": "الفوترة",
     "Billing and subscription": "الفوترة والاشتراك",
     "View and manage your billing history": "عرض وإدارة تاريخ الفوترة",
@@ -98,7 +96,6 @@
     "Redirecting you": "جاري توجيهك",
     "Your subscription has been updated successfully!": "تم تحديث اشتراكك بنجاح!",
     "Search billing logs": "البحث في سجلات الفوترة",
-
     "Campaigns": "الحملات",
     "Campaign details": "تفاصيل الحملة",
     "Sent": "مُرسل",
@@ -144,7 +141,6 @@
     "Last updated": "آخر تحديث",
     "Ref": "المرجع",
     "View campaign": "عرض الحملة",
-
     "Canned replies": "الردود الجاهزة",
     "Canned replies allow you to respond automatically to messages based on your own criteria": "تتيح لك الردود الجاهزة الرد تلقائياً على الرسائل بناءً على معاييرك الخاصة",
     "Search by name or trigger text": "البحث بالاسم أو النص المحفز",
@@ -182,7 +178,6 @@
     "Data updated successfully!": "تم تحديث البيانات بنجاح!",
     "Row deleted successfully!": "تم حذف الصف بنجاح!",
     "Update reply": "تحديث الرد",
-
     "Chats": "المحادثات",
     "Clear chat": "مسح المحادثة",
     "Search name or number...": "البحث بالاسم أو الرقم...",
@@ -198,7 +193,6 @@
     "Sticker": "ملصق",
     "Location": "الموقع",
     "File": "ملف",
-
     "Contacts": "جهات الاتصال",
     "Contact groups": "مجموعات جهات الاتصال",
     "Full name": "الاسم الكامل",
@@ -241,7 +235,6 @@
     "Contact group added successfully": "تم إضافة مجموعة جهات الاتصال بنجاح",
     "Contact group updated successfully": "تم تحديث مجموعة جهات الاتصال بنجاح",
     "Contact group deleted successfully": "تم حذف مجموعة جهات الاتصال بنجاح",
-
     "Developer": "المطور",
     "API keys": "مفاتيح API",
     "Create and manage your API keys": "إنشاء وإدارة مفاتيح API الخاصة بك",
@@ -269,7 +262,6 @@
     "Delete canned reply": "حذف الرد الجاهز",
     "Send message": "إرسال رسالة",
     "Your API token has been generated successfully": "تم إنشاء رمز API الخاص بك بنجاح!",
-    
     "Settings": "الإعدادات",
     "Setup your whatsapp cloud API": "إعداد واجهة برمجة تطبيقات واتساب السحابية",
     "Overall status": "الحالة العامة",
@@ -291,7 +283,6 @@
     "App secret": "سر التطبيق",
     "Whatsapp settings updated successfully": "تم تحديث إعدادات واتساب بنجاح!",
     "Something went wrong. Refresh the page and try again": "حدث خطأ ما. حدث الصفحة وحاول مرة أخرى!",
-    
     "Support": "الدعم",
     "Support desk": "مكتب الدعم",
     "Support tickets": "تذاكر الدعم",
@@ -317,7 +308,6 @@
     "Open": "مفتوح",
     "View and respond to customer queries": "عرض والرد على استفسارات العملاء",
     "Assigned to": "مخصص لـ",
-
     "Team": "الفريق",
     "Add edit and delete accounts in your team": "إضافة وتعديل وحذف حسابات في فريقك",
     "Invite user": "دعوة مستخدم",
@@ -333,7 +323,6 @@
     "Owner": "المالك",
     "Active": "نشط",
     "Inactive": "غير نشط",
-
     "Templates": "القوالب",
     "Message templates": "قوالب الرسائل",
     "Add template": "إضافة قالب",
@@ -357,10 +346,10 @@
     "Required": "مطلوب",
     "Enter the text for your message in the language that you've selected": "أدخل نص رسالتك باللغة التي اخترتها",
     "Create buttons that let customers respond to your message or take action": "أنشئ أزراراً تتيح للعملاء الرد على رسالتك أو اتخاذ إجراء",
-    "Call phone number (1)" : "اتصال برقم الهاتف (1)",
-    "Visit website (2)" : "زيارة الموقع (2)",
-    "Copy offer code (1)" : "نسخ رمز العرض (1)",
-    "Custom button (6)" : "زر مخصص (6)",
+    "Call phone number (1)": "اتصال برقم الهاتف (1)",
+    "Visit website (2)": "زيارة الموقع (2)",
+    "Copy offer code (1)": "نسخ رمز العرض (1)",
+    "Custom button (6)": "زر مخصص (6)",
     "Edit template": "تعديل القالب",
     "Modify whatsapp template": "تعديل قالب واتساب",
     "Preview": "معاينة",
@@ -373,7 +362,6 @@
     "Loading...": "جاري التحميل...",
     "Samples": "عينات",
     "In order for your template to be reviewed properly, please add an example for each variable": "لكي تتم مراجعة قالبك بشكل صحيح، يرجى إضافة مثال لكل متغير",
-
     "View profile": "عرض الملف الشخصي",
     "My profile": "ملفي الشخصي",
     "Organization details": "تفاصيل المنظمة",
@@ -386,7 +374,6 @@
     "New password": "كلمة المرور الجديدة",
     "Confirm password": "تأكيد كلمة المرور",
     "Switch teams": "تبديل الفرق",
-
     "Login": "تسجيل الدخول",
     "Password": "كلمة المرور",
     "Reset password": "إعادة تعيين كلمة المرور",
@@ -411,7 +398,6 @@
     "We've sent you a password reset link to your email!": "لقد أرسلنا لك رابط إعادة تعيين كلمة المرور إلى بريدك الإلكتروني!",
     "Password reset successful!": "تم إعادة تعيين كلمة المرور بنجاح!",
     "That page does not exist!": "هذه الصفحة غير موجودة!",
-
     "Organizations": "المنظمات",
     "Create organization": "إنشاء منظمة",
     "Manage organization accounts": "إدارة حسابات المنظمة",
@@ -441,23 +427,19 @@
     "Manual": "يدوي",
     "Bank": "بنك",
     "Transaction created successfully!": "تم إنشاء المعاملة بنجاح!",
-    
     "Users": "المستخدمون",
     "Manage user accounts": "إدارة حسابات المستخدمين",
     "Create user": "إنشاء مستخدم",
     "View user": "عرض المستخدم",
     "User created successfully!": "تم إنشاء المستخدم بنجاح!",
     "User updated successfully!": "تم تحديث المستخدم بنجاح!",
-    
     "Billing logs": "سجلات الفوترة",
     "View and approve or decline subscription payments": "عرض والموافقة أو رفض مدفوعات الاشتراك",
-    
     "Manage admin accounts": "إدارة حسابات المشرفين",
     "Update user": "تحديث المستخدم",
     "Create administrative user and assign role": "إنشاء مستخدم إداري وتعيين دور",
     "Update administrative user and assign role": "تحديث المستخدم الإداري وتعيين دور",
     "Personally identifiable information": "المعلومات الشخصية القابلة للتحديد",
-    
     "Roles": "الأدوار",
     "Admin roles": "أدوار المشرفين",
     "Manage roles": "إدارة الأدوار",
@@ -471,7 +453,6 @@
     "Customers": "العملاء",
     "Role added successfully!": "تم إضافة الدور بنجاح!",
     "Role updated successfully!": "تم تحديث الدور بنجاح!",
-
     "Subscription plans": "خطط الاشتراك",
     "Manage subscription plans": "إدارة خطط الاشتراك",
     "Create plan": "إنشاء خطة",
@@ -492,7 +473,6 @@
     "Yearly": "سنوي",
     "Plan created successfully!": "تم إنشاء الخطة بنجاح!",
     "Plan updated successfully!": "تم تحديث الخطة بنجاح!",
-    
     "FAQs": "الأسئلة الشائعة",
     "View, add, edit or delete frequently asked questions": "عرض وإضافة وتعديل أو حذف الأسئلة الشائعة",
     "Add FAQ": "إضافة سؤال شائع",
@@ -501,7 +481,6 @@
     "Question": "السؤال",
     "Answer": "الإجابة",
     "Search FAQs": "البحث في الأسئلة الشائعة",
-
     "Reviews": "المراجعات",
     "View, add, edit or delete reviews": "عرض وإضافة وتعديل أو حذف المراجعات",
     "Add review": "إضافة مراجعة",
@@ -513,7 +492,6 @@
     "Review added successfully!": "تم إضافة المراجعة بنجاح!",
     "Review updated successfully!": "تم تحديث المراجعة بنجاح!",
     "Review deleted successfully!": "تم حذف المراجعة بنجاح!",
-
     "General settings": "الإعدادات العامة",
     "Timezone and currency": "المنطقة الزمنية والعملة",
     "Timezone": "المنطقة الزمنية",
@@ -607,7 +585,6 @@
     "Configure the information to be seen in your invoices": "تكوين المعلومات التي ستظهر في فواتيرك",
     "Update": "تحديث",
     "You've updated your settings successfully": "لقد قمت بتحديث إعداداتك بنجاح",
-
     "Tax rates": "معدلات الضرائب",
     "Tax rate": "معدل الضريبة",
     "Configure tax rates": "تكوين معدلات الضرائب",
@@ -621,7 +598,6 @@
     "Tax rate added successfully": "تم إضافة معدل الضريبة بنجاح",
     "Tax rate updated successfully": "تم تحديث معدل الضريبة بنجاح",
     "Tax rate deleted successfully": "تم حذف معدل الضريبة بنجاح",
-
     "Coupons": "القسائم",
     "Configure coupons": "تكوين القسائم",
     "Add coupon": "إضافة قسيمة",
@@ -632,7 +608,6 @@
     "Coupon added successfully": "تم إضافة القسيمة بنجاح!",
     "Coupon updated successfully": "تم تحديث القسيمة بنجاح!",
     "Coupon deleted successfully": "تم حذف القسيمة بنجاح",
-
     "Languages & translations": "اللغات والترجمات",
     "Add, edit & translate languages": "إضافة وتعديل وترجمة اللغات",
     "Add language": "إضافة لغة",
@@ -655,14 +630,13 @@
     "Key not found": "المفتاح غير موجود",
     "Translation updated successfully": "تم تحديث الترجمة بنجاح",
     "Language deleted successfully!": "تم حذف اللغة بنجاح!",
-
     "Header.message": "جدولة عرض توضيحي.",
     "Pricing": "التسعير",
     "Contact us": "اتصل بنا",
     "Sign up": "التسجيل",
     "Upgrade your messaging experience": "طوّر تجربة المراسلة الخاصة بك",
     "Revolutionise Your Whatsapp Messaging Today": "ثوّر مراسلة واتساب اليوم",
-    "Send multiple whatsapp campaigns, immerse in seamless chats & collaborate with your team effortlessly" : "أرسل حملات واتساب متعددة، انغمس في دردشات سلسة وتعاون مع فريقك دون عناء.",
+    "Send multiple whatsapp campaigns, immerse in seamless chats & collaborate with your team effortlessly": "أرسل حملات واتساب متعددة، انغمس في دردشات سلسة وتعاون مع فريقك دون عناء.",
     "Get started": "ابدأ",
     "Free demo": "تجربة مجانية لمدة 20 يوماً",
     "No credit card needed": "لا حاجة لبطاقة ائتمان",
@@ -698,7 +672,6 @@
     "Links": "الروابط",
     "Copyright": "حقوق الطبع والنشر",
     "All rights reserved": "جميع الحقوق محفوظة",
-
     "Meta API settings": "إعدادات واجهة برمجة تطبيقات Meta",
     "Contact fields": "حقول جهات الاتصال",
     "Contact fields location": "موقع حقول جهات الاتصال",
@@ -732,7 +705,6 @@
     "Contact field added successfully": "تم إضافة حقل جهة الاتصال بنجاح",
     "Contact field updated successfully": "تم تحديث حقل جهة الاتصال بنجاح",
     "Contact field deleted successfully": "تم حذف حقل جهة الاتصال بنجاح",
-
     "Automation": "الأتمتة",
     "Automations": "الأتمتة",
     "Respond automatically to messages based on your own criteria": "الرد تلقائياً على الرسائل بناءً على معاييرك الخاصة",
@@ -741,7 +713,7 @@
     "You have reached your limit. Please upgrade your account!": "لقد وصلت لحدك المسموح. يرجى ترقية حسابك!",
     "Status updated successfully!": "تم تحديث الحالة بنجاح!",
     "Ticket assigned successfully!": "تم تعيين التذكرة بنجاح!",
-    "Mark as open" : "وضع علامة كمفتوح",
+    "Mark as open": "وضع علامة كمفتوح",
     "Mark as closed": "وضع علامة كمغلق",
     "Add notes": "إضافة ملاحظات",
     "Are you sure you want to delete this thread? You can't undo this action": "هل أنت متأكد من حذف هذا السلسلة؟ لا يمكنك التراجع عن هذا الإجراء",
@@ -764,7 +736,6 @@
     "Enable this option to reassign chats when a contact re-opens a closed conversation. If disabled, reopened chats will either return to the previous agent or remain unassigned, based on auto-assignment settings.": "فعّل هذا الخيار لإعادة تعيين المحادثات عندما يعيد جهة اتصال فتح محادثة مغلقة. إذا تم إلغاؤه، ستعود المحادثات المُعاد فتحها إما للوكيل السابق أو تبقى غير مُعيّنة، بناءً على إعدادات التعيين التلقائي.",
     "Grant agents access to view all chats not assigned to them": "منح الوكلاء إمكانية الوصول لعرض جميع المحادثات غير المُعيّنة لهم",
     "Disable this option, if you want live chat agents to have access only to new conversations and conversations that are assigned to them.": "ألغِ هذا الخيار، إذا كنت تريد وكلاء الدردشة المباشرة أن يكون لديهم وصول فقط للمحادثات الجديدة والمحادثات المُعيّنة لهم.",
-
     "Whatsapp settings": "إعدادات واتساب",
     "Specify the name of your business/organization": "حدد اسم عملك/منظمتك",
     "Specify your physical business address": "حدد عنوان عملك الفعلي",
@@ -775,7 +746,6 @@
     "Enable notification sound": "تفعيل صوت الإشعار",
     "New chat sound": "صوت المحادثة الجديدة",
     "Notification sound for every new message": "صوت إشعار لكل رسالة جديدة",
-
     "Display name": "اسم العرض",
     "Connected number": "الرقم المتصل",
     "Message limits": "حدود الرسائل",
@@ -795,22 +765,18 @@
     "Remove Whatsapp account": "إزالة حساب واتساب",
     "This will completely delete your whatsapp integration. Your contacts & messages will be unaffected.": "سيحذف هذا تكامل واتساب بالكامل. جهات الاتصال والرسائل لن تتأثر.",
     "Delete integration": "حذف التكامل",
-
     "Export as CSV": "تصدير كـ CSV",
     "Samples for header content": "عينات لمحتوى الرأس",
     "Please add an example for each variable in your body text. Do not use real customer information. Cloud API hosted by Meta reviews templates and variable parameters to protect the security and integrity of their services.": "يرجى إضافة مثال لكل متغير في نص الرسالة. لا تستخدم معلومات عملاء حقيقية. واجهة برمجة التطبيقات السحابية المستضافة من Meta تراجع القوالب ومعاملات المتغيرات لحماية أمان وسلامة خدماتها.",
     "Add sample text": "إضافة نص عينة",
     "Samples for body content": "عينات لمحتوى النص",
-
     "Trial period limits": "حدود فترة التجربة",
     "Define the usage limits during the trial period": "تحديد حدود الاستخدام خلال فترة التجربة",
     "For unlimited usage, set -1 as the value": "للاستخدام غير المحدود، ضع -1 كقيمة",
-
     "Frontend Settings": "إعدادات الواجهة الأمامية",
     "Show/hide the main frontend page": "إظهار/إخفاء الصفحة الأمامية الرئيسية",
     "Use the current default frontend": "استخدم الواجهة الأمامية الافتراضية الحالية",
     "Toggle on/off to show/hide the main frontend page": "تبديل تشغيل/إيقاف لإظهار/إخفاء الصفحة الأمامية الرئيسية",
-
     "Explore Add-ons Marketplace": "استكشف سوق الإضافات",
     "Select an addon that you want to install on your platform": "اختر إضافة تريد تثبيتها على منصتك",
     "Installed": "مثبت",
@@ -823,7 +789,7 @@
     "Envato purchase code": "رمز شراء Envato",
     "Not installed": "غير مثبت",
     "Search": "بحث",
-     "Manage labels": "إدارة العلامات",
+    "Manage labels": "إدارة العلامات",
     "Save Labels": "حفظ العلامة",
     "Total selected": "الإجمالي المحدد",
     "Filter by Labels": "فلترة باستخدام العلامة",
@@ -887,7 +853,7 @@
     "Enable this option to allow assigning conversations only to specific agents.": "قم بتفعيل هذا الخيار للسماح بتعيين المحادثات لوكلاء محددين فقط",
     "Enable or disable plugins to enhance your business operations.": "فعّل أو عطل الإضافات لتعزيز عمليات عملك",
     "At least 1 and at most 3 buttons when active.": "زر واحد على الأقل و3 أزرار كحد أقصى عند التفعيل.",
-    "There are currently no plugins available for your account. Check back later for new integrations.": "لا توجد إضافات متاحة حاليًا لحسابك. تحقق لاحقًا من وجود تكاملات جديدة",                      
+    "There are currently no plugins available for your account. Check back later for new integrations.": "لا توجد إضافات متاحة حاليًا لحسابك. تحقق لاحقًا من وجود تكاملات جديدة",
     "Enable a universal auto-reply with optional interactive buttons (max 3).": "تفعيل الرد التلقائي العام مع أزرار تفاعلية اختيارية (بحد أقصى 3)",
     "Choose the order in which the system searches for a matching response when replying to messages. Set the sequence for Basic Replies, Automated Flows, and AI Assistant to control how replies are prioritized.": "اختر الترتيب الذي يستخدمه النظام للبحث عن استجابة مطابقة عند الرد على الرسائل. قم بتعيين تسلسل الردود الأساسية، والتدفقات الآلية، ومساعد الذكاء الاصطناعي للتحكم في أولوية الردود",
     "If a flow is already active for a contact, the response sequence will not be followed.": "إذا كان هناك تدفّق نشط بالفعل لجهة الاتصال، فلن يتم اتباع تسلسل الاستجابة",
@@ -918,33 +884,34 @@
     "Message Body": "نص الرسالة",
     "The main body of your message.": "النص الأساسي للرسالة.",
     "Header & Footer": "الترويسة والتذييل",
-    "Link Button Text" : "نص زر الرابط",
-
-"Link URL" : "رابط URL",
-
-"Save Reply" : "حفظ الرد",
-
-"Title is required" : "العنوان مطلوب",
-
-"Message body is required" : "نص الرسالة مطلوب",
-"enable_working_hours_first": "الرجاء تفعيل ساعات العمل من الإعدادات العامة أولاً.",
-"Button text is required" : "نص الزر مطلوب",
-"Select Here": "اختار هنا",
-"Link button text is required" : "نص زر الرابط مطلوب",
-"Whatsapp does not allow sending messages 24 hours after they last messaged you.However, you can send them a template message": "واتساب لا يسمح بإرسال الرسائل بعد مرور 24 ساعة من آخر رسالة أرسلها لك العميل. ولكن يمكنك إرسال رسالة قالب (Template Message) لهم.",
-"Link URL is required" : "رابط URL مطلوب",
-"Header Text" : "نص الترويسة",
-
-"Footer Text" : "نص التذييل",
-
-"Add up to 3 buttons." : "يمكنك إضافة ما يصل إلى 3 أزرار.",
-
-"Button Text" : "نص الزر",
-
-"Add Button" : "إضافة زر",
-
-"Link Details" : "تفاصيل الرابط",
-
-"Message body and link configuration." : "نص الرسالة وإعدادات الرابط."
-   
+    "Link Button Text": "نص زر الرابط",
+    "Link URL": "رابط URL",
+    "Save Reply": "حفظ الرد",
+    "Title is required": "العنوان مطلوب",
+    "Message body is required": "نص الرسالة مطلوب",
+    "enable_working_hours_first": "الرجاء تفعيل ساعات العمل من الإعدادات العامة أولاً.",
+    "Button text is required": "نص الزر مطلوب",
+    "Select Here": "اختار هنا",
+    "Link button text is required": "نص زر الرابط مطلوب",
+    "Whatsapp does not allow sending messages 24 hours after they last messaged you.However, you can send them a template message": "واتساب لا يسمح بإرسال الرسائل بعد مرور 24 ساعة من آخر رسالة أرسلها لك العميل. ولكن يمكنك إرسال رسالة قالب (Template Message) لهم.",
+    "Link URL is required": "رابط URL مطلوب",
+    "Header Text": "نص الترويسة",
+    "Footer Text": "نص التذييل",
+    "Add up to 3 buttons.": "يمكنك إضافة ما يصل إلى 3 أزرار.",
+    "Button Text": "نص الزر",
+    "Greeting Message Settings": "إعدادات رسالة الترحيب الأولى",
+    "Send a welcome message when the user contacts you for the first time.": "إرسال رسالة ترحيب عند تواصل المستخدم معك لأول مرة.",
+    "Enable greeting message": "تفعيل رسالة الترحيب الأولى",
+    "Greeting message": "رسالة الترحيب",
+    "This message is sent once, on the first conversation only.": "يتم إرسال هذه الرسالة مرة واحدة فقط عند أول محادثة.",
+    "Optional interactive buttons": "أزرار تفاعلية اختيارية",
+    "Button title": "عنوان الزر",
+    "Max 20 characters": "الحد الأقصى 20 حرفًا",
+    "Buttons are optional. You can add up to 3.": "الأزرار اختيارية، يمكنك إضافة ما يصل إلى 3 أزرار.",
+    "Add Button": "إضافة زر",
+    "Greeting Message": "رسالة الترحيب الأولى",
+    "Link Details": "تفاصيل الرابط",
+    "Remove": "إزالة",
+    "After Hours Reply Settings": "إعدادات الرد خارج أوقات العمل",
+    "Auto-reply for messages received outside working hours (max 3 buttons).": "رد تلقائي للرسائل المستلمة خارج أوقات العمل (بحد أقصى 3 أزرار)."
 }

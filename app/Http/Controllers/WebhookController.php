@@ -189,6 +189,12 @@ class WebhookController extends BaseController
             $webhookType
         );
 
+        /*
+        // this code to test job sync without queue
+        $job = new ProcessWebhookJob($res, $organization->id, $webhookType);
+        $job->handle();
+        */
+
         // Calculate response time and log (AC-1.1.6)
         $responseTime = (microtime(true) - $startTime) * 1000; // Convert to milliseconds
 

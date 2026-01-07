@@ -227,6 +227,10 @@ Route::middleware(['auth:user'])->group(function () {
                     Route::delete('/settings/whatsapp/business-profile', [App\Http\Controllers\User\SettingController::class, 'deleteWhatsappIntegration']);
                     Route::post('/settings/whatsapp/update-coexistence', [App\Http\Controllers\User\SettingController::class, 'updateWhatsappForCoExistence']);
 
+                    Route::get('/settings/greeting-message', [App\Http\Controllers\User\SettingController::class, 'greetingMessageSettings']);
+                    Route::post('/settings/greeting-message', [App\Http\Controllers\User\SettingController::class, 'updateGreetingMessageSettings']);
+
+
                     Route::get('/settings/labels', [App\Http\Controllers\User\SettingController::class, 'labels'])->name('settings.labels');
                     Route::post('/settings/labels', [App\Http\Controllers\User\SettingController::class, 'labels']);
                     Route::post('/settings/labels/create-group', [App\Http\Controllers\User\SettingController::class, 'createGroupFromLabel']);
