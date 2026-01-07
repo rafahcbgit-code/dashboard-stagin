@@ -37,6 +37,27 @@
                                 <span>{{ $t('Global reply') }}</span>
                             </Link>
                         </li>
+
+                        <li
+                        class="hover:bg-slate-50 hover:text-black rounded-[5px] px-1 truncate cursor-pointer"
+                        :class="$page.url.startsWith('/settings/greeting-message') ? 'bg-slate-50 text-black' : ''"
+                        >
+                        <Link
+                            rel="noopener noreferrer"
+                            href="/settings/greeting-message"
+                            class="flex items-center p-2 space-s-3 rounded-md"
+                        >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24"
+                            fill="none" stroke="currentColor" stroke-width="1.8"
+                            stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15a4 4 0 0 1-4 4H7l-4 3v-3H5a4 4 0 0 1-4-4V7a4 4 0 0 1 4-4h10"/>
+                        <path d="M15 6l.8 2.2L18 9l-2.2.8L15 12l-.8-2.2L12 9l2.2-.8z"/>
+                        </svg>
+                        <span>{{ $t('Greeting Message') }}</span>
+                        </Link>
+                        </li>
+
+
                         <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-1 truncate cursor-pointer" :class="$page.url.startsWith('/settings/contacts') ? 'bg-slate-50 text-black' : ''">
                             <Link rel="noopener noreferrer" href="/settings/contacts" class="flex items-center p-2 space-s-3 rounded-md">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 20c0-1.742-1.67-3.223-4-3.773M15 20c0-2.21-2.686-4-6-4s-6 1.79-6 4m12-7a4 4 0 0 0 0-8m-6 8a4 4 0 1 1 0-8a4 4 0 0 1 0 8"/></svg>

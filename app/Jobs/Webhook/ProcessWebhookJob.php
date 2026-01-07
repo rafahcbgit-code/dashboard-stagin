@@ -372,12 +372,19 @@ class ProcessWebhookJob implements ShouldQueue
                 $workingHoursService = new WorkingHoursService();
                 $autoReplyService    = new AutoReplyService();
 
+                // Send greeting message and check if it was sent
+                $greetingSent = $autoReplyService->sendGrettingMessage($chat);
+
+                // If greeting message was sent, skip the rest of auto-reply logic
+                if ($greetingSent) {
+                    return;
+                }
+
                 // Check whether the current time is within the organization's working hours
                 $isWithinWorkingHours = $workingHoursService
                     ->isWithinWorkingHours($this->organizationId);
 
                 if ($isWithinWorkingHours) {
-
                     // Inside working hours:
                     // Always allow normal auto-reply logic
                     $autoReplyService->checkAutoReply($chat, $isNewContact);

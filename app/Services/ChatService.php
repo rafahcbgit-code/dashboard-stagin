@@ -339,7 +339,7 @@ class ChatService
                                         $organizationId
                                     );
                                 } catch (\Exception $e) {
-                                    \Log::error('Failed to send assignment notification: ' . $e->getMessage());
+                                    Log::error('Failed to send assignment notification: ' . $e->getMessage());
                                 }
                             }
 
@@ -389,7 +389,7 @@ class ChatService
                                             $organizationId
                                         );
                                     } catch (\Exception $e) {
-                                        \Log::error('Failed to send assignment notification: ' . $e->getMessage());
+                                        Log::error('Failed to send assignment notification: ' . $e->getMessage());
                                     }
                                 }
 
@@ -464,7 +464,7 @@ class ChatService
                     $organizationId
                 );
             } catch (\Exception $e) {
-                \Log::error('Failed to send assignment notification: ' . $e->getMessage());
+                Log::error('Failed to send assignment notification: ' . $e->getMessage());
             }
 
             return $ticket;

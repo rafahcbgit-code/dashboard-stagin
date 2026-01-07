@@ -272,7 +272,7 @@
     const initializeWorkingHours = () => {
         const defaultWorkingHours = workingDays.map((day, index) => ({
             day: day,
-            active: index < 5, // تفعيل أيام الأسبوع بشكل افتراضي (الاثنين إلى الجمعة)
+            active: index < 5, 
             from: '09:00',
             to: '17:00'
         }));
@@ -300,7 +300,7 @@
         zip: getAddressDetail(props.settings?.address, 'zip'),
         country: getAddressDetail(props.settings?.address, 'country'),
         timezone:  settings.value && settings.value.timezone ? settings.value.timezone : 'UTC',
-        enable_working_hours: settings.value && settings.value.working_hours ? true : false,
+        enable_working_hours: settings.value && settings.value.enable_working_hours ? true : false,
         working_hours: initializeWorkingHours(),
         enable_sound_notification: settings.value && settings.value.notifications ? settings.value.notifications.enable_sound : false,
         volume: settings.value && settings.value.notifications ? settings.value.notifications.volume : 1,
