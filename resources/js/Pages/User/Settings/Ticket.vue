@@ -15,12 +15,12 @@
                                     </div>
                                 </div>
                                 <div class="ml-auto">
-                                    <div class="w-12 h-6 flex items-center bg-gray-300 rounded-full p-1" 
+                                     <div class="w-12 h-6 flex items-center bg-gray-300 rounded-full p-1 cursor-pointer transition-colors duration-300" 
                                          :class="{ 'bg-primary': form.active}" 
                                          @click="toggleState1">
                                         <div class="bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out" 
-                                             :class="{ 'translate-x-6': form.active}"></div>
-                                    </div>
+                                            :class="{ 'ltr:translate-x-6 rtl:translate-x-[-24px]': form.active}"></div>
+                                     </div>
                                 </div>
                             </div>
                         </div>
@@ -95,12 +95,12 @@
                                     </div>
                                 </div>
                                 <div class="w-1/4">
-                                    <div class="ml-auto w-12 h-6 flex items-center bg-gray-300 rounded-full p-1"
+                                     <div class="ml-auto w-12 h-6 flex items-center bg-gray-300 rounded-full p-1 cursor-pointer transition-colors duration-300"
                                          :class="{ 'bg-primary': form.reassign_reopened_chats}" 
                                          @click="toggleState2">
                                         <div class="bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out"
-                                             :class="{ 'translate-x-6': form.reassign_reopened_chats}"></div>
-                                    </div>
+                                            :class="{ 'ltr:translate-x-6 rtl:translate-x-[-24px]': form.reassign_reopened_chats}"></div>
+                                     </div>
                                 </div>
                             </div>
                         </div>
@@ -117,12 +117,12 @@
                                     </div>
                                 </div>
                                 <div class="w-1/4">
-                                    <div class="ml-auto w-12 h-6 flex items-center bg-gray-300 rounded-full p-1"
-                                        :class="{ 'bg-primary': form.assigned_to_specific_agents}" 
+                                     <div class="ml-auto w-12 h-6 flex items-center bg-gray-300 rounded-full p-1 cursor-pointer transition-colors duration-300"
+                                         :class="{ 'bg-primary': form.assigned_to_specific_agents}" 
                                          @click="toggleState4">
                                         <div class="bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out"
-                                             :class="{ 'translate-x-6': form.assigned_to_specific_agents}"></div>
-                                    </div>
+                                            :class="{ 'ltr:translate-x-6 rtl:translate-x-[-24px]': form.assigned_to_specific_agents}"></div>
+                                     </div>
                                 </div>
                             </div>
                         </div>
@@ -149,11 +149,11 @@
                                     </div>
                                 </div>
                                 <div class="flex-shrink-0">
-                                    <div class="w-12 h-6 flex items-center bg-gray-300 rounded-full p-1"
+                                    <div class="w-12 h-6 flex items-center bg-gray-300 rounded-full p-1 cursor-pointer transition-colors duration-300"
                                         :class="{ 'bg-primary': form.allow_agents_to_view_all_chats}" 
                                         @click="toggleState3">
                                         <div class="bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out"
-                                            :class="{ 'translate-x-6': form.allow_agents_to_view_all_chats}"></div>
+                                            :class="{ 'ltr:translate-x-6 rtl:translate-x-[-24px]': form.allow_agents_to_view_all_chats}"></div>
                                     </div>
                                 </div>
                             </div>
