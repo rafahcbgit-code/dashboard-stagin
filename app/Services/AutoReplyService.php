@@ -199,7 +199,7 @@ class AutoReplyService
         $receivedMessage = " " . $text;
 
 
-        //2. Check basic reply flow and send auto reply
+        //Check basic reply flow
         $autoReplies = AutoReply::where('organization_id', $organizationId)
             ->where('deleted_at', null)
             ->get();
@@ -214,9 +214,8 @@ class AutoReplyService
                 }
             }
         }
-        $isWithinWorkingHours = $this->workingHoursService->isWithinWorkingHours($organizationId);
 
-        // 3. Check for global reply if no auto-reply matched
+        // NEW: Check for global reply if no auto-reply matched
         if ($this->sendGlobalReply($chat)) {
             return true;
         }
@@ -536,7 +535,6 @@ class AutoReplyService
             if ($this->alreadySentGreetingMessage($chat)) {
                 Log::info('sendGrettingMessage skipped - already sent within 24 hours', [
                     'contact_id' => $chat->contact_id,
-                    'reason' => 'ALREADY_SENT_WITHIN_24H'
                 ]);
                 return false;
             }
@@ -545,16 +543,14 @@ class AutoReplyService
             $organization = Organization::where('id', $organizationId)->first();
             if (!$organization) {
                 Log::warning('sendGrettingMessage skipped - organization not found', [
-                    'organization_id' => $organizationId,
-                    'reason' => 'ORGANIZATION_NOT_FOUND'
+                    'organization_id' => $organizationId
                 ]);
                 return false;
             }
 
             if (!$organization->metadata) {
                 Log::warning('sendGrettingMessage skipped - organization metadata is null', [
-                    'organization_id' => $organizationId,
-                    'reason' => 'ORGANIZATION_METADATA_NULL'
+                    'organization_id' => $organizationId
                 ]);
                 return false;
             }
@@ -564,26 +560,21 @@ class AutoReplyService
             // Check if greeting message is active
             if (!isset($metadata['greeting_message'])) {
                 Log::warning('sendGrettingMessage skipped - greeting_message key not found in metadata', [
-                    'organization_id' => $organizationId,
-                    'reason' => 'GREETING_MESSAGE_KEY_NOT_FOUND',
-                    'available_keys' => array_keys($metadata)
+                    'organization_id' => $organizationId
                 ]);
                 return false;
             }
 
             if (!$metadata['greeting_message']['active']) {
                 Log::info('sendGrettingMessage skipped - greeting_message is not active', [
-                    'organization_id' => $organizationId,
-                    'reason' => 'GREETING_MESSAGE_NOT_ACTIVE',
-                    'active_status' => $metadata['greeting_message']['active'] ?? 'not set'
+                    'organization_id' => $organizationId
                 ]);
                 return false;
             }
 
             if (empty($metadata['greeting_message']['message'])) {
                 Log::warning('sendGrettingMessage skipped - greeting_message message is empty', [
-                    'organization_id' => $organizationId,
-                    'reason' => 'GREETING_MESSAGE_TEXT_EMPTY'
+                    'organization_id' => $organizationId
                 ]);
                 return false;
             }
@@ -593,16 +584,13 @@ class AutoReplyService
 
             if (!$contact) {
                 Log::warning('sendGrettingMessage skipped - contact not found', [
-                    'contact_id' => $chat->contact_id,
-                    'reason' => 'CONTACT_NOT_FOUND'
+                    'contact_id' => $chat->contact_id
                 ]);
                 return false;
             }
 
             Log::info('sendGrettingMessage - All checks passed, sending message', [
                 'contact_id' => $chat->contact_id,
-                'contact_uuid' => $contact->uuid,
-                'has_buttons' => !empty($gretting_message['buttons'])
             ]);
 
             // Send interactive message with buttons if buttons exist
@@ -642,17 +630,12 @@ class AutoReplyService
                     'contact_id' => $chat->contact_id,
                 ]);
 
-                $created = ChatSystemMessage::create([
+                 ChatSystemMessage::create([
                     'contact_id' => $chat->contact_id,
                     'type'       => 'greeting_message',
                     'sent_at'    => now(),
                 ]);
 
-                Log::info('ChatSystemMessage created successfully', [
-                    'id'         => $created->id ?? null,
-                    'contact_id' => $created->contact_id ?? null,
-                    'sent_at'    => $created->sent_at ?? null,
-                ]);
             } catch (\Throwable $e) {
                 // Failing to save the system message should NOT block the greeting
                 Log::error('Failed to create ChatSystemMessage (greeting_message)', [
@@ -845,17 +828,13 @@ class AutoReplyService
                     'contact_id' => $chat->contact_id,
                 ]);
 
-                $created = ChatSystemMessage::create([
+                ChatSystemMessage::create([
                     'contact_id' => $chat->contact_id,
                     'type'       => 'outside_working_hours',
                     'sent_at'    => now(),
                 ]);
 
-                Log::channel('webhook')->info('ChatSystemMessage created successfully', [
-                    'id'         => $created->id ?? null,
-                    'contact_id' => $created->contact_id ?? null,
-                    'sent_at'    => $created->sent_at ?? null,
-                ]);
+
             } catch (\Throwable $e) {
                 // Failing to save the system message should NOT block the user reply
                 Log::channel('webhook')->error('Failed to create ChatSystemMessage (outside_working_hours)', [

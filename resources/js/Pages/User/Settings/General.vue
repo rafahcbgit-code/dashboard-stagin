@@ -74,7 +74,7 @@
                                 </div>
                             </div>
                             <div class="w-[20%] flex justify-end">
-                                <FormToggleSwitch v-model="form2.enable_working_hours" /> {{ form2.enable_working_hours }}
+                                <FormToggleSwitch v-model="form2.enable_working_hours" />
                             </div>
                         </div>
                         <div v-if="form2.enable_working_hours === true" class="w-full px-4 py-6">
