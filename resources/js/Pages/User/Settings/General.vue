@@ -76,9 +76,9 @@
                             <div class="w-[20%] flex justify-end">
                                 <FormToggleSwitch v-model="form2.enable_working_hours" />
                             </div>
-                        </div>
+                        </div>÷
                         <div v-if="form2.enable_working_hours === true" class="w-full px-4 py-6">
-                            <div class="space-y-4">
+                            <div class="space-y-4">÷
                                 <div v-for="(day, index) in workingDays" :key="index" class="flex items-center space-x-4 pb-4 border-b last:border-b-0">
                                     <div class="w-[15%]">
                                         <div class="flex items-center">

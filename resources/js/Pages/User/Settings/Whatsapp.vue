@@ -191,6 +191,9 @@
                         
                         <div class="w-[40%] ml-auto space-x-2 flex justify-end">
                             <!-- Sync Contacts -->
+                            <span class="text-sm">
+                            {{ $t('Sync Contacts') }}
+                            </span>
                             <div 
                                 @click="updateCoExistenceSync({ 'sync_contacts': sync_contacts === 1 ? 0 : 1 })"
                                     class="w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-300"
@@ -198,15 +201,14 @@
                                 >
                                 <div
                                     class="bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out"
-                                    :class="sync_contacts === 1 ? 'translate-x-6' : 'translate-x-0'"
+                                    :class="sync_contacts === 1 ? 'ltr:translate-x-6 rtl:translate-x-[-24px]' : 'translate-x-0'"
                                 ></div>
                             </div>
-                            <span class="ml-2 text-sm">
-                            {{ $t('Sync Contacts') }}
-                            </span>
-
 
                             <!-- Sync History -->
+                            <span class="text-sm">
+                            {{ $t('Sync History') }}
+                            </span>
                             <div 
                             @click="updateCoExistenceSync({ 'sync_history': sync_history === 1 ? 0 : 1 })"
                             class="w-12 h-6 flex items-center rounded-full p-1 cursor-pointer transition-colors duration-300"
@@ -214,12 +216,9 @@
                             >
                             <div
                                 class="bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out"
-                                :class="sync_history === 1 ? 'translate-x-6' : 'translate-x-0'"
+                                :class="sync_history === 1 ? 'ltr:translate-x-6 rtl:translate-x-[-24px]' : 'translate-x-0'"
                             ></div>
                             </div>
-                            <span class="ml-2 text-sm">
-                            {{ $t('Sync History') }}
-                            </span>
                         </div>
                     </div>
                     </div>
