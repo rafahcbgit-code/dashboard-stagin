@@ -680,10 +680,13 @@ class ChatService
 
         $chats = [];
         foreach ($chatLogs as $chatLog) {
-            $chats[] = array([
-                'type' => $chatLog->entity_type,
-                'value' => $chatLog->relatedEntities
-            ]);
+            // Only add if relatedEntities exists
+            if ($chatLog->relatedEntities !== null) {
+                $chats[] = array([
+                    'type' => $chatLog->entity_type,
+                    'value' => $chatLog->relatedEntities
+                ]);
+            }
         }
 
         return [
