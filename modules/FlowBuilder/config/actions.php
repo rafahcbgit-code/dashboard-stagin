@@ -10,5 +10,7 @@ return [
     'webhook'           => true,
     'ai_response'       => false, // Disabled
     'conditional'       => false,
+    'assign_to_agent'   => true,
+
     // Add more actions as needed
 ]; 

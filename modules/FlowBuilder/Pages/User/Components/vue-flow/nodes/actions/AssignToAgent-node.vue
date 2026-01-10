@@ -200,8 +200,8 @@ const loadAgents = async () => {
     })
     
     availableAgents.value = response.data.rows.map(agent => ({
-      value: agent.user_id,
-      label: agent.user.full_name || agent.user.email
+      value: agent.id,
+      label: agent.full_name || agent.email
     }))
   } catch (error) {
     console.error('Error loading agents:', error)
