@@ -304,6 +304,12 @@ class FlowValidator
                     $errors[] = 'Field name is required for contact_field condition type.';
                 }
                 break;
+            
+            case 'assign_to_agent':
+                if (empty($config['agent_id'])) {
+                    $errors[] = 'Agent ID is required for assign_to_agent action.';
+                }
+                break;
 
             default:
                 if (empty($actionType)) {
