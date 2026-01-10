@@ -535,6 +535,17 @@ class ActionExecutionService
         }
 
         try {
+            // Check if already assigned to this agent
+            $existingTicket = \App\Models\ChatTicket::where('contact_id', $contact->id)->first();
+            
+            if ($existingTicket && $existingTicket->assigned_to == $agentUserId) {
+                Log::info("Contact already assigned to this agent, skipping duplicate assignment", [
+                    'contact_id' => $contact->id,
+                    'agent_id' => $agentUserId
+                ]);
+                return true; // Return success but don't re-assign
+            }
+
             // Find or create chat ticket for this contact
             $ticket = \App\Models\ChatTicket::firstOrCreate(
                 ['contact_id' => $contact->id],
@@ -545,9 +556,9 @@ class ActionExecutionService
                 ]
             );
 
-            // Update ticket assignment
+            // Rest of the code stays the same...
             $ticket->assigned_to = $agentUserId;
-            $ticket->status = 'open'; // Reopen if closed
+            $ticket->status = 'open';
             $ticket->updated_at = now();
             $ticket->save();
 
@@ -571,16 +582,10 @@ class ActionExecutionService
                 $notificationService->sendAssignmentNotification(
                     $contact->id,
                     $agentUserId,
-                    0, // System assignment (flow automation)
+                    0,
                     $this->organizationId
                 );
-                
-                Log::info("Agent assignment notification sent", [
-                    'contact_id' => $contact->id,
-                    'agent_id' => $agentUserId
-                ]);
             } catch (\Exception $e) {
-                // Non-blocking - notification failure shouldn't stop the flow
                 Log::error('Failed to send agent assignment notification: ' . $e->getMessage());
             }
 
