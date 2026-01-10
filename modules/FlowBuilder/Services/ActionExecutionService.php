@@ -76,6 +76,9 @@ class ActionExecutionService
                 case 'conditional':
                     return $this->executeConditional($config, $contact, $userMessage);
                 
+                case 'assign_to_agent':
+                    return $this->executeAssignToAgent($config, $contact);
+                
                 default:
                     Log::warning("Unknown action type: {$actionType}");
                     return false;
@@ -516,5 +519,81 @@ class ActionExecutionService
         }
 
         return str_replace(array_keys($placeholders), array_values($placeholders), $text);
+    }
+
+
+    /**
+     * Execute assign to agent action
+     */
+    private function executeAssignToAgent($config, $contact)
+    {
+        $agentUserId = $config['agent_id'] ?? null;
+        
+        if (!$agentUserId) {
+            Log::warning("No agent_id specified for assign_to_agent action");
+            return false;
+        }
+
+        try {
+            // Find or create chat ticket for this contact
+            $ticket = \App\Models\ChatTicket::firstOrCreate(
+                ['contact_id' => $contact->id],
+                [
+                    'status' => 'open',
+                    'created_at' => now(),
+                    'updated_at' => now()
+                ]
+            );
+
+            // Update ticket assignment
+            $ticket->assigned_to = $agentUserId;
+            $ticket->status = 'open'; // Reopen if closed
+            $ticket->updated_at = now();
+            $ticket->save();
+
+            // Create ticket log
+            $ticketId = \App\Models\ChatTicketLog::insertGetId([
+                'contact_id' => $contact->id,
+                'description' => 'Conversation assigned to agent via automation flow',
+                'created_at' => now()
+            ]);
+
+            \App\Models\ChatLog::insert([
+                'contact_id' => $contact->id,
+                'entity_type' => 'ticket',
+                'entity_id' => $ticketId,
+                'created_at' => now()
+            ]);
+
+            // Send notification to assigned agent
+            try {
+                $notificationService = new \App\Services\ApiNotificationService();
+                $notificationService->sendAssignmentNotification(
+                    $contact->id,
+                    $agentUserId,
+                    0, // System assignment (flow automation)
+                    $this->organizationId
+                );
+                
+                Log::info("Agent assignment notification sent", [
+                    'contact_id' => $contact->id,
+                    'agent_id' => $agentUserId
+                ]);
+            } catch (\Exception $e) {
+                // Non-blocking - notification failure shouldn't stop the flow
+                Log::error('Failed to send agent assignment notification: ' . $e->getMessage());
+            }
+
+            Log::info("Contact assigned to agent via flow", [
+                'contact_id' => $contact->id,
+                'agent_id' => $agentUserId,
+                'ticket_id' => $ticket->id
+            ]);
+
+            return true;
+        } catch (\Exception $e) {
+            Log::error("Failed to assign contact to agent: " . $e->getMessage());
+            return false;
+        }
     }
 } 

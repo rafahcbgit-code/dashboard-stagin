@@ -180,6 +180,8 @@ const getDefaultConfig = (actionType: string) => {
         variable_operator: 'equals',
         conditions: []
       }
+    case 'assign_to_agent':
+      return { agent_id: '' }
     default:
       return {}
   }
