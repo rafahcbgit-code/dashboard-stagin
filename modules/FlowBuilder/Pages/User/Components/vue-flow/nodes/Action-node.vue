@@ -44,7 +44,7 @@ const actionComponent = computed(() => {
     case 'delay':
       return DelayNode
     case 'webhook':
-      return AssignToAgentNode
+      return WebhookNode
     case 'ai_response':
       return AIResponseNode
     case 'conditional':
