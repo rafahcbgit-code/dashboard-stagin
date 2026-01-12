@@ -325,8 +325,7 @@ class FlowExecutionService
             if(empty($metadataArray)){
                 Log::warning("DELETION POINT 2: No next step found for contact {$contactId}, ending flow");
                 FlowUserData::where('contact_id', $contactId)->delete();
-                // Removed
-                // $this->executeFlow($chat, $isNewContact, $message);
+                $this->executeFlow($chat, $isNewContact, $message);
                 return false;
             }
 
