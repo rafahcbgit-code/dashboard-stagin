@@ -103,5 +103,18 @@ export interface AIResponseNodeEvents {
   'update:data': (data: AIResponseNodeData) => void
 }
 
+export interface AssignToAgentNodeData {
+  actionType: string
+  name: string
+  config: {
+    agent_id: string | number
+  }
+  is_active: boolean
+}
+
+export interface AssignToAgentNodeEvents {
+  'update:data': (data: AssignToAgentNodeData) => void
+}
+
 // Export all action nodes
 export * from './actions'
