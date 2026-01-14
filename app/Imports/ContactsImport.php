@@ -250,6 +250,24 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
 
     protected function updateExistingContact($contactId, array $row)
     {
+        // Get existing contact to preserve old metadata
+        $existingContact = Contact::find($contactId);
+        $existingMetadata = $existingContact && $existingContact->metadata 
+            ? json_decode($existingContact->metadata, true) 
+            : [];
+
+        // Prepare new metadata from row
+        $newMetadata = [];
+        foreach ($this->contactFields as $field) {
+            $normalizedField = strtolower($field);
+            if (isset($row[$normalizedField])) {
+                $newMetadata[$field] = $row[$normalizedField];
+            }
+        }
+
+        // Merge: new values override old ones, but keep old values for fields not in import
+        $mergedMetadata = array_merge($existingMetadata, $newMetadata);
+
         $updateData = [
             'first_name' => $row['first_name'] ?? 'name',
             'last_name'  => $row['last_name'] ?? null,
@@ -261,6 +279,7 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
                 'zip'     => $row['zip'] ?? null,
                 'country' => $row['country'] ?? null
             ]),
+            'metadata'   => !empty($mergedMetadata) ? json_encode($mergedMetadata) : null,
             'updated_at' => now(),
         ];
 
