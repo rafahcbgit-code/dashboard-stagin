@@ -87,4 +87,24 @@ class ChatController extends BaseController
 
         return response()->json($labels);
     }
+
+    public function getTeamMembersForFilter()
+    {
+        $organizationId = session()->get('current_organization');
+        
+        // Get all team members with their user info
+        $teamMembers = \App\Models\Team::where('organization_id', $organizationId)
+            ->join('users', 'teams.user_id', '=', 'users.id')
+            ->select('teams.user_id', 'users.first_name', 'teams.role')
+            ->orderBy('users.first_name')
+            ->get();
+
+        \Log::info('Team members for filter:', [
+            'organization_id' => $organizationId,
+            'count' => $teamMembers->count(),
+            'members' => $teamMembers->toArray()
+        ]);
+
+        return response()->json($teamMembers);
+    }
 }

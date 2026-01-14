@@ -102,7 +102,7 @@ class Contact extends Model {
         return $this->hasMany(ChatLog::class);
     }
 
-    public function contactsWithChats($organizationId, $searchTerm = null, $ticketingActive = false, $ticketState = null, $sortDirection = 'asc', $role = 'owner', $allowAgentsViewAllChats = true, $labelFilters = [], $assignedToMe = false)
+    public function contactsWithChats($organizationId, $searchTerm = null, $ticketingActive = false, $ticketState = null, $sortDirection = 'asc', $role = 'owner', $allowAgentsViewAllChats = true, $labelFilters = [], $assignedToMe = false, $assignedToFilter = null)
     {
         $query = $this->newQuery()
             ->where('contacts.organization_id', $organizationId)
@@ -123,7 +123,10 @@ class Contact extends Model {
         if ($ticketingActive) {
             $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id');
 
-            if ($assignedToMe && $role === 'agent') {
+            // Apply assigned_to filter if provided
+            if ($assignedToFilter !== null) {
+                $query->where('chat_tickets.assigned_to', $assignedToFilter);
+            } elseif ($assignedToMe && $role === 'agent') {
                 $query->where('chat_tickets.assigned_to', auth()->user()->id);
             } 
             
@@ -163,7 +166,7 @@ class Contact extends Model {
         return $query->paginate(10);
     }
 
-    public function contactsWithChatsCount($organizationId, $searchTerm = null, $ticketingActive = false, $ticketState = null, $sortDirection = 'asc', $role = 'owner', $allowAgentsViewAllChats = true, $labelFilters = [], $assignedToMe = false)
+    public function contactsWithChatsCount($organizationId, $searchTerm = null, $ticketingActive = false, $ticketState = null, $sortDirection = 'asc', $role = 'owner', $allowAgentsViewAllChats = true, $labelFilters = [], $assignedToMe = false, $assignedToFilter = null)
     {
         $query = $this->newQuery()
             ->where('contacts.organization_id', $organizationId)
@@ -175,7 +178,10 @@ class Contact extends Model {
 
         if($ticketingActive){
             // Conditional join with chat_tickets table and comparison with ticketState
-            if ($ticketState === 'unassigned') {
+            if ($assignedToFilter !== null) {
+                $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
+                    ->where('chat_tickets.assigned_to', $assignedToFilter);
+            } elseif ($ticketState === 'unassigned') {
                 $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
                     ->whereNull('chat_tickets.assigned_to');
             } elseif ($ticketState !== null && $ticketState !== 'all') {

@@ -111,6 +111,9 @@ class ChatService
         
         // Get label filters from request
         $labelFilters = $request->query('labels') ? explode(',', $request->query('labels')) : [];
+        
+        // Get assigned_to filter from request
+        $assignedToFilter = $request->query('assigned_to') ? (int)$request->query('assigned_to') : null;
 
         $assignedToMe = ($ticketState === 'assigned_to_me');
 
@@ -144,7 +147,8 @@ class ChatService
             $role, 
             $allowAgentsToViewAllChats,
             $labelFilters,
-            $assignedToMe
+            $assignedToMe,
+            $assignedToFilter
         );
         
         $rowCount = $contact->contactsWithChatsCount(
@@ -156,7 +160,8 @@ class ChatService
             $role, 
             $allowAgentsToViewAllChats,
             $labelFilters,
-            $assignedToMe
+            $assignedToMe,
+            $assignedToFilter
         );
 
         $pusherSettings = Setting::whereIn('key', [

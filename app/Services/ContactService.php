@@ -89,7 +89,7 @@ class ContactService
         $contact->first_name = $request->first_name;
         $contact->last_name = $request->last_name;
         $contact->email = $request->email;
-        $contact->is_subscribed = $request->is_subscribed || 1;
+        $contact->is_subscribed = $request->is_subscribed;
 
         $contact->phone = PhoneService::getE164Format($request->phone);
 
