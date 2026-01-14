@@ -889,7 +889,7 @@ class MessageController extends Controller
                 break;
             case 'audio':
                 $rules = [
-                    'file' => 'required|file|mimes:aac,amr,mp3,m4a,ogg|max:16384' // 16MB
+                    'file' => 'required|file|mimes:aac,amr,mp3,m4a,mp4,ogg|max:16384' // 16MB
                 ];
                 break;
             case 'document':
