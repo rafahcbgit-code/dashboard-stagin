@@ -33,6 +33,9 @@
                             <FormInput v-model="form.password_confirmation" :name="$t('Confirm password')" :error="form.errors.password_confirmation" :type="'password'" :class="'col-span-3'"/>
                         </div>
                         <div v-if="form.errors.recaptcha_response" class="form-error text-[#b91c1c] text-xs">{{ form.errors.recaptcha_response }}</div>
+                        <div class="mt-4 text-xs text-gray-500 text-center">
+                            By signing up, you agree to the <a href="https://chatberry.net/terms-conditions/" target="_blank" class="underline hover:text-gray-700">Terms & Conditions</a> and <a href="https://chatberry.net/privacy-policy/" target="_blank" class="underline hover:text-gray-700">Privacy Policy</a>, and consent to receive marketing communications from Chatberry.net and our service partners. Your information will also be shared with Chatberry's Service Partners to facilitate your Wati signup, product inquiries and enable your use of the Chatberry service.
+                        </div>
                         <div class="mt-6">
                             <button v-if="!isLoading" type="submit" class="rounded-md bg-primary px-3 py-3 text-sm text-white shadow-sm w-full">{{ $t('Create account') }}</button>
                             <button v-else type="button" class="rounded-md bg-primary px-3 py-3 text-sm text-white shadow-sm w-full flex justify-center">
