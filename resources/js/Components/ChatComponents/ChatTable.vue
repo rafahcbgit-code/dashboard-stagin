@@ -2,6 +2,7 @@
     import axios from 'axios';
     import { ref, watch, onMounted } from 'vue';
     import debounce from 'lodash/debounce';
+    import { useChatFilterStore, setChatFilters } from '@/stores/chatFilterStore.js';
     import { Link, router } from "@inertiajs/vue3";
     import Pagination from '@/Components/Pagination.vue';
     import TicketStatusToggle from '@/Components/TicketStatusToggle.vue';
@@ -143,10 +144,13 @@
         }
     );
 
+    const filterStore = useChatFilterStore();
+
     const params = ref({
-        search: props.filters.search,
-        labels: props.filters.labels,
-        assigned_to: props.filters.assigned_to,
+        search: props.filters?.search ?? null,
+        labels: props.filters?.labels ?? null,
+        assigned_to: props.filters?.assigned_to ?? null,
+        status: props.filters?.status ?? null,
     });
 
     const search = debounce(() => {
@@ -197,12 +201,15 @@
         
         // Update params and trigger search
         params.value.labels = selectedLabels.value.length > 0 ? selectedLabels.value.join(',') : null;
+        // persist to shared store
+        setChatFilters({ search: params.value.search, labels: params.value.labels, assigned_to: params.value.assigned_to });
         runSearch();
     };
 
     const clearLabelFilters = () => {
         selectedLabels.value = [];
         params.value.labels = null;
+        setChatFilters({ search: params.value.search, labels: null, assigned_to: params.value.assigned_to, status: params.value.status });
         runSearch();
     };
 
@@ -230,6 +237,7 @@
     const selectTeamMember = (userId) => {
         selectedTeamMember.value = userId;
         params.value.assigned_to = userId;
+        setChatFilters({ search: params.value.search, labels: params.value.labels, assigned_to: params.value.assigned_to, status: params.value.status });
         runSearch();
         showTeamFilter.value = false;
     };
@@ -237,16 +245,29 @@
     const clearTeamFilter = () => {
         selectedTeamMember.value = null;
         params.value.assigned_to = null;
+        setChatFilters({ search: params.value.search, labels: params.value.labels, assigned_to: null, status: params.value.status });
         runSearch();
     };
 
     // Initialize selected labels and team member from URL params
     onMounted(() => {
-        if (props.filters.labels) {
+        // Initialize from shared store if present, otherwise use props
+        if (filterStore.labels) {
+            params.value.labels = filterStore.labels;
+            selectedLabels.value = filterStore.labels.split(',').map(id => parseInt(id));
+        } else if (props.filters?.labels) {
+            params.value.labels = props.filters.labels;
             selectedLabels.value = props.filters.labels.split(',').map(id => parseInt(id));
+            setChatFilters({ search: params.value.search, labels: params.value.labels, assigned_to: params.value.assigned_to });
         }
-        if (props.filters.assigned_to) {
+
+        if (filterStore.assigned_to) {
+            params.value.assigned_to = filterStore.assigned_to;
+            selectedTeamMember.value = parseInt(filterStore.assigned_to);
+        } else if (props.filters?.assigned_to) {
+            params.value.assigned_to = props.filters.assigned_to;
             selectedTeamMember.value = parseInt(props.filters.assigned_to);
+            setChatFilters({ search: params.value.search, labels: params.value.labels, assigned_to: params.value.assigned_to });
         }
         
         // Add click outside listener
@@ -263,6 +284,17 @@
         if (!teamFilterElement && showTeamFilter.value) {
             showTeamFilter.value = false;
         }
+    };
+
+    const buildChatHref = (contact) => {
+        const page = props.rows.meta?.current_page || 1;
+        const qs = new URLSearchParams();
+        qs.set('page', page);
+        if (params.value.labels) qs.set('labels', params.value.labels);
+        if (params.value.assigned_to) qs.set('assigned_to', params.value.assigned_to);
+        if (params.value.status) qs.set('status', params.value.status);
+        if (params.value.search) qs.set('search', params.value.search);
+        return '/chats/' + contact.uuid + '?' + qs.toString();
     };
 
 </script>
@@ -413,7 +445,7 @@
         </div>
     </div>
     <div class="flex-grow overflow-y-auto h-[65vh]" ref="scrollContainer">
-        <Link :href="'/chats/' + contact.uuid + '?page=' + props.rows.meta.current_page" class="block border-b group-hover:pr-0" :class="contact.unread_messages > 0 ? 'bg-green-50' : ''" v-for="(contact, index) in rows.data" :key="index">
+        <Link :href="buildChatHref(contact)" class="block border-b group-hover:pr-0" :class="contact.unread_messages > 0 ? 'bg-green-50' : ''" v-for="(contact, index) in rows.data" :key="index">
             <div class="flex space-x-2 hover:bg-gray-50 cursor-pointer py-3 px-4">
                 <div class="w-[15%]">
                     <img v-if="contact.avatar" class="rounded-full w-10 h-10" :src="contact.avatar">

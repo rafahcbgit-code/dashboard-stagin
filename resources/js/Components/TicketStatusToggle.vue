@@ -2,6 +2,8 @@
     import { ref, onMounted, onUnmounted } from 'vue';
     import { Link } from "@inertiajs/vue3";
 
+    import { useChatFilterStore, setChatFilters } from '@/stores/chatFilterStore.js';
+
     const props = defineProps({
         languages: Object,
         currentLanguage: String,
@@ -40,6 +42,17 @@
     onUnmounted(() => {
         document.body.removeEventListener('click', handleClickOutside);
     });
+
+    const buildStatusHref = (status) => {
+        const filterStore = useChatFilterStore();
+        const qs = new URLSearchParams();
+        if (filterStore.labels) qs.set('labels', filterStore.labels);
+        if (filterStore.assigned_to) qs.set('assigned_to', filterStore.assigned_to);
+        if (filterStore.search) qs.set('search', filterStore.search);
+        if (status) qs.set('status', status);
+        const str = qs.toString();
+        return '/chats' + (str ? ('?' + str) : '');
+    }
 </script>
 <template>
     <div class="relative text-sm">
@@ -55,7 +68,7 @@
             <div>
                 <Link 
                     v-if="teamRole === 'agent'" 
-                    :href="'/chats?status=assigned_to_me'" 
+                    :href="buildStatusHref('assigned_to_me')" 
                     class="block px-2 py-1 cursor-pointer hover:bg-slate-100 rounded-md"
                 >
                     <div class="flex items-center space-x-2">
@@ -63,16 +76,16 @@
                     </div>
                 </Link>
 
-                <Link :href="'/chats?status=unassigned'" class="block px-2 py-1 cursor-pointer hover:bg-slate-100 rounded-md">
+                <Link :href="buildStatusHref('unassigned')" class="block px-2 py-1 cursor-pointer hover:bg-slate-100 rounded-md">
                     {{ $t('Unassigned')}} 
                 </Link>
-                <Link :href="'/chats?status=open'" class="block px-2 py-1 cursor-pointer hover:bg-slate-100 rounded-md">
+                <Link :href="buildStatusHref('open')" class="block px-2 py-1 cursor-pointer hover:bg-slate-100 rounded-md">
                     {{ $t('Open')}} 
                 </Link>
-                <Link :href="'/chats?status=closed'" class="block px-2 py-1 cursor-pointer hover:bg-slate-100 rounded-md">
+                <Link :href="buildStatusHref('closed')" class="block px-2 py-1 cursor-pointer hover:bg-slate-100 rounded-md">
                     {{ $t('Closed')}} 
                 </Link>
-                <Link :href="'/chats?status=all'" class="block px-2 py-1 cursor-pointer hover:bg-slate-100 rounded-md">
+                <Link :href="buildStatusHref('all')" class="block px-2 py-1 cursor-pointer hover:bg-slate-100 rounded-md">
                     {{ $t('All')}} 
                 </Link>
             </div>
