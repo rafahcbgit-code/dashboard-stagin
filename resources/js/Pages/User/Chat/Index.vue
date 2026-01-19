@@ -259,6 +259,7 @@ const closeThread = () => {
     if (filterStore.labels) url += '&labels=' + filterStore.labels;
     if (filterStore.assigned_to) url += '&assigned_to=' + filterStore.assigned_to;
     if (filterStore.search) url += '&search=' + encodeURIComponent(filterStore.search);
+    if (filterStore.status) url += '&status=' + encodeURIComponent(filterStore.status);
     contact.value = null;
     router.visit(url, { replace: true, preserveState: true, preserveScroll: true });
   } catch (e) {

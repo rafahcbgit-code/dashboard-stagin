@@ -150,6 +150,7 @@
         search: props.filters?.search ?? null,
         labels: props.filters?.labels ?? null,
         assigned_to: props.filters?.assigned_to ?? null,
+        status: props.filters?.status ?? null,
     });
 
     const search = debounce(() => {
@@ -208,7 +209,7 @@
     const clearLabelFilters = () => {
         selectedLabels.value = [];
         params.value.labels = null;
-        setChatFilters({ search: params.value.search, labels: null, assigned_to: params.value.assigned_to });
+        setChatFilters({ search: params.value.search, labels: null, assigned_to: params.value.assigned_to, status: params.value.status });
         runSearch();
     };
 
@@ -236,7 +237,7 @@
     const selectTeamMember = (userId) => {
         selectedTeamMember.value = userId;
         params.value.assigned_to = userId;
-        setChatFilters({ search: params.value.search, labels: params.value.labels, assigned_to: params.value.assigned_to });
+        setChatFilters({ search: params.value.search, labels: params.value.labels, assigned_to: params.value.assigned_to, status: params.value.status });
         runSearch();
         showTeamFilter.value = false;
     };
@@ -244,7 +245,7 @@
     const clearTeamFilter = () => {
         selectedTeamMember.value = null;
         params.value.assigned_to = null;
-        setChatFilters({ search: params.value.search, labels: params.value.labels, assigned_to: null });
+        setChatFilters({ search: params.value.search, labels: params.value.labels, assigned_to: null, status: params.value.status });
         runSearch();
     };
 
@@ -291,6 +292,7 @@
         qs.set('page', page);
         if (params.value.labels) qs.set('labels', params.value.labels);
         if (params.value.assigned_to) qs.set('assigned_to', params.value.assigned_to);
+        if (params.value.status) qs.set('status', params.value.status);
         if (params.value.search) qs.set('search', params.value.search);
         return '/chats/' + contact.uuid + '?' + qs.toString();
     };
