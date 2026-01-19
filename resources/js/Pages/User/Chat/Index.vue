@@ -39,6 +39,7 @@
 import AppLayout from "./../Layout/App.vue";
 import { default as axios } from "axios";
 import { router, useForm } from "@inertiajs/vue3";
+import { useChatFilterStore } from '@/stores/chatFilterStore.js';
 import { defineEmits, ref, onMounted, watch, onUnmounted } from "vue";
 import CampaignForm from "@/Components/CampaignForm.vue";
 import ChatForm from "@/Components/ChatComponents/ChatForm.vue";
@@ -252,8 +253,12 @@ const closeThread = () => {
   // the user returns to the same page they were browsing (e.g., page 10).
   try {
     const currentPage = rows.value?.meta?.current_page || 1;
-    // Update route to include the page parameter without adding history entry
-    const url = '/chats?page=' + currentPage;
+    // Include active filters persisted in the shared store when closing the thread
+    const filterStore = useChatFilterStore();
+    let url = '/chats?page=' + currentPage;
+    if (filterStore.labels) url += '&labels=' + filterStore.labels;
+    if (filterStore.assigned_to) url += '&assigned_to=' + filterStore.assigned_to;
+    if (filterStore.search) url += '&search=' + encodeURIComponent(filterStore.search);
     contact.value = null;
     router.visit(url, { replace: true, preserveState: true, preserveScroll: true });
   } catch (e) {
