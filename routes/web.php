@@ -15,6 +15,7 @@ use Illuminate\Support\Facades\Route;
 | be assigned to the "web" middleware group. Make something great!
 |
 */
+
 Route::post('/webhook/{organization}', [App\Http\Controllers\WebhookController::class, 'handlePostRequest']);
 
 //Installer routes
@@ -253,6 +254,7 @@ Route::middleware(['auth:user'])->group(function () {
                     Route::delete('/team/{uuid}', [App\Http\Controllers\User\TeamController::class, 'delete'])->name('team.destroy');
 
                     Route::get('/developer-tools/access-tokens', [App\Http\Controllers\User\DeveloperController::class, 'index']);
+                    Route::get('/reports/general', [App\Http\Controllers\User\ReportController::class, 'index'])->name('reports.general');
                     Route::post('/developer-tools/access-tokens', [App\Http\Controllers\User\DeveloperController::class, 'store']);
                     Route::delete('/developer-tools/access-tokens/{uuid}', [App\Http\Controllers\User\DeveloperController::class, 'delete']);
                 });
