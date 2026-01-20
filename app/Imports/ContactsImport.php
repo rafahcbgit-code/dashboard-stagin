@@ -33,6 +33,7 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
     protected $groupsCache = [];
     protected $contactsBuffer = [];
     protected $contactGroupsBuffer = [];
+    protected $pendingBufferMap = []; // phone -> buffer index
 
     public function __construct()
     {
@@ -110,6 +111,24 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
 
             $formattedPhone = PhoneService::getE164Format($phoneNumberValue);
 
+            // Check if currently in buffer (intra-file duplicate)
+            if (isset($this->pendingBufferMap[$formattedPhone])) {
+                $bufferIndex = $this->pendingBufferMap[$formattedPhone];
+                // Merge groups
+                $newGroups = $this->parseGroups($row['group_name'] ?? null);
+                if (!empty($newGroups)) {
+                    $this->contactsBuffer[$bufferIndex]['groups'] = array_unique(array_merge(
+                        $this->contactsBuffer[$bufferIndex]['groups'],
+                        $newGroups
+                    ));
+                }
+                // Do not increment successfulImports here to avoid double counting per row for limit, 
+                // but technically we processed the row. 
+                // Maybe redundant to limit check again if we assume identical rows are just updates.
+                // If we want to treat it as "skipped creation but processed", simpler to just return.
+                return;
+            }
+
             // Check if contact exists
             if (isset($this->allExistingPhones[$formattedPhone])) {
                 $this->updateExistingContact($this->allExistingPhones[$formattedPhone], $row);
@@ -118,7 +137,7 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
 
             // Check contact limit
             if ($this->contactLimit > 0) {
-                $totalCount = count($this->allExistingPhones) + $this->successfulImports;
+                $totalCount = count($this->allExistingPhones) + $this->successfulImports; // successfulImports counts NEW ones
 
                 if ($totalCount >= $this->contactLimit) {
                     $this->failedImports[] = [
@@ -164,6 +183,9 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
                 'groups' => $this->parseGroups($row['group_name'] ?? null)
             ];
 
+            // Map the phone to the new buffer index
+            $this->pendingBufferMap[$formattedPhone] = array_key_last($this->contactsBuffer);
+
             $this->successfulImports++;
 
             // Flush buffer every 1000 records
@@ -196,6 +218,7 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
                     'name'            => $name,
                     'created_by'      => $this->userId,
                 ]);
+                // Optimization: update cache with id immediately
                 $this->groupsCache[$name] = $group->id;
             }
             $groupIds[] = $this->groupsCache[$name];
@@ -222,6 +245,11 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
             ->pluck('id', 'phone')
             ->toArray();
 
+        // CRITICAL: Update the global map of existing phones so subsequent chunks know these exist!
+        foreach ($insertedContacts as $phone => $id) {
+            $this->allExistingPhones[$phone] = $id;
+        }
+
         // Prepare pivot data for groups
         $pivotData = [];
         foreach ($this->contactsBuffer as $buffer) {
@@ -243,8 +271,9 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
             DB::table('contact_contact_group')->insert($pivotData);
         }
 
-        // Clear buffer
+        // Clear buffer and pending map
         $this->contactsBuffer = [];
+        $this->pendingBufferMap = [];
     }
 
     protected function updateExistingContact($contactId, array $row)
