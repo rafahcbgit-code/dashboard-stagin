@@ -77,6 +77,39 @@
                     <apexchart type="area" height="220" :options="areaOptions" :series="areaSeries"></apexchart>
                 </div>
             </div>
+
+            <div class="mt-6 bg-white rounded-lg p-4 shadow-sm">
+                <div class="flex items-center justify-between">
+                    <h4 class="text-sm text-slate-600">{{ $t('Labels distribution') }}</h4>
+                    <div class="text-xs text-slate-400">{{ $t('Contacts per label') }}</div>
+                </div>
+                <div class="mt-3">
+                    <apexchart type="bar" height="240" :options="barOptions" :series="barSeries"></apexchart>
+                </div>
+            </div>
+
+            <div class="mt-6 bg-white rounded-lg p-4 shadow-sm overflow-x-auto">
+                <h4 class="text-sm text-slate-600 mb-3">{{ $t('Labels') }}</h4>
+                <table class="w-full text-sm">
+                    <thead>
+                        <tr class="text-left text-slate-500">
+                            <th class="p-2">{{ $t('Label') }}</th>
+                            <th class="p-2">{{ $t('Count') }}</th>
+                            <th class="p-2">{{ $t('Percentage') }}</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        <tr v-for="label in props.labels" :key="label.id" class="border-t">
+                            <td class="p-2 flex items-center gap-2">
+                                <span :style="{ backgroundColor: label.color }" class="w-3 h-3 rounded-full inline-block"></span>
+                                <span>{{ label.title }}</span>
+                            </td>
+                            <td class="p-2">{{ label.count }}</td>
+                            <td class="p-2">{{ label.percentage }}%</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
         </div>
     </AppLayout>
 </template>
@@ -93,6 +126,8 @@ const props = defineProps({
     unsubscribed: { type: Object, default: () => ({ count: 0, percentage: 0 }) },
     initial_start_date: { type: String, default: '' },
     initial_end_date: { type: String, default: '' },
+    labels: { type: Array, default: () => [] },
+    area_series: { type: Array, default: () => [] },
 });
 
 const formatDate = (d) => {
@@ -141,13 +176,38 @@ const newContactsPct = computed(() => {
     return Math.round((props.new_contacts / total) * 100);
 });
 
-// Area chart placeholder (frontend can be enhanced later with series data)
-const areaSeries = [{ name: 'New contacts', data: [10, 20, 12, 25, 18, props.new_contacts || 0] }];
+// Area chart: use datetime points when provided, otherwise fallback to placeholder
+const areaSeries = computed(() => {
+    if (props.area_series && props.area_series.length) {
+        return [{ name: 'New contacts', data: props.area_series }];
+    }
+    return [{ name: 'New contacts', data: [10, 20, 12, 25, 18, props.new_contacts || 0] }];
+});
+
 const areaOptions = {
     chart: { toolbar: { show: false }, zoom: { enabled: false } },
     stroke: { curve: 'smooth' },
     colors: ['#0ea5a4'],
-    xaxis: { categories: ['-5d','-4d','-3d','-2d','-1d','Today'] },
+    xaxis: { type: 'datetime' },
     tooltip: { x: { format: 'dd MMM' } },
 };
+
+const barSeries = computed(() => {
+    const counts = (props.labels || []).map(l => l.count || 0);
+    return [{ name: 'Contacts', data: counts }];
+});
+
+const barOptions = computed(() => {
+    const labels = (props.labels || []).map(l => l.title || '');
+    const colors = (props.labels || []).map(l => l.color || '#6b7280');
+    return {
+        chart: { toolbar: { show: false } },
+        plotOptions: { bar: { distributed: true, borderRadius: 4, columnWidth: '10%' } },
+        dataLabels: { enabled: false },
+        colors: colors,
+        xaxis: { categories: labels },
+        legend: { show: false },
+        tooltip: { y: { formatter: (val) => `${val}` } },
+    };
+});
 </script>

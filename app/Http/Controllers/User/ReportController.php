@@ -37,6 +37,20 @@ class ReportController extends BaseController
         $total = $service->totalContacts($start, $end);
         $new = $service->newContactsCount($start, $end);
         $subs = $service->subscribedUnsubscribedCounts($start, $end);
+        $labels = $service->labelsStats($start, $end);
+        $areaSeries = $service->dailyNewContactsSeries($start, $end);
+/*dd([
+    'title' => __('General Reports'),
+    'total_contacts' => $total,
+    'new_contacts' => $new,
+    'subscribed' => $subs['subscribed'],
+    'unsubscribed' => $subs['unsubscribed'],
+    'initial_start_date' => $start->toDateString(),
+    'initial_end_date' => $end->toDateString(),
+    'labels' => $labels,
+]);*/
+
+
 
         return Inertia::render('User/Reports/General', [
             'title' => __('General Reports'),
@@ -47,6 +61,8 @@ class ReportController extends BaseController
             // Pass the initial date range so frontend inputs are prefilled
             'initial_start_date' => $start->toDateString(),
             'initial_end_date' => $end->toDateString(),
+            'labels' => $labels,
+            'area_series' => $areaSeries,
         ]);
     }
 }
