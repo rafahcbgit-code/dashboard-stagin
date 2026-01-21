@@ -83,11 +83,13 @@ class HandleInertiaRequests extends Middleware
 
             $organizations = Team::with('organization')->where('user_id', $user->id)->get();
             $organization = Organization::where('id', $organizationId)->first();
-            $unreadMessages = Chat::where('organization_id', $organizationId)
-                ->where('type', 'inbound')
-                ->where('deleted_at', null)
-                ->where('is_read', 0)
-                ->count();
+            $unreadMessages = \Illuminate\Support\Facades\Cache::remember("org_{$organizationId}_global_unread", 60, function () use ($organizationId) {
+                return Chat::where('organization_id', $organizationId)
+                    ->where('type', 'inbound')
+                    ->where('deleted_at', null)
+                    ->where('is_read', 0)
+                    ->count();
+            });
         }
 
         if ($this->isInstalled()) {
@@ -106,8 +108,8 @@ class HandleInertiaRequests extends Middleware
 
         return array_merge(parent::share($request), [
             'csrf_token' => csrf_token(),
-            'applicationVersion' => fn () => Config::get('version.version'),
-            'applicationReleaseDate' => fn () => Config::get('version.release_date'),
+            'applicationVersion' => fn() => Config::get('version.version'),
+            'applicationReleaseDate' => fn() => Config::get('version.release_date'),
             'config' => $config,
             'auth' => [
                 'user' => $user ?: null,
@@ -117,7 +119,7 @@ class HandleInertiaRequests extends Middleware
             'flash' => [
                 'status' => session('status'),
             ],
-            'response_data' => fn () => $request->session()->get('response_data'),
+            'response_data' => fn() => $request->session()->get('response_data'),
             'languages' => $languages,
             'unreadMessages' => $unreadMessages,
             'currentLanguage' => $language,
