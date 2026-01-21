@@ -15,7 +15,7 @@
                         $t('Apply') }}</button>
                     <button @click="setToday" class="ml-2 text-sm px-3 py-2 border rounded">{{ $t('Today') }}</button>
                     <button @click="setLast7Days" class="ml-2 text-sm px-3 py-2 border rounded">{{ $t('Last 7 Days')
-                    }}</button>
+                        }}</button>
                 </div>
             </div>
 
