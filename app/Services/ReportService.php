@@ -195,7 +195,9 @@ class ReportService
             ->orderBy('day')
             ->get()
             ->keyBy('day')
-            ->map(function ($r) { return (int) $r->count; })
+            ->map(function ($r) {
+                return (int) $r->count;
+            })
             ->toArray();
 
         $days = [];
@@ -253,6 +255,53 @@ class ReportService
             'sent' => $sent,
             'received' => $received,
         ];
+    }
+
+    /**
+     * Daily chats series split by type (inbound/outbound).
+     * Returns ['categories' => [...days], 'inbound' => [...counts], 'outbound' => [...counts]]
+     */
+    public function dailyChatsSeries(?Carbon $start = null, ?Carbon $end = null): array
+    {
+        if (!$start) {
+            $start = Carbon::now()->startOfDay()->subDays(6);
+        }
+        if (!$end) {
+            $end = Carbon::now()->endOfDay();
+        }
+
+        $rows = DB::table('chats')
+            ->select(DB::raw('DATE(created_at) as day'), 'type', DB::raw('count(*) as count'))
+            ->where('organization_id', $this->organizationId)
+            ->whereNull('deleted_at')
+            ->whereBetween('created_at', [$start->toDateTimeString(), $end->toDateTimeString()])
+            ->groupBy('day', 'type')
+            ->orderBy('day')
+            ->get();
+
+        $map = [];
+        foreach ($rows as $r) {
+            $d = $r->day;
+            $t = $r->type;
+            if (!isset($map[$d])) $map[$d] = ['inbound' => 0, 'outbound' => 0];
+            $map[$d][$t] = (int) $r->count;
+        }
+
+        $days = [];
+        $inbound = [];
+        $outbound = [];
+
+        $cursor = $start->copy()->startOfDay();
+        $endDay = $end->copy()->startOfDay();
+        while ($cursor->lte($endDay)) {
+            $dayStr = $cursor->toDateString();
+            $days[] = $dayStr;
+            $inbound[] = isset($map[$dayStr]) ? $map[$dayStr]['inbound'] : 0;
+            $outbound[] = isset($map[$dayStr]) ? $map[$dayStr]['outbound'] : 0;
+            $cursor->addDay();
+        }
+
+        return ['categories' => $days, 'inbound' => $inbound, 'outbound' => $outbound];
     }
 
     /**

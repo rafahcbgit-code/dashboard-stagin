@@ -36,13 +36,16 @@ class ReportController extends BaseController
 
         $service = new ReportService($organizationId);
 
-        $total = $service->totalContacts($start, $end);
+        // Total contacts should be reported as all-time (no date filter)
+        $total = $service->totalContacts(null, null);
         $new = $service->newContactsCount($start, $end);
         $subs = $service->subscribedUnsubscribedCounts($start, $end);
-        $labels = $service->labelsStats($start, $end);
+        // labels should represent distribution across all contacts (not limited by selected date range)
+        $labels = $service->labelsStats(null, null);
         $areaSeries = $service->dailyNewContactsSeries($start, $end);
         $conversations = $service->conversationsCounts($start, $end);
         $conversations_series = $service->dailyConversationsSeries($start, $end);
+        $chats_series = $service->dailyChatsSeries($start, $end);
         // include unassigned across all time for quick visibility
         try {
             $conversations['unassigned_all_time'] = $service->unassignedAllTime();
@@ -50,7 +53,7 @@ class ReportController extends BaseController
             $conversations['unassigned_all_time'] = 0;
         }
         $messages = $service->messagesCount($start, $end);
-        
+
         // Debug messages count
         Log::info('[Reports] messages_count', [
             'sent' => $messages['sent'] ?? 'missing',
@@ -59,7 +62,7 @@ class ReportController extends BaseController
             'end' => $end->toDateTimeString(),
             'org_id' => $organizationId
         ]);
-        
+
         // Debug closed tickets
         $closedTicketsSample = DB::table('chat_tickets')
             ->join('contacts', 'chat_tickets.contact_id', '=', 'contacts.id')
@@ -75,7 +78,7 @@ class ReportController extends BaseController
             'expected_count' => $conversations['closed'] ?? 0,
             'samples' => $closedTicketsSample->toArray()
         ]);
-        
+
         try {
             Log::info('[Reports] conversations_debug', $conversations);
             $samples = DB::table('chat_tickets')
@@ -128,6 +131,7 @@ class ReportController extends BaseController
             'area_series' => $areaSeries,
             'conversations' => $conversations,
             'conversations_series' => $conversations_series,
+            'chats_series' => $chats_series,
             'messages' => $messages,
         ]);
     }

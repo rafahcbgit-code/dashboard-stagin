@@ -25,9 +25,51 @@
                     <div class="text-xs text-slate-400">{{ $t('Daily conversations created') }}</div>
                 </div>
                 <div class="mt-3">
-                    <apexchart type="area" height="220" :options="conversationsAreaOptions" :series="conversationsAreaSeries"></apexchart>
+                    <apexchart type="area" height="220" :options="conversationsAreaOptions"
+                        :series="conversationsAreaSeries"></apexchart>
                 </div>
             </div>
+
+            <!-- Conversations metrics immediately under the chart -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
+                <div class="bg-white rounded-lg p-4 shadow-sm">
+                    <h4 class="text-sm text-slate-500">{{ $t('Unassigned conversations') }}</h4>
+                    <div class="text-2xl font-bold mt-2">{{ props.conversations ?
+                        props.conversations.unassigned_all_time : 0 }}</div>
+                    <div class="text-xs text-slate-400">{{ $t('All time') }}</div>
+                </div>
+
+                <div class="bg-white rounded-lg p-4 shadow-sm">
+                    <h4 class="text-sm text-slate-500">{{ $t('Closed conversations') }}</h4>
+                    <div class="text-2xl font-bold mt-2">{{ props.conversations ? props.conversations.closed : 0 }}
+                    </div>
+                    <div class="text-xs text-slate-400">{{ $t('Status = closed in the range') }}</div>
+                </div>
+
+                <div class="bg-white rounded-lg p-4 shadow-sm">
+                    <h4 class="text-sm text-slate-500">{{ $t('Open conversations') }}</h4>
+                    <div class="text-2xl font-bold mt-2">{{ props.conversations ? props.conversations.open : 0 }}</div>
+                    <div class="text-xs text-slate-400">{{ $t('Status = open in the range') }}</div>
+                </div>
+
+                <div class="bg-white rounded-lg p-4 shadow-sm">
+                    <h4 class="text-sm text-slate-600 mb-3">{{ $t('Messages') }}</h4>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div>
+                            <div class="text-xs text-slate-500">{{ $t('Sent') }}</div>
+                            <div class="text-2xl font-bold text-blue-600 mt-1">{{ props.messages ? props.messages.sent :
+                                0 }}</div>
+                        </div>
+                        <div>
+                            <div class="text-xs text-slate-500">{{ $t('Received') }}</div>
+                            <div class="text-2xl font-bold text-green-600 mt-1">{{ props.messages ?
+                                props.messages.received : 0 }}</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- End conversations metrics -->
 
             <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
                 <div
@@ -36,7 +78,7 @@
                         <div>
                             <h3 class="text-sm text-slate-500">{{ $t('Total contacts') }}</h3>
                             <div class="text-3xl font-bold text-slate-800">{{ props.total_contacts }}</div>
-                            <div class="text-sm text-slate-400 mt-1">{{ $t('All contacts in the selected range') }}
+                            <div class="text-sm text-slate-400 mt-1">{{ $t('All contacts (all time)') }}
                             </div>
                         </div>
                         <div class="flex items-center gap-2">
@@ -86,40 +128,7 @@
                 </div>
             </div>
 
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
-                <div class="bg-white rounded-lg p-4 shadow-sm">
-                    <h4 class="text-sm text-slate-500">{{ $t('Unassigned conversations') }}</h4>
-                    <div class="text-2xl font-bold mt-2">{{ props.conversations ? props.conversations.unassigned : 0 }}</div>
-                    <div class="text-xs text-slate-400">{{ $t('Not assigned to any agent') }}</div>
-                    <div class="text-xs text-slate-400 mt-1">{{ $t('All time') }}: <span class="font-medium">{{ props.conversations ? props.conversations.unassigned_all_time : 0 }}</span></div>
-                </div>
-
-                <div class="bg-white rounded-lg p-4 shadow-sm">
-                    <h4 class="text-sm text-slate-500">{{ $t('Closed conversations') }}</h4>
-                    <div class="text-2xl font-bold mt-2">{{ props.conversations ? props.conversations.closed : 0 }}</div>
-                    <div class="text-xs text-slate-400">{{ $t('Status = closed in the range') }}</div>
-                </div>
-
-                <div class="bg-white rounded-lg p-4 shadow-sm">
-                    <h4 class="text-sm text-slate-500">{{ $t('Open conversations') }}</h4>
-                    <div class="text-2xl font-bold mt-2">{{ props.conversations ? props.conversations.open : 0 }}</div>
-                    <div class="text-xs text-slate-400">{{ $t('Status = open in the range') }}</div>
-                </div>
-            </div>
-
-            <div class="mt-4 bg-white rounded-lg p-4 shadow-sm">
-                <h4 class="text-sm text-slate-600 mb-3">{{ $t('Messages') }}</h4>
-                <div class="grid grid-cols-2 gap-4">
-                    <div>
-                        <div class="text-xs text-slate-500">{{ $t('Sent') }}</div>
-                        <div class="text-2xl font-bold text-blue-600 mt-1">{{ props.messages ? props.messages.sent : 0 }}</div>
-                    </div>
-                    <div>
-                        <div class="text-xs text-slate-500">{{ $t('Received') }}</div>
-                        <div class="text-2xl font-bold text-green-600 mt-1">{{ props.messages ? props.messages.received : 0 }}</div>
-                    </div>
-                </div>
-            </div>
+            <!-- Duplicate conversation cards removed (now shown directly under the conversations chart) -->
 
             <div class="mt-6 bg-white rounded-lg p-4 shadow-sm">
                 <div class="flex items-center justify-between">
@@ -140,7 +149,8 @@
 
                 <div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
                     <div class="overflow-x-auto">
-                        <apexchart type="bar" :width="chartWidth" :height="chartHeight" :options="barOptions" :series="barSeries"></apexchart>
+                        <apexchart type="bar" :width="chartWidth" :height="chartHeight" :options="barOptions"
+                            :series="barSeries"></apexchart>
                     </div>
 
                     <div class="overflow-y-auto max-h-72">
@@ -151,7 +161,8 @@
                                     <th class="p-2">{{ $t('Count') }}</th>
                                     <th class="p-2">
                                         {{ $t('Percentage') }}
-                                        <span class="ml-2 text-xs text-slate-400" :title="$t('Share of total contacts assigned to this label')">&#9432;</span>
+                                        <span class="ml-2 text-xs text-slate-400"
+                                            :title="$t('Share of total contacts assigned to this label')">&#9432;</span>
                                     </th>
                                 </tr>
                             </thead>
@@ -190,6 +201,7 @@ const props = defineProps({
     area_series: { type: Array, default: () => [] },
     conversations: { type: Object, default: () => ({ total: 0, open: 0, closed: 0 }) },
     conversations_series: { type: Object, default: () => ({ categories: [], data: [] }) },
+    chats_series: { type: Object, default: () => ({ categories: [], inbound: [], outbound: [] }) },
     messages: { type: Object, default: () => ({ sent: 0, received: 0 }) },
 });
 
@@ -259,7 +271,7 @@ const barSeries = computed(() => {
     const counts = (props.labels || []).map(l => l.count || 0);
     return [{ name: 'Contacts', data: counts }];
 });
-    const maxLabelCount = computed(() => {
+const maxLabelCount = computed(() => {
     const counts = (props.labels || []).map(l => l.count || 0);
     return counts.length ? Math.max(...counts) : 0;
 });
@@ -320,22 +332,38 @@ const chartWidth = computed(() => {
     return calculated;
 });
 
+// Mirror dashboard's messages area chart style and show inbound/outbound series when available
 const conversationsAreaSeries = computed(() => {
-    const series = [];
+    // if chats_series provided (inbound/outbound arrays), use two series similar to dashboard
+    if (props.chats_series && Array.isArray(props.chats_series.categories)) {
+        return [
+            { name: 'Inbound chats', data: props.chats_series.inbound || [] },
+            { name: 'Outbound chats', data: props.chats_series.outbound || [] },
+        ];
+    }
+
+    // fallback: use single conversations_series as datetime points
     if (props.conversations_series && Array.isArray(props.conversations_series.categories) && Array.isArray(props.conversations_series.data)) {
         const data = props.conversations_series.categories.map((d, i) => ({ x: d, y: props.conversations_series.data[i] || 0 }));
-        series.push({ name: 'Conversations', data });
-    } else {
-        series.push({ name: 'Conversations', data: [] });
+        return [{ name: 'Conversations', data }];
     }
-    return series;
+
+    return [{ name: 'Conversations', data: [] }];
 });
 
-const conversationsAreaOptions = {
-    chart: { toolbar: { show: false }, zoom: { enabled: false } },
-    stroke: { curve: 'smooth' },
-    colors: ['#3b82f6'],
-    xaxis: { type: 'datetime' },
-    tooltip: { x: { format: 'dd MMM' } },
-};
+const conversationsAreaOptions = computed(() => {
+    // dashboard style
+    return {
+        chart: { height: 350, type: 'area', toolbar: { show: false }, zoom: { enabled: false } },
+        colors: ['#418207'],
+        fill: {
+            type: 'gradient',
+            gradient: { shadeIntensity: 1, opacityFrom: 0.7, opacityTo: 0.9, stops: [0, 90, 100] }
+        },
+        dataLabels: { enabled: false },
+        stroke: { width: 1, curve: 'smooth' },
+        xaxis: { type: 'datetime', categories: props.chats_series && props.chats_series.categories ? props.chats_series.categories : props.conversations_series.categories },
+        tooltip: { x: { format: 'dd/MM/yy HH:mm' } },
+    };
+});
 </script>
