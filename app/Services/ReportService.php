@@ -137,6 +137,125 @@ class ReportService
     }
 
     /**
+     * Conversations: total, open, closed counts within optional created_at range.
+     * Uses chat_tickets joined to contacts to filter by organization.
+     */
+    public function conversationsCounts(?Carbon $start = null, ?Carbon $end = null): array
+    {
+        $base = DB::table('chat_tickets')
+            ->join('contacts', 'chat_tickets.contact_id', '=', 'contacts.id')
+            ->where('contacts.organization_id', $this->organizationId)
+            ->whereNull('contacts.deleted_at');
+
+        if ($start && $end) {
+            $base->whereBetween('chat_tickets.created_at', [$start->toDateTimeString(), $end->toDateTimeString()]);
+        } elseif ($start) {
+            $base->where('chat_tickets.created_at', '>=', $start->toDateTimeString());
+        } elseif ($end) {
+            $base->where('chat_tickets.created_at', '<=', $end->toDateTimeString());
+        }
+
+        $total = (int) (clone $base)->count();
+
+        $open = (int) (clone $base)->where('chat_tickets.status', 'open')->count();
+        $closed = (int) (clone $base)->where('chat_tickets.status', 'closed')->count();
+        // treat assigned_to NULL or 0 as unassigned
+        $unassigned = (int) (clone $base)
+            ->where(function ($q) {
+                $q->whereNull('chat_tickets.assigned_to')->orWhere('chat_tickets.assigned_to', 0);
+            })->count();
+
+        return [
+            'total' => $total,
+            'open' => $open,
+            'closed' => $closed,
+            'unassigned' => $unassigned,
+        ];
+    }
+
+    /**
+     * Daily conversations series (tickets created per day) as categories+data.
+     */
+    public function dailyConversationsSeries(?Carbon $start = null, ?Carbon $end = null): array
+    {
+        if (!$start) {
+            $start = Carbon::now()->startOfDay()->subDays(6);
+        }
+        if (!$end) {
+            $end = Carbon::now()->endOfDay();
+        }
+
+        $rows = DB::table('chat_tickets')
+            ->join('contacts', 'chat_tickets.contact_id', '=', 'contacts.id')
+            ->where('contacts.organization_id', $this->organizationId)
+            ->whereNull('contacts.deleted_at')
+            ->whereBetween('chat_tickets.created_at', [$start->toDateTimeString(), $end->toDateTimeString()])
+            ->select(DB::raw('DATE(chat_tickets.created_at) as day'), DB::raw('count(*) as count'))
+            ->groupBy('day')
+            ->orderBy('day')
+            ->get()
+            ->keyBy('day')
+            ->map(function ($r) { return (int) $r->count; })
+            ->toArray();
+
+        $days = [];
+        $counts = [];
+        $cursor = $start->copy()->startOfDay();
+        $endDay = $end->copy()->startOfDay();
+        while ($cursor->lte($endDay)) {
+            $dayStr = $cursor->toDateString();
+            $days[] = $dayStr;
+            $counts[] = isset($rows[$dayStr]) ? $rows[$dayStr] : 0;
+            $cursor->addDay();
+        }
+
+        return ['categories' => $days, 'data' => $counts];
+    }
+
+    /**
+     * Count unassigned conversations across all time for the organization.
+     */
+    public function unassignedAllTime(): int
+    {
+        $q = DB::table('chat_tickets')
+            ->join('contacts', 'chat_tickets.contact_id', '=', 'contacts.id')
+            ->where('contacts.organization_id', $this->organizationId)
+            ->whereNull('contacts.deleted_at')
+            ->where(function ($q) {
+                $q->whereNull('chat_tickets.assigned_to')->orWhere('chat_tickets.assigned_to', 0);
+            });
+
+        return (int) $q->count();
+    }
+
+    /**
+     * Count sent and received messages within optional date range.
+     * Returns ['sent' => count, 'received' => count]
+     */
+    public function messagesCount(?Carbon $start = null, ?Carbon $end = null): array
+    {
+        $query = DB::table('chats')
+            ->where('organization_id', $this->organizationId)
+            ->whereNull('deleted_at');
+
+        if ($start && $end) {
+            $query->whereBetween('created_at', [$start->toDateTimeString(), $end->toDateTimeString()]);
+        } elseif ($start) {
+            $query->where('created_at', '>=', $start->toDateTimeString());
+        } elseif ($end) {
+            $query->where('created_at', '<=', $end->toDateTimeString());
+        }
+
+        $sent = (int) (clone $query)->where('type', 'outbound')->count();
+        $received = (int) (clone $query)->where('type', 'inbound')->count();
+
+        return [
+            'sent' => $sent,
+            'received' => $received,
+        ];
+    }
+
+    /**
      * Return an array of { x: 'YYYY-MM-DD', y: count } points for each day in range.
      * Useful for datetime-area charts.
      *

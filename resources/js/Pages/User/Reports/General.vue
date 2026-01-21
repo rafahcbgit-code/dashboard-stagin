@@ -11,22 +11,40 @@
                     <input v-model="startDate" type="date" class="border rounded p-2 text-sm" />
                     <span class="text-sm text-slate-400">—</span>
                     <input v-model="endDate" type="date" class="border rounded p-2 text-sm" />
-                    <button @click="applyFilter" class="bg-primary text-white px-3 py-2 rounded ml-2 text-sm">{{ $t('Apply') }}</button>
+                    <button @click="applyFilter" class="bg-primary text-white px-3 py-2 rounded ml-2 text-sm">{{
+                        $t('Apply') }}</button>
                     <button @click="setToday" class="ml-2 text-sm px-3 py-2 border rounded">{{ $t('Today') }}</button>
-                    <button @click="setLast7Days" class="ml-2 text-sm px-3 py-2 border rounded">{{ $t('Last 7 Days') }}</button>
+                    <button @click="setLast7Days" class="ml-2 text-sm px-3 py-2 border rounded">{{ $t('Last 7 Days')
+                        }}</button>
+                </div>
+            </div>
+
+            <div class="mt-6 bg-white rounded-lg p-4 shadow-sm">
+                <div class="flex items-center justify-between">
+                    <h4 class="text-sm text-slate-600">{{ $t('Conversations over time') }}</h4>
+                    <div class="text-xs text-slate-400">{{ $t('Daily conversations created') }}</div>
+                </div>
+                <div class="mt-3">
+                    <apexchart type="area" height="220" :options="conversationsAreaOptions" :series="conversationsAreaSeries"></apexchart>
                 </div>
             </div>
 
             <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mt-6">
-                <div class="col-span-1 md:col-span-2 bg-gradient-to-r from-slate-50 to-white rounded-lg p-6 shadow-sm border">
+                <div
+                    class="col-span-1 md:col-span-2 bg-gradient-to-r from-slate-50 to-white rounded-lg p-6 shadow-sm border">
                     <div class="flex items-center justify-between">
                         <div>
                             <h3 class="text-sm text-slate-500">{{ $t('Total contacts') }}</h3>
                             <div class="text-3xl font-bold text-slate-800">{{ props.total_contacts }}</div>
-                            <div class="text-sm text-slate-400 mt-1">{{ $t('All contacts in the selected range') }}</div>
+                            <div class="text-sm text-slate-400 mt-1">{{ $t('All contacts in the selected range') }}
+                            </div>
                         </div>
                         <div class="flex items-center gap-2">
-                            <svg class="w-12 h-12 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M17 20h5V4H2v16h5m10 0v-6a4 4 0 10-8 0v6"/></svg>
+                            <svg class="w-12 h-12 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none"
+                                viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"
+                                    d="M17 20h5V4H2v16h5m10 0v-6a4 4 0 10-8 0v6" />
+                            </svg>
                         </div>
                     </div>
                 </div>
@@ -62,7 +80,43 @@
                         <div class="w-full bg-slate-100 rounded h-2 overflow-hidden">
                             <div class="bg-primary h-2" :style="{ width: newContactsPct + '%' }"></div>
                         </div>
-                        <div class="text-xs text-slate-400 mt-2">{{ newContactsPct }}% {{ $t('of total contacts') }}</div>
+                        <div class="text-xs text-slate-400 mt-2">{{ newContactsPct }}% {{ $t('of total contacts') }}
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mt-4">
+                <div class="bg-white rounded-lg p-4 shadow-sm">
+                    <h4 class="text-sm text-slate-500">{{ $t('Unassigned conversations') }}</h4>
+                    <div class="text-2xl font-bold mt-2">{{ props.conversations ? props.conversations.unassigned : 0 }}</div>
+                    <div class="text-xs text-slate-400">{{ $t('Not assigned to any agent') }}</div>
+                    <div class="text-xs text-slate-400 mt-1">{{ $t('All time') }}: <span class="font-medium">{{ props.conversations ? props.conversations.unassigned_all_time : 0 }}</span></div>
+                </div>
+
+                <div class="bg-white rounded-lg p-4 shadow-sm">
+                    <h4 class="text-sm text-slate-500">{{ $t('Closed conversations') }}</h4>
+                    <div class="text-2xl font-bold mt-2">{{ props.conversations ? props.conversations.closed : 0 }}</div>
+                    <div class="text-xs text-slate-400">{{ $t('Status = closed in the range') }}</div>
+                </div>
+
+                <div class="bg-white rounded-lg p-4 shadow-sm">
+                    <h4 class="text-sm text-slate-500">{{ $t('Open conversations') }}</h4>
+                    <div class="text-2xl font-bold mt-2">{{ props.conversations ? props.conversations.open : 0 }}</div>
+                    <div class="text-xs text-slate-400">{{ $t('Status = open in the range') }}</div>
+                </div>
+            </div>
+
+            <div class="mt-4 bg-white rounded-lg p-4 shadow-sm">
+                <h4 class="text-sm text-slate-600 mb-3">{{ $t('Messages') }}</h4>
+                <div class="grid grid-cols-2 gap-4">
+                    <div>
+                        <div class="text-xs text-slate-500">{{ $t('Sent') }}</div>
+                        <div class="text-2xl font-bold text-blue-600 mt-1">{{ props.messages ? props.messages.sent : 0 }}</div>
+                    </div>
+                    <div>
+                        <div class="text-xs text-slate-500">{{ $t('Received') }}</div>
+                        <div class="text-2xl font-bold text-green-600 mt-1">{{ props.messages ? props.messages.received : 0 }}</div>
                     </div>
                 </div>
             </div>
@@ -80,35 +134,41 @@
 
             <div class="mt-6 bg-white rounded-lg p-4 shadow-sm">
                 <div class="flex items-center justify-between">
-                    <h4 class="text-sm text-slate-600">{{ $t('Labels distribution') }}</h4>
+                    <h4 class="text-sm text-slate-600">{{ $t('Labels') }}</h4>
                     <div class="text-xs text-slate-400">{{ $t('Contacts per label') }}</div>
                 </div>
-                <div class="mt-3">
-                    <apexchart type="bar" height="240" :options="barOptions" :series="barSeries"></apexchart>
-                </div>
-            </div>
 
-            <div class="mt-6 bg-white rounded-lg p-4 shadow-sm overflow-x-auto">
-                <h4 class="text-sm text-slate-600 mb-3">{{ $t('Labels') }}</h4>
-                <table class="w-full text-sm">
-                    <thead>
-                        <tr class="text-left text-slate-500">
-                            <th class="p-2">{{ $t('Label') }}</th>
-                            <th class="p-2">{{ $t('Count') }}</th>
-                            <th class="p-2">{{ $t('Percentage') }}</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        <tr v-for="label in props.labels" :key="label.id" class="border-t">
-                            <td class="p-2 flex items-center gap-2">
-                                <span :style="{ backgroundColor: label.color }" class="w-3 h-3 rounded-full inline-block"></span>
-                                <span>{{ label.title }}</span>
-                            </td>
-                            <td class="p-2">{{ label.count }}</td>
-                            <td class="p-2">{{ label.percentage }}%</td>
-                        </tr>
-                    </tbody>
-                </table>
+                <div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
+                    <div class="overflow-x-auto">
+                        <apexchart type="bar" :width="chartWidth" :height="chartHeight" :options="barOptions" :series="barSeries"></apexchart>
+                    </div>
+
+                    <div class="overflow-y-auto max-h-72">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="text-left text-slate-500">
+                                    <th class="p-2">{{ $t('Label') }}</th>
+                                    <th class="p-2">{{ $t('Count') }}</th>
+                                    <th class="p-2">
+                                        {{ $t('Percentage') }}
+                                        <span class="ml-2 text-xs text-slate-400" :title="$t('Share of total contacts assigned to this label')">&#9432;</span>
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="label in props.labels" :key="label.id" class="border-t">
+                                    <td class="p-2 flex items-center gap-2">
+                                        <span :style="{ backgroundColor: label.color }"
+                                            class="w-3 h-3 rounded-full inline-block"></span>
+                                        <span>{{ label.title }}</span>
+                                    </td>
+                                    <td class="p-2">{{ label.count }}</td>
+                                    <td class="p-2">{{ label.percentage }}%</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
         </div>
     </AppLayout>
@@ -128,10 +188,13 @@ const props = defineProps({
     initial_end_date: { type: String, default: '' },
     labels: { type: Array, default: () => [] },
     area_series: { type: Array, default: () => [] },
+    conversations: { type: Object, default: () => ({ total: 0, open: 0, closed: 0 }) },
+    conversations_series: { type: Object, default: () => ({ categories: [], data: [] }) },
+    messages: { type: Object, default: () => ({ sent: 0, received: 0 }) },
 });
 
 const formatDate = (d) => {
-    return d.toISOString().slice(0,10);
+    return d.toISOString().slice(0, 10);
 };
 
 const today = new Date();
@@ -145,7 +208,7 @@ const applyFilter = () => {
     const params = {};
     if (startDate.value) params.start_date = startDate.value;
     if (endDate.value) params.end_date = endDate.value;
-    router.get('/reports/general', params, { preserveState: true, replace: true });
+    router.get('/reports/general', params, { preserveState: false, replace: true });
 };
 
 const setToday = () => {
@@ -164,7 +227,7 @@ const setLast7Days = () => {
 const donutSeries = computed(() => [props.subscribed.count || 0, props.unsubscribed.count || 0]);
 
 const donutOptions = {
-    labels: [ 'Subscribed', 'Unsubscribed' ],
+    labels: ['Subscribed', 'Unsubscribed'],
     colors: ['#16a34a', '#ef4444'],
     legend: { position: 'bottom' },
     dataLabels: { enabled: false },
@@ -196,18 +259,83 @@ const barSeries = computed(() => {
     const counts = (props.labels || []).map(l => l.count || 0);
     return [{ name: 'Contacts', data: counts }];
 });
+    const maxLabelCount = computed(() => {
+    const counts = (props.labels || []).map(l => l.count || 0);
+    return counts.length ? Math.max(...counts) : 0;
+});
 
 const barOptions = computed(() => {
     const labels = (props.labels || []).map(l => l.title || '');
     const colors = (props.labels || []).map(l => l.color || '#6b7280');
+
+    const count = Math.max(1, (props.labels || []).length);
+
+    // choose a sensible columnWidth percent depending on number of labels
+    let columnWidthPercent = '20%';
+    if (count <= 8) columnWidthPercent = '40%';
+    else if (count <= 20) columnWidthPercent = '25%';
+    else if (count <= 50) columnWidthPercent = '12%';
+    else columnWidthPercent = '6%';
+
+    const xMax = Math.ceil((maxLabelCount.value || 1) * 1.05);
+
     return {
         chart: { toolbar: { show: false } },
-        plotOptions: { bar: { distributed: true, borderRadius: 4, columnWidth: '10%' } },
-        dataLabels: { enabled: false },
+        plotOptions: { bar: { distributed: true, borderRadius: 4, columnWidth: columnWidthPercent, horizontal: true } },
+        dataLabels: { enabled: true, formatter: (val) => `${val}`, style: { fontSize: '12px' } },
         colors: colors,
-        xaxis: { categories: labels },
+        xaxis: {
+            // for horizontal charts xaxis is the numeric axis
+            labels: {
+                formatter: (val) => `${val}`
+            },
+            max: xMax
+        },
+        xaxisCategories: labels,
+        yaxis: {
+            // categories will appear on the y-axis for horizontal bars
+            labels: {
+                style: { fontSize: '12px' }
+            }
+        },
         legend: { show: false },
         tooltip: { y: { formatter: (val) => `${val}` } },
     };
 });
+
+// Dynamic chart height based on label count
+const chartHeight = computed(() => {
+    const perLabel = 36; // vertical px per label
+    const minHeight = 360;
+    const count = (props.labels || []).length || 1;
+    return Math.max(minHeight, count * perLabel);
+});
+
+// Dynamic chart width based on label count (px per label, with a minimum width)
+const chartWidth = computed(() => {
+    const perLabel = 28; // px per label
+    const minWidth = 800; // minimum width in px
+    const count = (props.labels || []).length;
+    const calculated = Math.max(minWidth, count * perLabel);
+    return calculated;
+});
+
+const conversationsAreaSeries = computed(() => {
+    const series = [];
+    if (props.conversations_series && Array.isArray(props.conversations_series.categories) && Array.isArray(props.conversations_series.data)) {
+        const data = props.conversations_series.categories.map((d, i) => ({ x: d, y: props.conversations_series.data[i] || 0 }));
+        series.push({ name: 'Conversations', data });
+    } else {
+        series.push({ name: 'Conversations', data: [] });
+    }
+    return series;
+});
+
+const conversationsAreaOptions = {
+    chart: { toolbar: { show: false }, zoom: { enabled: false } },
+    stroke: { curve: 'smooth' },
+    colors: ['#3b82f6'],
+    xaxis: { type: 'datetime' },
+    tooltip: { x: { format: 'dd MMM' } },
+};
 </script>
