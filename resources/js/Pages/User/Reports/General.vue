@@ -15,7 +15,7 @@
                         $t('Apply') }}</button>
                     <button @click="setToday" class="ml-2 text-sm px-3 py-2 border rounded">{{ $t('Today') }}</button>
                     <button @click="setLast7Days" class="ml-2 text-sm px-3 py-2 border rounded">{{ $t('Last 7 Days')
-                        }}</button>
+                    }}</button>
                 </div>
             </div>
 
@@ -259,13 +259,20 @@ const areaSeries = computed(() => {
     return [{ name: 'New contacts', data: [10, 20, 12, 25, 18, props.new_contacts || 0] }];
 });
 
-const areaOptions = {
-    chart: { toolbar: { show: false }, zoom: { enabled: false } },
-    stroke: { curve: 'smooth' },
-    colors: ['#0ea5a4'],
-    xaxis: { type: 'datetime' },
-    tooltip: { x: { format: 'dd MMM' } },
-};
+const areaOptions = computed(() => {
+    return {
+        chart: { height: 350, type: 'area', toolbar: { show: false }, zoom: { enabled: false } },
+        colors: ['#418207'],
+        fill: {
+            type: 'gradient',
+            gradient: { shadeIntensity: 1, opacityFrom: 0.7, opacityTo: 0.9, stops: [0, 90, 100] }
+        },
+        dataLabels: { enabled: false },
+        stroke: { width: 1, curve: 'smooth' },
+        xaxis: { type: 'datetime' },
+        tooltip: { x: { format: 'dd/MM/yy HH:mm' } },
+    };
+});
 
 const barSeries = computed(() => {
     const counts = (props.labels || []).map(l => l.count || 0);
