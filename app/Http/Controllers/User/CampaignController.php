@@ -40,13 +40,13 @@ class CampaignController extends BaseController
             $searchTerm = $request->query('search');
             $settings = Organization::where('id', $organizationId)->first();
             $rows = CampaignResource::collection(
-                Campaign::with(['template', 'campaignLogs'])
+                Campaign::with(['template'])
                     ->where('organization_id', $organizationId)
                     ->where('deleted_at', null)
                     ->where(function ($query) use ($searchTerm) {
-                        $query->where('name', 'like', '%'.$searchTerm.'%')
+                        $query->where('name', 'like', '%' . $searchTerm . '%')
                             ->orWhereHas('template', function ($templateQuery) use ($searchTerm) {
-                                $templateQuery->where('name', 'like', '%'.$searchTerm.'%');
+                                $templateQuery->where('name', 'like', '%' . $searchTerm . '%');
                             });
                     })
                     ->latest()
@@ -97,9 +97,9 @@ class CampaignController extends BaseController
                     ->where('campaign_id', $data['campaign']->id)
                     ->where(function ($query) use ($searchTerm) {
                         $query->whereHas('contact', function ($contactQuery) use ($searchTerm) {
-                            $contactQuery->where('first_name', 'like', '%'.$searchTerm.'%')
-                                ->orWhere('last_name', 'like', '%'.$searchTerm.'%')
-                                ->orWhere('phone', 'like', '%'.$searchTerm.'%');
+                            $contactQuery->where('first_name', 'like', '%' . $searchTerm . '%')
+                                ->orWhere('last_name', 'like', '%' . $searchTerm . '%')
+                                ->orWhere('phone', 'like', '%' . $searchTerm . '%');
                         });
                     })
                     ->orderBy('id')
@@ -121,7 +121,8 @@ class CampaignController extends BaseController
         $this->campaignService->store($request);
 
         return Redirect::route('campaigns')->with(
-            'status', [
+            'status',
+            [
                 'type' => 'success',
                 'message' => __('Campaign created successfully!'),
             ]
@@ -138,7 +139,8 @@ class CampaignController extends BaseController
         $this->campaignService->destroy($uuid);
 
         return Redirect::back()->with(
-            'status', [
+            'status',
+            [
                 'type' => 'success',
                 'message' => __('Row deleted successfully!'),
             ]

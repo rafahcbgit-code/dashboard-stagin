@@ -7,7 +7,8 @@ use App\Http\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
-class Campaign extends Model {
+class Campaign extends Model
+{
     use HasFactory;
     use HasUuid;
 
@@ -29,31 +30,38 @@ class Campaign extends Model {
         return DateTimeHelper::convertToOrganizationTimezone($value)->toDateTimeString();
     }
 
-    public function organization(){
+    public function organization()
+    {
         return $this->belongsTo(Organization::class, 'organization_id', 'id');
     }
 
-    public function template(){
+    public function template()
+    {
         return $this->belongsTo(Template::class, 'template_id', 'id');
     }
 
-    public function contactGroup(){
+    public function contactGroup()
+    {
         return $this->belongsTo(ContactGroup::class, 'contact_group_id', 'id');
     }
 
-    public function campaignLogs(){
+    public function campaignLogs()
+    {
         return $this->hasMany(CampaignLog::class, 'campaign_id', 'id');
     }
 
-    public function contactsCount(){
+    public function contactsCount()
+    {
         return $this->campaignLogs->count();
     }
 
-    public function contactGroupCount(){
-        return $this->contactGroup ? $this->contactGroup->contacts->count() : 0;
+    public function contactGroupCount()
+    {
+        return $this->contactGroup ? $this->contactGroup->contacts()->count() : 0;
     }
 
-    public function sentCount(){
+    public function sentCount()
+    {
         return $this->campaignLogs()
             ->where('status', 'success')
             ->whereHas('chat', function ($query) {
@@ -62,7 +70,8 @@ class Campaign extends Model {
             ->count();
     }
 
-    public function deliveryCount(){
+    public function deliveryCount()
+    {
         return $this->campaignLogs()
             ->where('status', 'success')
             ->whereHas('chat', function ($query) {
@@ -71,7 +80,8 @@ class Campaign extends Model {
             ->count();
     }
 
-    public function failedCount(){
+    public function failedCount()
+    {
         $failedToSendCount = $this->campaignLogs()->where('status', 'failed')->count();
 
         $chatFailedCount = $this->campaignLogs()
@@ -84,7 +94,8 @@ class Campaign extends Model {
         return $failedToSendCount + $chatFailedCount;
     }
 
-    public function readCount(){
+    public function readCount()
+    {
         return $this->campaignLogs()
             ->where('status', 'success')
             ->whereHas('chat', function ($query) {
@@ -93,7 +104,8 @@ class Campaign extends Model {
             ->count();
     }
 
-    public function getCounts(){
+    public function getCounts()
+    {
         return $this->campaignLogs()
             ->selectRaw('
                 COUNT(*) as total_message_count,
