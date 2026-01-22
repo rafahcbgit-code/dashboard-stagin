@@ -22,9 +22,9 @@ class PhoneService
         $phoneNumber = str_replace(["\xC2\xA0", "\xE2\x80\x8B", "\xEF\xBB\xBF"], '', $phoneNumber);
 
         // Convert Arabic-Indic and Extended Arabic-Indic digits to Latin digits
-        $arabicIndic = ['٠','١','٢','٣','٤','٥','٦','٧','٨','٩'];
-        $extendedIndic = ['۰','۱','۲','۳','۴','۵','۶','۷','۸','۹'];
-        $latin = ['0','1','2','3','4','5','6','7','8','9'];
+        $arabicIndic = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+        $extendedIndic = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+        $latin = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
         $phoneNumber = str_replace($arabicIndic, $latin, $phoneNumber);
         $phoneNumber = str_replace($extendedIndic, $latin, $phoneNumber);
 
@@ -47,7 +47,7 @@ class PhoneService
         // Check if it's a Brazilian number
         if (BrazilPhoneHelper::isBrazilianNumber($phoneNumber)) {
             $validation = BrazilPhoneHelper::validateBrazilPhone($phoneNumber);
-            
+
             if ($validation['is_valid']) {
                 $type = BrazilPhoneHelper::getPhoneType($phoneNumber);
                 return [
@@ -69,7 +69,7 @@ class PhoneService
         // For non-Brazilian numbers, use libphonenumber
         try {
             $phone = new PhoneNumber($phoneNumber);
-            
+
             if ($phone->isValid()) {
                 return [
                     'is_valid' => true,
@@ -79,11 +79,17 @@ class PhoneService
                 ];
             } else {
                 // Log invalid attempt for debugging
-                try { Log::warning('PhoneService invalid phone', ['original' => $original, 'normalized' => $phoneNumber]); } catch (\Throwable $__t) {}
+                try {
+
+                } catch (\Throwable $__t) {
+                }
 
                 // Fallback: accept Omani numbers (+968) that match expected 8-digit national numbers.
                 if (preg_match('/^\+968[1-9]\d{7}$/', $phoneNumber)) {
-                    try { Log::info('PhoneService fallback accept Omani number', ['original' => $original, 'normalized' => $phoneNumber]); } catch (\Throwable $__t) {}
+                    try {
+
+                    } catch (\Throwable $__t) {
+                    }
                     return [
                         'is_valid' => true,
                         'formatted' => $phoneNumber,
@@ -138,11 +144,11 @@ class PhoneService
     public static function getE164Format($phoneNumber)
     {
         $validation = self::validateAndFormat($phoneNumber);
-        
+
         if ($validation['is_valid']) {
             return $validation['formatted'];
         }
-        
+
         return null;
     }
 
@@ -181,7 +187,7 @@ class PhoneService
         if (!str_starts_with($phoneNumber, '+')) {
             $phoneNumber = '+' . $phoneNumber;
         }
-        
+
         return $phoneNumber;
     }
-} 
+}

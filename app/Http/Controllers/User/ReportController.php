@@ -135,4 +135,66 @@ class ReportController extends BaseController
             'messages' => $messages,
         ]);
     }
+
+    public function countContactsByLabel(Request $request)
+    {
+        $organizationId = $this->getCurrentOrganizationId();
+        $labelId = $request->query('label_id') ?? $request->input('label_id');
+        $period = $request->query('period') ?? $request->input('period');
+
+        if (!$labelId) {
+            return response()->json(['count' => 0]);
+        }
+
+        $allowed = ['today', 'yesterday', 'last7'];
+        if (!in_array($period, $allowed)) {
+            $period = 'last7';
+        }
+
+        if ($period === 'today') {
+            $start = Carbon::now()->startOfDay();
+            $end = Carbon::now()->endOfDay();
+        } elseif ($period === 'yesterday') {
+            $start = Carbon::now()->subDay()->startOfDay();
+            $end = Carbon::now()->subDay()->endOfDay();
+        } else {
+            // last7 days (including today)
+            $start = Carbon::now()->startOfDay()->subDays(6);
+            $end = Carbon::now()->endOfDay();
+        }
+
+        $q = \Illuminate\Support\Facades\DB::table('contact_label')
+            ->join('contacts', 'contact_label.contact_id', '=', 'contacts.id')
+            ->where('contact_label.label_id', $labelId)
+            ->where('contacts.organization_id', $organizationId)
+            ->whereNull('contacts.deleted_at')
+            // filter by when the label was attached (pivot created_at)
+            ->whereBetween('contact_label.created_at', [$start->toDateTimeString(), $end->toDateTimeString()]);
+
+        // log SQL and bindings for debugging
+        try {
+            \Illuminate\Support\Facades\Log::info('[Reports] countContactsByLabel - query', [
+                'sql' => $q->toSql(),
+                'bindings' => $q->getBindings(),
+                'label_id' => $labelId,
+                'org_id' => $organizationId,
+                'start' => $start->toDateTimeString(),
+                'end' => $end->toDateTimeString(),
+                'period' => $period,
+            ]);
+        } catch (\Exception $e) {
+            // ignore logging failures
+        }
+
+        $count = (int) $q->distinct()->count('contact_label.contact_id');
+
+        \Illuminate\Support\Facades\Log::info('[Reports] countContactsByLabel - result', [
+            'label_id' => $labelId,
+            'org_id' => $organizationId,
+            'period' => $period,
+            'count' => $count,
+        ]);
+
+        return response()->json(['count' => $count]);
+    }
 }

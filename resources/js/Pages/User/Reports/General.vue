@@ -147,6 +147,29 @@
                     <div class="text-xs text-slate-400">{{ $t('Contacts per label') }}</div>
                 </div>
 
+                <div class="mt-3 flex items-center justify-between">
+                    <div class="flex items-center gap-2">
+                        <label class="text-sm text-slate-500">{{ $t('Period') }}</label>
+                        <select v-model="labelPeriod" class="border rounded p-2 text-sm">
+                            <option value="today">{{ $t('Today') }}</option>
+                            <option value="yesterday">{{ $t('Yesterday') }}</option>
+                            <option value="last7">{{ $t('Last 7 Days') }}</option>
+                        </select>
+
+                        <label class="ml-4 text-sm text-slate-500">{{ $t('Label') }}</label>
+                        <select v-model="selectedLabelId" class="border rounded p-2 text-sm">
+                            <option v-for="l in props.labels" :key="l.id" :value="l.id">{{ l.title }}</option>
+                        </select>
+
+                        <button @click="fetchLabelCount" :disabled="loadingLabelCount" class="ml-3 bg-primary text-white px-3 py-2 rounded text-sm">
+                            <span v-if="loadingLabelCount">{{ $t('Loading') }}</span>
+                            <span v-else>{{ $t('Refresh') }}</span>
+                        </button>
+                    </div>
+
+                    <div class="text-sm text-slate-400">{{ $t('Count') }}: <span class="ml-2 text-primary font-bold text-xl">{{ labelCount !== null ? labelCount : '-' }}</span></div>
+                </div>
+
                 <div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
                     <div class="overflow-x-auto">
                         <apexchart type="bar" :width="chartWidth" :height="chartHeight" :options="barOptions"
@@ -188,7 +211,8 @@
 <script setup>
 import AppLayout from "../Layout/App.vue";
 import { Link, router } from "@inertiajs/vue3";
-import { ref, computed } from 'vue';
+import { ref, computed, watch, onMounted } from 'vue';
+import axios from 'axios';
 
 const props = defineProps({
     total_contacts: { type: Number, default: 0 },
@@ -244,6 +268,46 @@ const donutOptions = {
     legend: { position: 'bottom' },
     dataLabels: { enabled: false },
 };
+
+// Label filter UI state
+const labelPeriod = ref('last7');
+const selectedLabelId = ref((props.labels && props.labels.length) ? props.labels[0].id : null);
+const labelCount = ref(null);
+const loadingLabelCount = ref(false);
+
+const fetchLabelCount = async () => {
+    if (!selectedLabelId.value) {
+        labelCount.value = 0;
+        return;
+    }
+    loadingLabelCount.value = true;
+    try {
+        console.debug('fetchLabelCount: requesting', { label: selectedLabelId.value, period: labelPeriod.value });
+        const resp = await axios.get('/reports/label-count', { params: { label_id: selectedLabelId.value, period: labelPeriod.value } });
+        console.debug('fetchLabelCount: response', resp.data);
+        labelCount.value = resp.data.count ?? 0;
+    } catch (e) {
+        console.error('fetchLabelCount error', e);
+        labelCount.value = 0;
+    } finally {
+        loadingLabelCount.value = false;
+    }
+};
+
+watch(() => props.labels, (newVal) => {
+    if (newVal && newVal.length && !selectedLabelId.value) selectedLabelId.value = newVal[0].id;
+}, { immediate: true });
+
+onMounted(() => {
+    if (selectedLabelId.value) fetchLabelCount();
+});
+
+// Auto-refresh when period or selected label changes to give immediate feedback
+watch([labelPeriod, selectedLabelId], ([newPeriod, newLabel], [oldPeriod, oldLabel]) => {
+    if (!newLabel) return;
+    // avoid duplicate immediate call if onMounted already triggered
+    fetchLabelCount();
+});
 
 const newContactsPct = computed(() => {
     const total = props.total_contacts || 0;
