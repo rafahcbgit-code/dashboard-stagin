@@ -141,7 +141,7 @@ class ChatController extends Controller
             // Format response
             $chats = $contacts->map(function ($contact) {
                 $lastChat = $contact->lastChat;
-                $unreadCount = (int) ($contact->unread_inbound_chats_count ?? 0);
+                $unreadCount = $contact->unread_inbound_chats_count;
                 $ticket = $contact->ticket;
                 $lastMessage = $this->parseLastMessage($lastChat);
 
@@ -150,29 +150,29 @@ class ChatController extends Controller
                         'uuid' => $contact->uuid,
                         'first_name' => $contact->first_name,
                         'last_name' => $contact->last_name,
-                        'bot_enable' => (bool) ($contact->bot_enable ?? false),
+                        'bot_enable' => $contact->bot_enable,
                         'full_name' => trim($contact->first_name . ' ' . $contact->last_name),
                         'phone' => $contact->phone,
                         'email' => $contact->email,
                         'avatar' => $contact->avatar,
-                        'is_favorite' => (bool) ($contact->is_favorite ?? false),
+                        'is_favorite' => (bool) $contact->is_favorite,
                     ],
                     'last_message' => $lastMessage,
                     'unread_count' => $unreadCount,
                     'ticket' => $ticket ? [
                         'status' => $ticket->status,
                         'assigned_to' => $ticket->assigned_to ? [
-                            'id' => (int) ($ticket->user->id ?? $ticket->assigned_to),
-                            'uuid' => $ticket->user->uuid ?? null,
-                            'first_name' => $ticket->user->first_name ?? null,
-                            'last_name' => $ticket->user->last_name ?? null,
-                            'full_name' => $ticket->user->full_name ?? null,
-                            'email' => $ticket->user->email ?? null,
+                            'id' => $ticket->user->id,
+                            'uuid' => $ticket->user->uuid,
+                            'first_name' => $ticket->user->first_name,
+                            'last_name' => $ticket->user->last_name,
+                            'full_name' => $ticket->user->full_name,
+                            'email' => $ticket->user->email,
                         ] : null
                     ] : null,
                     'labels' => $contact->labels->map(function ($label) {
                         return [
-                            'id' => (int) $label->id,
+                            'id' => $label->id,
                             'title' => $label->title,
                             'color' => $label->color,
                         ];
@@ -189,12 +189,12 @@ class ChatController extends Controller
                     'applied_filter' => $ticketStatus, // Show what filter was applied
                 ],
                 'meta' => [
-                    'current_page' => (int) $contacts->currentPage(),
-                    'last_page' => (int) $contacts->lastPage(),
-                    'per_page' => (int) $contacts->perPage(),
-                    'total' => (int) $contacts->total(),
-                    'from' => (int) ($contacts->firstItem() ?? 0),
-                    'to' => (int) ($contacts->lastItem() ?? 0),
+                    'current_page' => $contacts->currentPage(),
+                    'last_page' => $contacts->lastPage(),
+                    'per_page' => $contacts->perPage(),
+                    'total' => $contacts->total(),
+                    'from' => $contacts->firstItem(),
+                    'to' => $contacts->lastItem(),
                 ]
             ], 200);
         } catch (\Exception $e) {
@@ -300,8 +300,8 @@ class ChatController extends Controller
             'message_type' => $messageType,
             'status' => $chat->status,
             'created_at' => $chat->created_at,
-            'is_read' => (bool) ($chat->is_read ?? false),
-            'has_media' => (bool) ($chat->media_id ? true : false),
+            'is_read' => (bool)$chat->is_read,
+            'has_media' => $chat->media_id ? true : false,
         ];
     }
 
@@ -323,7 +323,7 @@ class ChatController extends Controller
             return response()->json([
                 'success' => true,
                 'data' => [
-                    'unread_count' => (int) ($totalUnread ?? 0)
+                    'unread_count' => $totalUnread
                 ]
             ], 200);
         } catch (\Exception $e) {
