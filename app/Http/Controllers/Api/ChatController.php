@@ -150,12 +150,12 @@ class ChatController extends Controller
                         'uuid' => $contact->uuid,
                         'first_name' => $contact->first_name,
                         'last_name' => $contact->last_name,
-                        'bot_enable' => (int) ($contact->bot_enable ?? 0),
+                        'bot_enable' => (bool) ($contact->bot_enable ?? false),
                         'full_name' => trim($contact->first_name . ' ' . $contact->last_name),
                         'phone' => $contact->phone,
                         'email' => $contact->email,
                         'avatar' => $contact->avatar,
-                        'is_favorite' => (int) ($contact->is_favorite ?? 0),
+                        'is_favorite' => (bool) ($contact->is_favorite ?? false),
                     ],
                     'last_message' => $lastMessage,
                     'unread_count' => $unreadCount,
@@ -300,8 +300,8 @@ class ChatController extends Controller
             'message_type' => $messageType,
             'status' => $chat->status,
             'created_at' => $chat->created_at,
-            'is_read' => (int) ($chat->is_read ?? 0),
-            'has_media' => $chat->media_id ? 1 : 0,
+            'is_read' => (bool) ($chat->is_read ?? false),
+            'has_media' => (bool) ($chat->media_id ? true : false),
         ];
     }
 
