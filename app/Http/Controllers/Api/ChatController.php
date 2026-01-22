@@ -81,11 +81,26 @@ class ChatController extends Controller
             }
 
             // Base query - Get contacts with chats
-            $query = Contact::with(['labels', 'contactGroups', 'lastChat', 'ticket.user'])
-                ->withCount('unreadInboundChats')
-                ->where('contacts.organization_id', $organizationId)
-                ->whereNull('contacts.deleted_at')
-                ->whereNotNull('contacts.latest_chat_created_at');
+            $query = Contact::query();
+
+            // TICKET STATUS FILTER
+            if ($ticketStatus === 'unassigned') {
+                // Show unassigned chats
+                $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
+                    ->whereNull('chat_tickets.assigned_to');
+            } elseif ($ticketStatus === 'open') {
+                // Show open tickets
+                $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
+                    ->where('chat_tickets.status', 'open');
+            } elseif ($ticketStatus === 'closed') {
+                // Show closed tickets
+                $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
+                    ->where('chat_tickets.status', 'closed');
+            } elseif ($ticketStatus === 'assigned_to_me') {
+                // Show only chats assigned to current user
+                $query->join('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
+                    ->where('chat_tickets.assigned_to', $currentUserId);
+            }
 
             // Search filter
             if ($searchTerm) {
@@ -107,28 +122,13 @@ class ChatController extends Controller
                 }
             }
 
-            // TICKET STATUS FILTER
-            if ($ticketStatus === 'unassigned') {
-                // Show unassigned chats
-                $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
-                    ->whereNull('chat_tickets.assigned_to');
-                $query->select('contacts.*');
-            } elseif ($ticketStatus === 'open') {
-                // Show open tickets
-                $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
-                    ->where('chat_tickets.status', 'open');
-                $query->select('contacts.*');
-            } elseif ($ticketStatus === 'closed') {
-                // Show closed tickets
-                $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
-                    ->where('chat_tickets.status', 'closed');
-                $query->select('contacts.*');
-            } elseif ($ticketStatus === 'assigned_to_me') {
-                // Show only chats assigned to current user
-                $query->join('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
-                    ->where('chat_tickets.assigned_to', $currentUserId);
-                $query->select('contacts.*');
-            }
+            // Apply selects and eager loading
+            $query->select('contacts.*')
+                ->with(['labels', 'contactGroups', 'lastChat', 'ticket.user'])
+                ->withCount('unreadInboundChats')
+                ->where('contacts.organization_id', $organizationId)
+                ->whereNull('contacts.deleted_at')
+                ->whereNotNull('contacts.latest_chat_created_at');
             // If $ticketStatus === 'all', no filter (only for owner/manager)
 
             // Sort by last message time
@@ -142,7 +142,7 @@ class ChatController extends Controller
             $chats = $contacts->map(function ($contact) {
                 $lastChat = $contact->lastChat;
 
-                $unreadCount = $contact->unread_inbound_chats_count;
+                $unreadCount = (int) ($contact->unread_inbound_chats_count ?? 0);
 
                 $ticket = $contact->ticket;
 
