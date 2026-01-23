@@ -381,6 +381,23 @@ class ChatController extends Controller
                 ], 404);
             }
 
+            // PERMISSION CHECK: Agents can only access chats assigned to them or unassigned chats
+            $currentUserId = $request->user('sanctum')->id;
+            $userRole = \App\Models\Team::where('organization_id', $organizationId)
+                ->where('user_id', $currentUserId)
+                ->whereNull('deleted_at')
+                ->value('role');
+
+            if ($userRole === 'agent') {
+                $ticket = \App\Models\ChatTicket::where('contact_id', $contact->id)->first();
+                if ($ticket && $ticket->assigned_to && $ticket->assigned_to !== $currentUserId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'This conversation is assigned to another agent'
+                    ], 403);
+                }
+            }
+
             // Parse include_types filter
             $typesToInclude = ['chat', 'notes', 'ticket'];
 
@@ -775,6 +792,23 @@ class ChatController extends Controller
                     ], 403);
                 }
 
+                // PERMISSION CHECK for agents
+                $currentUserId = $request->user('sanctum')->id;
+                $userRole = \App\Models\Team::where('organization_id', $organizationId)
+                    ->where('user_id', $currentUserId)
+                    ->whereNull('deleted_at')
+                    ->value('role');
+
+                if ($userRole === 'agent') {
+                    $ticket = \App\Models\ChatTicket::where('contact_id', $chat->contact->id)->first();
+                    if ($ticket && $ticket->assigned_to && $ticket->assigned_to !== $currentUserId) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'This conversation is assigned to another agent'
+                        ], 403);
+                    }
+                }
+
                 if ($chat->type === 'inbound' && !$chat->is_read) {
                     $chat->update(['is_read' => 1]);
                 }
@@ -810,6 +844,23 @@ class ChatController extends Controller
                         'success' => false,
                         'message' => 'Unauthorized access'
                     ], 403);
+                }
+
+                // PERMISSION CHECK for agents
+                $currentUserId = $request->user('sanctum')->id;
+                $userRole = \App\Models\Team::where('organization_id', $organizationId)
+                    ->where('user_id', $currentUserId)
+                    ->whereNull('deleted_at')
+                    ->value('role');
+
+                if ($userRole === 'agent') {
+                    $ticket = \App\Models\ChatTicket::where('contact_id', $note->contact->id)->first();
+                    if ($ticket && $ticket->assigned_to && $ticket->assigned_to !== $currentUserId) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'This conversation is assigned to another agent'
+                        ], 403);
+                    }
                 }
 
                 $creator = \App\Models\User::find($note->created_by);

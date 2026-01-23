@@ -27,18 +27,24 @@ class ApiNotificationService
 
             if ($chat->type !== 'inbound') {
                 return;
-            }   
+            }
             $contact = $chat->contact;
             $metadata = json_decode($chat->metadata, true);
             $messageType = $metadata['type'] ?? 'text';
 
+            // Filter unsupported message types for mobile notifications
+            $unsupportedTypes = ['reaction', 'order', 'unsupported'];
+            if (in_array($messageType, $unsupportedTypes)) {
+                return;
+            }
+
             // Get message preview
             $messagePreview = $this->getMessagePreview($messageType, $metadata);
 
-            // Get contact name
+            // Get contact name (Ensure it's not empty)
             $contactName = trim($contact->first_name . ' ' . $contact->last_name);
-            if (empty($contactName)) {
-                $contactName = $contact->phone;
+            if (empty($contactName) || $contactName === ' ') {
+                $contactName = $contact->phone ?: 'New Customer';
             }
 
             // Get all active users in organization (exclude sender if outbound)
@@ -142,7 +148,6 @@ class ApiNotificationService
 
             // Log notification (optional)
             $this->logNotification($assignedToUserId, $organizationId, 'chat_assigned', $data, $result);
-
         } catch (\Exception $e) {
             Log::error('Failed to send assignment notification: ' . $e->getMessage());
         }
@@ -185,16 +190,20 @@ class ApiNotificationService
      */
     private function getUsersToNotify($organizationId, $contactId)
     {
-        // Get all team members in organization
+        // 1. Check if the chat is assigned to someone
+        $assignment = \App\Models\ChatTicket::where('contact_id', $contactId)->first();
+
+        if ($assignment && $assignment->assigned_to) {
+            // Only notify the assigned agent
+            return [$assignment->assigned_to];
+        }
+
+        // 2. If unassigned, notify all active team members in organization
         $teamMembers = \App\Models\Team::where('organization_id', $organizationId)
+            ->where('status', 'active')
             ->whereNull('deleted_at')
             ->pluck('user_id')
             ->toArray();
-
-        // TODO: Add logic to filter based on:
-        // - Ticket assignment (if assigned, only notify assigned agent)
-        // - Notification preferences
-        // - User roles
 
         return $teamMembers;
     }
