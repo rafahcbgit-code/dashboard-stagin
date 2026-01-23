@@ -52,6 +52,22 @@ class TicketController extends Controller
                 ], 404);
             }
 
+            // PERMISSION CHECK for agents
+            $userRole = Team::where('organization_id', $organizationId)
+                ->where('user_id', $userId)
+                ->whereNull('deleted_at')
+                ->value('role');
+
+            if ($userRole === 'agent') {
+                $checkTicket = ChatTicket::where('contact_id', $contact->id)->first();
+                if ($checkTicket && $checkTicket->assigned_to && $checkTicket->assigned_to !== $userId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'This conversation is assigned to another agent'
+                    ], 403);
+                }
+            }
+
             // Find or create ticket
             $ticket = ChatTicket::firstOrCreate(
                 ['contact_id' => $contact->id],
@@ -72,8 +88,8 @@ class TicketController extends Controller
             $ticket->save();
 
             // Log the status change
-            $statusDescription = $newStatus == 'closed' 
-                ? 'opened to closed' 
+            $statusDescription = $newStatus == 'closed'
+                ? 'opened to closed'
                 : 'closed to open';
 
             $ticketLogId = ChatTicketLog::insertGetId([
@@ -97,7 +113,6 @@ class TicketController extends Controller
                     'updated_at' => $ticket->updated_at
                 ]
             ], 200);
-
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -143,6 +158,22 @@ class TicketController extends Controller
                     'success' => false,
                     'message' => 'Contact not found'
                 ], 404);
+            }
+
+            // PERMISSION CHECK for agents
+            $userRole = Team::where('organization_id', $organizationId)
+                ->where('user_id', $currentUserId)
+                ->whereNull('deleted_at')
+                ->value('role');
+
+            if ($userRole === 'agent') {
+                $checkTicket = ChatTicket::where('contact_id', $contact->id)->first();
+                if ($checkTicket && $checkTicket->assigned_to && $checkTicket->assigned_to !== $currentUserId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'This conversation is assigned to another agent'
+                    ], 403);
+                }
             }
 
             $assignToUserId = $request->input('user_id');
@@ -230,7 +261,6 @@ class TicketController extends Controller
                     'updated_at' => $ticket->updated_at
                 ]
             ], 200);
-
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -260,6 +290,23 @@ class TicketController extends Controller
                     'success' => false,
                     'message' => 'Contact not found'
                 ], 404);
+            }
+
+            // PERMISSION CHECK for agents
+            $currentUserId = $request->user('sanctum')->id;
+            $userRole = Team::where('organization_id', $organizationId)
+                ->where('user_id', $currentUserId)
+                ->whereNull('deleted_at')
+                ->value('role');
+
+            if ($userRole === 'agent') {
+                $checkTicket = ChatTicket::where('contact_id', $contact->id)->first();
+                if ($checkTicket && $checkTicket->assigned_to && $checkTicket->assigned_to !== $currentUserId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'This conversation is assigned to another agent'
+                    ], 403);
+                }
             }
 
             // Get ticket
@@ -301,7 +348,6 @@ class TicketController extends Controller
                     ]
                 ]
             ], 200);
-
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -343,7 +389,7 @@ class TicketController extends Controller
                 $query->where('role', $roleFilter);
             }
 
-            $agents = $query->get()->map(function($team) {
+            $agents = $query->get()->map(function ($team) {
                 return [
                     'id' => $team->user->id,
                     'uuid' => $team->user->uuid,
@@ -365,7 +411,6 @@ class TicketController extends Controller
                     'total' => $agents->count()
                 ]
             ], 200);
-
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,

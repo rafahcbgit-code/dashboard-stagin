@@ -39,7 +39,7 @@ class MessageController extends Controller
     {
         try {
             $organizationId = $request->organization_id;
-            $userId = $request->user('sanctum')->id; 
+            $userId = $request->user('sanctum')->id;
             // Initialize ChatService with organization
             $this->chatService = new ChatService($organizationId);
 
@@ -58,7 +58,7 @@ class MessageController extends Controller
                     'errors' => $validator->errors()
                 ], 422);
             }
-           
+
             // Check subscription
             if (!SubscriptionService::isSubscriptionActive($organizationId)) {
                 return response()->json([
@@ -96,6 +96,22 @@ class MessageController extends Controller
                 ], 404);
             }
 
+            // PERMISSION CHECK: Agents can only send messages to assigned or unassigned chats
+            $userRole = \App\Models\Team::where('organization_id', $organizationId)
+                ->where('user_id', $userId)
+                ->whereNull('deleted_at')
+                ->value('role');
+
+            if ($userRole === 'agent') {
+                $ticket = \App\Models\ChatTicket::where('contact_id', $contact->id)->first();
+                if ($ticket && $ticket->assigned_to && $ticket->assigned_to !== $userId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'This conversation is assigned to another agent'
+                    ], 403);
+                }
+            }
+
             // Route to appropriate handler based on type
             $messageType = $request->input('type');
 
@@ -106,7 +122,6 @@ class MessageController extends Controller
             } elseif ($messageType === 'interactive') {
                 return $this->handleInteractiveMessage($request, $contact, $userId);
             }
-
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -183,7 +198,7 @@ class MessageController extends Controller
     {
         // Validate file
         $validator = $this->validateMediaFile($request, $mediaType);
-        
+
         if ($validator->fails()) {
             return response()->json([
                 'success' => false,
@@ -198,7 +213,7 @@ class MessageController extends Controller
             $caption = $request->input('caption', '');
             $storage = Setting::where('key', 'storage_system')->first()->value;
             $fileName = $file->getClientOriginalName();
-            
+
             // Upload file based on storage system
             if ($storage === 'local') {
                 $location = 'local';
@@ -296,7 +311,6 @@ class MessageController extends Controller
                     'error' => $response->data->error ?? null
                 ], 500);
             }
-
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -393,6 +407,22 @@ class MessageController extends Controller
                 ], 404);
             }
 
+            // PERMISSION CHECK SHI: Agents can only send templates to assigned or unassigned chats
+            $userRole = \App\Models\Team::where('organization_id', $organizationId)
+                ->where('user_id', $userId)
+                ->whereNull('deleted_at')
+                ->value('role');
+
+            if ($userRole === 'agent') {
+                $checkTicket = \App\Models\ChatTicket::where('contact_id', $contact->id)->first();
+                if ($checkTicket && $checkTicket->assigned_to && $checkTicket->assigned_to !== $userId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'This conversation is assigned to another agent'
+                    ], 403);
+                }
+            }
+
             // Build template request - NEW METHOD
             $templateRequest = $this->buildTemplateRequestWithMedia($request, $template, $organizationId);
 
@@ -444,7 +474,6 @@ class MessageController extends Controller
                     'error' => $response->data->error ?? null
                 ], 500);
             }
-
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -477,10 +506,10 @@ class MessageController extends Controller
 
         // Find header component
         $headerComponent = $this->findComponent($components, 'HEADER');
-        
+
         if ($headerComponent) {
             $format = $headerComponent['format'] ?? 'TEXT';
-            
+
             // Check if this is a media header (IMAGE, VIDEO, DOCUMENT)
             if (in_array($format, ['IMAGE', 'VIDEO', 'DOCUMENT'])) {
                 $headerData = $this->buildMediaHeader($request, $format, $organizationId);
@@ -490,7 +519,7 @@ class MessageController extends Controller
                 // TEXT header
                 $templateRequest->header = $this->buildTextHeader($request, $headerComponent);
             }
-        }else {
+        } else {
             $templateRequest->header = [
                 'format' => null,
                 'parameters' => null
@@ -546,7 +575,7 @@ class MessageController extends Controller
     private function buildMediaHeader($request, $format, $organizationId)
     {
         $selection = $request->input('header_selection', 'link');
-        
+
         $header = [
             'format' => $format, // Keep uppercase: IMAGE, VIDEO, DOCUMENT
             'parameters' => null
@@ -592,12 +621,11 @@ class MessageController extends Controller
                 'selection' => 'static', // Use 'static' since we already have URL
                 'value' => $mediaUrl
             ]];
-            
+
             $header['media_id'] = $chatMedia->id;
-            
         } else {
             $headerLink = $request->input('header_link');
-            
+
             if (!$headerLink) {
                 throw new \Exception('header_link is required when header_selection is link');
             }
@@ -612,7 +640,7 @@ class MessageController extends Controller
                 'selection' => 'static',
                 'value' => $headerLink
             ]];
-            
+
             $header['media_id'] = null;
         }
 
@@ -633,12 +661,12 @@ class MessageController extends Controller
         // Get header parameters from request
         // Support both JSON and form data
         $headerParams = $request->input('header_params');
-        
+
         if ($headerParams) {
             if (is_string($headerParams)) {
                 $headerParams = json_decode($headerParams, true);
             }
-            
+
             if (is_array($headerParams)) {
                 foreach ($headerParams as $param) {
                     $header['parameters'][] = [
@@ -666,12 +694,12 @@ class MessageController extends Controller
         // Get body parameters from request
         // Support both JSON and form data
         $bodyParams = $request->input('body_params');
-        
+
         if ($bodyParams) {
             if (is_string($bodyParams)) {
                 $bodyParams = json_decode($bodyParams, true);
             }
-            
+
             if (is_array($bodyParams)) {
                 foreach ($bodyParams as $param) {
                     $body['parameters'][] = [
@@ -692,7 +720,7 @@ class MessageController extends Controller
     private function validateHeaderFile($file, $format)
     {
         $rules = [];
-        
+
         switch ($format) {
             case 'IMAGE':
                 $rules = [
@@ -712,7 +740,7 @@ class MessageController extends Controller
         }
 
         $validator = Validator::make(['header_file' => $file], $rules);
-        
+
         if ($validator->fails()) {
             throw new \Exception($validator->errors()->first());
         }
@@ -740,7 +768,7 @@ class MessageController extends Controller
             return [];
         }
 
-        return array_map(function($param) {
+        return array_map(function ($param) {
             $formatted = [
                 'type' => $param['type'],
                 'selection' => 'static', // API always uses static values
@@ -769,7 +797,7 @@ class MessageController extends Controller
             return [];
         }
 
-        return array_map(function($param) {
+        return array_map(function ($param) {
             return [
                 'type' => 'text',
                 'selection' => 'static',
@@ -1025,8 +1053,8 @@ class MessageController extends Controller
         }
 
         // If it's a collection, get the first item
-        $media = is_object($mediaRelation) && method_exists($mediaRelation, 'first') 
-            ? $mediaRelation->first() 
+        $media = is_object($mediaRelation) && method_exists($mediaRelation, 'first')
+            ? $mediaRelation->first()
             : $mediaRelation;
 
         if (!$media) {
