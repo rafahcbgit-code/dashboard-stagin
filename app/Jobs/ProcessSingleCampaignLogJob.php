@@ -47,12 +47,13 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
     public function handle()
     {
         try {
-            //DB::transaction(function() {
-            // Lock the log for update to prevent duplicate processing
-            $lockedLog = CampaignLog::where('id', $this->campaignLog->id)
-                ->whereIn('status', ['pending', 'failed'])
-                ->lockForUpdate()
-                ->first();
+            $lockedLog = DB::transaction(function () {
+                // Lock the log for update to prevent duplicate processing
+                return CampaignLog::where('id', $this->campaignLog->id)
+                    ->whereIn('status', ['pending', 'failed'])
+                    ->lockForUpdate()
+                    ->first();
+            });
 
             if ($lockedLog) {
                 // Task 2.6: AC-2.6.4 - Check if campaign was cancelled before processing
@@ -94,9 +95,8 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
                     throw $e;
                 }
             }
-            //});
         } catch (\Exception $e) {
-            Log::error('Error processing campaign log '.$this->campaignLog->id.': '.$e->getMessage());
+            Log::error('Error processing campaign log ' . $this->campaignLog->id . ': ' . $e->getMessage());
             throw $e;
         }
     }
@@ -252,7 +252,7 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
             }
         } catch (\Exception $e) {
             // Log but don't fail the job due to broadcast issues
-            Log::warning('Failed to broadcast campaign progress: '.$e->getMessage());
+            Log::warning('Failed to broadcast campaign progress: ' . $e->getMessage());
         }
     }
 
