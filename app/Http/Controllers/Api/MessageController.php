@@ -729,7 +729,7 @@ class MessageController extends Controller
                 break;
             case 'VIDEO':
                 $rules = [
-                    'header_file' => 'required|file|mimes:mp4,3gp|max:16384' // 16MB
+                    'header_file' => 'required|file|mimes:mp4,3gp,mov|max:65536' // 64MB
                 ];
                 break;
             case 'DOCUMENT':
@@ -912,7 +912,7 @@ class MessageController extends Controller
                 break;
             case 'video':
                 $rules = [
-                    'file' => 'required|file|mimes:mp4,3gp|max:16384' // 16MB
+                    'file' => 'required|file|mimes:mp4,3gp,mov|max:65536' // 64MB
                 ];
                 break;
             case 'audio':
