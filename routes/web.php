@@ -153,6 +153,7 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::get('/chats/{contactId}/messages', [App\Http\Controllers\User\ChatController::class, 'loadMoreMessages']);
                 Route::get('/chats/labels/filter-data', [App\Http\Controllers\User\ChatController::class, 'getLabelsForFilter']);
                 Route::get('/chats/team-members/filter-data', [App\Http\Controllers\User\ChatController::class, 'getTeamMembersForFilter']);
+                Route::post('/chats/mark-all-read', [App\Http\Controllers\User\ChatController::class, 'markAllAsRead']);
 
                 Route::get('/tickets/{status}', [App\Http\Controllers\User\ChatTicketController::class, 'index']);
                 Route::put('/tickets/{uuid}/update', [App\Http\Controllers\User\ChatTicketController::class, 'update']);
@@ -256,7 +257,6 @@ Route::middleware(['auth:user'])->group(function () {
 
                     Route::get('/developer-tools/access-tokens', [App\Http\Controllers\User\DeveloperController::class, 'index']);
                     Route::get('/reports/general', [App\Http\Controllers\User\ReportController::class, 'index'])->name('reports.general');
-                    Route::get('/reports/agent', [App\Http\Controllers\User\ReportController::class, 'agentReports'])->name('reports.agent');
                     Route::get('/reports/label-count', [App\Http\Controllers\User\ReportController::class, 'countContactsByLabel']);
                     Route::post('/developer-tools/access-tokens', [App\Http\Controllers\User\DeveloperController::class, 'store']);
                     Route::delete('/developer-tools/access-tokens/{uuid}', [App\Http\Controllers\User\DeveloperController::class, 'delete']);

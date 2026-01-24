@@ -111,7 +111,7 @@ class Contact extends Model
         return $this->hasMany(ChatLog::class);
     }
 
-    public function contactsWithChats($organizationId, $searchTerm = null, $ticketingActive = false, $ticketState = null, $sortDirection = 'asc', $role = 'owner', $allowAgentsViewAllChats = true, $labelFilters = [], $assignedToMe = false, $assignedToFilter = null)
+    public function contactsWithChats($organizationId, $searchTerm = null, $ticketingActive = false, $ticketState = null, $sortDirection = 'asc', $role = 'owner', $allowAgentsViewAllChats = true, $labelFilters = [], $assignedToMe = false, $assignedToFilter = null, $unreadOnly = false)
     {
         $query = $this->newQuery()
             ->where('contacts.organization_id', $organizationId)
@@ -125,6 +125,15 @@ class Contact extends Model
         if (!empty($labelFilters)) {
             $query->whereHas('labels', function ($q) use ($labelFilters) {
                 $q->whereIn('labels.id', $labelFilters);
+            });
+        }
+
+        // Apply unread messages filter
+        if ($unreadOnly) {
+            $query->whereHas('chats', function ($q) {
+                $q->where('type', 'inbound')
+                  ->where('is_read', 0)
+                  ->whereNull('deleted_at');
             });
         }
 
@@ -175,7 +184,7 @@ class Contact extends Model
         return $query->paginate(10);
     }
 
-    public function contactsWithChatsCount($organizationId, $searchTerm = null, $ticketingActive = false, $ticketState = null, $sortDirection = 'asc', $role = 'owner', $allowAgentsViewAllChats = true, $labelFilters = [], $assignedToMe = false, $assignedToFilter = null)
+    public function contactsWithChatsCount($organizationId, $searchTerm = null, $ticketingActive = false, $ticketState = null, $sortDirection = 'asc', $role = 'owner', $allowAgentsViewAllChats = true, $labelFilters = [], $assignedToMe = false, $assignedToFilter = null, $unreadOnly = false)
     {
         $query = $this->newQuery()
             ->where('contacts.organization_id', $organizationId)
@@ -184,6 +193,15 @@ class Contact extends Model
             ->with(['lastChat', 'lastInboundChat', 'ticket'])
             ->select('contacts.*')
             ->orderBy('contacts.latest_chat_created_at', $sortDirection);
+
+        // Apply unread messages filter
+        if ($unreadOnly) {
+            $query->whereHas('chats', function ($q) {
+                $q->where('type', 'inbound')
+                  ->where('is_read', 0)
+                  ->whereNull('deleted_at');
+            });
+        }
 
         if ($ticketingActive) {
             // Conditional join with chat_tickets table and comparison with ticketState

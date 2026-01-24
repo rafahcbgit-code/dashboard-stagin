@@ -38,6 +38,23 @@ class ChatController extends BaseController
         return $this->chatService()->sendMessage($request);
     }
 
+    public function markAllAsRead(Request $request)
+    {
+        $organizationId = session()->get('current_organization');
+        
+        $updated = Chat::where('organization_id', $organizationId)
+            ->where('type', 'inbound')
+            ->where('is_read', 0)
+            ->whereNull('deleted_at')
+            ->update(['is_read' => 1]);
+
+        return response()->json([
+            'success' => true,
+            'message' => __('All messages marked as read'),
+            'updated_count' => $updated
+        ]);
+    }
+
     public function sendTemplateMessage(Request $request, $uuid)
     {
         $res = $this->chatService()->sendTemplateMessage($request, $uuid);
