@@ -20,13 +20,14 @@ use Illuminate\Support\Str;
 /*Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });*/
+
 Route::get('/translations/{locale}', function ($locale) {
     if (Str::startsWith($locale, 'php_')) {
         return response()->json(['error' => 'Invalid locale'], 400);
     }
 
     $path = base_path("lang/{$locale}.json");
-    
+
     if (!File::exists($path)) {
         return response()->json(['error' => 'Translation file not found'], 404);
     }
@@ -39,7 +40,7 @@ Route::middleware([AuthenticateBearerToken::class])->group(function () {
     Route::post('/send/template', [App\Http\Controllers\ApiController::class, 'sendTemplateMessage']);
     Route::post('/send/media', [App\Http\Controllers\ApiController::class, 'sendMediaMessage']);
     Route::post('/campaigns', [App\Http\Controllers\ApiController::class, 'storeCampaign']);
-    
+
     Route::get('/contacts', [App\Http\Controllers\ApiController::class, 'listContacts']);
     Route::post('/contacts', [App\Http\Controllers\ApiController::class, 'storeContact']);
     Route::put('/contacts/{uuid}', [App\Http\Controllers\ApiController::class, 'storeContact']);
@@ -56,35 +57,36 @@ Route::middleware([AuthenticateBearerToken::class])->group(function () {
     Route::delete('/canned-replies/{uuid}', [App\Http\Controllers\ApiController::class, 'destroyCannedReply']);
 
     Route::get('/templates', [App\Http\Controllers\ApiController::class, 'listTemplates']);
+    Route::get('/reports/general', [App\Http\Controllers\Api\ReportController::class, 'general']);
     Route::get('/verify', [App\Http\Controllers\ApiController::class, 'verifyApiKey']);
 });
 
 Route::get('/generateOtp', [App\Http\Controllers\AuthController::class, 'generateOtp']);
- 
+
 
 // ============================================
 // Mobile API Routes (v1)
 // ============================================
 Route::prefix('v1')->group(function () {
-    
+
     // Public routes (No authentication)
     Route::post('/auth/login', [App\Http\Controllers\Api\AuthController::class, 'login']);
-    
+
     // Protected routes (Sanctum authentication for mobile)
     Route::middleware('sanctum.auth')->group(function () {
         Route::get('/auth/me', [App\Http\Controllers\Api\AuthController::class, 'me']);
         Route::post('/auth/logout', [App\Http\Controllers\Api\AuthController::class, 'logout']);
-        
+
         // Get organizations list
         Route::get('/auth/organizations', [App\Http\Controllers\Api\AuthController::class, 'organizations']);
 
 
         // Organization-specific endpoints (requires X-Organization-UUID header)
         Route::middleware('check.organization_selected')->group(function () {
-            
+
             // Labels
             Route::get('/labels', [App\Http\Controllers\Api\LabelController::class, 'index']);
-            
+
 
             // Chats
             Route::get('/chats', [App\Http\Controllers\Api\ChatController::class, 'index']);
@@ -101,13 +103,13 @@ Route::prefix('v1')->group(function () {
 
             // Pre-created Replies
             Route::get('/pre-created-replies', [App\Http\Controllers\Api\PreCreatedReplyController::class, 'index']);
-            
+
             // Contact Management 
             Route::get('/contacts/{contact_uuid}/labels', [App\Http\Controllers\Api\ContactController::class, 'getLabels']);
             Route::put('/contacts/{contact_uuid}/labels', [App\Http\Controllers\Api\ContactController::class, 'updateLabels']);
             Route::delete('/contacts/{contact_uuid}/labels', [App\Http\Controllers\Api\ContactController::class, 'removeLabels']);
             Route::put('/contacts/{contact_uuid}/bot', [App\Http\Controllers\Api\ContactController::class, 'toggleBot']);
-        
+
             // Ticket Management
             Route::get('/agents', [App\Http\Controllers\Api\TicketController::class, 'getAgents']);
             Route::get('/chats/{contact_uuid}/ticket', [App\Http\Controllers\Api\TicketController::class, 'getTicket']);
@@ -126,7 +128,7 @@ Route::prefix('v1')->group(function () {
                 Route::get('/list', [App\Http\Controllers\Api\DeviceTokenController::class, 'list']);
                 Route::post('/test', [App\Http\Controllers\Api\DeviceTokenController::class, 'test']);
             });
-           
+
             Route::prefix('config')->group(function () {
                 Route::get('/pusher', [App\Http\Controllers\Api\ConfigController::class, 'pusher']);
             });

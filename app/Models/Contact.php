@@ -300,7 +300,7 @@ class Contact extends Model
 
     public function labels()
     {
-        return $this->belongsToMany(Label::class, 'contact_label');
+        return $this->belongsToMany(Label::class, 'contact_label')->withTimestamps();
     }
 
     public function ticket()
