@@ -15,7 +15,7 @@
                         $t('Apply') }}</button>
                     <button @click="setToday" class="ml-2 text-sm px-3 py-2 border rounded">{{ $t('Today') }}</button>
                     <button @click="setLast7Days" class="ml-2 text-sm px-3 py-2 border rounded">{{ $t('Last 7 Days')
-                        }}</button>
+                    }}</button>
                 </div>
             </div>
 
@@ -27,6 +27,17 @@
                 <div class="mt-3">
                     <apexchart type="area" height="220" :options="conversationsAreaOptions"
                         :series="conversationsAreaSeries"></apexchart>
+                </div>
+            </div>
+
+            <div class="mt-6 bg-white rounded-lg p-4 shadow-sm">
+                <div class="flex items-center justify-between">
+                    <h4 class="text-sm text-slate-600">{{ $t('Labels over time') }}</h4>
+                    <div class="text-xs text-slate-400">{{ $t('Daily contacts assigned to labels') }}</div>
+                </div>
+                <div class="mt-3">
+                    <apexchart type="area" height="220" :options="labelsAreaOptions" :series="labelsAreaSeries">
+                    </apexchart>
                 </div>
             </div>
 
@@ -147,7 +158,7 @@
                     <div class="text-xs text-slate-400">{{ $t('Contacts per label') }}</div>
                 </div>
 
-                <div class="mt-3 flex items-center justify-between">
+                <!-- <div class="mt-3 flex items-center justify-between">
                     <div class="flex items-center gap-2">
                         <label class="text-sm text-slate-500">{{ $t('Period') }}</label>
                         <select v-model="labelPeriod" class="border rounded p-2 text-sm">
@@ -161,14 +172,16 @@
                             <option v-for="l in props.labels" :key="l.id" :value="l.id">{{ l.title }}</option>
                         </select>
 
-                        <button @click="fetchLabelCount" :disabled="loadingLabelCount" class="ml-3 bg-primary text-white px-3 py-2 rounded text-sm">
+                        <button @click="fetchLabelCount" :disabled="loadingLabelCount"
+                            class="ml-3 bg-primary text-white px-3 py-2 rounded text-sm">
                             <span v-if="loadingLabelCount">{{ $t('Loading') }}</span>
                             <span v-else>{{ $t('Refresh') }}</span>
                         </button>
                     </div>
 
-                    <div class="text-sm text-slate-400">{{ $t('Count') }}: <span class="font-semibold">{{ labelCount !== null ? labelCount : '-' }}</span></div>
-                </div>
+                    <div class="text-sm text-slate-400">{{ $t('Count') }}: <span class="font-semibold">{{ labelCount !==
+                        null ? labelCount : '-' }}</span></div>
+                </div> -->
 
                 <div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
                     <div class="overflow-x-auto">
@@ -212,7 +225,10 @@
 import AppLayout from "../Layout/App.vue";
 import { Link, router } from "@inertiajs/vue3";
 import { ref, computed, watch, onMounted } from 'vue';
+import { useI18n } from 'vue-i18n';
 import axios from 'axios';
+
+const { t } = useI18n();
 
 const props = defineProps({
     total_contacts: { type: Number, default: 0 },
@@ -226,6 +242,7 @@ const props = defineProps({
     conversations: { type: Object, default: () => ({ total: 0, open: 0, closed: 0 }) },
     conversations_series: { type: Object, default: () => ({ categories: [], data: [] }) },
     chats_series: { type: Object, default: () => ({ categories: [], inbound: [], outbound: [] }) },
+    labels_series: { type: Object, default: () => ({ categories: [], series: [] }) },
     messages: { type: Object, default: () => ({ sent: 0, received: 0 }) },
 });
 
@@ -262,12 +279,12 @@ const setLast7Days = () => {
 
 const donutSeries = computed(() => [props.subscribed.count || 0, props.unsubscribed.count || 0]);
 
-const donutOptions = {
-    labels: ['Subscribed', 'Unsubscribed'],
+const donutOptions = computed(() => ({
+    labels: [t('Subscribed'), t('Unsubscribed')],
     colors: ['#16a34a', '#ef4444'],
     legend: { position: 'bottom' },
     dataLabels: { enabled: false },
-};
+}));
 
 // Label filter UI state
 const labelPeriod = ref('last7');
@@ -406,18 +423,18 @@ const conversationsAreaSeries = computed(() => {
     // if chats_series provided (inbound/outbound arrays), use two series similar to dashboard
     if (props.chats_series && Array.isArray(props.chats_series.categories)) {
         return [
-            { name: 'Inbound chats', data: props.chats_series.inbound || [] },
-            { name: 'Outbound chats', data: props.chats_series.outbound || [] },
+            { name: t('Inbound chats'), data: props.chats_series.inbound || [] },
+            { name: t('Outbound chats'), data: props.chats_series.outbound || [] },
         ];
     }
 
     // fallback: use single conversations_series as datetime points
     if (props.conversations_series && Array.isArray(props.conversations_series.categories) && Array.isArray(props.conversations_series.data)) {
         const data = props.conversations_series.categories.map((d, i) => ({ x: d, y: props.conversations_series.data[i] || 0 }));
-        return [{ name: 'Conversations', data }];
+        return [{ name: t('Conversations'), data }];
     }
 
-    return [{ name: 'Conversations', data: [] }];
+    return [{ name: t('Conversations'), data: [] }];
 });
 
 const conversationsAreaOptions = computed(() => {
@@ -433,6 +450,27 @@ const conversationsAreaOptions = computed(() => {
         stroke: { width: 1, curve: 'smooth' },
         xaxis: { type: 'datetime', categories: props.chats_series && props.chats_series.categories ? props.chats_series.categories : props.conversations_series.categories },
         tooltip: { x: { format: 'dd/MM/yy HH:mm' } },
+    };
+});
+
+const labelsAreaSeries = computed(() => {
+    if (props.labels_series && Array.isArray(props.labels_series.series)) {
+        return props.labels_series.series;
+    }
+    return [];
+});
+
+const labelsAreaOptions = computed(() => {
+    return {
+        chart: { height: 350, type: 'area', toolbar: { show: false }, zoom: { enabled: false } },
+        fill: {
+            type: 'gradient',
+            gradient: { shadeIntensity: 1, opacityFrom: 0.5, opacityTo: 0.8, stops: [0, 90, 100] }
+        },
+        dataLabels: { enabled: false },
+        stroke: { width: 1, curve: 'smooth' },
+        xaxis: { type: 'datetime', categories: props.labels_series ? props.labels_series.categories : [] },
+        tooltip: { x: { format: 'dd/MM/yy' } },
     };
 });
 </script>

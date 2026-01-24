@@ -40,7 +40,7 @@ class ReportController extends BaseController
         $total = $service->totalContacts(null, null);
         $new = $service->newContactsCount($start, $end);
         $subs = $service->subscribedUnsubscribedCounts($start, $end);
-        // labels should represent distribution across all contacts (not limited by selected date range)
+        // labels should represent distribution across all contacts (all time)
         $labels = $service->labelsStats(null, null);
         $areaSeries = $service->dailyNewContactsSeries($start, $end);
         $conversations = $service->conversationsCounts($start, $end);
@@ -128,6 +128,7 @@ class ReportController extends BaseController
             'initial_start_date' => $start->toDateString(),
             'initial_end_date' => $end->toDateString(),
             'labels' => $labels,
+            'labels_series' => $service->dailyLabelsSeries($start, $end),
             'area_series' => $areaSeries,
             'conversations' => $conversations,
             'conversations_series' => $conversations_series,
@@ -196,5 +197,34 @@ class ReportController extends BaseController
         ]);
 
         return response()->json(['count' => $count]);
+    }
+
+    public function agentReports(Request $request)
+    {
+        $organizationId = $this->getCurrentOrganizationId();
+        $businessHours = $request->query('business_hours') === 'true';
+
+        if ($request->query('start_date')) {
+            $start = Carbon::parse($request->query('start_date'))->startOfDay();
+        } else {
+            $start = Carbon::now()->startOfDay()->subDays(6);
+        }
+
+        if ($request->query('end_date')) {
+            $end = Carbon::parse($request->query('end_date'))->endOfDay();
+        } else {
+            $end = Carbon::now()->endOfDay();
+        }
+
+        $service = new ReportService($organizationId);
+        $agentReports = $service->agentReports($start, $end, $businessHours);
+
+        return Inertia::render('User/Reports/AgentReports', [
+            'title' => __('Agent Reports'),
+            'agent_reports' => $agentReports,
+            'initial_start_date' => $start->toDateString(),
+            'initial_end_date' => $end->toDateString(),
+            'business_hours' => $businessHours,
+        ]);
     }
 }

@@ -76,7 +76,7 @@
                     </Link>
                 </li>
                 <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
-                    :class="$page.url.startsWith('/contact') || $page.url.startsWith('/reports') ? 'bg-slate-50 text-black' : ''">
+                    :class="$page.url.startsWith('/contact') ? 'bg-slate-50 text-black' : ''">
                     <Link rel="noopener noreferrer" href="/contacts" class="flex items-center p-2 space-s-3 rounded-md">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
                             <path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
@@ -86,18 +86,44 @@
                         <span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Contacts') }}</span>
                     </Link>
                 </li>
-                <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
-                    :class="$page.url.startsWith('/reports') ? 'bg-slate-50 text-black' : ''">
-                    <Link rel="noopener noreferrer" href="/reports/general"
-                        class="flex items-center p-2 space-s-3 rounded-md">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
-                            <path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
-                                stroke-width="2" d="M3 3v18h18" />
-                            <path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
-                                stroke-width="2" d="M7 14h4v6M7 10h10v10M7 6h10v4" />
+                <!-- Reporting Section -->
+                <li class="rounded-[5px] px-2">
+                    <div @click="toggleDropdown('reporting')"
+                        class="flex items-center justify-between p-2 space-s-3 rounded-md cursor-pointer hover:bg-slate-50 hover:text-black transition-colors"
+                        :class="$page.url.startsWith('/reports') ? 'bg-slate-50 text-black font-medium' : ''">
+                        <div class="flex items-center space-s-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+                                <path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
+                                    stroke-width="2" d="M3 3v18h18" />
+                                <path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
+                                    stroke-width="2" d="M7 14h4v6M7 10h10v10M7 6h10v4" />
+                            </svg>
+                            <span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Reporting') }}</span>
+                        </div>
+                        <svg v-if="!menuIconsOnly" class="w-4 h-4 transition-transform duration-200"
+                            :class="showReportingDropdown ? 'rotate-180' : ''" xmlns="http://www.w3.org/2000/svg"
+                            viewBox="0 0 20 20" fill="currentColor">
+                            <path fill-rule="evenodd"
+                                d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z"
+                                clip-rule="evenodd" />
                         </svg>
-                        <span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('General Reports') }}</span>
-                    </Link>
+                    </div>
+
+                    <ul v-show="showReportingDropdown"
+                        class="mt-1 space-y-1 ps-8 overflow-hidden transition-all duration-300">
+                        <li class="hover:text-primary rounded-[5px] truncate"
+                            :class="$page.url === '/reports/agent' ? 'text-primary font-medium' : 'text-slate-600'">
+                            <Link href="/reports/agent" class="flex items-center p-2 text-sm">
+                                <span>{{ $t('Agent Reports') }}</span>
+                            </Link>
+                        </li>
+                        <li class="hover:text-primary rounded-[5px] truncate"
+                            :class="$page.url === '/reports/general' ? 'text-primary font-medium' : 'text-slate-600'">
+                            <Link href="/reports/general" class="flex items-center p-2 text-sm">
+                                <span>{{ $t('General Reports') }}</span>
+                            </Link>
+                        </li>
+                    </ul>
                 </li>
                 <li v-if="!isAgent" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
                     :class="$page.url.startsWith('/campaign') ? 'bg-slate-50 text-black' : ''">
@@ -306,7 +332,7 @@
             <div class="mt-4 border-t pt-4">
                 <button type="button" @click.self="isLocationSwitchModalOpen = false"
                     class="inline-flex justify-center rounded-md border border-transparent bg-slate-50 px-4 py-2 text-sm text-slate-500 hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 mr-4">{{
-                    $t('Cancel') }}</button>
+                        $t('Cancel') }}</button>
             </div>
         </div>
     </Modal>
@@ -337,6 +363,7 @@ const isAgent = computed(() => {
 const isOpen = ref(false);
 const isLocationSwitchModalOpen = ref(false);
 const showDropdown1 = ref(false);
+const showReportingDropdown = ref(false);
 const isOpenOrganizationModal = ref(false);
 
 const emit = defineEmits(['closeSidebar']);
@@ -357,6 +384,8 @@ const closeSidebar = () => {
 const toggleDropdown = (type) => {
     if (type === 'dropdown1') {
         showDropdown1.value = !showDropdown1.value;
+    } else if (type === 'reporting') {
+        showReportingDropdown.value = !showReportingDropdown.value;
     }
 }
 
