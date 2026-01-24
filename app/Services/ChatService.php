@@ -115,9 +115,12 @@ class ChatService
         // Get assigned_to filter from request
         $assignedToFilter = $request->query('assigned_to') ? (int)$request->query('assigned_to') : null;
 
+        // Check if unread filter is active via status
+        $unreadOnly = ($ticketState === 'unread');
+
         $assignedToMe = ($ticketState === 'assigned_to_me');
 
-        if ($assignedToMe) {
+        if ($assignedToMe || $unreadOnly) {
             $ticketState = 'all';
         }
 
@@ -148,7 +151,8 @@ class ChatService
             $allowAgentsToViewAllChats,
             $labelFilters,
             $assignedToMe,
-            $assignedToFilter
+            $assignedToFilter,
+            $unreadOnly
         );
         
         $rowCount = $contact->contactsWithChatsCount(
@@ -161,7 +165,8 @@ class ChatService
             $allowAgentsToViewAllChats,
             $labelFilters,
             $assignedToMe,
-            $assignedToFilter
+            $assignedToFilter,
+            $unreadOnly
         );
 
         $pusherSettings = Setting::whereIn('key', [

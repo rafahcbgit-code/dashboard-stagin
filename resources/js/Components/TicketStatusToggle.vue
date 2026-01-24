@@ -88,6 +88,9 @@
                 <Link :href="buildStatusHref('all')" class="block px-2 py-1 cursor-pointer hover:bg-slate-100 rounded-md">
                     {{ $t('All')}} 
                 </Link>
+                <Link :href="buildStatusHref('unread')" class="block px-2 py-1 cursor-pointer hover:bg-slate-100 rounded-md">
+                    {{ $t('Unread Only')}} 
+                </Link>
             </div>
         </div>
     </div>
