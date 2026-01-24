@@ -34,6 +34,7 @@ class ContactsExport implements FromCollection, WithHeadings
                 'first_name' => $contact->first_name,
                 'last_name' => $contact->last_name,
                 'phone' => $contact->formatted_phone_number, // Assuming formatted_phone_number is defined
+                'subscription' => ((int) $contact->is_subscribed == 1) ? 'Subscribed' : 'Not subscribed',
                 'email' => $contact->email,
                 'group_name' => $contact->contactGroups->pluck('name')->implode('|'),
                 'street' => $address['street'] ?? null,
@@ -70,6 +71,7 @@ class ContactsExport implements FromCollection, WithHeadings
             'First name',
             'Last name',
             'Phone',
+            'Subscription',
             'Email',
             'Group name',
             'Street',
