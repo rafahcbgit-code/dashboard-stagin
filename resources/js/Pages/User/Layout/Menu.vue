@@ -87,7 +87,7 @@
                     </Link>
                 </li>
                 <!-- Reporting Section -->
-                <li class="rounded-[5px] px-2">
+                <li v-if="!isAgent" class="rounded-[5px] px-2">
                     <div @click="toggleDropdown('reporting')"
                         class="flex items-center justify-between p-2 space-s-3 rounded-md cursor-pointer hover:bg-slate-50 hover:text-black transition-colors"
                         :class="$page.url.startsWith('/reports') ? 'bg-slate-50 text-black font-medium' : ''">
