@@ -9,7 +9,8 @@ use Illuminate\Database\Eloquent\Model;
 use Propaganistas\LaravelPhone\PhoneNumber;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
-class Contact extends Model {
+class Contact extends Model
+{
     use HasFactory;
     use HasUuid;
     use SoftDeletes;
@@ -36,20 +37,20 @@ class Contact extends Model {
             ->where('deleted_at', null)
             ->where(function ($query) use ($searchTerm) {
                 $query->where('contacts.first_name', 'like', '%' . $searchTerm . '%')
-                ->orWhere('contacts.last_name', 'like', '%' . $searchTerm . '%')
-                
-                // Split the search term into parts and check for matches in both columns
-                ->orWhere(function ($subQuery) use ($searchTerm) {
-                    $searchParts = explode(' ', $searchTerm);
-                    if (count($searchParts) > 1) {
-                        $subQuery->where('contacts.first_name', 'like', '%' . $searchParts[0] . '%')
+                    ->orWhere('contacts.last_name', 'like', '%' . $searchTerm . '%')
+
+                    // Split the search term into parts and check for matches in both columns
+                    ->orWhere(function ($subQuery) use ($searchTerm) {
+                        $searchParts = explode(' ', $searchTerm);
+                        if (count($searchParts) > 1) {
+                            $subQuery->where('contacts.first_name', 'like', '%' . $searchParts[0] . '%')
                                 ->where('contacts.last_name', 'like', '%' . $searchParts[1] . '%');
-                    }
-                })
-                
-                // Match phone or email
-                ->orWhere('contacts.phone', 'like', '%' . $searchTerm . '%')
-                ->orWhere('contacts.email', 'like', '%' . $searchTerm . '%');
+                        }
+                    })
+
+                    // Match phone or email
+                    ->orWhere('contacts.phone', 'like', '%' . $searchTerm . '%')
+                    ->orWhere('contacts.email', 'like', '%' . $searchTerm . '%');
             })
             ->orderByDesc('is_favorite')
             ->latest()
@@ -92,9 +93,17 @@ class Contact extends Model {
     public function lastInboundChat()
     {
         return $this->hasOne(Chat::class, 'contact_id')
-                    ->where('type', 'inbound')
-                    ->with('media')
-                    ->latest();
+            ->where('type', 'inbound')
+            ->with('media')
+            ->latest();
+    }
+
+    public function unreadInboundChats()
+    {
+        return $this->hasMany(Chat::class, 'contact_id')
+            ->where('type', 'inbound')
+            ->where('is_read', 0)
+            ->whereNull('deleted_at');
     }
 
     public function chatLogs()
@@ -102,31 +111,34 @@ class Contact extends Model {
         return $this->hasMany(ChatLog::class);
     }
 
-    public function contactsWithChats($organizationId, $searchTerm = null, $ticketingActive = false, $ticketState = null, $sortDirection = 'asc', $role = 'owner', $allowAgentsViewAllChats = true, $labelFilters = [], $assignedToMe = false)
+    public function contactsWithChats($organizationId, $searchTerm = null, $ticketingActive = false, $ticketState = null, $sortDirection = 'asc', $role = 'owner', $allowAgentsViewAllChats = true, $labelFilters = [], $assignedToMe = false, $assignedToFilter = null)
     {
         $query = $this->newQuery()
             ->where('contacts.organization_id', $organizationId)
             ->whereNotNull('contacts.latest_chat_created_at')
-            ->with(['lastChat', 'lastInboundChat', 'latestAssignedUser', 'labels'])
+            ->with(['lastChat', 'lastInboundChat', 'latestAssignedUser', 'labels', 'ticket'])
             ->whereNull('contacts.deleted_at')
             ->select('contacts.*')
             ->distinct();
 
         // Apply label filtering
         if (!empty($labelFilters)) {
-            $query->whereHas('labels', function($q) use ($labelFilters) {
+            $query->whereHas('labels', function ($q) use ($labelFilters) {
                 $q->whereIn('labels.id', $labelFilters);
             });
         }
-            
+
         // Apply ticketing conditions if active
         if ($ticketingActive) {
             $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id');
 
-            if ($assignedToMe && $role === 'agent') {
+            // Apply assigned_to filter if provided
+            if ($assignedToFilter !== null) {
+                $query->where('chat_tickets.assigned_to', $assignedToFilter);
+            } elseif ($assignedToMe && $role === 'agent') {
                 $query->where('chat_tickets.assigned_to', auth()->user()->id);
-            } 
-            
+            }
+
             if ($ticketState === 'unassigned') {
                 $query->whereNull('chat_tickets.assigned_to');
             } elseif ($ticketState !== null && $ticketState !== 'all') {
@@ -139,10 +151,10 @@ class Contact extends Model {
         }
 
         // Agent permission check
-        if($role == 'agent' && $allowAgentsViewAllChats == false && !$assignedToMe){
-            $query->where(function($q) {
+        if ($role == 'agent' && $allowAgentsViewAllChats == false && !$assignedToMe) {
+            $query->where(function ($q) {
                 $q->whereNull('chat_tickets.assigned_to')
-                ->orWhere('chat_tickets.assigned_to', auth()->user()->id);
+                    ->orWhere('chat_tickets.assigned_to', auth()->user()->id);
             });
         }
 
@@ -163,25 +175,28 @@ class Contact extends Model {
         return $query->paginate(10);
     }
 
-    public function contactsWithChatsCount($organizationId, $searchTerm = null, $ticketingActive = false, $ticketState = null, $sortDirection = 'asc', $role = 'owner', $allowAgentsViewAllChats = true, $labelFilters = [], $assignedToMe = false)
+    public function contactsWithChatsCount($organizationId, $searchTerm = null, $ticketingActive = false, $ticketState = null, $sortDirection = 'asc', $role = 'owner', $allowAgentsViewAllChats = true, $labelFilters = [], $assignedToMe = false, $assignedToFilter = null)
     {
         $query = $this->newQuery()
             ->where('contacts.organization_id', $organizationId)
             ->whereNotNull('contacts.latest_chat_created_at')
             ->whereNull('contacts.deleted_at')
-            ->with(['lastChat', 'lastInboundChat'])
+            ->with(['lastChat', 'lastInboundChat', 'ticket'])
             ->select('contacts.*')
             ->orderBy('contacts.latest_chat_created_at', $sortDirection);
 
-        if($ticketingActive){
+        if ($ticketingActive) {
             // Conditional join with chat_tickets table and comparison with ticketState
-            if ($ticketState === 'unassigned') {
+            if ($assignedToFilter !== null) {
+                $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
+                    ->where('chat_tickets.assigned_to', $assignedToFilter);
+            } elseif ($ticketState === 'unassigned') {
                 $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
                     ->whereNull('chat_tickets.assigned_to');
             } elseif ($ticketState !== null && $ticketState !== 'all') {
                 $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
                     ->where('chat_tickets.status', $ticketState);
-            } else if($ticketState === 'all'){
+            } else if ($ticketState === 'all') {
                 $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id');
             }
 
@@ -190,23 +205,23 @@ class Contact extends Model {
                 $query->where('chat_tickets.assigned_to', auth()->user()->id);
             }
 
-            if($role == 'agent' && $allowAgentsViewAllChats == false){
-                $query->where(function($q) {
+            if ($role == 'agent' && $allowAgentsViewAllChats == false) {
+                $query->where(function ($q) {
                     $q->where('chat_tickets.assigned_to', auth()->user()->id);
                 });
             }
         }
 
-        if($role == 'agent' && $allowAgentsViewAllChats == false && !$assignedToMe){
-            $query->where(function($q) {
+        if ($role == 'agent' && $allowAgentsViewAllChats == false && !$assignedToMe) {
+            $query->where(function ($q) {
                 $q->whereNull('chat_tickets.assigned_to')
-                ->orWhere('chat_tickets.assigned_to', auth()->user()->id);
+                    ->orWhere('chat_tickets.assigned_to', auth()->user()->id);
             });
         }
 
         // Apply label filtering
         if (!empty($labelFilters)) {
-            $query->whereHas('labels', function($q) use ($labelFilters) {
+            $query->whereHas('labels', function ($q) use ($labelFilters) {
                 $q->whereIn('labels.id', $labelFilters);
             });
         }
@@ -215,20 +230,20 @@ class Contact extends Model {
         if ($searchTerm) {
             $query->where(function ($q) use ($searchTerm) {
                 $q->where('contacts.first_name', 'like', '%' . $searchTerm . '%')
-                ->orWhere('contacts.last_name', 'like', '%' . $searchTerm . '%')
-                
-                // Split the search term into parts and check for matches in both columns
-                ->orWhere(function ($subQuery) use ($searchTerm) {
-                    $searchParts = explode(' ', $searchTerm);
-                    if (count($searchParts) > 1) {
-                        $subQuery->where('contacts.first_name', 'like', '%' . $searchParts[0] . '%')
+                    ->orWhere('contacts.last_name', 'like', '%' . $searchTerm . '%')
+
+                    // Split the search term into parts and check for matches in both columns
+                    ->orWhere(function ($subQuery) use ($searchTerm) {
+                        $searchParts = explode(' ', $searchTerm);
+                        if (count($searchParts) > 1) {
+                            $subQuery->where('contacts.first_name', 'like', '%' . $searchParts[0] . '%')
                                 ->where('contacts.last_name', 'like', '%' . $searchParts[1] . '%');
-                    }
-                })
-                
-                // Match phone or email
-                ->orWhere('contacts.phone', 'like', '%' . $searchTerm . '%')
-                ->orWhere('contacts.email', 'like', '%' . $searchTerm . '%');
+                        }
+                    })
+
+                    // Match phone or email
+                    ->orWhere('contacts.phone', 'like', '%' . $searchTerm . '%')
+                    ->orWhere('contacts.email', 'like', '%' . $searchTerm . '%');
             });
         }
 
@@ -274,7 +289,6 @@ class Contact extends Model {
         } catch (\Exception $e) {
             return $this->phone;
         }
-        
     }
 
     protected function decodeUnicodeBytes($value)
@@ -289,15 +303,20 @@ class Contact extends Model {
         return $this->belongsToMany(Label::class, 'contact_label')->withTimestamps();
     }
 
+    public function ticket()
+    {
+        return $this->hasOne(ChatTicket::class, 'contact_id');
+    }
+
     public function latestAssignedUser()
     {
         return $this->hasOneThrough(
             User::class,
             ChatTicket::class,
-            'contact_id',  
-            'id',          
-            'id',           
-            'assigned_to'   
-        )->latest('chat_tickets.id'); 
+            'contact_id',
+            'id',
+            'id',
+            'assigned_to'
+        )->latest('chat_tickets.id');
     }
 }

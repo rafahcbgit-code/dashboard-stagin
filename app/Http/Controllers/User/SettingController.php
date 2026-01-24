@@ -524,6 +524,7 @@ public function campaign(Request $request)
             $updatedMetadataJson = json_encode($metadataArray);
 
             $organizationConfig->metadata = $updatedMetadataJson;
+           
             $organizationConfig->save();
 
             return back()->with(

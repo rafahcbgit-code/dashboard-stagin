@@ -2,6 +2,8 @@
     import { ref, onMounted, onUnmounted } from 'vue';
     import { Link } from "@inertiajs/vue3";
 
+    import { useChatFilterStore, setChatFilters } from '@/stores/chatFilterStore.js';
+
     const props = defineProps({
         languages: Object,
         currentLanguage: String,
@@ -40,13 +42,23 @@
     onUnmounted(() => {
         document.body.removeEventListener('click', handleClickOutside);
     });
+
+    const buildStatusHref = (status) => {
+        const filterStore = useChatFilterStore();
+        const qs = new URLSearchParams();
+        if (filterStore.labels) qs.set('labels', filterStore.labels);
+        if (filterStore.assigned_to) qs.set('assigned_to', filterStore.assigned_to);
+        if (filterStore.search) qs.set('search', filterStore.search);
+        if (status) qs.set('status', status);
+        const str = qs.toString();
+        return '/chats' + (str ? ('?' + str) : '');
+    }
 </script>
 <template>
     <div class="relative text-sm">
         <div @click="toggleDropdown()" class="status-dd">
             <div class="cursor-pointer flex items-center space-x-1 bg-slate-50 w-[fit-content] h-[fit-content] rounded-md p-1 px-2 text-sm">
                 <span class="capitalize">{{ $t(capitalizeString(props.status)) }}</span>
-                <span class="text-slate-500">{{ props.rowCount }}</span>
                 <span>
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M16.53 8.97a.75.75 0 0 1 0 1.06l-4 4a.75.75 0 0 1-1.06 0l-4-4a.75.75 0 1 1 1.06-1.06L12 12.44l3.47-3.47a.75.75 0 0 1 1.06 0" clip-rule="evenodd"/></svg>
                 </span>
@@ -56,7 +68,7 @@
             <div>
                 <Link 
                     v-if="teamRole === 'agent'" 
-                    :href="'/chats?status=assigned_to_me'" 
+                    :href="buildStatusHref('assigned_to_me')" 
                     class="block px-2 py-1 cursor-pointer hover:bg-slate-100 rounded-md"
                 >
                     <div class="flex items-center space-x-2">
@@ -64,16 +76,16 @@
                     </div>
                 </Link>
 
-                <Link :href="'/chats?status=unassigned'" class="block px-2 py-1 cursor-pointer hover:bg-slate-100 rounded-md">
+                <Link :href="buildStatusHref('unassigned')" class="block px-2 py-1 cursor-pointer hover:bg-slate-100 rounded-md">
                     {{ $t('Unassigned')}} 
                 </Link>
-                <Link :href="'/chats?status=open'" class="block px-2 py-1 cursor-pointer hover:bg-slate-100 rounded-md">
+                <Link :href="buildStatusHref('open')" class="block px-2 py-1 cursor-pointer hover:bg-slate-100 rounded-md">
                     {{ $t('Open')}} 
                 </Link>
-                <Link :href="'/chats?status=closed'" class="block px-2 py-1 cursor-pointer hover:bg-slate-100 rounded-md">
+                <Link :href="buildStatusHref('closed')" class="block px-2 py-1 cursor-pointer hover:bg-slate-100 rounded-md">
                     {{ $t('Closed')}} 
                 </Link>
-                <Link :href="'/chats?status=all'" class="block px-2 py-1 cursor-pointer hover:bg-slate-100 rounded-md">
+                <Link :href="buildStatusHref('all')" class="block px-2 py-1 cursor-pointer hover:bg-slate-100 rounded-md">
                     {{ $t('All')}} 
                 </Link>
             </div>

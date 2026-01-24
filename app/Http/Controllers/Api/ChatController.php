@@ -9,6 +9,7 @@ use App\Models\ChatLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class ChatController extends Controller
 {
@@ -80,12 +81,26 @@ class ChatController extends Controller
             }
 
             // Base query - Get contacts with chats
-            $query = Contact::with(['labels', 'contactGroups'])
-                ->where('contacts.organization_id', $organizationId)
-                ->whereNull('contacts.deleted_at')
-                ->whereHas('chats', function ($q) {
-                    $q->whereNull('deleted_at');
-                });
+            $query = Contact::query();
+
+            // TICKET STATUS FILTER
+            if ($ticketStatus === 'unassigned') {
+                // Show unassigned chats
+                $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
+                    ->whereNull('chat_tickets.assigned_to');
+            } elseif ($ticketStatus === 'open') {
+                // Show open tickets
+                $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
+                    ->where('chat_tickets.status', 'open');
+            } elseif ($ticketStatus === 'closed') {
+                // Show closed tickets
+                $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
+                    ->where('chat_tickets.status', 'closed');
+            } elseif ($ticketStatus === 'assigned_to_me') {
+                // Show only chats assigned to current user
+                $query->join('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
+                    ->where('chat_tickets.assigned_to', $currentUserId);
+            }
 
             // Search filter
             if ($searchTerm) {
@@ -107,65 +122,27 @@ class ChatController extends Controller
                 }
             }
 
-            // TICKET STATUS FILTER
-            if ($ticketStatus === 'unassigned') {
-                // Show unassigned chats
-                $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
-                    ->whereNull('chat_tickets.assigned_to');
-                $query->select('contacts.*');
-                
-            } elseif ($ticketStatus === 'open') {
-                // Show open tickets
-                $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
-                    ->where('chat_tickets.status', 'open');
-                $query->select('contacts.*');
-                
-            } elseif ($ticketStatus === 'closed') {
-                // Show closed tickets
-                $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
-                    ->where('chat_tickets.status', 'closed');
-                $query->select('contacts.*');
-                
-            } elseif ($ticketStatus === 'assigned_to_me') {
-                // Show only chats assigned to current user
-                $query->join('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
-                    ->where('chat_tickets.assigned_to', $currentUserId);
-                $query->select('contacts.*');
-            }
+            // Apply selects and eager loading
+            $query->select('contacts.*')
+                ->with(['labels', 'contactGroups', 'lastChat', 'ticket.user'])
+                ->withCount('unreadInboundChats')
+                ->where('contacts.organization_id', $organizationId)
+                ->whereNull('contacts.deleted_at')
+                ->whereNotNull('contacts.latest_chat_created_at');
             // If $ticketStatus === 'all', no filter (only for owner/manager)
 
             // Sort by last message time
             $sortDirection = $sort === 'oldest' ? 'asc' : 'desc';
-            $query->orderBy(
-                Chat::select('created_at')
-                    ->whereColumn('contact_id', 'contacts.id')
-                    ->whereNull('deleted_at')
-                    ->latest('created_at')
-                    ->limit(1),
-                $sortDirection
-            );
+            $query->orderBy('contacts.latest_chat_created_at', $sortDirection);
 
             // Paginate
             $contacts = $query->paginate($perPage);
 
             // Format response
             $chats = $contacts->map(function ($contact) {
-                $lastChat = Chat::with('media')
-                    ->where('contact_id', $contact->id)
-                    ->whereNull('deleted_at')
-                    ->orderBy('created_at', 'desc')
-                    ->first();
-
-                $unreadCount = Chat::where('contact_id', $contact->id)
-                    ->where('type', 'inbound')
-                    ->where('is_read', 0)
-                    ->whereNull('deleted_at')
-                    ->count();
-
-                $ticket = \App\Models\ChatTicket::with('user')
-                    ->where('contact_id', $contact->id)
-                    ->first();
-
+                $lastChat = $contact->lastChat;
+                $unreadCount = $contact->unread_inbound_chats_count;
+                $ticket = $contact->ticket;
                 $lastMessage = $this->parseLastMessage($lastChat);
 
                 return [
@@ -220,7 +197,6 @@ class ChatController extends Controller
                     'to' => $contacts->lastItem(),
                 ]
             ], 200);
-
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -313,7 +289,7 @@ class ChatController extends Controller
             $messageText = '🛒 Order';
         }
         // Unsupported or unknown type
-         else {
+        else {
             $messageText = '💬 Message';
         }
 
@@ -350,7 +326,6 @@ class ChatController extends Controller
                     'unread_count' => $totalUnread
                 ]
             ], 200);
-
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -406,9 +381,26 @@ class ChatController extends Controller
                 ], 404);
             }
 
+            // PERMISSION CHECK: Agents can only access chats assigned to them or unassigned chats
+            $currentUserId = $request->user('sanctum')->id;
+            $userRole = \App\Models\Team::where('organization_id', $organizationId)
+                ->where('user_id', $currentUserId)
+                ->whereNull('deleted_at')
+                ->value('role');
+
+            if ($userRole === 'agent') {
+                $ticket = \App\Models\ChatTicket::where('contact_id', $contact->id)->first();
+                if ($ticket && $ticket->assigned_to && $ticket->assigned_to !== $currentUserId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'This conversation is assigned to another agent'
+                    ], 403);
+                }
+            }
+
             // Parse include_types filter
             $typesToInclude = ['chat', 'notes', 'ticket'];
-            
+
             if ($includeTypes !== 'all') {
                 $requestedTypes = array_map('trim', explode(',', $includeTypes));
                 $typeMap = [
@@ -416,14 +408,14 @@ class ChatController extends Controller
                     'note' => 'notes',
                     'ticket' => 'ticket'
                 ];
-                
+
                 $typesToInclude = [];
                 foreach ($requestedTypes as $type) {
                     if (isset($typeMap[$type])) {
                         $typesToInclude[] = $typeMap[$type];
                     }
                 }
-                
+
                 if (empty($typesToInclude)) {
                     $typesToInclude = ['chat', 'notes', 'ticket'];
                 }
@@ -484,7 +476,6 @@ class ChatController extends Controller
                     'has_more' => $chatLogs->hasMorePages(),
                 ]
             ], 200);
-
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -501,26 +492,26 @@ class ChatController extends Controller
     private function formatTimelineItem($chatLog)
     {
         $entityType = $chatLog->entity_type;
-        
+
         try {
             // Type 1: Message
             if ($entityType === 'chat') {
                 $chat = $chatLog->relatedEntities;
                 if (!$chat) return null;
-                
+
                 $formattedMessage = $this->formatMessage($chat);
                 $formattedMessage['entity'] = 'message';
-                
+
                 return $formattedMessage;
-            } 
-            
+            }
+
             // Type 2: Note
             elseif ($entityType === 'notes') {
                 $note = $chatLog->relatedEntities;
                 if (!$note) return null;
-                
+
                 $creator = \App\Models\User::find($note->created_by);
-                
+
                 return [
                     'entity' => 'note',
                     'uuid' => $note->uuid,
@@ -536,13 +527,13 @@ class ChatController extends Controller
                     'created_at' => $note->created_at,
                     'updated_at' => $note->updated_at,
                 ];
-            } 
-            
+            }
+
             // Type 3: Ticket Event
             elseif ($entityType === 'ticket') {
                 $ticketLog = $chatLog->relatedEntities;
                 if (!$ticketLog) return null;
-                
+
                 return [
                     'entity' => 'ticket_event',
                     'id' => $ticketLog->id,
@@ -550,9 +541,8 @@ class ChatController extends Controller
                     'created_at' => $ticketLog->created_at,
                 ];
             }
-            
+
             return null;
-            
         } catch (\Exception $e) {
             \Log::error('Error formatting timeline item: ' . $e->getMessage(), [
                 'entity_type' => $entityType,
@@ -643,38 +633,38 @@ class ChatController extends Controller
         elseif ($messageType === 'contacts') {
             $contacts = $metadata['contacts'] ?? [];
             $formattedContacts = [];
-            
+
             foreach ($contacts as $contact) {
                 $formattedContact = [];
-                
+
                 // Name
                 if (isset($contact['name']['formatted_name'])) {
                     $formattedContact['name'] = $contact['name']['formatted_name'];
                 }
-                
+
                 // Phones
                 if (isset($contact['phones']) && is_array($contact['phones'])) {
-                    $formattedContact['phones'] = array_map(function($phone) {
+                    $formattedContact['phones'] = array_map(function ($phone) {
                         return [
                             'phone' => $phone['phone'] ?? $phone['wa_id'] ?? null,
                             'type' => $phone['type'] ?? null,
                         ];
                     }, $contact['phones']);
                 }
-                
+
                 // Emails (optional)
                 if (isset($contact['emails']) && is_array($contact['emails'])) {
-                    $formattedContact['emails'] = array_map(function($email) {
+                    $formattedContact['emails'] = array_map(function ($email) {
                         return [
                             'email' => $email['email'] ?? null,
                             'type' => $email['type'] ?? null,
                         ];
                     }, $contact['emails']);
                 }
-                
+
                 $formattedContacts[] = $formattedContact;
             }
-            
+
             $message['content'] = [
                 'contacts' => $formattedContacts,
                 'text' => "📱 Contact"
@@ -686,33 +676,30 @@ class ChatController extends Controller
                 'text' => $metadata['button']['text'] ?? null,
                 'payload' => $metadata['button']['payload'] ?? null,
             ];
-        }
-        elseif ($messageType === 'reaction') {
+        } elseif ($messageType === 'reaction') {
             $emoji = $metadata['reaction']['emoji'] ?? '❤️';
             $message['content'] = [
                 'text' => 'Reacted with ' . $emoji
             ];
-        }
-        elseif ($messageType === 'unsupported') {
+        } elseif ($messageType === 'unsupported') {
             $errorMessage = 'Unsupported message';
-            
+
             // Try to get actual error message from WhatsApp
             if (isset($metadata['raw']['errors'][0]['title'])) {
                 $errorMessage = $metadata['raw']['errors'][0]['title'];
             } elseif (isset($metadata['raw']['errors'][0]['message'])) {
                 $errorMessage = $metadata['raw']['errors'][0]['message'];
             }
-            
+
             $message['content'] = [
                 'text' => '⚠️ ' . $errorMessage
             ];
-            
+
             // Optional Include error code for debugging
             /* if (isset($metadata['raw']['errors'][0]['code'])) {
                 $message['error_code'] = $metadata['raw']['errors'][0]['code'];
             } */
-        }
-        else {
+        } else {
             $message['content'] = [
                 'text' => 'Unsupported message type'
             ];
@@ -772,7 +759,6 @@ class ChatController extends Controller
                     'updated_count' => $updated
                 ]
             ], 200);
-
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -804,6 +790,23 @@ class ChatController extends Controller
                         'success' => false,
                         'message' => 'Unauthorized access'
                     ], 403);
+                }
+
+                // PERMISSION CHECK for agents
+                $currentUserId = $request->user('sanctum')->id;
+                $userRole = \App\Models\Team::where('organization_id', $organizationId)
+                    ->where('user_id', $currentUserId)
+                    ->whereNull('deleted_at')
+                    ->value('role');
+
+                if ($userRole === 'agent') {
+                    $ticket = \App\Models\ChatTicket::where('contact_id', $chat->contact->id)->first();
+                    if ($ticket && $ticket->assigned_to && $ticket->assigned_to !== $currentUserId) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'This conversation is assigned to another agent'
+                        ], 403);
+                    }
                 }
 
                 if ($chat->type === 'inbound' && !$chat->is_read) {
@@ -843,6 +846,23 @@ class ChatController extends Controller
                     ], 403);
                 }
 
+                // PERMISSION CHECK for agents
+                $currentUserId = $request->user('sanctum')->id;
+                $userRole = \App\Models\Team::where('organization_id', $organizationId)
+                    ->where('user_id', $currentUserId)
+                    ->whereNull('deleted_at')
+                    ->value('role');
+
+                if ($userRole === 'agent') {
+                    $ticket = \App\Models\ChatTicket::where('contact_id', $note->contact->id)->first();
+                    if ($ticket && $ticket->assigned_to && $ticket->assigned_to !== $currentUserId) {
+                        return response()->json([
+                            'success' => false,
+                            'message' => 'This conversation is assigned to another agent'
+                        ], 403);
+                    }
+                }
+
                 $creator = \App\Models\User::find($note->created_by);
 
                 return response()->json([
@@ -879,7 +899,6 @@ class ChatController extends Controller
                 'success' => false,
                 'message' => 'Timeline item not found'
             ], 404);
-
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
