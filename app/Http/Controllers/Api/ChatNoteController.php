@@ -5,6 +5,8 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Contact;
 use App\Models\ChatNote;
+use App\Models\ChatTicket;
+use App\Models\Team;
 use App\Services\ChatNoteService;
 use App\Http\Resources\Api\ChatNoteResource;
 use Illuminate\Http\Request;
@@ -59,6 +61,23 @@ class ChatNoteController extends Controller
                 ], 404);
             }
 
+            // PERMISSION CHECK for agents
+            $currentUserId = $request->user('sanctum')->id;
+            $userRole = Team::where('organization_id', $organizationId)
+                ->where('user_id', $currentUserId)
+                ->whereNull('deleted_at')
+                ->value('role');
+
+            if ($userRole === 'agent') {
+                $ticket = ChatTicket::where('contact_id', $contact->id)->first();
+                if ($ticket && $ticket->assigned_to && $ticket->assigned_to !== $currentUserId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'This conversation is assigned to another agent'
+                    ], 403);
+                }
+            }
+
             // Get notes with pagination
             $notes = $this->chatNoteService->getByContact($contact->id, $perPage);
 
@@ -76,7 +95,6 @@ class ChatNoteController extends Controller
                     'to' => $notes->lastItem(),
                 ]
             ], 200);
-
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -108,6 +126,23 @@ class ChatNoteController extends Controller
                 ], 404);
             }
 
+            // PERMISSION CHECK for agents
+            $currentUserId = $request->user('sanctum')->id;
+            $userRole = Team::where('organization_id', $organizationId)
+                ->where('user_id', $currentUserId)
+                ->whereNull('deleted_at')
+                ->value('role');
+
+            if ($userRole === 'agent') {
+                $ticket = ChatTicket::where('contact_id', $contact->id)->first();
+                if ($ticket && $ticket->assigned_to && $ticket->assigned_to !== $currentUserId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'This conversation is assigned to another agent'
+                    ], 403);
+                }
+            }
+
             // Find note
             $note = ChatNote::where('uuid', $noteUuid)
                 ->where('contact_id', $contact->id)
@@ -127,7 +162,6 @@ class ChatNoteController extends Controller
                     'note' => new ChatNoteResource($note)
                 ]
             ], 200);
-
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -177,6 +211,22 @@ class ChatNoteController extends Controller
                 ], 404);
             }
 
+            // PERMISSION CHECK for agents
+            $userRole = Team::where('organization_id', $organizationId)
+                ->where('user_id', $userId)
+                ->whereNull('deleted_at')
+                ->value('role');
+
+            if ($userRole === 'agent') {
+                $ticket = ChatTicket::where('contact_id', $contact->id)->first();
+                if ($ticket && $ticket->assigned_to && $ticket->assigned_to !== $userId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'This conversation is assigned to another agent'
+                    ], 403);
+                }
+            }
+
             // Create request object for service
             $serviceRequest = (object)[
                 'contact' => $contactUuid,
@@ -193,7 +243,6 @@ class ChatNoteController extends Controller
                     'note' => new ChatNoteResource($note)
                 ]
             ], 201);
-
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -243,6 +292,22 @@ class ChatNoteController extends Controller
                 ], 404);
             }
 
+            // PERMISSION CHECK for agents
+            $userRole = Team::where('organization_id', $organizationId)
+                ->where('user_id', $userId)
+                ->whereNull('deleted_at')
+                ->value('role');
+
+            if ($userRole === 'agent') {
+                $ticket = ChatTicket::where('contact_id', $contact->id)->first();
+                if ($ticket && $ticket->assigned_to && $ticket->assigned_to !== $userId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'This conversation is assigned to another agent'
+                    ], 403);
+                }
+            }
+
             // Verify note belongs to this contact
             $note = ChatNote::where('uuid', $noteUuid)
                 ->where('contact_id', $contact->id)
@@ -266,7 +331,6 @@ class ChatNoteController extends Controller
                     'note' => new ChatNoteResource($updatedNote)
                 ]
             ], 200);
-
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
@@ -299,6 +363,23 @@ class ChatNoteController extends Controller
                 ], 404);
             }
 
+            // PERMISSION CHECK for agents
+            $currentUserId = $request->user('sanctum')->id;
+            $userRole = Team::where('organization_id', $organizationId)
+                ->where('user_id', $currentUserId)
+                ->whereNull('deleted_at')
+                ->value('role');
+
+            if ($userRole === 'agent') {
+                $ticket = ChatTicket::where('contact_id', $contact->id)->first();
+                if ($ticket && $ticket->assigned_to && $ticket->assigned_to !== $currentUserId) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => 'This conversation is assigned to another agent'
+                    ], 403);
+                }
+            }
+
             // Verify note belongs to this contact
             $note = ChatNote::where('uuid', $noteUuid)
                 ->where('contact_id', $contact->id)
@@ -319,7 +400,6 @@ class ChatNoteController extends Controller
                 'success' => true,
                 'message' => 'Note deleted successfully'
             ], 200);
-
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,

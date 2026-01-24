@@ -63,11 +63,12 @@
                     </div>
                 </div>
                 <div class="md:w-[50%]">
-                    <div class="md:float-right gap-y-2 gap-x-3" :class="props.setting['enable_custom_payment'] == 0 ? 'flex' : 'grid grid-cols-2'">
+                     <!--The plan update section has been suspended because some customers are subscribing without making a payment.-->
+                    <!-- <div class="md:float-right gap-y-2 gap-x-3" :class="props.setting['enable_custom_payment'] == 0 ? 'flex' : 'grid grid-cols-2'">
                         <button v-if="props.setting['enable_custom_payment'] == 1" @click="openModal()" type="button" class="w-full capitalize rounded-md bg-primary px-3 py-2 text-sm text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 mr-2 col-span-2 md:col-span-1 text-center">{{ $t('Add payment') }}</button>
                         <Link href="/subscription" v-if="props.subscription?.status === 'trial'" class="w-full rounded-md bg-primary px-3 py-2 text-sm text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 col-span-2 md:col-span-1 text-center">{{ $t('Subscribe to plan') }}</Link>
                         <Link href="/subscription" v-if="props.subscription?.status === 'active'" class="w-full rounded-md bg-primary px-3 py-2 text-sm text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 col-span-2 md:col-span-1 text-center">{{ $t('Upgrade subscription') }}</Link>
-                    </div>
+                    </div> -->
                 </div>
             </div>
             <div class=" bg-slate-100 md:bg-gray-50 p-5 md:px-0 rounded-[0.5rem] mt-10 w-full">

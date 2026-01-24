@@ -10,12 +10,13 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Foundation\Bus\PendingDispatch;
 use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
-class ProcessCampaignMessagesJob implements ShouldQueue
+class ProcessCampaignMessagesJob implements ShouldQueue, ShouldBeUnique
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
@@ -32,6 +33,14 @@ class ProcessCampaignMessagesJob implements ShouldQueue
         public int $organizationId
     ) {
         $this->queue = 'campaign-messages';
+    }
+
+    /**
+     * The unique ID of the job.
+     */
+    public function uniqueId(): string
+    {
+        return (string) $this->organizationId;
     }
 
     /**
@@ -72,7 +81,7 @@ class ProcessCampaignMessagesJob implements ShouldQueue
             CampaignLog::select(['id', 'campaign_id', 'contact_id', 'status'])
                 ->withCount('retries')
                 ->with([
-                    'campaign' => fn ($q) => $q->select(['id', 'organization_id', 'status', 'uuid', 'created_by']),
+                    'campaign' => fn($q) => $q->select(['id', 'organization_id', 'status', 'uuid', 'created_by']),
                     'contact',
                 ])
                 ->whereIn('status', ['pending', 'failed'])
@@ -112,8 +121,10 @@ class ProcessCampaignMessagesJob implements ShouldQueue
                         $retryCount = $log->retries_count;
 
                         // Add job if pending or failed with retries remaining
-                        if ($log->status === 'pending' ||
-                            ($log->status === 'failed' && $retryEnabled && $retryCount < $maxRetries)) {
+                        if (
+                            $log->status === 'pending' ||
+                            ($log->status === 'failed' && $retryEnabled && $retryCount < $maxRetries)
+                        ) {
                             $jobs[] = new ProcessSingleCampaignLogJob($log);
                         }
 
@@ -149,9 +160,8 @@ class ProcessCampaignMessagesJob implements ShouldQueue
 
             // Task 2.2: Log query metrics for performance baseline (AC-2.2.1, AC-2.2.4)
             $this->logQueryMetrics($startTime, $initialQueryCount, count($campaignsProcessed));
-
         } catch (\Exception $e) {
-            Log::error('Error in ProcessCampaignMessagesJob: '.$e->getMessage());
+            Log::error('Error in ProcessCampaignMessagesJob: ' . $e->getMessage());
             throw $e;
         }
     }

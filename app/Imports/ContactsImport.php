@@ -33,17 +33,18 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
     protected $groupsCache = [];
     protected $contactsBuffer = [];
     protected $contactGroupsBuffer = [];
+    protected $pendingBufferMap = []; // phone -> buffer index
 
     public function __construct()
     {
         $this->organizationId = session()->get('current_organization');
         $this->userId = auth()->user()->id;
         $this->contactLimit = $this->contactSubscriptionLimit($this->organizationId);
-        
+
         $this->contactFields = Cache::remember(
-            "contact_fields_{$this->organizationId}", 
-            3600, 
-            function() {
+            "contact_fields_{$this->organizationId}",
+            3600,
+            function () {
                 return ContactField::where('organization_id', $this->organizationId)
                     ->pluck('name')
                     ->toArray();
@@ -60,7 +61,7 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
         $groups = ContactGroup::where('organization_id', $this->organizationId)
             ->whereNull('deleted_at')
             ->get();
-        
+
         foreach ($groups as $group) {
             $this->groupsCache[$group->name] = $group->id;
         }
@@ -69,15 +70,15 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
     public function collection(Collection $rows)
     {
         DB::connection()->disableQueryLog();
-        
+
         foreach ($rows as $row) {
             $this->totalImports++;
             $this->processRow($row->toArray());
         }
-        
+
         // Insert all buffered contacts at once
         $this->flushContactsBuffer();
-        
+
         gc_collect_cycles();
     }
 
@@ -110,6 +111,24 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
 
             $formattedPhone = PhoneService::getE164Format($phoneNumberValue);
 
+            // Check if currently in buffer (intra-file duplicate)
+            if (isset($this->pendingBufferMap[$formattedPhone])) {
+                $bufferIndex = $this->pendingBufferMap[$formattedPhone];
+                // Merge groups
+                $newGroups = $this->parseGroups($row['group_name'] ?? null);
+                if (!empty($newGroups)) {
+                    $this->contactsBuffer[$bufferIndex]['groups'] = array_unique(array_merge(
+                        $this->contactsBuffer[$bufferIndex]['groups'],
+                        $newGroups
+                    ));
+                }
+                // Do not increment successfulImports here to avoid double counting per row for limit, 
+                // but technically we processed the row. 
+                // Maybe redundant to limit check again if we assume identical rows are just updates.
+                // If we want to treat it as "skipped creation but processed", simpler to just return.
+                return;
+            }
+
             // Check if contact exists
             if (isset($this->allExistingPhones[$formattedPhone])) {
                 $this->updateExistingContact($this->allExistingPhones[$formattedPhone], $row);
@@ -118,8 +137,8 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
 
             // Check contact limit
             if ($this->contactLimit > 0) {
-                $totalCount = count($this->allExistingPhones) + $this->successfulImports;
-                
+                $totalCount = count($this->allExistingPhones) + $this->successfulImports; // successfulImports counts NEW ones
+
                 if ($totalCount >= $this->contactLimit) {
                     $this->failedImports[] = [
                         'row' => $row['phone'],
@@ -164,13 +183,15 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
                 'groups' => $this->parseGroups($row['group_name'] ?? null)
             ];
 
+            // Map the phone to the new buffer index
+            $this->pendingBufferMap[$formattedPhone] = array_key_last($this->contactsBuffer);
+
             $this->successfulImports++;
 
             // Flush buffer every 1000 records
             if (count($this->contactsBuffer) >= 1000) {
                 $this->flushContactsBuffer();
             }
-
         } catch (\Exception $e) {
             $this->failedImports[] = [
                 'row' => $row['phone'] ?? 'Unknown',
@@ -197,6 +218,7 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
                     'name'            => $name,
                     'created_by'      => $this->userId,
                 ]);
+                // Optimization: update cache with id immediately
                 $this->groupsCache[$name] = $group->id;
             }
             $groupIds[] = $this->groupsCache[$name];
@@ -212,7 +234,7 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
         }
 
         $contactsData = array_column($this->contactsBuffer, 'data');
-        
+
         // Insert all contacts at once
         Contact::insert($contactsData);
 
@@ -222,6 +244,11 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
             ->whereIn('phone', $phones)
             ->pluck('id', 'phone')
             ->toArray();
+
+        // CRITICAL: Update the global map of existing phones so subsequent chunks know these exist!
+        foreach ($insertedContacts as $phone => $id) {
+            $this->allExistingPhones[$phone] = $id;
+        }
 
         // Prepare pivot data for groups
         $pivotData = [];
@@ -244,12 +271,31 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
             DB::table('contact_contact_group')->insert($pivotData);
         }
 
-        // Clear buffer
+        // Clear buffer and pending map
         $this->contactsBuffer = [];
+        $this->pendingBufferMap = [];
     }
 
     protected function updateExistingContact($contactId, array $row)
     {
+        // Get existing contact to preserve old metadata
+        $existingContact = Contact::find($contactId);
+        $existingMetadata = $existingContact && $existingContact->metadata
+            ? json_decode($existingContact->metadata, true)
+            : [];
+
+        // Prepare new metadata from row
+        $newMetadata = [];
+        foreach ($this->contactFields as $field) {
+            $normalizedField = strtolower($field);
+            if (isset($row[$normalizedField])) {
+                $newMetadata[$field] = $row[$normalizedField];
+            }
+        }
+
+        // Merge: new values override old ones, but keep old values for fields not in import
+        $mergedMetadata = array_merge($existingMetadata, $newMetadata);
+
         $updateData = [
             'first_name' => $row['first_name'] ?? 'name',
             'last_name'  => $row['last_name'] ?? null,
@@ -261,6 +307,7 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
                 'zip'     => $row['zip'] ?? null,
                 'country' => $row['country'] ?? null
             ]),
+            'metadata'   => !empty($mergedMetadata) ? json_encode($mergedMetadata) : null,
             'updated_at' => now(),
         ];
 
@@ -268,7 +315,7 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
 
         if (!empty($row['group_name'])) {
             $groupIds = $this->parseGroups($row['group_name']);
-            
+
             if (!empty($groupIds)) {
                 // Get existing group associations
                 $existingGroups = DB::table('contact_contact_group')
@@ -278,7 +325,7 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
 
                 // Only insert new associations
                 $newGroups = array_diff($groupIds, $existingGroups);
-                
+
                 if (!empty($newGroups)) {
                     $pivotData = [];
                     foreach ($newGroups as $groupId) {
@@ -331,19 +378,19 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
     private function contactSubscriptionLimit($organizationId)
     {
         $subscription = Subscription::where('organization_id', $organizationId)->first();
-        
+
         if (!$subscription) {
             return 0;
         }
-        
+
         $usageLimit = 0;
-        
+
         if ($subscription->status === 'trial' && $subscription->valid_until > now()) {
             $limit = optional(Setting::where('key', 'trial_limits')->first())->value;
             $usageLimit = $limit ? json_decode($limit, true)['contacts'] ?? 0 : 0;
         } else {
             $subscriptionPlan = SubscriptionPlan::find($subscription->plan_id);
-            
+
             if ($subscriptionPlan) {
                 $subscriptionPlanLimits = json_decode($subscriptionPlan->metadata, true);
                 $usageLimit = $subscriptionPlanLimits['contacts_limit'] ?? 0;

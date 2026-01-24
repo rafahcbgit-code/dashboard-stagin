@@ -29,7 +29,8 @@ class DashboardController extends BaseController
         $this->subscriptionService = new SubscriptionService();
     }
 
-    public function index(Request $request){
+    public function index(Request $request)
+    {
         $organizationId = session()->get('current_organization');
         $team = Team::where('organization_id', $organizationId)->where('user_id', auth()->user()->id)->first();
         $data['role'] = $team->role;
@@ -43,12 +44,22 @@ class DashboardController extends BaseController
         $data['subscription'] = Subscription::with('plan')->where('organization_id', $organizationId)->first();
         $data['subscriptionDetails'] = SubscriptionService::calculateSubscriptionBillingDetails($organizationId, $data['subscription']->plan_id);
         $data['subscriptionIsActive'] = SubscriptionService::isSubscriptionActive($organizationId);
-        //$data['chatCount'] = $this->chatCount($organizationId);
-        $data['chatCount'] = $this->chatCount($organizationId);
-        
-        $data['campaignCount'] = Campaign::where('organization_id', $organizationId)->whereNull('deleted_at')->count();
-        $data['contactCount'] = Contact::where('organization_id', $organizationId)->whereNull('deleted_at')->count();
-        $data['templateCount'] = Template::where('organization_id', $organizationId)->whereNull('deleted_at')->count();
+
+        $data['chatCount'] = \Illuminate\Support\Facades\Cache::remember("org_{$organizationId}_chat_count", 300, function () use ($organizationId) {
+            return $this->chatCount($organizationId);
+        });
+
+        $data['campaignCount'] = \Illuminate\Support\Facades\Cache::remember("org_{$organizationId}_campaign_count", 300, function () use ($organizationId) {
+            return Campaign::where('organization_id', $organizationId)->whereNull('deleted_at')->count();
+        });
+
+        $data['contactCount'] = \Illuminate\Support\Facades\Cache::remember("org_{$organizationId}_contact_count", 300, function () use ($organizationId) {
+            return Contact::where('organization_id', $organizationId)->whereNull('deleted_at')->count();
+        });
+
+        $data['templateCount'] = \Illuminate\Support\Facades\Cache::remember("org_{$organizationId}_template_count", 300, function () use ($organizationId) {
+            return Template::where('organization_id', $organizationId)->whereNull('deleted_at')->count();
+        });
         $data['graphAPIVersion'] = config('graph.api_version');
 
         $organization = Organization::where('id', $organizationId)->first();
@@ -65,7 +76,7 @@ class DashboardController extends BaseController
         $data['period'] = $this->period();
         $data['inbound'] = $this->getChatCounts('inbound');
         $data['outbound'] = $this->getChatCounts('outbound');
-       
+
         $data['embeddedSignupActive'] = CustomHelper::isModuleEnabled('Embedded Signup');
         $data['appId'] = $settings->get('whatsapp_client_id', null);
         $data['configId'] = $settings->get('whatsapp_config_id', null);
@@ -74,13 +85,14 @@ class DashboardController extends BaseController
         return Inertia::render('User/Dashboard', $data);
     }
 
-    public function dismissNotification(Request $request, $type){
+    public function dismissNotification(Request $request, $type)
+    {
         $currentOrganizationId = session()->get('current_organization');
         $organizationConfig = Organization::where('id', $currentOrganizationId)->first();
 
         $metadataArray = $organizationConfig->metadata ? json_decode($organizationConfig->metadata, true) : [];
 
-        if($type === 'team'){
+        if ($type === 'team') {
             $metadataArray['notification']['team'] = false;
         }
 
@@ -90,14 +102,16 @@ class DashboardController extends BaseController
         $organizationConfig->save();
 
         return redirect()->route('dashboard')->with(
-            'status', [
-                'type' => 'success', 
+            'status',
+            [
+                'type' => 'success',
                 'message' => __('Notification dismissed successfully!')
             ]
         );
     }
 
-    private function period(){
+    private function period()
+    {
         $currentDate = Carbon::now();
         $dateArray = [];
 
@@ -129,9 +143,10 @@ class DashboardController extends BaseController
         return $chatCounts;
     }*/
 
-     private function getChatCounts($type) {
+    private function getChatCounts($type)
+    {
         $organizationId = session()->get('current_organization');
-        $period = $this->period(); 
+        $period = $this->period();
 
         $startDate = Carbon::parse($period[0])->startOfDay();
         $endDate   = Carbon::parse(end($period))->endOfDay();
@@ -140,29 +155,30 @@ class DashboardController extends BaseController
             ->where('type', $type)
             ->whereNull('deleted_at')
             ->whereBetween('created_at', [$startDate, $endDate])
-            ->selectRaw('DATE(created_at) as date, COUNT(*) as count') 
+            ->selectRaw('DATE(created_at) as date, COUNT(*) as count')
             ->groupBy('date')
-            ->pluck('count', 'date'); 
+            ->pluck('count', 'date');
 
         $chatCounts = [];
         foreach ($period as $dateString) {
             $dateKey = Carbon::parse($dateString)->format('Y-m-d');
-            
+
             $chatCounts[] = $stats[$dateKey] ?? 0;
         }
 
         return $chatCounts;
-}
+    }
 
-    private function chatCount($organizationId){
-         return Chat::query()
-                ->join('contacts', 'chats.contact_id', '=', 'contacts.id') 
-                ->where('chats.organization_id', $organizationId)
-                ->whereNull('chats.deleted_at')    
-                ->whereNull('contacts.deleted_at')   
-                ->count();
+    private function chatCount($organizationId)
+    {
+        return Chat::query()
+            ->join('contacts', 'chats.contact_id', '=', 'contacts.id')
+            ->where('chats.organization_id', $organizationId)
+            ->whereNull('chats.deleted_at')
+            ->whereNull('contacts.deleted_at')
+            ->count();
 
-                /*Chat::where('organization_id', $organizationId)
+        /*Chat::where('organization_id', $organizationId)
             ->whereNull('deleted_at')
             ->whereHas('contact', function ($query) {
                 $query->whereNull('deleted_at');

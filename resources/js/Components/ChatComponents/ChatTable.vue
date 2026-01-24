@@ -2,6 +2,7 @@
     import axios from 'axios';
     import { ref, watch, onMounted } from 'vue';
     import debounce from 'lodash/debounce';
+    import { useChatFilterStore, setChatFilters } from '@/stores/chatFilterStore.js';
     import { Link, router } from "@inertiajs/vue3";
     import Pagination from '@/Components/Pagination.vue';
     import TicketStatusToggle from '@/Components/TicketStatusToggle.vue';
@@ -45,6 +46,10 @@
     const selectedLabels = ref([]);
     const showLabelFilter = ref(false);
     const loadingLabels = ref(false);
+    const availableTeamMembers = ref([]);
+    const selectedTeamMember = ref(null);
+    const showTeamFilter = ref(false);
+    const loadingTeamMembers = ref(false);
     const emit = defineEmits(['view']);
 
     function viewChat(contact) {
@@ -153,9 +158,13 @@
         }
     );
 
+    const filterStore = useChatFilterStore();
+
     const params = ref({
-        search: props.filters.search,
-        labels: props.filters.labels,
+        search: props.filters?.search ?? null,
+        labels: props.filters?.labels ?? null,
+        assigned_to: props.filters?.assigned_to ?? null,
+        status: props.filters?.status ?? null,
     });
 
     const search = debounce(() => {
@@ -206,19 +215,73 @@
         
         // Update params and trigger search
         params.value.labels = selectedLabels.value.length > 0 ? selectedLabels.value.join(',') : null;
+        // persist to shared store
+        setChatFilters({ search: params.value.search, labels: params.value.labels, assigned_to: params.value.assigned_to });
         runSearch();
     };
 
     const clearLabelFilters = () => {
         selectedLabels.value = [];
         params.value.labels = null;
+        setChatFilters({ search: params.value.search, labels: null, assigned_to: params.value.assigned_to, status: params.value.status });
         runSearch();
     };
 
-    // Initialize selected labels from URL params
+    // Team member filtering functions
+    const loadTeamMembers = async () => {
+        if (availableTeamMembers.value.length > 0) {
+            showTeamFilter.value = !showTeamFilter.value;
+            return;
+        }
+
+        loadingTeamMembers.value = true;
+        try {
+            const response = await axios.get('/chats/team-members/filter-data');
+            console.log('Team members response:', response.data);
+            availableTeamMembers.value = response.data;
+            showTeamFilter.value = true;
+        } catch (error) {
+            console.error('Error loading team members:', error);
+            alert('Error loading team members: ' + error.message);
+        } finally {
+            loadingTeamMembers.value = false;
+        }
+    };
+
+    const selectTeamMember = (userId) => {
+        selectedTeamMember.value = userId;
+        params.value.assigned_to = userId;
+        setChatFilters({ search: params.value.search, labels: params.value.labels, assigned_to: params.value.assigned_to, status: params.value.status });
+        runSearch();
+        showTeamFilter.value = false;
+    };
+
+    const clearTeamFilter = () => {
+        selectedTeamMember.value = null;
+        params.value.assigned_to = null;
+        setChatFilters({ search: params.value.search, labels: params.value.labels, assigned_to: null, status: params.value.status });
+        runSearch();
+    };
+
+    // Initialize selected labels and team member from URL params
     onMounted(() => {
-        if (props.filters.labels) {
+        // Initialize from shared store if present, otherwise use props
+        if (filterStore.labels) {
+            params.value.labels = filterStore.labels;
+            selectedLabels.value = filterStore.labels.split(',').map(id => parseInt(id));
+        } else if (props.filters?.labels) {
+            params.value.labels = props.filters.labels;
             selectedLabels.value = props.filters.labels.split(',').map(id => parseInt(id));
+            setChatFilters({ search: params.value.search, labels: params.value.labels, assigned_to: params.value.assigned_to });
+        }
+
+        if (filterStore.assigned_to) {
+            params.value.assigned_to = filterStore.assigned_to;
+            selectedTeamMember.value = parseInt(filterStore.assigned_to);
+        } else if (props.filters?.assigned_to) {
+            params.value.assigned_to = props.filters.assigned_to;
+            selectedTeamMember.value = parseInt(props.filters.assigned_to);
+            setChatFilters({ search: params.value.search, labels: params.value.labels, assigned_to: params.value.assigned_to });
         }
         
         // Add click outside listener
@@ -228,9 +291,24 @@
     // Handle click outside to close dropdown
     const handleClickOutside = (event) => {
         const labelFilterElement = event.target.closest('.label-filter-container');
+        const teamFilterElement = event.target.closest('.team-filter-container');
         if (!labelFilterElement && showLabelFilter.value) {
             showLabelFilter.value = false;
         }
+        if (!teamFilterElement && showTeamFilter.value) {
+            showTeamFilter.value = false;
+        }
+    };
+
+    const buildChatHref = (contact) => {
+        const page = props.rows.meta?.current_page || 1;
+        const qs = new URLSearchParams();
+        qs.set('page', page);
+        if (params.value.labels) qs.set('labels', params.value.labels);
+        if (params.value.assigned_to) qs.set('assigned_to', params.value.assigned_to);
+        if (params.value.status) qs.set('status', params.value.status);
+        if (params.value.search) qs.set('search', params.value.search);
+        return '/chats/' + contact.uuid + '?' + qs.toString();
     };
 
 </script>
@@ -255,9 +333,10 @@
             </span>
         </div>
 
-        <!-- Label Filter Section -->
-        <div class="mt-3 relative label-filter-container">
-            <div class="flex items-center space-x-2">
+        <!-- Filter Section -->
+        <div class="mt-3 flex items-center gap-2">
+            <!-- Label Filter -->
+            <div class="relative label-filter-container">
                 <button @click="loadLabels" 
                         :disabled="loadingLabels"
                         class="flex items-center space-x-1 px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded-md text-sm transition-colors">
@@ -274,38 +353,98 @@
                         {{ selectedLabels.length }}
                     </span>
                 </button>
-                
-                <button v-if="selectedLabels.length > 0" @click="clearLabelFilters" 
-                        class="text-red-500 hover:text-red-700 text-sm">
-                    {{ $t('Clear filters') }}
-                </button>
-            </div>
 
-            <!-- Label Filter Dropdown -->
-            <div v-if="showLabelFilter && availableLabels.length > 0" 
-                 class="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-md shadow-lg z-10 max-h-60 overflow-y-auto">
-                <div class="p-2">
-                    <div class="text-sm font-medium text-gray-700 mb-2">{{ $t('Select Labels') }}</div>
-                    <div class="space-y-2">
-                        <div v-for="label in availableLabels" :key="label.id" 
-                             class="flex items-center space-x-2 hover:bg-gray-50 p-1 rounded">
-                            <input type="checkbox" 
-                                   :id="`filter-label-${label.id}`"
-                                   :checked="selectedLabels.includes(label.id)"
-                                   @change="toggleLabel(label.id)"
-                                   class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2">
-                            <label :for="`filter-label-${label.id}`" class="flex items-center space-x-2 cursor-pointer flex-1">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24">
-                                    <path fill="none" :stroke="label.color" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
-                                        d="M20.59 13.41 12 22 4 14V4h10l8.59 8.59zM7 7h.01" />
-                                </svg>
-                                <span class="text-sm">{{ label.title }}</span>
-                                <span class="text-xs text-gray-500 ml-auto">({{ label.contacts_count }})</span>
-                            </label>
+                <!-- Label Filter Dropdown -->
+                <div v-if="showLabelFilter && availableLabels.length > 0" 
+                     class="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-md shadow-lg z-50 max-h-60 overflow-y-auto">
+                    <div class="p-2">
+                        <div class="text-sm font-medium text-gray-700 mb-2">{{ $t('Select Labels') }}</div>
+                        <div class="space-y-2">
+                            <div v-for="label in availableLabels" :key="label.id" 
+                                 class="flex items-center space-x-2 hover:bg-gray-50 p-1 rounded">
+                                <input type="checkbox" 
+                                       :id="`filter-label-${label.id}`"
+                                       :checked="selectedLabels.includes(label.id)"
+                                       @change="toggleLabel(label.id)"
+                                       class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2">
+                                <label :for="`filter-label-${label.id}`" class="flex items-center space-x-2 cursor-pointer flex-1">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24">
+                                        <path fill="none" :stroke="label.color" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                            d="M20.59 13.41 12 22 4 14V4h10l8.59 8.59zM7 7h.01" />
+                                    </svg>
+                                    <span class="text-sm">{{ label.title }}</span>
+                                    <span class="text-xs text-gray-500 ml-auto">({{ label.contacts_count }})</span>
+                                </label>
+                            </div>
                         </div>
                     </div>
                 </div>
             </div>
+
+            <!-- Team Member Filter -->
+            <div v-if="props.teamRole !== 'agent'" class="relative team-filter-container">
+                <button @click="loadTeamMembers" 
+                        :disabled="loadingTeamMembers"
+                        class="flex items-center space-x-1 px-3 py-1 bg-gray-100 hover:bg-gray-200 rounded-md text-sm transition-colors">
+                    <svg v-if="loadingTeamMembers" class="animate-spin w-4 h-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                    </svg>
+                    <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                        <circle cx="9" cy="7" r="4"></circle>
+                        <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                        <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                    </svg>
+                    <span>{{ selectedTeamMember ? 'Team: 1' : 'Team' }}</span>
+                    <svg class="w-3 h-3" :class="{'rotate-180': showTeamFilter}" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
+                    </svg>
+                </button>
+
+                <!-- Team Member dropdown -->
+                <div v-if="showTeamFilter" class="absolute top-full left-0 mt-1 w-64 bg-white rounded-lg shadow-lg border border-gray-200 z-50 max-h-96 overflow-y-auto">
+                    <div class="p-3 border-b border-gray-200">
+                        <div class="flex items-center justify-between">
+                            <h3 class="font-semibold text-sm">{{ $t('Filter by Team Member') }}</h3>
+                            <button v-if="selectedTeamMember" @click="clearTeamFilter" class="text-xs text-blue-600 hover:text-blue-800">
+                                {{ $t('Clear') }}
+                            </button>
+                        </div>
+                    </div>
+                    <div v-if="availableTeamMembers.length === 0" class="p-4 text-center text-gray-500 text-sm">
+                        {{ $t('No team members found') }}
+                    </div>
+                    <div v-else class="p-2">
+                        <button v-for="member in availableTeamMembers" 
+                                :key="member.user_id"
+                                @click="selectTeamMember(member.user_id)"
+                                class="w-full text-left px-3 py-2 hover:bg-gray-50 rounded flex items-center justify-between group transition-colors">
+                            <div class="flex items-center space-x-2">
+                                <div class="w-8 h-8 rounded-full bg-secondary/10 text-secondary flex items-center justify-center text-sm font-semibold">
+                                    {{ (member.first_name || 'U').substring(0, 1).toUpperCase() }}
+                                </div>
+                                <div>
+                                    <div class="text-sm font-medium">{{ member.first_name || 'Unknown' }}</div>
+                                    <div class="text-xs text-gray-500">{{ member.role }}</div>
+                                </div>
+                            </div>
+                            <svg v-if="selectedTeamMember === member.user_id" 
+                                 class="w-4 h-4 text-secondary" 
+                                 fill="currentColor" 
+                                 viewBox="0 0 20 20">
+                                <path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clip-rule="evenodd"/>
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Clear filters button -->
+            <button v-if="selectedLabels.length > 0 || selectedTeamMember" @click="clearLabelFilters(); clearTeamFilter()" 
+                    class="text-red-500 hover:text-red-700 text-sm">
+                {{ $t('Clear all filters') }}
+            </button>
         </div>
 
 
@@ -320,7 +459,11 @@
         </div>
     </div>
     <div class="flex-grow overflow-y-auto h-[65vh]" ref="scrollContainer">
+
         <Link @click="selectContact(contact.uuid)" :href="'/chats/' + contact.uuid + '?page=' + props.rows.meta.current_page" :class="[ 'block border-b group-hover:pr-0', contact.unread_messages > 0 ? 'bg-green-50' : '', selectedContact === contact.uuid ? 'bg-green-100' : '' ]" v-for="(contact, index) in rows.data" :key="index">
+
+        <!-- <Link :href="buildChatHref(contact)" class="block border-b group-hover:pr-0" :class="contact.unread_messages > 0 ? 'bg-green-50' : ''" v-for="(contact, index) in rows.data" :key="index"> -->
+
             <div class="flex space-x-2 hover:bg-gray-50 cursor-pointer py-3 px-4">
                 <div class="w-[15%]">
                     <img v-if="contact.avatar" class="rounded-full w-10 h-10" :src="contact.avatar">
