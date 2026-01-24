@@ -167,7 +167,7 @@
                         </button>
                     </div>
 
-                    <div class="text-sm text-slate-400">{{ $t('Count') }}: <span class="ml-2 text-primary font-bold text-xl">{{ labelCount !== null ? labelCount : '-' }}</span></div>
+                    <div class="text-sm text-slate-400">{{ $t('Count') }}: <span class="font-semibold">{{ labelCount !== null ? labelCount : '-' }}</span></div>
                 </div>
 
                 <div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-4 items-start">
@@ -282,9 +282,7 @@ const fetchLabelCount = async () => {
     }
     loadingLabelCount.value = true;
     try {
-        console.debug('fetchLabelCount: requesting', { label: selectedLabelId.value, period: labelPeriod.value });
         const resp = await axios.get('/reports/label-count', { params: { label_id: selectedLabelId.value, period: labelPeriod.value } });
-        console.debug('fetchLabelCount: response', resp.data);
         labelCount.value = resp.data.count ?? 0;
     } catch (e) {
         console.error('fetchLabelCount error', e);
