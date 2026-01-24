@@ -238,6 +238,31 @@
         runSearch();
     };
 
+    // Mark all as read function
+    const isMarkingAllRead = ref(false);
+    
+    const markAllAsRead = async () => {
+        if (isMarkingAllRead.value) return;
+        
+        if (!confirm('Are you sure you want to mark all messages as read?')) {
+            return;
+        }
+        
+        isMarkingAllRead.value = true;
+        try {
+            const response = await axios.post('/chats/mark-all-read');
+            if (response.data.success) {
+                // Refresh the page to show updated counts
+                runSearch();
+            }
+        } catch (error) {
+            console.error('Error marking all as read:', error);
+            alert('Failed to mark all messages as read');
+        } finally {
+            isMarkingAllRead.value = false;
+        }
+    };
+
     // Initialize selected labels from URL params
     onMounted(() => {
         if (props.filters.labels) {

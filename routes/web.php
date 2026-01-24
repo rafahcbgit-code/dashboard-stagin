@@ -153,6 +153,7 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::get('/chats/{contactId}/messages', [App\Http\Controllers\User\ChatController::class, 'loadMoreMessages']);
                 Route::get('/chats/labels/filter-data', [App\Http\Controllers\User\ChatController::class, 'getLabelsForFilter']);
                 Route::get('/chats/team-members/filter-data', [App\Http\Controllers\User\ChatController::class, 'getTeamMembersForFilter']);
+                Route::post('/chats/mark-all-read', [App\Http\Controllers\User\ChatController::class, 'markAllAsRead']);
 
                 Route::get('/tickets/{status}', [App\Http\Controllers\User\ChatTicketController::class, 'index']);
                 Route::put('/tickets/{uuid}/update', [App\Http\Controllers\User\ChatTicketController::class, 'update']);
