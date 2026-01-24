@@ -32,10 +32,15 @@
             type: String,
             default: 'owner'
         }
+        ,
+        selectedContactUuid: {
+            type: [String, Number],
+            default: null,
+        }
     });
 
     const isSearching = ref(false);
-    const selectedContact = ref(null);
+    const selectedContact = ref(props.selectedContactUuid || null);
     const availableLabels = ref([]);
     const selectedLabels = ref([]);
     const showLabelFilter = ref(false);
@@ -43,8 +48,17 @@
     const emit = defineEmits(['view']);
 
     function viewChat(contact) {
-        selectedContact.value = contact;
+        selectedContact.value = contact.uuid || contact;
         emit('view', contact);
+    }
+
+    // Keep local selection in sync with parent prop
+    watch(() => props.selectedContactUuid, (val) => {
+        selectedContact.value = val;
+    });
+
+    const selectContact = (uuid) => {
+        selectedContact.value = uuid;
     }
 
     const contentType = (metadata) => {
@@ -306,7 +320,7 @@
         </div>
     </div>
     <div class="flex-grow overflow-y-auto h-[65vh]" ref="scrollContainer">
-        <Link :href="'/chats/' + contact.uuid + '?page=' + props.rows.meta.current_page" class="block border-b group-hover:pr-0" :class="contact.unread_messages > 0 ? 'bg-green-50' : ''" v-for="(contact, index) in rows.data" :key="index">
+        <Link @click="selectContact(contact.uuid)" :href="'/chats/' + contact.uuid + '?page=' + props.rows.meta.current_page" :class="[ 'block border-b group-hover:pr-0', contact.unread_messages > 0 ? 'bg-green-50' : '', selectedContact === contact.uuid ? 'bg-green-100' : '' ]" v-for="(contact, index) in rows.data" :key="index">
             <div class="flex space-x-2 hover:bg-gray-50 cursor-pointer py-3 px-4">
                 <div class="w-[15%]">
                     <img v-if="contact.avatar" class="rounded-full w-10 h-10" :src="contact.avatar">
