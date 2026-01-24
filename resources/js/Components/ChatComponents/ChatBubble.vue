@@ -188,6 +188,17 @@
                 <p class="normal-case whitespace-pre-wrap">{{ JSON.parse(content.metadata).errors[0].error_data.details }}</p>
             </div>
 
+            <!--Reaction formatting-->
+            <div v-else-if="metadata.type === 'reaction'" class="max-w-[300px]">
+                <div class="flex items-center gap-3">
+                    <span class="text-2xl">{{ metadata.reaction?.emoji || '👍' }}</span>
+                    <div class="text-sm text-slate-500">
+                        <div>{{ $t('Reaction') }}</div>
+                        <div class="text-xs">{{ metadata.reaction?.message_id ? $t('On message') : '' }}</div>
+                    </div>
+                </div>
+            </div>
+
             <!--Reply button formatting-->
             <div v-if="JSON.parse(content.metadata).type === 'button'" class="max-w-[300px]">
                 <p class="normal-case whitespace-pre-wrap">{{ JSON.parse(content.metadata).button.text }}</p>
