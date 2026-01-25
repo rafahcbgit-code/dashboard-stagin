@@ -124,6 +124,7 @@ class ProcessWebhookJob implements ShouldQueue
             'organization_id' => $this->organizationId,
             'webhook_type' => $this->webhookType,
             'job_id' => $this->job?->getJobId(),
+            'payload' => $this->payload, // Full webhook payload for debugging
         ]);
 
         try {
