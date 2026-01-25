@@ -31,7 +31,9 @@ class ChatTicketController extends BaseController
 
         ChatTicket::where('contact_id', $contact->id)->update([
             'status' => $request->status,
-            'assigned_to' => auth()->user()->id
+            'assigned_to' => auth()->user()->id,
+            'created_at' => now(),
+            'updated_at' => now(),
         ]);
 
         $statusDescription = $request->status == 'closed' ? 'opened to closed' : 'closed to open';
@@ -39,14 +41,16 @@ class ChatTicketController extends BaseController
         $ticketId = ChatTicketLog::insertGetId([
             'contact_id' => $contact->id,
             'description' => 'Conversation was moved from ' . $statusDescription,
-            'created_at' => now()
+            'created_at' => now(),
+            'updated_at' => now(),
         ]);
 
         ChatLog::insert([
             'contact_id' => $contact->id,
             'entity_type' => 'ticket',
             'entity_id' => $ticketId,
-            'created_at' => now()
+            'created_at' => now(),
+            'updated_at' => now(),
         ]);
 
         return Redirect::back()->with(
@@ -65,20 +69,24 @@ class ChatTicketController extends BaseController
         
         if($team && $user){
             ChatTicket::where('contact_id', $contact->id)->update([
-                'assigned_to' => $request->id
+                'assigned_to' => $request->id,
+                'created_at' => now(),
+                'updated_at' => now(),
             ]);
 
             $ticketId = ChatTicketLog::insertGetId([
                 'contact_id' => $contact->id,
                 'description' => 'Conversation was assigned to ' . $user->first_name . ' ' . $user->last_name,
-                'created_at' => now()
+                'created_at' => now(),
+                'updated_at' => now(),
             ]);
 
             ChatLog::insert([
                 'contact_id' => $contact->id,
                 'entity_type' => 'ticket',
                 'entity_id' => $ticketId,
-                'created_at' => now()
+                'created_at' => now(),
+                'updated_at' => now(),
             ]);
 
             return Redirect::back()->with(

@@ -425,24 +425,28 @@ class ReportService
                 ->where('contacts.organization_id', $this->organizationId)
                 ->where('chat_tickets.assigned_to', $userId);
 
+            // Filter both open and closed tickets by updated_at
             if ($start && $end) {
-                // Filter by ticket update/closure or creation? Usually reports are by the period the ticket was active or closed.
-                // We'll use created_at for consistency with other reports.
-                $baseTicketQuery->whereBetween('chat_tickets.created_at', [$start->toDateTimeString(), $end->toDateTimeString()]);
+                $baseTicketQuery->whereBetween('chat_tickets.updated_at', [$start->toDateTimeString(), $end->toDateTimeString()]);
             }
 
             $openCount = (clone $baseTicketQuery)->where('chat_tickets.status', 'open')->count();
             $closedCount = (clone $baseTicketQuery)->where('chat_tickets.status', 'closed')->count();
 
             // First Response Time & Waiting Time calculation
-            $ticketsQuery = (clone $baseTicketQuery)->select('chat_tickets.id', 'chat_tickets.contact_id', 'chat_tickets.created_at');
+            // Include all tickets (both open and closed) for response time metrics
+            $ticketsForMetrics = DB::table('chat_tickets')
+                ->join('contacts', 'chat_tickets.contact_id', '=', 'contacts.id')
+                ->where('contacts.organization_id', $this->organizationId)
+                ->where('chat_tickets.assigned_to', $userId)
+                ->select('chat_tickets.id', 'chat_tickets.contact_id', 'chat_tickets.created_at', 'chat_tickets.status', 'chat_tickets.updated_at');
             
-            Log::info('[AgentReports] Tickets Query SQL', [
-                'sql' => $ticketsQuery->toSql(),
-                'bindings' => $ticketsQuery->getBindings()
-            ]);
+            if ($start && $end) {
+                // Filter tickets by updated_at for metrics as well
+                $ticketsForMetrics->whereBetween('chat_tickets.updated_at', [$start->toDateTimeString(), $end->toDateTimeString()]);
+            }
 
-            $tickets = $ticketsQuery->get();
+            $tickets = $ticketsForMetrics->get();
             
             $firstResponseTimes = [];
             $allWaitingTimes = [];
@@ -496,13 +500,6 @@ class ReportService
 
             $avgFirstResponseSeconds = count($firstResponseTimes) > 0 ? (array_sum($firstResponseTimes) / count($firstResponseTimes)) : 0;
             $avgWaitingSeconds = count($allWaitingTimes) > 0 ? (array_sum($allWaitingTimes) / count($allWaitingTimes)) : 0;
-
-            Log::info("[AgentReports] Agent Final Metrics: $userName", [
-                'avg_first_response' => $this->formatSeconds($avgFirstResponseSeconds),
-                'avg_waiting_time' => $this->formatSeconds($avgWaitingSeconds),
-                'tickets_calculated' => count($tickets),
-                'waiting_blocks_found' => count($allWaitingTimes)
-            ]);
 
             $data[] = [
                 'agent_name' => $userName,
