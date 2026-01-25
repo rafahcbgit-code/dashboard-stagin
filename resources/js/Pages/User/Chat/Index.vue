@@ -229,6 +229,13 @@ watch(
   }
 );
 
+watch(
+  () => props.contact,
+  (newContact) => {
+    contact.value = newContact;
+  }
+);
+
 const toggleDropdown = () => {
   isOpen.value = !isOpen.value;
 };
