@@ -32,7 +32,6 @@ class ChatTicketController extends BaseController
         ChatTicket::where('contact_id', $contact->id)->update([
             'status' => $request->status,
             'assigned_to' => auth()->user()->id,
-            'created_at' => now(),
             'updated_at' => now(),
         ]);
 
@@ -70,7 +69,6 @@ class ChatTicketController extends BaseController
         if($team && $user){
             ChatTicket::where('contact_id', $contact->id)->update([
                 'assigned_to' => $request->id,
-                'created_at' => now(),
                 'updated_at' => now(),
             ]);
 

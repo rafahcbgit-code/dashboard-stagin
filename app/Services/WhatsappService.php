@@ -148,6 +148,14 @@ class WhatsappService
             ]);
             
             event(new NewChatEvent($chatArray, $contact->organization_id));
+
+            // Ensure ticket exists and is assigned
+            try {
+                $chatService = new ChatService($contact->organization_id);
+                $chatService->handleTicketAssignment($contact->id);
+            } catch (\Exception $e) {
+                Log::error('Failed to handle ticket assignment in sendMessage: ' . $e->getMessage());
+            }
         }
 
         // Trigger webhook
@@ -216,6 +224,14 @@ class WhatsappService
             ]);
 
             event(new NewChatEvent($chatArray, $contact->organization_id));
+
+            // Ensure ticket exists and is assigned
+            try {
+                $chatService = new ChatService($contact->organization_id);
+                $chatService->handleTicketAssignment($contact->id);
+            } catch (\Exception $e) {
+                Log::error('Failed to handle ticket assignment in sendTemplateMessage: ' . $e->getMessage());
+            }
         }
 
         // Trigger webhook
@@ -556,6 +572,14 @@ class WhatsappService
             ]);
 
             event(new NewChatEvent($chatArray, $contact->organization_id));
+
+            // Ensure ticket exists and is assigned
+            try {
+                $chatService = new ChatService($contact->organization_id);
+                $chatService->handleTicketAssignment($contact->id);
+            } catch (\Exception $e) {
+                Log::error('Failed to handle ticket assignment in sendMedia: ' . $e->getMessage());
+            }
         }
 
         //\Log::info(json_encode($responseObject, true));
