@@ -57,7 +57,6 @@ Route::middleware([AuthenticateBearerToken::class])->group(function () {
     Route::delete('/canned-replies/{uuid}', [App\Http\Controllers\ApiController::class, 'destroyCannedReply']);
 
     Route::get('/templates', [App\Http\Controllers\ApiController::class, 'listTemplates']);
-    Route::get('/reports/general', [App\Http\Controllers\Api\ReportController::class, 'general']);
     Route::get('/verify', [App\Http\Controllers\ApiController::class, 'verifyApiKey']);
 });
 

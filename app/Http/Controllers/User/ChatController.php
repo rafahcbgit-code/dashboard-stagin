@@ -41,10 +41,12 @@ class ChatController extends BaseController
     public function markAllAsRead(Request $request)
     {
         $organizationId = session()->get('current_organization');
-        
+        $userId = auth()->user()->id;
+
         $updated = Chat::where('organization_id', $organizationId)
             ->where('type', 'inbound')
             ->where('is_read', 0)
+            ->where('user_id', $userId)
             ->whereNull('deleted_at')
             ->update(['is_read' => 1]);
 
