@@ -297,11 +297,11 @@ class ChatService
             $settings = json_decode($settings->metadata);
             $isSpecificAgentEnabled = !empty($settings->tickets->assigned_to_specific_agents ?? false);
 
-            // **Skip if ticket already exists and is open**
+            // **Skip if ticket already exists, is open AND is already assigned**
             $existingTicket = ChatTicket::where('contact_id', $contactId)->first();
-            if ($existingTicket && $existingTicket->status === 'open') {
+            if ($existingTicket && $existingTicket->status === 'open' && $existingTicket->assigned_to !== null) {
                 // Ticket is already open and assigned, nothing to do
-                Log::channel('webhook')->debug('Ticket already open, skipping assignment', [
+                Log::channel('webhook')->debug('Ticket already open and assigned, skipping assignment', [
                     'contact_id' => $contactId,
                     'ticket_id' => $existingTicket->id,
                     'assigned_to' => $existingTicket->assigned_to
@@ -377,12 +377,25 @@ class ChatService
                             'created_at' => now()
                         ]);
                     } else {
-                        // **Only process if ticket is closed**
-                        if ($ticket->status === 'closed') {
+                        // **Process if ticket is closed OR open but unassigned**
+                        if ($ticket->status === 'closed' || ($ticket->status === 'open' && $ticket->assigned_to === null)) {
+                            $shouldLogReopen = ($ticket->status === 'closed');
+
                             if ($isSpecificAgentEnabled) {
                                 $this->assignTicketToSpecificAgent($contactId, $organizationId);
-                                return;
-                            } elseif ($reassignOnReopen) {
+                                $ticket->refresh(); // Get updated status and assignment from round-robin
+                            } elseif ($ticket->status === 'closed') {
+                                if ($reassignOnReopen && $autoassignment) {
+                                    $agent = Team::where('organization_id', $organizationId)
+                                        ->withCount('tickets')
+                                        ->whereNull('deleted_at')
+                                        ->orderBy('tickets_count')
+                                        ->first();
+
+                                    $ticket->assigned_to = $agent ? $agent->user_id : null;
+                                }
+                                $ticket->status = 'open';
+                            } elseif ($ticket->status === 'open' && $ticket->assigned_to === null) {
                                 if ($autoassignment) {
                                     $agent = Team::where('organization_id', $organizationId)
                                         ->withCount('tickets')
@@ -390,13 +403,11 @@ class ChatService
                                         ->orderBy('tickets_count')
                                         ->first();
 
-                                    $ticket->assigned_to = $agent->user_id;
-                                } else {
-                                    $ticket->assigned_to = null;
+                                    $ticket->assigned_to = $agent ? $agent->user_id : null;
                                 }
                             }
 
-                            $ticket->status = 'open';
+                            $ticket->updated_at = now();
                             $ticket->save();
 
                             if ($ticket->assigned_to) {
@@ -413,21 +424,22 @@ class ChatService
                                 }
                             }
 
-                            $ticketId = ChatTicketLog::insertGetId([
-                                'contact_id' => $contactId,
-                                'description' => 'Conversation was moved from closed to open',
-                                'created_at' => now()
-                            ]);
+                            if ($shouldLogReopen) {
+                                $ticketId = ChatTicketLog::insertGetId([
+                                    'contact_id' => $contactId,
+                                    'description' => 'Conversation was moved from closed to open',
+                                    'created_at' => now()
+                                ]);
 
-                            ChatLog::insert([
-                                'contact_id' => $contactId,
-                                'entity_type' => 'ticket',
-                                'entity_id' => $ticketId,
-                                'created_at' => now()
-                            ]);
+                                ChatLog::insert([
+                                    'contact_id' => $contactId,
+                                    'entity_type' => 'ticket',
+                                    'entity_id' => $ticketId,
+                                    'created_at' => now()
+                                ]);
+                            }
                         }
-                        // **If ticket exists and is open, do nothing (handled by guard clause above)**
-                    }
+                        }
                 });
             }
         } catch (\Exception $ex) {
@@ -447,9 +459,10 @@ class ChatService
                 // Create a new ticket
                 $ticket = new ChatTicket();
                 $ticket->contact_id = $contactId;
-                $ticket->status = 'open';
                 $ticket->created_at = now();
             }
+
+            $ticket->status = 'open';
 
             // 1. Get the list of agents assigned to this organization
             $agents = DB::table('assigned_agents')
