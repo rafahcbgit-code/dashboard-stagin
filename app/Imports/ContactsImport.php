@@ -51,9 +51,9 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
             }
         );
 
-        // Load ALL existing phones ONCE at the beginning
-        $this->allExistingPhones = Contact::where('organization_id', $this->organizationId)
-            ->whereNull('deleted_at')
+        // Load ALL existing phones ONCE at the beginning (including soft-deleted)
+        $this->allExistingPhones = Contact::withTrashed()
+            ->where('organization_id', $this->organizationId)
             ->pluck('id', 'phone')
             ->toArray();
 
@@ -278,8 +278,13 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
 
     protected function updateExistingContact($contactId, array $row)
     {
-        // Get existing contact to preserve old metadata
-        $existingContact = Contact::find($contactId);
+        // Get existing contact (including trashed) to preserve old metadata
+        $existingContact = Contact::withTrashed()->find($contactId);
+
+        if ($existingContact && $existingContact->trashed()) {
+            $existingContact->restore();
+        }
+
         $existingMetadata = $existingContact && $existingContact->metadata
             ? json_decode($existingContact->metadata, true)
             : [];
