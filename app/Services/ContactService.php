@@ -104,11 +104,10 @@ class ContactService
         } else {
             $contact = Contact::where('uuid', $uuid)->firstOrFail();
         }
-
         $contact->first_name = $request->first_name;
         $contact->last_name = $request->last_name;
         $contact->email = $request->email;
-        $contact->is_subscribed = $request->is_subscribed;
+        $contact->is_subscribed = (int) $request->is_subscribed;
         $contact->phone = $normalizedPhone;
 
         if ($request->hasFile('file')) {
