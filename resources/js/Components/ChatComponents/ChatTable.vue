@@ -388,7 +388,7 @@ const buildChatUrl = (contactUuid) => {
                             d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4s-4 1.79-4 4s1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
                     </svg>
                     <span>{{selectedTeamMember ? availableTeamMembers.find(m => m.user_id ===
-                        selectedTeamMember)?.first_name || $t('Team Member') : $t('Team Member') }}</span>
+                        selectedTeamMember)?.first_name || $t('Team Member') : $t('Team Member')}}</span>
                 </button>
 
                 <!-- Labels Filter Button -->
@@ -560,7 +560,7 @@ const buildChatUrl = (contactUuid) => {
                                         d="M15.75 2.824c0-.184.193-.301.336-.186c.121.098.23.212.323.342l3.013 4.197c.068.096-.006.22-.124.22H16a.25.25 0 0 1-.25-.25V2.824Z" />
                                 </svg>
                                 <span class="ml-2">{{ getExtension(contact?.last_chat?.media.type) }} {{ $t('File')
-                                    }}</span>
+                                }}</span>
                             </div>
                         </div>
                         <div v-if="contentType(contact?.last_chat?.metadata) === 'video'"
@@ -615,9 +615,19 @@ const buildChatUrl = (contactUuid) => {
                                 <span class="ml-2">{{ $t('Location') }}</span>
                             </div>
                         </div>
+                        <div v-if="contentType(contact?.last_chat?.metadata) === 'reaction'"
+                            class="text-slate-500 text-xs truncate self-end">
+                            <div class="flex items-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
+                                    <path fill="currentColor"
+                                        d="M12 2C6.47 2 2 6.47 2 12s4.47 10 10 10s10-4.47 10-10S17.53 2 12 2Zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8s8 3.59 8 8s-3.59 8-8 8Zm3.5-9c.83 0 1.5-.67 1.5-1.5S16.33 8 15.5 8S14 8.67 14 9.5s.67 1.5 1.5 1.5Zm-7 0c.83 0 1.5-.67 1.5-1.5S9.33 8 8.5 8S7 8.67 7 9.5s.67 1.5 1.5 1.5Zm3.5 6.5c2.33 0 4.31-1.46 5.11-3.5H6.89c.8 2.04 2.78 3.5 5.11 3.5Z" />
+                                </svg>
+                                <span class="ml-2">{{ content(contact?.last_chat?.metadata).reaction?.emoji }}</span>
+                            </div>
+                        </div>
                         <span v-if="contact.unread_messages > 0"
                             class="bg-green-600 text-white rounded-md py-[1px] px-[8px] min-w-10 text-[10px] flex items-center justify-center">{{
-                            contact.unread_messages }}</span>
+                                contact.unread_messages }}</span>
                     </div>
                 </div>
             </div>
