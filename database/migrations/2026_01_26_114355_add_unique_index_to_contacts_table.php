@@ -20,14 +20,14 @@ return new class extends Migration
         // Cleanup duplicates before adding unique index
         // Keep the one with the smallest ID (oldest) and delete others
         // This will now use the temporary index and be much faster
-       /* DB::statement("
+        DB::statement("
             DELETE c1 FROM contacts c1
             INNER JOIN contacts c2 
             WHERE 
                 c1.id > c2.id AND 
                 c1.organization_id = c2.organization_id AND 
                 c1.phone = c2.phone
-        ");*/
+        ");
 
         Schema::table('contacts', function (Blueprint $table) {
             $table->dropIndex('temp_idx_org_phone');
