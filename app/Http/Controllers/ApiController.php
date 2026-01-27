@@ -489,7 +489,10 @@ class ApiController extends Controller
         $phone = new PhoneNumber($phone);
         $phone = $phone->formatE164();
 
-        $contact = Contact::where('organization_id', $request->organization)->where('phone', $phone)->first();
+        $contact = Contact::where('organization_id', $request->organization)
+            ->where('phone', $phone)
+            ->whereNull('deleted_at')
+            ->first();
 
         if(!$contact){
             $contact = new Contact();
@@ -638,7 +641,10 @@ class ApiController extends Controller
         $phone = new PhoneNumber($phone);
         $phone = $phone->formatE164();
 
-        $contact = Contact::where('organization_id', $request->organization)->where('phone', $phone)->first();
+        $contact = Contact::where('organization_id', $request->organization)
+            ->where('phone', $phone)
+            ->whereNull('deleted_at')
+            ->first();
 
         if(!$contact){
             $contact = new Contact();
