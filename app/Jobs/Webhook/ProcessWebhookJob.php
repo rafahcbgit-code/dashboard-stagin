@@ -991,6 +991,7 @@ class ProcessWebhookJob implements ShouldQueue
                     ->orWhere('phone', '+' . $phone)
                     ->orWhere('phone', $phone);
             })
+            ->whereNull('deleted_at')
             ->first();
 
         $result = [

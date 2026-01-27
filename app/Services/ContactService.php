@@ -53,6 +53,7 @@ class ContactService
                     ->orWhere('phone', '+'.$phone)
                     ->orWhere('phone', $phone);
             })
+            ->whereNull('deleted_at')
             ->first();
 
         if ($contact) {
