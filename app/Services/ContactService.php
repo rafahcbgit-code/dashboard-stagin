@@ -85,13 +85,30 @@ class ContactService
 
     public function store(object $request, $uuid = null)
     {
-        $contact = $uuid === null ? new Contact() : Contact::where('uuid', $uuid)->firstOrFail();
+        $normalizedPhone = PhoneService::getE164Format($request->phone);
+
+        if ($uuid === null) {
+            // Check if contact with same phone already exists (including soft-deleted)
+            $contact = Contact::withTrashed()
+                ->where('organization_id', $this->organizationId)
+                ->where('phone', $normalizedPhone)
+                ->first();
+
+            if ($contact) {
+                if ($contact->trashed()) {
+                    $contact->restore();
+                }
+            } else {
+                $contact = new Contact();
+            }
+        } else {
+            $contact = Contact::where('uuid', $uuid)->firstOrFail();
+        }
         $contact->first_name = $request->first_name;
         $contact->last_name = $request->last_name;
         $contact->email = $request->email;
-        $contact->is_subscribed = $request->is_subscribed;
-
-        $contact->phone = PhoneService::getE164Format($request->phone);
+        $contact->is_subscribed = (int) $request->is_subscribed;
+        $contact->phone = $normalizedPhone;
 
         if ($request->hasFile('file')) {
             $storage = Setting::where('key', 'storage_system')->first()->value;
