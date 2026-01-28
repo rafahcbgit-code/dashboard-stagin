@@ -489,12 +489,16 @@ class ApiController extends Controller
         $phone = new PhoneNumber($phone);
         $phone = $phone->formatE164();
 
-        $contact = Contact::where('organization_id', $request->organization)
+        $contact = Contact::withTrashed()
+            ->where('organization_id', $request->organization)
             ->where('phone', $phone)
-            ->whereNull('deleted_at')
             ->first();
 
-        if(!$contact){
+        if ($contact) {
+            if ($contact->trashed()) {
+                $contact->restore();
+            }
+        } else {
             $contact = new Contact();
             $contact->organization_id = $request->organization;
             $contact->first_name = $request->first_name;
@@ -569,10 +573,16 @@ class ApiController extends Controller
         $phone = new PhoneNumber($phone);
         $phone = $phone->formatE164();
 
-        $contact = Contact::where('phone', $phone)->where('organization_id', $request->organization)
-            ->whereNull('deleted_at')->first();
+        $contact = Contact::withTrashed()
+            ->where('organization_id', $request->organization)
+            ->where('phone', $phone)
+            ->first();
 
-        if(!$contact){
+        if ($contact) {
+            if ($contact->trashed()) {
+                $contact->restore();
+            }
+        } else {
             $contact = new Contact();
             $contact->organization_id = $request->organization;
             $contact->first_name = $request->first_name;
@@ -582,6 +592,7 @@ class ApiController extends Controller
             $contact->created_by = 0;
             $contact->save();
         }
+
 
         // Extract the UUID of the contact
         $this->initializeWhatsappService($request->organization);
@@ -641,12 +652,16 @@ class ApiController extends Controller
         $phone = new PhoneNumber($phone);
         $phone = $phone->formatE164();
 
-        $contact = Contact::where('organization_id', $request->organization)
+        $contact = Contact::withTrashed()
+            ->where('organization_id', $request->organization)
             ->where('phone', $phone)
-            ->whereNull('deleted_at')
             ->first();
 
-        if(!$contact){
+        if ($contact) {
+            if ($contact->trashed()) {
+                $contact->restore();
+            }
+        } else {
             $contact = new Contact();
             $contact->organization_id = $request->organization;
             $contact->first_name = $request->first_name;
@@ -656,6 +671,7 @@ class ApiController extends Controller
             $contact->created_by = 0;
             $contact->save();
         }
+
 
         // Extract the UUID of the contact
         $this->initializeWhatsappService($request->organization);

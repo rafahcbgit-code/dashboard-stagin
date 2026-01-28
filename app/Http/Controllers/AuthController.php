@@ -471,18 +471,24 @@ public function sendVerificationCodeToEmail(Request $request)
     $phoneNumber = new \Propaganistas\LaravelPhone\PhoneNumber($phone);
     $phone = $phoneNumber->formatE164();
 
-    $contact = Contact::where('phone', $phone)
-        ->where('organization_id', $organization)
-        ->whereNull('deleted_at')
-        ->first();
+        $contact = Contact::withTrashed()
+            ->where('organization_id', $organization)
+            ->where('phone', $phone)
+            ->first();
 
-    if (!$contact) {
+
+        if ($contact) {
+            if ($contact->trashed()) {
+                $contact->restore();
+            }
+        } else {
         $contact = Contact::create([
             'organization_id' => $organization,
             'phone' => $phone,
             'created_by' => 0,
         ]);
-    }
+        }
+    
 
     $templatePayload = [
         "name" => $template_name,

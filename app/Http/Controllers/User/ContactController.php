@@ -419,13 +419,17 @@ class ContactController extends BaseController
         $phone = preg_replace('/\s+/', '', $validated['phone']); // remove all whitespace
         $phone = trim($phone);
 
-        $contact = Contact::where('organization_id', $organizationId)
+        $contact = Contact::withTrashed()->where('organization_id', $organizationId)
             ->where('phone', $phone)
             ->whereNull('deleted_at')
             ->first();
-
-        if (!$contact) {
-            $contact = Contact::create([
+        
+            if ($contact) {
+                if ($contact->trashed()) {
+                    $contact->restore();
+            }
+        } else {
+             $contact = Contact::create([
                 'organization_id' => $organizationId,
                 'phone'           => $phone,
                 'first_name'            => $validated['name'] ?? 'Unknown Contact',
@@ -438,6 +442,7 @@ class ContactController extends BaseController
                 'bot_enable' => 1
             ]);
         }
+ 
 
         return response()->json([
             'redirect' => '/contacts?id=' . $contact->uuid,
