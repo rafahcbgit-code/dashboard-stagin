@@ -455,8 +455,17 @@ class ProcessWebhookJob implements ShouldQueue
         // Add type-specific data
         switch ($type) {
             case 'text':
-                $metadata['text'] = $message['text'] ?? ['body' => ''];
-                break;
+                    $metadata['text'] = [
+                'body' => $message['text']['body'] ?? '',
+            ];
+
+            if (!empty($message['referral'])) {
+                $metadata['referral'] = [
+                    'headline' => $message['referral']['headline'] ?? null,
+                    'body'     => $message['referral']['body'] ?? null,
+                ];
+            }
+            break;
 
             case 'image':
                 $metadata['image'] = $message['image'] ?? [];
