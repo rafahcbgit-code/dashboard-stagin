@@ -985,14 +985,17 @@ class ProcessWebhookJob implements ShouldQueue
         }
 
         // Find existing contact
-        $contact = \App\Models\Contact::where('organization_id', $this->organizationId)
+        $contact = \App\Models\Contact::withTrashed()->where('organization_id', $this->organizationId)
             ->where(function ($query) use ($formattedPhone, $phone) {
                 $query->where('phone', $formattedPhone)
                     ->orWhere('phone', '+' . $phone)
                     ->orWhere('phone', $phone);
             })
-            ->whereNull('deleted_at')
             ->first();
+
+             if ($contact && $contact->trashed()) {
+                    $contact->restore();
+                }
 
         $result = [
             'phone' => $formattedPhone,

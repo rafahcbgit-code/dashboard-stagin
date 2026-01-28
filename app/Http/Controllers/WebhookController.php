@@ -183,17 +183,17 @@ class WebhookController extends BaseController
 
         // Dispatch to background job for async processing (AC-1.1.3, AC-1.1.4, AC-1.1.5)
         // No database writes or external API calls occur here
-        ProcessWebhookJob::dispatch(
+        /*ProcessWebhookJob::dispatch(
             $res,
             $organization->id,
             $webhookType
-        );
+        );*/
 
-        /*
+        
         // this code to test job sync without queue
         $job = new ProcessWebhookJob($res, $organization->id, $webhookType);
         $job->handle();
-        */
+        
 
         // Calculate response time and log (AC-1.1.6)
         $responseTime = (microtime(true) - $startTime) * 1000; // Convert to milliseconds

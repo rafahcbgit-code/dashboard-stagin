@@ -47,18 +47,21 @@ class ContactService
         }
 
         // Look for existing contact - try multiple formats for compatibility
-        $contact = Contact::where('organization_id', $this->organizationId)
+        $contact = Contact::withTrashed()->where('organization_id', $this->organizationId)
             ->where(function ($query) use ($normalizedPhone, $phone) {
                 $query->where('phone', $normalizedPhone)
                     ->orWhere('phone', '+'.$phone)
                     ->orWhere('phone', $phone);
             })
-            ->whereNull('deleted_at')
             ->first();
+            
+            if ($contact) {
+                if ($contact->trashed()) {
+                    $contact->restore();
+                }
 
-        if ($contact) {
-            return ['contact' => $contact, 'isNew' => false];
-        }
+                return ['contact' => $contact, 'isNew' => false];
+            }
 
         // Parse name into first/last name
         $nameParts = $name ? explode(' ', $name, 2) : [];
