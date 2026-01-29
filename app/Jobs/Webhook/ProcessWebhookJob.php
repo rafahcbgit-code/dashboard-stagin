@@ -319,6 +319,33 @@ class ProcessWebhookJob implements ShouldQueue
             ]);
         }
 
+        // Check if referral contains media (video_url and media_type)
+        if (!empty($message['referral']['media_type']) && !empty($message['referral']['video_url'])) {
+            $referralMediaData = [
+                'type' => 'referral_video',
+                'media_id' => null,
+                'mime_type' => $message['referral']['media_type'] ?? 'video/mp4',
+                'sha256' => null,
+                'filename' => null,
+                'caption' => $message['referral']['body'] ?? null,
+                'video_url' => $message['referral']['video_url'],
+                'thumbnail_url' => $message['referral']['thumbnail_url'] ?? null,
+            ];
+
+            DownloadWebhookMediaJob::dispatch(
+                $chat->id,
+                $contact->id,
+                $this->organizationId,
+                $referralMediaData
+            )->onQueue('webhook-high');
+
+            Log::channel('webhook')->info('DownloadWebhookMediaJob dispatched for referral media', [
+                'chat_id' => $chat->id,
+                'media_type' => 'referral_video',
+                'video_url' => $message['referral']['video_url'],
+            ]);
+        }
+
         // AC-1.2.4: Dispatch ProcessWebhookNotificationsJob for real-time updates
         // Uses webhook-high queue for priority processing (fire-and-forget pattern)
         // Pass raw WhatsApp payload for backward-compatible external webhooks
@@ -463,6 +490,12 @@ class ProcessWebhookJob implements ShouldQueue
                 $metadata['referral'] = [
                     'headline' => $message['referral']['headline'] ?? null,
                     'body'     => $message['referral']['body'] ?? null,
+                    'source_type'     => $message['referral']['source_type'] ?? null,
+                    'source_id'     => $message['referral']['source_id'] ?? null,
+                    'media_type'     => $message['referral']['media_type'] ?? null, 
+                    'video_url'     => $message['referral']['video_url'] ?? null,
+                    'thumbnail_url'     => $message['referral']['thumbnail_url'] ?? null,
+                    'ctwa_clid'     => $message['referral']['ctwa_clid'] ?? null,
                 ];
             }
             break;

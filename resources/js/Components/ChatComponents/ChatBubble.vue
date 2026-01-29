@@ -171,11 +171,45 @@ const viewContactDetails = async (data) => {
 
 <!-- Referral Section -->
 <div v-if="metadata.referral" class="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
+    <!-- Referral Media (Video or Thumbnail) -->
+    <div v-if="metadata.referral.video_url || metadata.referral.thumbnail_url" class="mb-2">
+        <!-- If content.media exists and type is referral_video, show the downloaded media -->
+        <div v-if="content.media && content.media.type === 'referral_video'">
+            <video v-if="metadata.referral.media_type && metadata.referral.media_type.startsWith('video')" 
+                   controls width="250" class="max-h-[200px] rounded">
+                <source :src="content.media.path" :type="metadata.referral.media_type">
+                {{ $t('Your browser does not support the video element') }}
+            </video>
+            <img v-else :src="content.media.path" alt="Referral Media" class="max-w-[250px] rounded" />
+        </div>
+        <!-- Fallback: show thumbnail if available -->
+        <div v-else-if="metadata.referral.thumbnail_url">
+            <img :src="metadata.referral.thumbnail_url" alt="Referral Thumbnail" class="max-w-[250px] rounded" />
+        </div>
+        <!-- Loading state -->
+        <div v-else class="text-slate-500 flex justify-center items-center space-x-2 py-4">
+            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24">
+                <path fill="currentColor" d="M12,1A11,11,0,1,0,23,12,11,11,0,0,0,12,1Zm0,19a8,8,0,1,1,8-8A8,8,0,0,1,12,20Z" opacity=".25"/>
+                <path fill="currentColor" d="M10.14,1.16a11,11,0,0,0-9,8.92A1.59,1.59,0,0,0,2.46,12,1.52,1.52,0,0,0,4.11,10.7a8,8,0,0,1,6.66-6.61A1.42,1.42,0,0,0,12,2.69h0A1.57,1.57,0,0,0,10.14,1.16Z">
+                    <animateTransform attributeName="transform" dur="0.75s" repeatCount="indefinite" type="rotate" values="0 12 12;360 12 12"/>
+                </path>
+            </svg>
+            <span class="text-xs">{{ $t('Loading media...') }}</span>
+        </div>
+    </div>
+    
+    <!-- Referral Text Content -->
     <div v-if="metadata.referral.headline" class="text-sm font-semibold text-gray-800 mb-1">
-       headline: {{ metadata.referral.headline }}
+       {{ metadata.referral.headline }}
     </div>
     <div v-if="metadata.referral.body" class="text-xs text-gray-600">
-        body: {{ metadata.referral.body }}
+        {{ metadata.referral.body }}
+    </div>
+    
+    <!-- Referral Source Info -->
+    <div v-if="metadata.referral.source_type" class="mt-2 text-xs text-gray-500">
+        <span class="capitalize">{{ metadata.referral.source_type }}</span>
+        <span v-if="metadata.referral.source_id"> • ID: {{ metadata.referral.source_id }}</span>
     </div>
 </div>
 
