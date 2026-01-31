@@ -570,17 +570,48 @@ class WhatsappService
 
     function getContentTypeFromUrl($url) {
         try {
-            // Make a HEAD request to fetch headers only
+            $appUrl = rtrim(config('app.url'), '/');
+            $mediaPrefix = $appUrl . '/media/';
+
+            if (str_starts_with($url, $mediaPrefix)) {
+                $relative = substr($url, strlen($mediaPrefix));
+                $segments = explode('/', $relative);
+                $decoded = array_map('rawurldecode', $segments);
+                $relativePath = implode('/', $decoded);
+
+                $localPath = storage_path('app/' . ltrim($relativePath, '/'));
+                if (file_exists($localPath)) {
+                    $type = \File::mimeType($localPath);
+                    if ($type === 'application/octet-stream') {
+                        $ext = strtolower(pathinfo($localPath, PATHINFO_EXTENSION));
+                        $map = [
+                            'aac' => 'audio/aac',
+                            'amr' => 'audio/amr',
+                            'mp3' => 'audio/mpeg',
+                            'm4a' => 'audio/mp4',
+                            'mp4' => 'audio/mp4',
+                            'ogg' => 'audio/ogg; codecs=opus',
+                            'wav' => 'audio/wav',
+                        ];
+
+                        if (isset($map[$ext])) {
+                            return $map[$ext];
+                        }
+                    }
+
+                    return $type;
+                }
+            }
+
+            // Fallback to HTTP HEAD for external URLs
             $response = Http::head($url);
-    
-            // Check if the Content-Type header is present
+
             if ($response->hasHeader('Content-Type')) {
                 return $response->header('Content-Type');
             }
-    
+
             return null;
         } catch (\Exception $e) {
-            // Log the error for debugging
             Log::error('Error fetching headers: ' . $e->getMessage());
             return null;
         }
@@ -606,20 +637,46 @@ class WhatsappService
          Log::info('Checking media URL start', [
         'url' => $url,
     ]);
+        try {
+            $appUrl = rtrim(config('app.url'), '/');
+            $mediaPrefix = $appUrl . '/media/';
 
-        $imageContent = file_get_contents($url);
-    
-        if ($imageContent !== false) {
-            $data = strlen($imageContent);
-            Log::info('Media loaded successfully', [
-                'url'  => $url,
-                'imageContent' => $imageContent,
-                'strlen' => $data
-            ]);
-            
-            return $data;
+            // If the URL points to our app's /media/* route, read the file directly from storage
+            if (str_starts_with($url, $mediaPrefix)) {
+                $relative = substr($url, strlen($mediaPrefix));
+                // decode each segment
+                $segments = explode('/', $relative);
+                $decoded = array_map('rawurldecode', $segments);
+                $relativePath = implode('/', $decoded);
+
+                $localPath = storage_path('app/' . ltrim($relativePath, '/'));
+
+                if (file_exists($localPath)) {
+                    $size = filesize($localPath);
+                    Log::info('Media loaded from local storage', ['url' => $url, 'localPath' => $localPath, 'size' => $size]);
+                    return $size;
+                }
+
+                Log::warning('Media not found in local storage', ['url' => $url, 'localPath' => $localPath]);
+                return null;
+            }
+
+            // Fallback: attempt to fetch via HTTP
+            $imageContent = @file_get_contents($url);
+
+            if ($imageContent !== false) {
+                $data = strlen($imageContent);
+                Log::info('Media loaded successfully', [
+                    'url'  => $url,
+                    'strlen' => $data
+                ]);
+
+                return $data;
+            }
+        } catch (\Exception $e) {
+            Log::error('getMediaSizeInBytesFromUrl:error', ['message' => $e->getMessage(), 'url' => $url]);
         }
-    
+
         return null;
     }
 
