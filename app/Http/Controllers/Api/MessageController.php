@@ -217,12 +217,17 @@ class MessageController extends Controller
             // Upload file based on storage system
             if ($storage === 'local') {
                 $location = 'local';
-                $uploadedFile = Storage::disk('local')->put('public', $file);
+                $uploadedFile = Storage::disk('local')->putFileAs('public', $file, $fileName);
                 $mediaFilePath = $uploadedFile;
                 $mediaUrl = rtrim(config('app.url'), '/') . '/media/' . ltrim($mediaFilePath, '/');
             } elseif ($storage === 'aws') {
                 $location = 'amazon';
-                $uploadedFile = $file->store('uploads/media/sent/' . $organizationId, 's3');
+                $s3Path = 'uploads/media/sent/' . $organizationId . '/' . $fileName;
+                Storage::disk('s3')->put($s3Path, fopen($file->getPathname(), 'r'), [
+                    'ContentType' => $this->normalizeMimeType($file),
+                    'ACL' => 'public-read'
+                ]);
+                $uploadedFile = $s3Path;
                 $mediaFilePath = Storage::disk('s3')->url($uploadedFile);
                 $mediaUrl = $mediaFilePath;
             } else {
@@ -594,11 +599,16 @@ class MessageController extends Controller
             $fileName = $file->getClientOriginalName();
 
             if ($storage === 'local') {
-                $uploadedFile = Storage::disk('local')->put('public', $file);
+                $uploadedFile = Storage::disk('local')->putFileAs('public', $file, $fileName);
                 $mediaFilePath = $uploadedFile;
                 $mediaUrl = rtrim(config('app.url'), '/') . '/media/' . ltrim($mediaFilePath, '/');
             } elseif ($storage === 'aws') {
-                $uploadedFile = $file->store('uploads/media/sent/' . $organizationId, 's3');
+                $s3Path = 'uploads/media/sent/' . $organizationId . '/' . $fileName;
+                Storage::disk('s3')->put($s3Path, fopen($file->getPathname(), 'r'), [
+                    'ContentType' => $this->normalizeMimeType($file),
+                    'ACL' => 'public-read'
+                ]);
+                $uploadedFile = $s3Path;
                 $mediaFilePath = Storage::disk('s3')->url($uploadedFile);
                 $mediaUrl = $mediaFilePath;
             } else {
@@ -610,7 +620,7 @@ class MessageController extends Controller
             $chatMedia->name = $fileName;
             $chatMedia->location = $storage === 'aws' ? 'amazon' : 'local';
             $chatMedia->path = $mediaUrl;
-            $chatMedia->type = $file->getMimeType();
+            $chatMedia->type = $this->normalizeMimeType($file);
             $chatMedia->size = $file->getSize();
             $chatMedia->created_at = now();
             $chatMedia->save();
