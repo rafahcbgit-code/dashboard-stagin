@@ -297,7 +297,7 @@ class MessageController extends Controller
                                 'media' => [
                                     'url' => $mediaUrl,
                                     'filename' => $fileName,
-                                    'type' => $file->getMimeType(),
+                                        'type' => $this->normalizeMimeType($file),
                                     'size' => $file->getSize()
                                 ]
                             ]
@@ -744,6 +744,38 @@ class MessageController extends Controller
         if ($validator->fails()) {
             throw new \Exception($validator->errors()->first());
         }
+    }
+
+    /**
+     * Normalize mime type for uploaded files.
+     * If the detected mime is 'application/octet-stream' try to infer
+     * a more specific mime from the file extension to satisfy WhatsApp.
+     */
+    private function normalizeMimeType($file)
+    {
+        $mime = $file->getMimeType();
+
+        if ($mime && $mime !== 'application/octet-stream') {
+            return $mime;
+        }
+
+        $ext = strtolower($file->getClientOriginalExtension() ?? '');
+
+        $map = [
+            'aac' => 'audio/aac',
+            'amr' => 'audio/amr',
+            'mp3' => 'audio/mpeg',
+            'm4a' => 'audio/mp4',
+            'mp4' => 'audio/mp4',
+            'ogg' => 'audio/ogg; codecs=opus',
+            'wav' => 'audio/wav',
+        ];
+
+        if (isset($map[$ext])) {
+            return $map[$ext];
+        }
+
+        return $mime ?: 'application/octet-stream';
     }
 
     /**
