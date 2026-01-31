@@ -219,7 +219,7 @@ class MessageController extends Controller
                 $location = 'local';
                 $uploadedFile = Storage::disk('local')->putFileAs('public', $file, $fileName);
                 $mediaFilePath = $uploadedFile;
-                $mediaUrl = rtrim(config('app.url'), '/') . '/media/' . ltrim($mediaFilePath, '/');
+                $mediaUrl = $this->buildMediaUrl($mediaFilePath);
             } elseif ($storage === 'aws') {
                 $location = 'amazon';
                 $s3Path = 'uploads/media/sent/' . $organizationId . '/' . $fileName;
@@ -601,7 +601,7 @@ class MessageController extends Controller
             if ($storage === 'local') {
                 $uploadedFile = Storage::disk('local')->putFileAs('public', $file, $fileName);
                 $mediaFilePath = $uploadedFile;
-                $mediaUrl = rtrim(config('app.url'), '/') . '/media/' . ltrim($mediaFilePath, '/');
+                $mediaUrl = $this->buildMediaUrl($mediaFilePath);
             } elseif ($storage === 'aws') {
                 $s3Path = 'uploads/media/sent/' . $organizationId . '/' . $fileName;
                 Storage::disk('s3')->put($s3Path, fopen($file->getPathname(), 'r'), [
@@ -786,6 +786,26 @@ class MessageController extends Controller
         }
 
         return $mime ?: 'application/octet-stream';
+    }
+
+    /**
+     * Build a public media URL encoding each path segment.
+     * This prevents spaces or special characters from breaking downstream fetchers.
+     */
+    private function buildMediaUrl($mediaFilePath)
+    {
+        $base = rtrim(config('app.url'), '/') . '/media/';
+
+        // Ensure we work with a string path
+        $mediaFilePath = ltrim((string)$mediaFilePath, '/');
+
+        // Encode each path segment to preserve slashes but escape spaces and special chars
+        $segments = explode('/', $mediaFilePath);
+        $encoded = array_map(function ($seg) {
+            return rawurlencode($seg);
+        }, $segments);
+
+        return $base . implode('/', $encoded);
     }
 
     /**
