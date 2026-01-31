@@ -13,6 +13,7 @@ use App\Services\SubscriptionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Log;
 
 class MessageController extends Controller
 {
@@ -214,12 +215,37 @@ class MessageController extends Controller
             $storage = Setting::where('key', 'storage_system')->first()->value;
             $fileName = $file->getClientOriginalName();
 
+            Log::info('handleMediaMessage:start', [
+                'organization_id' => $organizationId,
+
+                'user_id' => $userId,
+                'contact_uuid' => $contact->uuid,
+                'media_type' => $mediaType,
+                'file_name' => $fileName,
+                'detected_mime' => $file->getMimeType(),
+                'normalized_mime' => $this->normalizeMimeType($file),
+                'caption' => $caption,
+                'storage' => $storage
+            ]);
+                 Log::info('handleMediaMessage:start', [
+                        'organization_id' => $organizationId,
+                        'user_id' => $userId,
+                        'contact_uuid' => $contact->uuid,
+                        'media_type' => $mediaType,
+                        'file_name' => $fileName,
+                        'detected_mime' => $file->getMimeType(),
+                        'normalized_mime' => $this->normalizeMimeType($file),
+                        'caption' => $caption,
+                        'storage' => $storage
+                    ]);
+
             // Upload file based on storage system
             if ($storage === 'local') {
                 $location = 'local';
                 $uploadedFile = Storage::disk('local')->putFileAs('public', $file, $fileName);
                 $mediaFilePath = $uploadedFile;
                 $mediaUrl = $this->buildMediaUrl($mediaFilePath);
+                Log::info('handleMediaMessage:local_uploaded', ['mediaFilePath' => $mediaFilePath, 'mediaUrl' => $mediaUrl]);
             } elseif ($storage === 'aws') {
                 $location = 'amazon';
                 $s3Path = 'uploads/media/sent/' . $organizationId . '/' . $fileName;
@@ -230,6 +256,7 @@ class MessageController extends Controller
                 $uploadedFile = $s3Path;
                 $mediaFilePath = Storage::disk('s3')->url($uploadedFile);
                 $mediaUrl = $mediaFilePath;
+                Log::info('handleMediaMessage:s3_uploaded', ['s3Path' => $s3Path, 'mediaFilePath' => $mediaFilePath, 'mediaUrl' => $mediaUrl]);
             } else {
                 return response()->json([
                     'success' => false,
@@ -258,6 +285,16 @@ class MessageController extends Controller
             );
 
             // Send media via WhatsApp
+            Log::info('handleMediaMessage:send_to_whatsapp', [
+                'contact_uuid' => $contact->uuid,
+                'media_type' => $mediaType,
+                'file_name' => $fileName,
+                'mediaFilePath' => $mediaFilePath,
+                'mediaUrl' => $mediaUrl,
+                'location' => $location,
+                'caption' => $caption,
+            ]);
+
             $response = $whatsappService->sendMedia(
                 $contact->uuid,
                 $mediaType,
@@ -267,6 +304,8 @@ class MessageController extends Controller
                 $location,
                 $caption
             );
+
+            Log::info('handleMediaMessage:whatsapp_response', ['response' => is_object($response) ? json_decode(json_encode($response), true) : $response]);
 
             if (isset($response->success) && $response->success === true) {
                 // Get the sent message from database with media relationship
@@ -317,6 +356,13 @@ class MessageController extends Controller
                 ], 500);
             }
         } catch (\Exception $e) {
+            Log::error('handleMediaMessage:error', [
+                'message' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
+                'contact_uuid' => $contact->uuid ?? null,
+                'file' => isset($fileName) ? $fileName : null
+            ]);
+
             return response()->json([
                 'success' => false,
                 'message' => 'Failed to send media',
@@ -625,6 +671,8 @@ class MessageController extends Controller
             $chatMedia->created_at = now();
             $chatMedia->save();
 
+            Log::info('buildMediaHeader:chatmedia_saved', ['chatmedia_id' => $chatMedia->id, 'path' => $chatMedia->path, 'type' => $chatMedia->type]);
+
             // Build parameter in format ChatService expects
             $header['parameters'] = [[
                 'type' => $format, // Keep UPPERCASE: IMAGE, VIDEO, DOCUMENT
@@ -763,12 +811,25 @@ class MessageController extends Controller
      */
     private function normalizeMimeType($file)
     {
-        $mime = $file->getMimeType();
+        $mime = strtolower((string)$file->getMimeType());
 
+        // Known problematic vendor/driver MIME variants -> map to WhatsApp-acceptable types
+        $variantMap = [
+            'audio/x-hx-aac-adts' => 'audio/aac',
+            'audio/aac-adts' => 'audio/aac',
+            'audio/x-aac' => 'audio/aac'
+        ];
+
+        if ($mime && isset($variantMap[$mime])) {
+            return $variantMap[$mime];
+        }
+
+        // If the detected mime looks acceptable (not generic octet-stream), return it
         if ($mime && $mime !== 'application/octet-stream') {
             return $mime;
         }
 
+        // Fallback to extension-based mapping when mime is generic or missing
         $ext = strtolower($file->getClientOriginalExtension() ?? '');
 
         $map = [
