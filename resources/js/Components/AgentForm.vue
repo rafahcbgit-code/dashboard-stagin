@@ -1,26 +1,28 @@
 <script setup>
-import { ref } from 'vue';
-import { useForm } from "@inertiajs/vue3";
+import { ref, watch } from 'vue';
 
 const props = defineProps({
     assignedToSpecificAgents: Boolean,
-    agents: Array,       // قائمة الوكلاء
+    agents: Array,       
     selectedAgents: Array 
 });
 
-const form = useForm({
-    assigned_to_specific_agents: props.assignedToSpecificAgents,
-    active: true,
-    selected_agents: props.selectedAgents || []
-});
+const emit = defineEmits(['update:selected-agents']);
 
-const submitForm = () => {
-    form.post('/settings/tickets', { preserveScroll: true });
-}
+const localSelectedAgents = ref(props.selectedAgents || []);
+
+// Sync with parent component
+watch(() => props.selectedAgents, (newVal) => {
+    localSelectedAgents.value = newVal || [];
+}, { immediate: true });
+
+// Emit changes to parent
+watch(localSelectedAgents, (newVal) => {
+    emit('update:selected-agents', newVal);
+}, { deep: true });
 </script>
 
 <template>
-  <!-- يتحكم بالاتجاه حسب اللغة -->
   <div 
     :dir="$i18n.locale === 'ar' ? 'rtl' : 'ltr'" 
     class="bg-white border border-slate-200 rounded-lg p-4"
@@ -33,22 +35,14 @@ const submitForm = () => {
         :key="agent.id" 
         class="flex items-center p-2 border rounded-md bg-gray-50"
       >
-        <!-- بدلنا mr-2 بـ margin ديناميكي حسب الاتجاه -->
         <input 
           type="checkbox" 
           class="mx-2" 
           :value="agent.id" 
-          v-model="form.selected_agents"
+          v-model="localSelectedAgents"
         >
         <span>{{ agent.first_name }}</span>
       </li>
     </ul>
-
-    <button 
-      @click="submitForm"
-      class="mt-4 bg-primary text-white px-4 py-2 rounded hover:bg-primary-dark"
-    >
-      {{ $t('Save Selected Agents') }}
-    </button>
   </div>
 </template>

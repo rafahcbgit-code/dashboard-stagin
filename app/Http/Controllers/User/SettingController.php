@@ -190,6 +190,7 @@ public function campaign(Request $request)
     ]);
 }
     public function tickets(Request $request){
+        //dd($request);
         if ($request->isMethod('get')) {
             $contactFieldService = new ContactFieldService(session()->get('current_organization'));
             $settings = Organization::where('id', session()->get('current_organization'))->first();
@@ -206,7 +207,7 @@ public function campaign(Request $request)
                 ->where('organization_id', session()->get('current_organization'))
                 ->pluck('user_id')
                 ->toArray();
-
+//dd($agents, $oldSelectedAgents);
             return Inertia::render('User/Settings/Ticket', [
                 'title' => __('Settings'),
                 'filters' => $request->all(),
@@ -223,19 +224,19 @@ public function campaign(Request $request)
             $metadataArray = $organizationConfig->metadata ? json_decode($organizationConfig->metadata, true) : [];
 
             $metadataArray['tickets']['active'] = $request->active;
-            $metadataArray['tickets']['auto_assignment'] = $request->auto_assignment;
+            $metadataArray['tickets']['auto_assignment'] = $request->auto_assignment ?? false;
+            $metadataArray['tickets']['assigned_to_specific_agents'] = $request->auto_robinhood ?? false;
             $metadataArray['tickets']['reassign_reopened_chats'] = $request->reassign_reopened_chats;
             $metadataArray['tickets']['allow_agents_to_view_all_chats'] = $request->allow_agents_to_view_all_chats;
-            $metadataArray['tickets']['assigned_to_specific_agents'] = $request->assigned_to_specific_agents;
 
             $updatedMetadataJson = json_encode($metadataArray);
 
             $organizationConfig->metadata = $updatedMetadataJson;
             $organizationConfig->save();
 
-    if (is_array($request->selected_agents)) {
-            $this->syncAssignedAgents($currentOrganizationId, $request->selected_agents);
-        }
+            if (is_array($request->selected_agents)) {
+                $this->syncAssignedAgents($currentOrganizationId, $request->selected_agents);
+            }
             /*return back()->with(
                 'status', [
                     'type' => 'success', 

@@ -34,8 +34,8 @@ class ChatService
     private $whatsappService;
     private $organizationId;
 
-    private $throttleSeconds = 15; 
-    private $cacheTtl = 30;       
+    private $throttleSeconds = 15;
+    private $cacheTtl = 30;
 
 
     public function __construct($organizationId)
@@ -53,12 +53,12 @@ class ChatService
         if (auth('sanctum')->check()) {
             return auth('sanctum')->user()->id;
         }
-        
+
         // Try session (for web)
         if (auth()->check()) {
             return auth()->user()->id;
         }
-        
+
         // Default to 0 (system/API)
         return 0;
     }
@@ -81,7 +81,7 @@ class ChatService
     {
         $throttleKey = $cacheKey . ':throttle';
         $lastRequest = Cache::get($throttleKey);
-        
+
         if ($lastRequest) {
             $elapsed = time() - $lastRequest;
             if ($elapsed < $this->throttleSeconds) {
@@ -92,7 +92,7 @@ class ChatService
                 ];
             }
         }
-        
+
         return ['throttled' => false];
     }
 
@@ -108,10 +108,10 @@ class ChatService
         $contact = new Contact;
         $ticketState = $request->status == null ? 'all' : $request->status;
         $sortDirection = $request->session()->get('chat_sort_direction') ?? 'desc';
-        
+
         // Get label filters from request
         $labelFilters = $request->query('labels') ? explode(',', $request->query('labels')) : [];
-        
+
         // Get assigned_to filter from request
         $assignedToFilter = $request->query('assigned_to') ? (int)$request->query('assigned_to') : null;
 
@@ -131,10 +131,10 @@ class ChatService
         $aimodule = CustomHelper::isModuleEnabled('AI Assistant');
 
         // Check if tickets module has been enabled
-        if($config->metadata != NULL){
+        if ($config->metadata != NULL) {
             $settings = json_decode($config->metadata);
 
-            if(isset($settings->tickets) && $settings->tickets->active === true){
+            if (isset($settings->tickets) && $settings->tickets->active === true) {
                 $ticketingActive = true;
                 $allowAgentsToViewAllChats = $settings->tickets->allow_agents_to_view_all_chats;
             }
@@ -142,26 +142,26 @@ class ChatService
 
         // Direct query - NO CACHE
         $contacts = $contact->contactsWithChats(
-            $this->organizationId, 
-            $searchTerm, 
-            $ticketingActive, 
-            $ticketState, 
-            $sortDirection, 
-            $role, 
+            $this->organizationId,
+            $searchTerm,
+            $ticketingActive,
+            $ticketState,
+            $sortDirection,
+            $role,
             $allowAgentsToViewAllChats,
             $labelFilters,
             $assignedToMe,
             $assignedToFilter,
             $unreadOnly
         );
-        
+
         $rowCount = $contact->contactsWithChatsCount(
-            $this->organizationId, 
-            $searchTerm, 
-            $ticketingActive, 
-            $ticketState, 
-            $sortDirection, 
-            $role, 
+            $this->organizationId,
+            $searchTerm,
+            $ticketingActive,
+            $ticketState,
+            $sortDirection,
+            $role,
             $allowAgentsToViewAllChats,
             $labelFilters,
             $assignedToMe,
@@ -189,7 +189,7 @@ class ChatService
             $contact = Contact::with(['lastChat', 'lastInboundChat', 'notes', 'contactGroups', 'labels'])
                 ->where('uuid', $uuid)
                 ->first();
-            
+
             $ticket = ChatTicket::with('user')
                 ->where('contact_id', $contact->id)
                 ->first();
@@ -219,12 +219,12 @@ class ChatService
 
                 $contactFieldService = new ContactFieldService(session()->get('current_organization'));
                 $contactFields = $contactFieldService->get($request);
-            
+
                 $labelColors = DB::table('labels')
-                        ->join('contact_label', 'labels.id', '=', 'contact_label.label_id')
-                        ->where('contact_label.contact_id', $contact->id)
-                        ->select('labels.color')
-                        ->pluck('color');
+                    ->join('contact_label', 'labels.id', '=', 'contact_label.label_id')
+                    ->where('contact_label.contact_id', $contact->id)
+                    ->select('labels.color')
+                    ->pluck('color');
 
                 return Inertia::render('User/Chat/Index', [
                     'title' => 'Chats',
@@ -264,7 +264,7 @@ class ChatService
             ], 200);
         } else {
             $settings = json_decode($config->metadata);
-    
+
             return Inertia::render('User/Chat/Index', [
                 'title' => 'Chats',
                 'rows' => ContactResource::collection($contacts),
@@ -282,8 +282,140 @@ class ChatService
                 'ticket' => array(),
                 'chat_sort_direction' => $sortDirection,
                 'isChatLimitReached' => SubscriptionService::isSubscriptionFeatureLimitReached($this->organizationId, 'message_limit'),
-                'teamRole' => $team?->role  
+                'teamRole' => $team?->role
             ]);
+        }
+    }
+
+    /**
+     * Find the agent with the least number of assigned tickets
+     */
+    private function findLeastLoadedAgent($organizationId)
+    {
+        return Team::where('organization_id', $organizationId)
+            ->where('role', 'agent')
+            ->where('status', 'active')
+            ->withCount('tickets')
+            ->whereNull('deleted_at')
+            ->orderBy('tickets_count')
+            ->first();
+    }
+
+    /**
+     * Send assignment notification to the assigned agent
+     */
+    private function sendTicketAssignmentNotification($contactId, $assignedTo, $assignedBy, $organizationId)
+    {
+        if (!$assignedTo) {
+            return;
+        }
+
+        try {
+            $notificationService = new \App\Services\ApiNotificationService();
+            $notificationService->sendAssignmentNotification(
+                $contactId,
+                $assignedTo,
+                $assignedBy,
+                $organizationId
+            );
+        } catch (\Exception $e) {
+            Log::error('Failed to send assignment notification: ' . $e->getMessage());
+        }
+    }
+
+    /**
+     * Log ticket event in ChatTicketLog and ChatLog
+     */
+    private function logTicketEvent($contactId, $description)
+    {
+        $ticketId = ChatTicketLog::insertGetId([
+            'contact_id' => $contactId,
+            'description' => $description,
+            'created_at' => now()
+        ]);
+
+        ChatLog::insert([
+            'contact_id' => $contactId,
+            'entity_type' => 'ticket',
+            'entity_id' => $ticketId,
+            'created_at' => now()
+        ]);
+    }
+
+    /**
+     * Assign agent to ticket based on auto-assignment setting
+     */
+    private function assignAgentToTicket($ticket, $organizationId, $autoassignment)
+    {
+        if (!$autoassignment) {
+            $ticket->assigned_to = null;
+            return;
+        }
+
+        $agent = $this->findLeastLoadedAgent($organizationId);
+        $ticket->assigned_to = $agent ? $agent->user_id : null;
+    }
+
+    /**
+     * Create a new ticket and assign agent
+     */
+    private function createNewTicket($contactId, $organizationId, $autoassignment)
+    {
+        $ticket = new ChatTicket();
+        $ticket->contact_id = $contactId;
+        $ticket->status = 'open';
+        $ticket->updated_at = now();
+
+        $this->assignAgentToTicket($ticket, $organizationId, $autoassignment);
+        $ticket->save();
+
+        $this->sendTicketAssignmentNotification(
+            $contactId,
+            $ticket->assigned_to,
+            auth('sanctum')->id() ?? auth()->id() ?? 0,
+            $organizationId
+        );
+
+        $this->logTicketEvent($contactId, 'Conversation was opened');
+
+        return $ticket;
+    }
+
+    /**
+     * Process existing ticket (closed or unassigned)
+     */
+    private function processExistingTicket($ticket, $contactId, $organizationId, $autoassignment, $reassignOnReopen)
+    {
+        // Only process if closed OR open but unassigned
+        if ($ticket->status !== 'closed' && !($ticket->status === 'open' && $ticket->assigned_to === null)) {
+            return;
+        }
+
+        $shouldLogReopen = ($ticket->status === 'closed');
+        $wasClosedAndNeedReassign = ($ticket->status === 'closed' && $reassignOnReopen);
+
+        // Reopen closed ticket
+        if ($ticket->status === 'closed') {
+            $ticket->status = 'open';
+        }
+
+        // Assign agent if needed
+        if ($wasClosedAndNeedReassign || ($ticket->status === 'open' && $ticket->assigned_to === null)) {
+            $this->assignAgentToTicket($ticket, $organizationId, $autoassignment);
+        }
+
+        $ticket->updated_at = now();
+        $ticket->save();
+
+        $this->sendTicketAssignmentNotification(
+            $contactId,
+            $ticket->assigned_to,
+            0,
+            $organizationId
+        );
+
+        if ($shouldLogReopen) {
+            $this->logTicketEvent($contactId, 'Conversation was moved from closed to open');
         }
     }
 
@@ -291,16 +423,15 @@ class ChatService
     {
         try {
             $organizationId = $this->organizationId;
-            
+
             // Get organization settings
             $settings = Organization::where('id', $organizationId)->first();
             $settings = json_decode($settings->metadata);
             $isSpecificAgentEnabled = !empty($settings->tickets->assigned_to_specific_agents ?? false);
 
-            // **Skip if ticket already exists, is open AND is already assigned**
+            // Skip if ticket already exists, is open AND is already assigned
             $existingTicket = ChatTicket::where('contact_id', $contactId)->first();
             if ($existingTicket && $existingTicket->status === 'open' && $existingTicket->assigned_to !== null) {
-                // Ticket is already open and assigned, nothing to do
                 Log::channel('webhook')->debug('Ticket already open and assigned, skipping assignment', [
                     'contact_id' => $contactId,
                     'ticket_id' => $existingTicket->id,
@@ -311,7 +442,8 @@ class ChatService
 
             // Case 1: Assign tickets to specific agents in a round-robin style
             if ($isSpecificAgentEnabled) {
-                $this->assignTicketToSpecificAgent($contactId, $organizationId);
+                $reassignOnReopen = $settings->tickets->reassign_reopened_chats;
+                $this->assignTicketToSpecificAgent($contactId, $organizationId, $reassignOnReopen);
                 return;
             }
 
@@ -322,124 +454,14 @@ class ChatService
 
                 $ticket = ChatTicket::where('contact_id', $contactId)->first();
 
-                DB::transaction(function () use ($reassignOnReopen, $autoassignment, $ticket, $contactId, $organizationId, $isSpecificAgentEnabled) {
+                DB::transaction(function () use ($reassignOnReopen, $autoassignment, $ticket, $contactId, $organizationId) {
                     if (!$ticket) {
-                        // Create a new ticket if none exists
-                        $ticket = new ChatTicket();
-                        $ticket->contact_id = $contactId;
-                        $ticket->status = 'open';
-                        $ticket->updated_at = now();
-
-                        if ($autoassignment) {
-                            // Find the agent with the least number of assigned tickets
-                            $agent = Team::where('organization_id', $organizationId)
-                                ->withCount('tickets')
-                                ->whereNull('deleted_at')
-                                ->orderBy('tickets_count')
-                                ->first();
-
-                            // Assign the ticket to the agent
-                            if ($agent) {
-                                $ticket->assigned_to = $agent->user_id;
-                            } else {
-                                $ticket->assigned_to = null;
-                            }
-                        } else {
-                            $ticket->assigned_to = null;
-                        }
-
-                        $ticket->save();
-
-                        if ($ticket->assigned_to) {
-                            try {
-                                $notificationService = new \App\Services\ApiNotificationService();
-                                $notificationService->sendAssignmentNotification(
-                                    $contactId,
-                                    $ticket->assigned_to,
-                                    auth('sanctum')->id() ?? auth()->id() ?? 0,
-                                    $organizationId
-                                );
-                            } catch (\Exception $e) {
-                                Log::error('Failed to send assignment notification: ' . $e->getMessage());
-                            }
-                        }
-
-                        $ticketId = ChatTicketLog::insertGetId([
-                            'contact_id' => $contactId,
-                            'description' => 'Conversation was opened',
-                            'created_at' => now()
-                        ]);
-
-                        ChatLog::insert([
-                            'contact_id' => $contactId,
-                            'entity_type' => 'ticket',
-                            'entity_id' => $ticketId,
-                            'created_at' => now()
-                        ]);
+                        // Create a new ticket
+                        $this->createNewTicket($contactId, $organizationId, $autoassignment);
                     } else {
-                        // **Process if ticket is closed OR open but unassigned**
-                        if ($ticket->status === 'closed' || ($ticket->status === 'open' && $ticket->assigned_to === null)) {
-                            $shouldLogReopen = ($ticket->status === 'closed');
-
-                            if ($isSpecificAgentEnabled) {
-                                $this->assignTicketToSpecificAgent($contactId, $organizationId);
-                                $ticket->refresh(); // Get updated status and assignment from round-robin
-                            } elseif ($ticket->status === 'closed') {
-                                if ($reassignOnReopen && $autoassignment) {
-                                    $agent = Team::where('organization_id', $organizationId)
-                                        ->withCount('tickets')
-                                        ->whereNull('deleted_at')
-                                        ->orderBy('tickets_count')
-                                        ->first();
-
-                                    $ticket->assigned_to = $agent ? $agent->user_id : null;
-                                }
-                                $ticket->status = 'open';
-                            } elseif ($ticket->status === 'open' && $ticket->assigned_to === null) {
-                                if ($autoassignment) {
-                                    $agent = Team::where('organization_id', $organizationId)
-                                        ->withCount('tickets')
-                                        ->whereNull('deleted_at')
-                                        ->orderBy('tickets_count')
-                                        ->first();
-
-                                    $ticket->assigned_to = $agent ? $agent->user_id : null;
-                                }
-                            }
-
-                            $ticket->updated_at = now();
-                            $ticket->save();
-
-                            if ($ticket->assigned_to) {
-                                try {
-                                    $notificationService = new \App\Services\ApiNotificationService();
-                                    $notificationService->sendAssignmentNotification(
-                                        $contactId,
-                                        $ticket->assigned_to,
-                                        0, // System reassignment
-                                        $organizationId
-                                    );
-                                } catch (\Exception $e) {
-                                    Log::error('Failed to send assignment notification: ' . $e->getMessage());
-                                }
-                            }
-
-                            if ($shouldLogReopen) {
-                                $ticketId = ChatTicketLog::insertGetId([
-                                    'contact_id' => $contactId,
-                                    'description' => 'Conversation was moved from closed to open',
-                                    'created_at' => now()
-                                ]);
-
-                                ChatLog::insert([
-                                    'contact_id' => $contactId,
-                                    'entity_type' => 'ticket',
-                                    'entity_id' => $ticketId,
-                                    'created_at' => now()
-                                ]);
-                            }
-                        }
-                        }
+                        // Process existing ticket (closed or open without assignment)
+                        $this->processExistingTicket($ticket, $contactId, $organizationId, $autoassignment, $reassignOnReopen);
+                    }
                 });
             }
         } catch (\Exception $ex) {
@@ -449,43 +471,67 @@ class ChatService
             ]);
         }
     }
-        
 
-    private function assignTicketToSpecificAgent($contactId, $organizationId)
-        {
-            $ticket = ChatTicket::where('contact_id', $contactId)->first();
+
+    private function assignTicketToSpecificAgent($contactId, $organizationId, $reassignOnReopen)
+    {
+        return DB::transaction(function () use ($contactId, $organizationId, $reassignOnReopen) {
+            $ticket = ChatTicket::where('contact_id', $contactId)->lockForUpdate()->first();
+            $isNewTicket = false;
+            $wasClosed = false;
 
             if (!$ticket) {
                 // Create a new ticket
                 $ticket = new ChatTicket();
                 $ticket->contact_id = $contactId;
                 $ticket->created_at = now();
+                $isNewTicket = true;
+            } else {
+                // Check if ticket was closed
+                $wasClosed = ($ticket->status === 'closed');
             }
 
             $ticket->status = 'open';
 
-            // 1. Get the list of agents assigned to this organization
-            $agents = DB::table('assigned_agents')
-                ->where('organization_id', $organizationId)
-                ->orderBy('id')
-                ->pluck('user_id')
-                ->toArray();
+            // Only reassign if ticket is new OR if it was closed and reassignOnReopen is enabled
+            $shouldReassign = !$wasClosed || $reassignOnReopen;
 
-            if (!empty($agents)) {
-                // 2. Find the last ticket assigned among these agents
-                $lastTicket = ChatTicket::whereIn('assigned_to', $agents)
-                    ->latest()
-                    ->first();
+            if ($shouldReassign) {
+                // 1. Get the list of agents assigned to this organization
+                $agents = DB::table('assigned_agents')
+                    ->where('organization_id', $organizationId)
+                    ->orderBy('id')
+                    ->pluck('user_id')
+                    ->toArray();
 
-                if ($lastTicket) {
-                    $lastIndex = array_search($lastTicket->assigned_to, $agents);
-                    $nextIndex = ($lastIndex === false) ? 0 : ($lastIndex + 1) % count($agents);
-                } else {
-                    $nextIndex = 0;
+                if (!empty($agents)) {
+                    // 2. Find the last ticket assigned among these agents (with pessimistic locking to prevent race conditions)
+                    // Also scope by organization using a join to ensure organization context
+                    $lastTicket = ChatTicket::whereIn('assigned_to', $agents)
+                        ->join('contacts', 'chat_tickets.contact_id', '=', 'contacts.id')
+                        ->where('contacts.organization_id', $organizationId)
+                        ->select('chat_tickets.*')
+                        ->latest('chat_tickets.id')
+                        ->lockForUpdate()
+                        ->first();
+
+                    if ($lastTicket) {
+                        $lastIndex = array_search($lastTicket->assigned_to, $agents);
+                        $nextIndex = ($lastIndex === false) ? 0 : ($lastIndex + 1) % count($agents);
+                    } else {
+                        $nextIndex = 0;
+                    }
+
+                    // 3. Assign the next agent in sequence
+                    $ticket->assigned_to = $agents[$nextIndex];
                 }
+            }
 
-                // 3. Assign the next agent in sequence
-                $ticket->assigned_to = $agents[$nextIndex];
+            // Log appropriate event based on ticket state
+            if ($isNewTicket) {
+                $this->logTicketEvent($contactId, 'Conversation was opened');
+            } elseif ($wasClosed) {
+                $this->logTicketEvent($contactId, 'Conversation was moved from closed to open');
             }
 
             $ticket->updated_at = now();
@@ -497,7 +543,7 @@ class ChatService
                 $notificationService->sendAssignmentNotification(
                     $contactId,
                     $ticket->assigned_to,
-                    0, // System round-robin assignment
+                    auth('sanctum')->id() ?? auth()->id() ?? 0,
                     $organizationId
                 );
             } catch (\Exception $e) {
@@ -505,28 +551,29 @@ class ChatService
             }
 
             return $ticket;
-        }
+        });
+    }
 
     public function sendMessage(object $request)
     {
         $userId = $request->user_id ?? $this->getUserId();
 
-        if($request->type === 'text'){
+        if ($request->type === 'text') {
             return $this->whatsappService->sendMessage($request->uuid, $request->message, $userId);
         } elseif (in_array($request->type, ['interactive buttons', 'interactive call to action url', 'interactive list'])) {
             $buttons = $request->buttons ?? [];
             $header = $request->header ?? [];
             $footer = $request->footer ?? null;
             $buttonLabel = $request->button_label ?? null;
-            
+
             return $this->whatsappService->sendMessage(
-                $request->uuid, 
-                $request->message, 
-                $userId, 
-                $request->type, 
-                $buttons, 
-                $header, 
-                $footer, 
+                $request->uuid,
+                $request->message,
+                $userId,
+                $request->type,
+                $buttons,
+                $header,
+                $footer,
                 $buttonLabel
             );
         } else {
@@ -534,12 +581,12 @@ class ChatService
             $fileName = $request->file('file')->getClientOriginalName();
             $fileContent = $request->file('file');
 
-            if($storage === 'local'){
+            if ($storage === 'local') {
                 $location = 'local';
                 $file = Storage::disk('local')->put('public', $fileContent);
                 $mediaFilePath = $file;
                 $mediaUrl = rtrim(config('app.url'), '/') . '/media/' . ltrim($mediaFilePath, '/');
-            } else if($storage === 'aws') {
+            } else if ($storage === 'aws') {
                 $location = 'amazon';
                 $file = $request->file('file');
                 $filePath = 'uploads/media/received/'  . $this->organizationId . '/' . $fileName;
@@ -547,7 +594,7 @@ class ChatService
                 $mediaFilePath = Storage::disk('s3')->url($uploadedFile);
                 $mediaUrl = $mediaFilePath;
             }
-    
+
             $this->whatsappService->sendMedia($request->uuid, $request->type, $fileName, $mediaFilePath, $mediaUrl, $location);
         }
     }
@@ -558,17 +605,17 @@ class ChatService
 
         $template = Template::where('uuid', $request->template)->first();
         $contact = Contact::where('uuid', $uuid)->first();
-        
+
         // Extract media_id from request if already uploaded
         $mediaId = $request->media_id ?? null;
 
-        if(isset($request->header['format']) && in_array($request->header['format'], ['IMAGE', 'DOCUMENT', 'VIDEO'])){
+        if (isset($request->header['format']) && in_array($request->header['format'], ['IMAGE', 'DOCUMENT', 'VIDEO'])) {
             $header = $request->header;
-            
+
             if (isset($request->header['parameters']) && $request->header['parameters']) {
                 $metadata['header']['format'] = $header['format'];
                 $metadata['header']['parameters'] = [];
-        
+
                 foreach ($request->header['parameters'] as $key => $parameter) {
                     if ($parameter['selection'] === 'upload') {
                         // This is now only for web version (when file object is passed)
@@ -576,16 +623,16 @@ class ChatService
                         $fileName = $parameter['value']->getClientOriginalName();
                         $fileContent = $parameter['value'];
 
-                        if($storage === 'local'){
+                        if ($storage === 'local') {
                             $file = Storage::disk('local')->put('public', $fileContent);
                             $mediaFilePath = $file;
-            
+
                             $mediaUrl = rtrim(config('app.url'), '/') . '/media/' . ltrim($mediaFilePath, '/');
-                        } else if($storage === 'aws') {
+                        } else if ($storage === 'aws') {
                             $file = $parameter['value'];
                             $uploadedFile = $file->store('uploads/media/sent/' . $this->organizationId, 's3');
                             $mediaFilePath = Storage::disk('s3')->url($uploadedFile);
-            
+
                             $mediaUrl = $mediaFilePath;
                         }
 
@@ -607,7 +654,7 @@ class ChatService
                         // For API (when URL is passed) - use the URL directly
                         $mediaUrl = $parameter['value'];
                     }
-        
+
                     $metadata['header']['parameters'][] = [
                         'type' => $parameter['type'],
                         'selection' => $parameter['selection'],
@@ -626,7 +673,7 @@ class ChatService
 
         //Build Template to send
         $template = $this->buildTemplate($template->name, $template->language, json_decode(json_encode($metadata)), $contact);
-        
+
         return $this->whatsappService->sendTemplateMessage($contact->uuid, $template, $userId, NULL, $mediaId);
     }
 
@@ -652,21 +699,22 @@ class ChatService
             'deleted_at' => now()
         ]);
 
-        $chat = Chat::with('contact','media')->where('id', $contact->lastChat->id)->first();
+        $chat = Chat::with('contact', 'media')->where('id', $contact->lastChat->id)->first();
 
         //event(new NewChatEvent($chat, $contact->organization_id));
     }
 
-    private function getContentTypeFromUrl($url) {
+    private function getContentTypeFromUrl($url)
+    {
         try {
             // Make a HEAD request to fetch headers only
             $response = Http::head($url);
-    
+
             // Check if the Content-Type header is present
             if ($response->hasHeader('Content-Type')) {
                 return $response->header('Content-Type');
             }
-    
+
             return null;
         } catch (\Exception $e) {
             // Log the error for debugging
@@ -675,18 +723,20 @@ class ChatService
         }
     }
 
-    private function getMediaSizeInBytesFromUrl($url) {
+    private function getMediaSizeInBytesFromUrl($url)
+    {
         $url = ltrim($url, '/');
         $imageContent = file_get_contents($url);
-    
+
         if ($imageContent !== false) {
             return strlen($imageContent);
         }
-    
+
         return null;
     }
 
-    private function getLocationSettings(){
+    private function getLocationSettings()
+    {
         // Retrieve the settings for the current organization
         $settings = Organization::where('id', $this->organizationId)->first();
 
