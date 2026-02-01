@@ -476,7 +476,7 @@ class ChatService
     private function assignTicketToSpecificAgent($contactId, $organizationId, $reassignOnReopen)
     {
         return DB::transaction(function () use ($contactId, $organizationId, $reassignOnReopen) {
-            $ticket = ChatTicket::where('contact_id', $contactId)->first();
+            $ticket = ChatTicket::where('contact_id', $contactId)->lockForUpdate()->first();
             $isNewTicket = false;
             $wasClosed = false;
 
@@ -493,33 +493,38 @@ class ChatService
 
             $ticket->status = 'open';
 
-            // 1. Get the list of agents assigned to this organization
-            $agents = DB::table('assigned_agents')
-                ->where('organization_id', $organizationId)
-                ->orderBy('id')
-                ->pluck('user_id')
-                ->toArray();
+            // Only reassign if ticket is new OR if it was closed and reassignOnReopen is enabled
+            $shouldReassign = !$wasClosed || $reassignOnReopen;
 
-            if (!empty($agents)) {
-                // 2. Find the last ticket assigned among these agents (with pessimistic locking to prevent race conditions)
-                // Also scope by organization using a join to ensure organization context
-                $lastTicket = ChatTicket::whereIn('assigned_to', $agents)
-                    ->join('contacts', 'chat_tickets.contact_id', '=', 'contacts.id')
-                    ->where('contacts.organization_id', $organizationId)
-                    ->select('chat_tickets.*')
-                    ->latest('chat_tickets.id')
-                    ->lockForUpdate()
-                    ->first();
+            if ($shouldReassign) {
+                // 1. Get the list of agents assigned to this organization
+                $agents = DB::table('assigned_agents')
+                    ->where('organization_id', $organizationId)
+                    ->orderBy('id')
+                    ->pluck('user_id')
+                    ->toArray();
 
-                if ($lastTicket) {
-                    $lastIndex = array_search($lastTicket->assigned_to, $agents);
-                    $nextIndex = ($lastIndex === false) ? 0 : ($lastIndex + 1) % count($agents);
-                } else {
-                    $nextIndex = 0;
+                if (!empty($agents)) {
+                    // 2. Find the last ticket assigned among these agents (with pessimistic locking to prevent race conditions)
+                    // Also scope by organization using a join to ensure organization context
+                    $lastTicket = ChatTicket::whereIn('assigned_to', $agents)
+                        ->join('contacts', 'chat_tickets.contact_id', '=', 'contacts.id')
+                        ->where('contacts.organization_id', $organizationId)
+                        ->select('chat_tickets.*')
+                        ->latest('chat_tickets.id')
+                        ->lockForUpdate()
+                        ->first();
+
+                    if ($lastTicket) {
+                        $lastIndex = array_search($lastTicket->assigned_to, $agents);
+                        $nextIndex = ($lastIndex === false) ? 0 : ($lastIndex + 1) % count($agents);
+                    } else {
+                        $nextIndex = 0;
+                    }
+
+                    // 3. Assign the next agent in sequence
+                    $ticket->assigned_to = $agents[$nextIndex];
                 }
-
-                // 3. Assign the next agent in sequence
-                $ticket->assigned_to = $agents[$nextIndex];
             }
 
             // Log appropriate event based on ticket state
