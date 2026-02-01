@@ -225,7 +225,7 @@ public function campaign(Request $request)
 
             $metadataArray['tickets']['active'] = $request->active;
             $metadataArray['tickets']['auto_assignment'] = $request->auto_assignment ?? false;
-            $metadataArray['tickets']['auto_robinhood'] = $request->auto_robinhood ?? false;
+            $metadataArray['tickets']['assigned_to_specific_agents'] = $request->auto_robinhood ?? false;
             $metadataArray['tickets']['reassign_reopened_chats'] = $request->reassign_reopened_chats;
             $metadataArray['tickets']['allow_agents_to_view_all_chats'] = $request->allow_agents_to_view_all_chats;
 
