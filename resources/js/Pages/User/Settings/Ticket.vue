@@ -35,7 +35,8 @@
                                 <div class="text-md">
                                     <h4 class="text-[16px]">{{ $t('Auto assignment') }}</h4>
                                     <span class="flex items-center mt-1 text-slate-500">
-                                        {{ $t('Use auto-assignment rules to evenly distribute chats among agents automatically.') }}
+                                        {{ $t('Use auto-assignment rules to evenly distribute chats among agents
+                                        automatically.') }}
                                     </span>
                                 </div>
                             </div>
@@ -60,7 +61,8 @@
                                             </div>
                                             <div @click="toggleAutoAssignment('off')" class="cursor-pointer">
                                                 <div>{{ $t('Off') }}</div>
-                                                <div>{{ $t('Team members pick conversations manually from Unassigned folder.') }}</div>
+                                                <div>{{ $t('Team members pick conversations manually from Unassigned
+                                                    folder.') }}</div>
                                             </div>
                                         </div>
                                     </div>
@@ -82,7 +84,8 @@
                                             </div>
                                             <div @click="toggleAutoAssignment('auto')" class="cursor-pointer">
                                                 <div>{{ $t('Auto') }}</div>
-                                                <div>{{ $t('Distribute conversations among all your available team members.') }}</div>
+                                                <div>{{ $t('Distribute conversations among all your available team
+                                                    members.') }}</div>
                                             </div>
                                         </div>
                                     </div>
@@ -103,9 +106,10 @@
                                                     </label>
                                                 </div>
                                             </div>
-                                            <diV class="cursor-pointer">
+                                            <div class="cursor-pointer">
                                                 <div>{{ $t('Auto Robinhood') }}</div>
-                                                <div>{{ $t('Round-robin assignment distributes chats equally among available agents.') }}</div>
+                                                <div>{{ $t('Round-robin assignment distributes chats equally among
+                                                    available agents.') }}</div>
                                             </div>
                                         </div>
                                     </div>
@@ -123,7 +127,8 @@
                                 <div class="text-md">
                                     <h4 class="text-[16px]">{{ $t('Assigned to specific agents') }}</h4>
                                     <div class="mb-1 text-slate-500">
-                                        {{ $t('Select the specific agents who will receive auto-assigned conversations.') }}
+                                        {{ $t('Select the specific agents who will receive auto-assigned
+                                        conversations.') }}
                                     </div>
                                 </div>
                             </div>
@@ -150,7 +155,8 @@
                                 <div class="w-3/4 text-md">
                                     <h4 class="text-[16px]">{{ $t('Reassign chats that have been reopened') }}</h4>
                                     <div class="mb-1 text-slate-500">
-                                        {{ $t('Enable this option to reassign chats when a contact re-opens closed conversation.') }}
+                                        {{ $t('Enable this option to reassign chats when a contact re-opens closed
+                                        conversation.') }}
                                     </div>
                                 </div>
                                 <div class="w-1/4">
@@ -175,7 +181,8 @@
                                         {{ $t('Grant agents access to view all chats not assigned to them') }}
                                     </h4>
                                     <div class="mb-1 text-slate-500 mt-1">
-                                        {{ $t('Disable this option, if you want live chat agents to have access only to new conversations.') }}
+                                        {{ $t('Disable this option, if you want live chat agents to have access only to
+                                        new conversations.') }}
                                     </div>
                                 </div>
                                 <div class="flex-shrink-0">
@@ -210,7 +217,7 @@ const settings = ref(config.value ? JSON.parse(config.value) : null);
 const form = useForm({
     active: settings.value?.tickets?.active ?? false,
     auto_assignment: settings.value?.tickets?.auto_assignment ?? false,
-    auto_robinhood: settings.value?.tickets?.auto_robinhood ?? false,
+    auto_robinhood: settings.value?.tickets?.assigned_to_specific_agents ?? false,
     reassign_reopened_chats: settings.value?.tickets?.reassign_reopened_chats ?? false,
     allow_agents_to_view_all_chats: settings.value?.tickets?.allow_agents_to_view_all_chats ?? false,
     selected_agents: props.oldSelectedAgents ?? (settings.value?.tickets?.selected_agents ?? [])

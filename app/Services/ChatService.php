@@ -293,6 +293,8 @@ class ChatService
     private function findLeastLoadedAgent($organizationId)
     {
         return Team::where('organization_id', $organizationId)
+            ->where('role', 'agent')
+            ->where('status', 'active')
             ->withCount('tickets')
             ->whereNull('deleted_at')
             ->orderBy('tickets_count')
@@ -473,71 +475,78 @@ class ChatService
 
     private function assignTicketToSpecificAgent($contactId, $organizationId, $reassignOnReopen)
     {
-        $ticket = ChatTicket::where('contact_id', $contactId)->first();
-        $isNewTicket = false;
-        $wasClosed = false;
+        return DB::transaction(function () use ($contactId, $organizationId, $reassignOnReopen) {
+            $ticket = ChatTicket::where('contact_id', $contactId)->first();
+            $isNewTicket = false;
+            $wasClosed = false;
 
-        if (!$ticket) {
-            // Create a new ticket
-            $ticket = new ChatTicket();
-            $ticket->contact_id = $contactId;
-            $ticket->created_at = now();     
-            $isNewTicket = true;
-        } else {
-            // Check if ticket was closed
-            $wasClosed = ($ticket->status === 'closed');
-        }
-
-        $ticket->status = 'open';
-
-        // 1. Get the list of agents assigned to this organization
-        $agents = DB::table('assigned_agents')
-            ->where('organization_id', $organizationId)
-            ->orderBy('id')
-            ->pluck('user_id')
-            ->toArray();
-
-        if (!empty($agents)) {
-            // 2. Find the last ticket assigned among these agents
-            $lastTicket = ChatTicket::whereIn('assigned_to', $agents)
-                ->latest()
-                ->first();
-
-            if ($lastTicket) {
-                $lastIndex = array_search($lastTicket->assigned_to, $agents);
-                $nextIndex = ($lastIndex === false) ? 0 : ($lastIndex + 1) % count($agents);
+            if (!$ticket) {
+                // Create a new ticket
+                $ticket = new ChatTicket();
+                $ticket->contact_id = $contactId;
+                $ticket->created_at = now();
+                $isNewTicket = true;
             } else {
-                $nextIndex = 0;
+                // Check if ticket was closed
+                $wasClosed = ($ticket->status === 'closed');
             }
 
-            // 3. Assign the next agent in sequence
-            $ticket->assigned_to = $agents[$nextIndex];
-        }
-        
-        // Log appropriate event based on ticket state
-        if ($isNewTicket) {
-            $this->logTicketEvent($contactId, 'Conversation was opened');
-        } elseif ($wasClosed) {
-            $this->logTicketEvent($contactId, 'Conversation was moved from closed to open');
-        }
-        
-        $ticket->updated_at = now();
-        $ticket->save();
+            $ticket->status = 'open';
 
-        // Send assignment notification
-        try {
-            $notificationService = new \App\Services\ApiNotificationService();
-            $notificationService->sendAssignmentNotification(
-                $contactId,
-                $ticket->assigned_to,
-                auth('sanctum')->id() ?? auth()->id() ?? 0,
-                $organizationId
-            );
-        } catch (\Exception $e) {
-            Log::error('Failed to send assignment notification: ' . $e->getMessage());
-        }
+            // 1. Get the list of agents assigned to this organization
+            $agents = DB::table('assigned_agents')
+                ->where('organization_id', $organizationId)
+                ->orderBy('id')
+                ->pluck('user_id')
+                ->toArray();
 
-        return $ticket;
+            if (!empty($agents)) {
+                // 2. Find the last ticket assigned among these agents (with pessimistic locking to prevent race conditions)
+                // Also scope by organization using a join to ensure organization context
+                $lastTicket = ChatTicket::whereIn('assigned_to', $agents)
+                    ->join('contacts', 'chat_tickets.contact_id', '=', 'contacts.id')
+                    ->where('contacts.organization_id', $organizationId)
+                    ->select('chat_tickets.*')
+                    ->latest('chat_tickets.id')
+                    ->lockForUpdate()
+                    ->first();
+
+                if ($lastTicket) {
+                    $lastIndex = array_search($lastTicket->assigned_to, $agents);
+                    $nextIndex = ($lastIndex === false) ? 0 : ($lastIndex + 1) % count($agents);
+                } else {
+                    $nextIndex = 0;
+                }
+
+                // 3. Assign the next agent in sequence
+                $ticket->assigned_to = $agents[$nextIndex];
+            }
+
+            // Log appropriate event based on ticket state
+            if ($isNewTicket) {
+                $this->logTicketEvent($contactId, 'Conversation was opened');
+            } elseif ($wasClosed) {
+                $this->logTicketEvent($contactId, 'Conversation was moved from closed to open');
+            }
+
+            $ticket->updated_at = now();
+            $ticket->save();
+
+            // Send assignment notification
+            try {
+                $notificationService = new \App\Services\ApiNotificationService();
+                $notificationService->sendAssignmentNotification(
+                    $contactId,
+                    $ticket->assigned_to,
+                    auth('sanctum')->id() ?? auth()->id() ?? 0,
+                    $organizationId
+                );
+            } catch (\Exception $e) {
+                Log::error('Failed to send assignment notification: ' . $e->getMessage());
+            }
+
+            return $ticket;
+        });
     }
 
     public function sendMessage(object $request)
