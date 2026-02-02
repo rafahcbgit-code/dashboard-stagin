@@ -630,6 +630,45 @@ class ChatService
         return $this->whatsappService->sendTemplateMessage($contact->uuid, $template, $userId, NULL, $mediaId);
     }
 
+    /**
+     * Send a carousel template message to a contact.
+     *
+     * This is intentionally separate from sendTemplateMessage() because the
+     * carousel payload structure is fundamentally different from standard
+     * templates — it has nested card components rather than a flat
+     * header/body/buttons layout.
+     *
+     * @param  string  $contactUuid   The UUID of the contact to send to
+     * @param  int     $templateId    The Template model ID (resolved from UUID by the caller)
+     * @return object                 The response object from WhatsappService
+     */
+    public function sendCarouselTemplateMessage(string $contactUuid, int $templateId): object
+    {
+        
+        $contact  = Contact::where('uuid', $contactUuid)->first();
+        $template = Template::where('id', $templateId)->first();
+        $userId  = $this->getUserId();
+
+        // Build the carousel payload using the trait method
+        $templateContent = $this->buildCarouselTemplateRequest($templateId, $contact);
+
+        $enrichedPayload = $this->whatsappService->enrichCarouselWithMediaIds($templateContent);
+
+        // Send via WhatsappService — reuses the same sendTemplateMessage method
+        // since it just POSTs whatever templateContent it receives to Meta.
+        // We pass null for campaignId and mediaId since carousel templates
+        // don't use those fields.
+        $responseObject = $this->whatsappService->sendTemplateMessage(
+            $contactUuid,
+            $enrichedPayload,
+            $userId,
+            null,  // campaignId
+            null   // mediaId
+        );
+
+        return $responseObject;
+    }
+
     public function clearMessage($uuid)
     {
         Chat::where('uuid', $uuid)

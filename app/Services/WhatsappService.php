@@ -178,10 +178,10 @@ class WhatsappService
         $requestData['type'] = 'template';
         $requestData['template'] = $templateContent;
 
-        //\Log::info('WhatsApp API Request: ' . json_encode($requestData));
+        \Log::info('WhatsApp API Request: ' . json_encode($requestData));
 
         $responseObject = $this->sendHttpRequest('POST', $url, $requestData, $headers);
-
+        \Log::info("meta resp", [$responseObject]);
         if($responseObject->success === true){
             if($campaignId != NULL){
                 $campaign = Campaign::where('id', $campaignId)->first();
@@ -194,7 +194,11 @@ class WhatsappService
                 'contact_id' => $contact->id,
                 'type' => 'outbound',
                 'user_id' => $userId,
-                'metadata' => $campaignId != NULL ? $this->buildCampaignTemplateChatMessage($templateMetadata, $contactUuId) : $this->buildTemplateChatMessage($templateContent, $contact),
+                'metadata' => $campaignId != NULL
+                ? $this->buildCampaignTemplateChatMessage($templateMetadata, $contactUuId)
+                : (isset($templateContent['components']) && $this->isCarouselPayload($templateContent)
+                    ? $this->buildCarouselTemplateChatMessage($contactUuId, $this->resolveTemplateIdFromPayload($templateContent))
+                    : $this->buildTemplateChatMessage($templateContent, $contact)),
                 'media_id' => $campaignId != NULL ? $this->getMediaIdFromCampaign($campaignId) : $mediaId,
                 'status' => isset($responseObject->data->messages[0]->message_status) ? $responseObject->data->messages[0]->message_status : 'sent',
                 'created_at' => now()
@@ -224,6 +228,294 @@ class WhatsappService
         ], $contact->organization_id);
 
         return $responseObject;
+    }
+
+    /**
+     * Enrich carousel template payload with fresh media IDs
+     * Called from TemplateTrait before sending
+     */
+    public function enrichCarouselWithMediaIds(array $templatePayload): array
+    {
+        // Find carousel component
+        foreach ($templatePayload['components'] as &$component) {
+            if (($component['type'] ?? '') === 'carousel') {
+                // Process each card
+                foreach ($component['cards'] as &$card) {
+                    // Find header component in card
+                    foreach ($card['components'] as &$cardComponent) {
+                        if (($cardComponent['type'] ?? '') === 'header') {
+                            // Get the URL from parameters
+                            $headerParam = &$cardComponent['parameters'][0] ?? null;
+                            
+                            if ($headerParam) {
+                                $mediaType = $headerParam['type'] ?? 'image';
+                                $mediaUrl = $headerParam[$mediaType]['link'] ?? null;
+                                
+                                if ($mediaUrl) {
+                                    // Upload and get fresh media ID
+                                    $mediaId = $this->uploadMediaForSending($mediaUrl);
+                                    
+                                    if ($mediaId) {
+                                        // Replace 'link' with 'id'
+                                        unset($headerParam[$mediaType]['link']);
+                                        $headerParam[$mediaType]['id'] = $mediaId;
+                                    } else {
+                                        \Log::error('Failed to get media ID for carousel card', [
+                                            'url' => $mediaUrl
+                                        ]);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        
+        return $templatePayload;
+    }
+
+    /**
+     * Check if a template payload is a carousel by scanning its components.
+     */
+    private function isCarouselPayload(array $templateContent): bool
+    {
+        foreach ($templateContent['components'] ?? [] as $component) {
+            if (strtolower($component['type'] ?? '') === 'carousel') {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    /**
+     * Resolve the Template model ID from the payload's name + language.
+     * This lets us look up the full carousel_cards metadata for chat storage.
+     */
+    private function resolveTemplateIdFromPayload(array $templateContent): int
+    {
+        $template = Template::where('organization_id', $this->organizationId)
+            ->where('name', $templateContent['name'])
+            ->where('language', $templateContent['language']['code'])
+            ->first();
+
+        return $template->id;
+    }
+
+    /**
+     * Upload media file and return its media ID for sending carousel templates
+     */
+    private function uploadMediaForSending(string $fileUrl): ?string
+    {
+        try {
+            // Get file info
+            $fileData = $this->getFileDataForUpload($fileUrl);
+            
+            if (!$fileData) {
+                \Log::error('Could not get file data', ['url' => $fileUrl]);
+                return null;
+            }
+
+            $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}/media";
+            
+            // Create a temporary file with proper extension
+            $tempFile = tmpfile();
+            $tempPath = stream_get_meta_data($tempFile)['uri'];
+            fwrite($tempFile, $fileData['content']);
+            
+            // Determine proper filename with extension
+            $extension = $this->getExtensionFromMimeType($fileData['mime_type']);
+            $filename = 'carousel_' . uniqid() . '.' . $extension;
+            
+            $response = \Http::withHeaders([
+                'Authorization' => 'Bearer ' . $this->accessToken,
+            ])->attach(
+                'file',
+                $fileData['content'],
+                $filename
+            )->post($url, [
+                'messaging_product' => 'whatsapp',
+                'type' => $fileData['mime_type'],  // Explicitly set type
+            ]);
+
+            // Clean up temp file
+            fclose($tempFile);
+
+            if ($response->successful()) {
+                $mediaId = $response->json('id');
+                \Log::info('Media uploaded for carousel card', [
+                    'media_id' => $mediaId,
+                    'mime_type' => $fileData['mime_type'],
+                    'filename' => $filename
+                ]);
+                return $mediaId;
+            }
+
+            \Log::error('Media upload failed', [
+                'response' => $response->json(),
+                'mime_type' => $fileData['mime_type'],
+                'url' => $fileUrl
+            ]);
+            return null;
+            
+        } catch (\Exception $e) {
+            \Log::error('uploadMediaForSending error', [
+                'error' => $e->getMessage(),
+                'url' => $fileUrl
+            ]);
+            return null;
+        }
+    }
+
+    /**
+     * Get file content and MIME type from URL
+     */
+    private function getFileDataForUpload(string $url): ?array
+    {
+        try {
+            $appUrl = rtrim(config('app.url'), '/');
+            
+            // If it's a local URL, read from storage
+            if (str_starts_with($url, $appUrl . '/media/')) {
+                $relativePath = str_replace($appUrl . '/media/', '', $url);
+                $decodedPath = urldecode($relativePath);
+                
+                if (\Storage::disk('local')->exists($decodedPath)) {
+                    $content = \Storage::disk('local')->get($decodedPath);
+                    $mimeType = \Storage::disk('local')->mimeType($decodedPath);
+                    
+                    return [
+                        'content' => $content,
+                        'mime_type' => $mimeType,
+                    ];
+                }
+                
+                \Log::warning('Local file not found', ['path' => $decodedPath]);
+                return null;
+            }
+            
+            // For external URLs (like Meta CDN), fetch and detect MIME type
+            $content = @file_get_contents($url);
+            
+            if ($content === false) {
+                \Log::error('Could not fetch external URL', ['url' => $url]);
+                return null;
+            }
+            
+            // Detect MIME type from content or URL
+            $mimeType = $this->detectMimeType($content, $url);
+            
+            return [
+                'content' => $content,
+                'mime_type' => $mimeType,
+            ];
+            
+        } catch (\Exception $e) {
+            \Log::error('getFileDataForUpload error', [
+                'error' => $e->getMessage(),
+                'url' => $url
+            ]);
+            return null;
+        }
+    }
+
+    /**
+     * Detect MIME type from content or URL
+     */
+    private function detectMimeType(string $content, string $url): string
+    {
+        // Try to detect from content using finfo
+        $finfo = new \finfo(FILEINFO_MIME_TYPE);
+        $mimeType = $finfo->buffer($content);
+        
+        // If detection worked and it's not generic, use it
+        if ($mimeType && $mimeType !== 'application/octet-stream') {
+            return $mimeType;
+        }
+        
+        // Fallback: detect from URL extension
+        $extension = strtolower(pathinfo(parse_url($url, PHP_URL_PATH), PATHINFO_EXTENSION));
+        
+        $extensionMap = [
+            'jpg'  => 'image/jpeg',
+            'jpeg' => 'image/jpeg',
+            'png'  => 'image/png',
+            'webp' => 'image/webp',
+            'gif'  => 'image/gif',
+            'mp4'  => 'video/mp4',
+            '3gpp' => 'video/3gpp',
+            'pdf'  => 'application/pdf',
+            'doc'  => 'application/msword',
+            'docx' => 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+            'xls'  => 'application/vnd.ms-excel',
+            'xlsx' => 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+            'ppt'  => 'application/vnd.ms-powerpoint',
+            'pptx' => 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+            'aac'  => 'audio/aac',
+            'mp3'  => 'audio/mpeg',
+            'ogg'  => 'audio/ogg',
+            'opus' => 'audio/opus',
+            'amr'  => 'audio/amr',
+        ];
+        
+        return $extensionMap[$extension] ?? 'application/octet-stream';
+    }
+
+    /**
+     * Get file extension from MIME type
+     */
+    private function getExtensionFromMimeType(string $mimeType): string
+    {
+        $mimeMap = [
+            'image/jpeg' => 'jpg',
+            'image/png'  => 'png',
+            'image/webp' => 'webp',
+            'image/gif'  => 'gif',
+            'video/mp4'  => 'mp4',
+            'video/3gpp' => '3gp',
+            'application/pdf' => 'pdf',
+            'audio/mpeg' => 'mp3',
+            'audio/ogg'  => 'ogg',
+            'audio/aac'  => 'aac',
+        ];
+        
+        return $mimeMap[$mimeType] ?? 'bin';
+    }
+
+    /**
+     * Get file content from local storage or external URL
+     */
+    private function getFileContentFromUrl(string $url): ?string
+    {
+        try {
+            $appUrl = rtrim(config('app.url'), '/');
+            
+            // If it's a local URL, read from storage
+            if (str_starts_with($url, $appUrl . '/media/')) {
+                $relativePath = str_replace($appUrl . '/media/', '', $url);
+                $decodedPath = urldecode($relativePath);
+                
+                if (\Storage::disk('local')->exists($decodedPath)) {
+                    return \Storage::disk('local')->get($decodedPath);
+                }
+                
+                \Log::warning('Local file not found', ['path' => $decodedPath]);
+            }
+            
+            // Otherwise fetch from external URL
+            $content = @file_get_contents($url);
+            
+            if ($content === false) {
+                \Log::error('Could not fetch external URL', ['url' => $url]);
+                return null;
+            }
+            
+            return $content;
+            
+        } catch (\Exception $e) {
+            \Log::error('getFileContentFromUrl error', ['error' => $e->getMessage(), 'url' => $url]);
+            return null;
+        }
     }
 
     private function getMediaIdFromCampaign($campaignId){
@@ -947,6 +1239,183 @@ class WhatsappService
         return $responseObject;
     }
 
+    public function createCarouselTemplate(Request $request)
+    {
+        $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->wabaId}/message_templates";
+
+        $cards     = $request->input('cards', []);
+        $cardFiles = $request->file('card_files', []);
+
+        $uploader = new \App\Services\MediaUploadService(
+            $this->accessToken,
+            $this->apiVersion,
+            $this->appId
+        );
+
+        $carouselCards = [];   // → components[1].cards  (sent to Meta)
+        $savedCards    = [];   // → metadata.carousel_cards  (persisted for Edit)
+
+        foreach ($cards as $index => $card) {
+            $cardComponents = [];   // components array INSIDE this card
+
+            // ── HEADER ──────────────────────────────────────────────────────────
+            if (isset($cardFiles[$index])) {
+                $uploadResult = $uploader->uploadToMeta($cardFiles[$index]);
+
+                if (!$uploadResult->success) {
+                    $responseObject = new \stdClass();
+                    $responseObject->success = false;
+                    $responseObject->data    = new \stdClass();
+                    $responseObject->data->error = new \stdClass();
+                    $responseObject->data->error->message = $uploadResult->error ?? 'Failed to upload card image';
+                    return $responseObject;
+                }
+
+                // Save locally
+                $localInfo = $uploader->saveLocally($cardFiles[$index], "carousel_card_{$index}_" . time());
+
+
+                // Matches docs: { "type": "header", "format": "image", "example": { "header_handle": [...] } }
+                $cardComponents[] = [
+                    'type'   => 'header',
+                    'format' => strtolower($card['header_type'] ?? 'image'),   // docs use lowercase
+                    'example' => [
+                        'header_handle' => [$uploadResult->handle],
+                    ],
+                ];
+
+                $savedCards[$index] = [
+                    'header_type'   => $card['header_type'] ?? 'IMAGE',
+                    'header_handle' => $uploadResult->handle,
+                    'local_path'    => $localInfo['path'] ?? null,  
+                    'local_url'     => $localInfo['url'] ?? null,
+                ];
+            }
+
+            // ── BODY (optional per card, but if ANY card has it, ALL must) ──────
+            // Docs: card body is a component inside card.components with type "body"
+            // Note: this is CARD body, separate from the top-level message body
+            if (!empty($card['body_text'])) {
+                $cardComponents[] = [
+                    'type' => 'body',
+                    'text' => $card['body_text'],
+                ];
+                $savedCards[$index]['body_text'] = $card['body_text'];
+            }
+
+            // ── BUTTONS ─────────────────────────────────────────────────────────
+            // Docs: { "type": "buttons", "buttons": [ ... ] }
+            if (!empty($card['buttons'])) {
+                $buttons = [];
+                foreach ($card['buttons'] as $btn) {
+                    $button = [
+                        'type' => strtolower($btn['type']),   // docs use lowercase: quick_reply, url, phone_number
+                        'text' => $btn['text'] ?? '',
+                    ];
+
+                    if (strtolower($btn['type']) === 'url' && isset($btn['url'])) {
+                        $button['url'] = $btn['url'];
+                    } elseif (strtolower($btn['type']) === 'phone_number') {
+                        $button['phone_number'] = ($btn['country'] ?? '') . ($btn['phone_number'] ?? '');
+                    } elseif (strtolower($btn['type']) === 'copy_code' && isset($btn['example'])) {
+                        $button['example'] = $btn['example'];
+                    }
+
+                    $buttons[] = $button;
+                }
+
+                $cardComponents[] = [
+                    'type'    => 'buttons',
+                    'buttons' => $buttons,
+                ];
+                $savedCards[$index]['buttons'] = $card['buttons'];
+            }
+
+            // Each card is an object with a "components" key wrapping the array
+            // Docs: cards: [ { "components": [ ... ] }, { "components": [ ... ] } ]
+            $carouselCards[] = [
+                'components' => $cardComponents,
+            ];
+        }
+
+        // ── Full payload ────────────────────────────────────────────────────────
+        // Docs require components in this order:
+        //   [0] → { "type": "body", "text": "..." }          ← REQUIRED by Meta
+        //   [1] → { "type": "carousel", "cards": [...] }
+        $requestData = [
+            'name'     => $request->name,
+            'language' => $request->language,
+            'category' => strtolower($request->category),
+            'components' => [
+                [
+                    'type' => 'body',
+                    'text' => $request->carousel_message_body,
+                ],
+                [
+                    'type'  => 'carousel',
+                    'cards' => $carouselCards,
+                ],
+            ],
+        ];
+
+        \Log::debug(json_encode($requestData, JSON_PRETTY_PRINT));
+
+        // ── POST to Meta ────────────────────────────────────────────────────────
+        $client = new Client();
+        $responseObject = new \stdClass();
+
+        try {
+            $response = $client->post($url, [
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $this->accessToken,
+                    'Content-Type'  => 'application/json',
+                ],
+                'json' => $requestData,
+            ]);
+
+            $responseObject->success = true;
+            $responseObject->data    = json_decode($response->getBody()->getContents());
+
+            // ── Persist to DB ───────────────────────────────────────────────────
+            $metaToStore = $requestData;
+            $metaToStore['template_type']  = 'carousel';
+            $metaToStore['carousel_cards'] = array_values($savedCards);
+
+            $template = new Template();
+            $template->organization_id = session()->get('current_organization');
+            $template->meta_id         = $responseObject->data->id;
+            $template->name            = $request->name;
+            $template->category        = $request->category;
+            $template->language        = $request->language;
+            $template->metadata        = json_encode($metaToStore);
+            $template->status          = $responseObject->data->status;
+            $template->created_by      = auth()->user()->id;
+            $template->created_at      = now();
+            $template->updated_at      = now();
+            $template->save();
+
+        } catch (ConnectException $e) {
+            $responseObject->success = false;
+            $responseObject->data    = new \stdClass();
+            $responseObject->data->error = new \stdClass();
+            $responseObject->data->error->message = $e->getMessage();
+        } catch (GuzzleException $e) {
+            $response = $e->getResponse();
+            $responseObject->success = false;
+            $responseObject->data    = json_decode($response->getBody()->getContents());
+            $responseObject->message = $responseObject->data->error->error_user_msg
+                ?? $responseObject->data->error->message
+                ?? $e->getMessage();
+        } catch (\Exception $e) {
+            $responseObject->success = false;
+            $responseObject->data    = new \stdClass();
+            $responseObject->data->error = new \stdClass();
+            $responseObject->data->error->message = $e->getMessage();
+        }
+
+        return $responseObject;
+    }
+
     public function updateTemplate(Request $request, $uuid)
     {
         $template = Template::where('uuid', $uuid)->first();
@@ -1178,6 +1647,175 @@ class WhatsappService
         return $responseObject;
     }
 
+    /**
+     * Update an existing carousel template.
+     *
+     * Only text is editable on an approved carousel:
+     *   - carousel_message_body  (top-level body)
+     *   - body_text per card
+     *   - button text per card (type/url/phone_number are locked)
+     *
+     * Media cannot change — we re-use the header_handle values stored in
+     * metadata.carousel_cards (which after sync are CDN URLs, but Meta still
+     * accepts them in header_handle on update).
+     *
+     * Payload shape mirrors createCarouselTemplate exactly:
+     *   components[0] → { type: "body", text: "..." }
+     *   components[1] → { type: "carousel", cards: [ { components: [...] }, ... ] }
+     */
+    public function updateCarouselTemplate(Request $request, $uuid)
+    {
+        $responseObject = new \stdClass();
+        $template       = Template::where('uuid', $uuid)->first();
+
+        if (!$template) {
+            $responseObject->success = false;
+            $responseObject->data    = new \stdClass();
+            $responseObject->data->error = new \stdClass();
+            $responseObject->data->error->message = 'Template not found.';
+            return $responseObject;
+        }
+
+        $existingMeta  = json_decode($template->metadata, true);
+        $originalCards = $existingMeta['carousel_cards'] ?? [];
+
+        // What the frontend sent
+        $updatedCards        = $request->carousel_cards ?? [];
+        $updatedMessageBody  = $request->carousel_message_body ?? '';
+
+        // ── Rebuild cards in the correct Meta format ───────────────────────────
+        $metaCards = [];
+
+        foreach ($originalCards as $index => $originalCard) {
+            $newCard = $updatedCards[$index] ?? $originalCard;   // fallback to original if missing
+            $cardComponents = [];
+
+            // HEADER — locked. Re-use the handle/URL from stored metadata.
+            $cardComponents[] = [
+                'type'   => 'header',
+                'format' => strtolower($originalCard['header_type'] ?? 'image'),
+                'example' => [
+                    'header_handle' => [$originalCard['header_handle']],   // CDN URL after sync
+                ],
+            ];
+
+            // BODY — use the new text from the update request
+            $bodyText = $newCard['body_text'] ?? $originalCard['body_text'] ?? null;
+            if ($bodyText !== null && $bodyText !== '') {
+                $cardComponents[] = [
+                    'type' => 'body',
+                    'text' => $bodyText,
+                ];
+            }
+
+            // BUTTONS — text is editable, type/url/phone are locked from original
+            $buttons = $newCard['buttons'] ?? $originalCard['buttons'] ?? [];
+            if (!empty($buttons)) {
+                $buttonsPayload = [];
+                foreach ($buttons as $btn) {
+                    $btnItem = [
+                        'type' => strtolower($btn['type']),
+                        'text' => $btn['text'] ?? '',
+                    ];
+
+                    if (strtolower($btn['type']) === 'url') {
+                        $btnItem['url'] = $btn['url'] ?? '';
+                    } elseif (strtolower($btn['type']) === 'phone_number') {
+                        $btnItem['phone_number'] = ($btn['country'] ?? '') . ($btn['phone_number'] ?? '');
+                    }
+
+                    $buttonsPayload[] = $btnItem;
+                }
+
+                $cardComponents[] = [
+                    'type'    => 'buttons',
+                    'buttons' => $buttonsPayload,
+                ];
+            }
+
+            // Each card wraps its components — same structure as create
+            $metaCards[] = [
+                'components' => $cardComponents,
+            ];
+        }
+
+        // ── Full payload — matches create exactly ──────────────────────────────
+        $requestData = [
+            'category'   => 'marketing',
+            'components' => [
+                [
+                    'type' => 'body',
+                    'text' => $updatedMessageBody,
+                ],
+                [
+                    'type'  => 'carousel',
+                    'cards' => $metaCards,
+                ],
+            ],
+        ];
+
+        \Log::debug(json_encode($requestData, JSON_PRETTY_PRINT));
+
+        // ── POST to Meta ────────────────────────────────────────────────────────
+        $url    = "https://graph.facebook.com/{$this->apiVersion}/{$template->meta_id}";
+        $client = new Client();
+
+        try {
+            $response = $client->post($url, [
+                'headers' => [
+                    'Authorization' => 'Bearer ' . $this->accessToken,
+                    'Content-Type'  => 'application/json',
+                ],
+                'json' => $requestData,
+            ]);
+
+            $responseObject->success = true;
+            $responseObject->data    = json_decode($response->getBody()->getContents());
+
+            // ── Update local metadata ───────────────────────────────────────────
+            // Keep everything that's already there, just update the editable parts
+            $updatedCarouselCards = [];
+            foreach ($originalCards as $index => $originalCard) {
+                $newCard = $updatedCards[$index] ?? $originalCard;
+                $updatedCarouselCards[] = [
+                    'header_type'   => $originalCard['header_type'],
+                    'header_handle' => $originalCard['header_handle'],
+                    'body_text'     => $newCard['body_text'] ?? $originalCard['body_text'],
+                    'buttons'       => $newCard['buttons']   ?? $originalCard['buttons'],
+                ];
+            }
+
+            $existingMeta['carousel_cards']        = $updatedCarouselCards;
+            $existingMeta['carousel_message_body'] = $updatedMessageBody;
+            $existingMeta['components']            = $requestData['components'];   // update components to match what we sent
+
+            $template->metadata   = json_encode($existingMeta);
+            $template->status     = 'PENDING';
+            $template->updated_at = now();
+            $template->save();
+
+        } catch (ConnectException $e) {
+            $responseObject->success = false;
+            $responseObject->data    = new \stdClass();
+            $responseObject->data->error = new \stdClass();
+            $responseObject->data->error->message = $e->getMessage();
+        } catch (GuzzleException $e) {
+            $response = $e->getResponse();
+            $responseObject->success = false;
+            $responseObject->data    = json_decode($response->getBody()->getContents());
+            $responseObject->message = $responseObject->data->error->error_user_msg
+                ?? $responseObject->data->error->message
+                ?? $e->getMessage();
+        } catch (\Exception $e) {
+            $responseObject->success = false;
+            $responseObject->data    = new \stdClass();
+            $responseObject->data->error = new \stdClass();
+            $responseObject->data->error->message = $e->getMessage();
+        }
+
+        return $responseObject;
+    }
+
     function syncTemplates()
     {
         $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->wabaId}/message_templates";
@@ -1195,27 +1833,45 @@ class WhatsappService
 
                 $responseObject = json_decode($response->getBody()->getContents());
 
-                //dd($responseObject);
-
                 foreach($responseObject->data as $templateData){
                     $template = Template::where('organization_id', session()->get('current_organization'))
                         ->where('meta_id', $templateData->id)->first();
 
                     if($template){
-                        $template->metadata = json_encode($templateData);
+                        // ── Carousel: preserve our carousel_cards before overwriting ──
+                        // Meta's response replaces header_handle with CDN URLs and drops
+                        // any custom keys we stored. We rebuild carousel_cards from the
+                        // synced metadata so the Edit page still has what it needs.
+                        $existingMeta = $template->metadata ? json_decode($template->metadata, true) : [];
+                        $newMeta      = json_decode(json_encode($templateData), true); // stdClass → array
+
+                        if ($this->isCarouselTemplate($newMeta)) {
+                            $newMeta = $this->rebuildCarouselMeta($newMeta, $existingMeta);
+                        }
+
+                        $template->metadata = json_encode($newMeta);
                         $template->status = $templateData->status;
                         $template->category = $templateData->category;
                         $template->updated_at = now();
                         $template->deleted_at = NULL;
                         $template->save();
                     } else {
+                        // New template from Meta we don't have locally yet
+                        $newMeta = json_decode(json_encode($templateData), true);
+
+                        // If it's a carousel that somehow we never saved (e.g. created
+                        // outside this app), build carousel_cards from scratch
+                        if ($this->isCarouselTemplate($newMeta)) {
+                            $newMeta = $this->rebuildCarouselMeta($newMeta, []);
+                        }
+
                         $template = new Template();
                         $template->organization_id = session()->get('current_organization');
                         $template->meta_id = $templateData->id;
                         $template->name = $templateData->name;
-                        $template->category = $templateData->category;
+                        $template->category = $templateData->language;
                         $template->language = $templateData->language;
-                        $template->metadata = json_encode($templateData);
+                        $template->metadata = json_encode($newMeta);
                         $template->status = $templateData->status;
                         $template->created_by = auth()->user()->id;
                         $template->created_at = now();
@@ -1227,7 +1883,7 @@ class WhatsappService
                 if(isset($responseObject->paging) && isset($responseObject->paging->next)) {
                     $url = $responseObject->paging->next;
                 } else {
-                    $url = null; // Break the loop if no next page URL is available
+                    $url = null;
                 }
             } while($url);
         } catch (ConnectException $e) {
@@ -1253,6 +1909,169 @@ class WhatsappService
         }
 
         return $responseObject;
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────────
+    // CAROUSEL HELPERS — only called from syncTemplates, kept private
+    // ─────────────────────────────────────────────────────────────────────────────
+
+    /**
+     * Check whether a metadata array contains a CAROUSEL component.
+     * Works regardless of case (Meta returns uppercase after sync).
+     */
+    private function isCarouselTemplate(array $meta): bool
+    {
+        if (!isset($meta['components']) || !is_array($meta['components'])) {
+            return false;
+        }
+
+        foreach ($meta['components'] as $component) {
+            if (strtoupper($component['type'] ?? '') === 'CAROUSEL') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Rebuild the carousel_cards array and inject template_type flag into
+     * the synced metadata.
+     *
+     * After sync, Meta's metadata looks like this per card:
+     *   {
+     *     "components": [
+     *       { "type": "HEADER", "format": "IMAGE", "example": { "header_handle": ["https://scontent..."] } },
+     *       { "type": "BODY",   "text": "Bodyy" },
+     *       { "type": "BUTTONS","buttons": [{ "type": "QUICK_REPLY", "text": "Test" }] }
+     *     ]
+     *   }
+     *
+     * We extract that into carousel_cards so the Edit page can read it:
+     *   {
+     *     "header_type":   "IMAGE",
+     *     "header_handle": "https://scontent...",   // CDN URL now, not an upload handle
+     *     "local_path":    "carousel_media/...",     // preserved from existing if available
+     *     "body_text":     "Bodyy",
+     *     "buttons":       [{ "type": "QUICK_REPLY", "text": "Test" }]
+     *   }
+     *
+     * @param  array  $newMeta       The fresh metadata object from Meta's sync response
+     * @param  array  $existingMeta  The metadata we had in DB before sync (may be empty)
+     * @return array  The newMeta array with carousel_cards and template_type injected
+     */
+    private function rebuildCarouselMeta(array $newMeta, array $existingMeta): array
+    {
+        // Pull existing carousel_cards so we can preserve local_path values
+        $existingCards = $existingMeta['carousel_cards'] ?? [];
+
+        
+
+        // Find the CAROUSEL component in the synced metadata
+        $carouselComponent = null;
+        foreach ($newMeta['components'] as $component) {
+            if (strtoupper($component['type'] ?? '') === 'CAROUSEL') {
+                $carouselComponent = $component;
+                break;
+            }
+        }
+
+        if (!$carouselComponent || !isset($carouselComponent['cards'])) {
+            // Shouldn't happen, but safe fallback — just tag it and return
+            $newMeta['template_type'] = 'carousel';
+            return $newMeta;
+        }
+
+        $rebuiltCards = [];
+
+        foreach ($carouselComponent['cards'] as $index => $card) {
+            $cardData = [];
+            $components = $card['components'] ?? [];
+
+            foreach ($components as $comp) {
+                $type = strtoupper($comp['type'] ?? '');
+
+                switch ($type) {
+                    case 'HEADER':
+                        $cardData['header_type'] = strtoupper($comp['format'] ?? 'IMAGE');
+
+                        // Meta replaces the upload handle with a CDN URL after approval.
+                        // header_handle[0] is now a URL like "https://scontent.whatsapp.net/..."
+                        $cardData['header_handle'] = $comp['example']['header_handle'][0] ?? null;
+
+                        // **NEW: Preserve local paths from existing metadata**
+                        if (isset($existingCards[$index])) {
+                            $cardData['local_path'] = $existingCards[$index]['local_path'] ?? null;
+                            $cardData['local_url']  = $existingCards[$index]['local_url'] ?? null;
+                        }
+                        break;
+
+                    case 'BODY':
+                        $cardData['body_text'] = $comp['text'] ?? '';
+                        break;
+
+                    case 'BUTTONS':
+                        $cardData['buttons'] = $comp['buttons'] ?? [];
+                        break;
+                }
+            }
+
+
+            $rebuiltCards[] = $cardData;
+        }
+
+        // Also preserve the top-level carousel message body if it exists
+        // (it's already in components as a BODY type, but we store it separately too)
+        foreach ($newMeta['components'] as $component) {
+            if (strtoupper($component['type'] ?? '') === 'BODY') {
+                $newMeta['carousel_message_body'] = $component['text'] ?? '';
+                break;
+            }
+        }
+
+        $newMeta['template_type']  = 'carousel';
+        $newMeta['carousel_cards'] = $rebuiltCards;
+
+        return $newMeta;
+    }
+
+    /**
+     * Build the metadata JSON for a carousel template chat record.
+     *
+     * This mirrors the structure that ChatBubble.vue will need to render
+     * the carousel in the thread. It stores each card's header type,
+     * body text, and buttons so the UI can display them without
+     * re-fetching the template.
+     *
+     * @param  string  $contactUuid   The contact UUID (used to resolve dynamic variables in future)
+     * @param  int     $templateId    The Template model ID
+     * @return string                 JSON-encoded metadata for the Chat record
+     */
+    private function buildCarouselTemplateChatMessage(string $contactUuid, int $templateId): string
+    {
+        $template     = Template::where('id', $templateId)->first();
+        $metadata     = json_decode($template->metadata, true);
+        $carouselCards = $metadata['carousel_cards'] ?? [];
+
+        $array = [
+            'type'                => 'carousel',
+            'carousel_message_body' => $metadata['carousel_message_body'] ?? '',
+            'cards'               => [],
+        ];
+
+        foreach ($carouselCards as $card) {
+            $cardData = [
+                'header_type'   => $card['header_type'] ?? 'IMAGE',
+                'header_handle' => $card['header_handle'] ?? null,
+                'local_url'     => $card['local_url'] ?? null,
+                'body_text'     => $card['body_text'] ?? '',
+                'buttons'       => $card['buttons'] ?? [],
+            ];
+
+            $array['cards'][] = $cardData;
+        }
+
+        return json_encode($array);
     }
 
     /**
