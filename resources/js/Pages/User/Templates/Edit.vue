@@ -215,14 +215,25 @@
             <div class="mt-5 grid grid-cols-1 gap-x-6 gap-y-4">
                 <div class="text-center">
                     <div v-if="error != null" class="bg-[#fae6e6] text-[darkred] rounded text-sm p-2 mb-4">
-                        <div>{{ $t('Error') }}: </div>
-                        <div>{{ error }}</div>
-                        <button type="button" @click="closeModal" class="mt-4 inline-flex justify-center rounded-md border border-transparent bg-slate-50 px-4 py-2 text-sm text-slate-500 hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 mr-4">Close</button>
+                        <div class="font-semibold mb-1">{{ $t('Error') }}</div>
+                        <div class="whitespace-pre-wrap">{{ error }}</div>
+                        <button 
+                            type="button" 
+                            @click="closeModal" 
+                            class="mt-4 inline-flex justify-center rounded-md border border-transparent bg-slate-50 px-4 py-2 text-sm text-slate-500 hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 mr-4"
+                        >
+                            {{ $t('Close') }}
+                        </button>
                     </div>
                     <div v-else>
                         <h2 class="text-xl">{{ $t('Your template is being updated!') }}</h2>
                         <div class="flex justify-center mt-4">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-dasharray="15" stroke-dashoffset="15" stroke-linecap="round" stroke-width="2" d="M12 3C16.9706 3 21 7.02944 21 12"><animate fill="freeze" attributeName="stroke-dashoffset" dur="0.3s" values="15;0"/><animateTransform attributeName="transform" dur="1.5s" repeatCount="indefinite" type="rotate" values="0 12 12;360 12 12"/></path></svg>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24">
+                                <path fill="none" stroke="currentColor" stroke-dasharray="15" stroke-dashoffset="15" stroke-linecap="round" stroke-width="2" d="M12 3C16.9706 3 21 7.02944 21 12">
+                                    <animate fill="freeze" attributeName="stroke-dashoffset" dur="0.3s" values="15;0"/>
+                                    <animateTransform attributeName="transform" dur="1.5s" repeatCount="indefinite" type="rotate" values="0 12 12;360 12 12"/>
+                                </path>
+                            </svg>
                         </div>
                     </div>
                 </div>
@@ -414,12 +425,33 @@
             .then(response => {
                 if (response.data.success === false) {
                     isLoading.value = false;
-                    error.value = response.data.data?.error?.message || 'Something went wrong';
+                    
+                    // Extract the most user-friendly error message
+                    const responseData = response.data;
+                    error.value = responseData.message 
+                        || responseData.data?.error?.error_user_msg 
+                        || responseData.data?.error?.error_user_title
+                        || responseData.data?.error?.message 
+                        || 'Something went wrong';
                 } else {
                     router.visit('/templates', { method: 'get' });
                 }
             })
-            .catch(() => {});
+            .catch(err => {
+                isLoading.value = false;
+                
+                // Handle network/server errors
+                if (err.response?.data) {
+                    const responseData = err.response.data;
+                    error.value = responseData.message 
+                        || responseData.data?.error?.error_user_msg 
+                        || responseData.data?.error?.error_user_title
+                        || responseData.data?.error?.message 
+                        || 'Network error occurred';
+                } else {
+                    error.value = 'Network error occurred';
+                }
+            });
             return;
         }
 
@@ -430,12 +462,33 @@
         .then(response => {
             if (response.data.success === false) {
                 isLoading.value = false;
-                error.value = response.data.data?.error?.message;
+                
+                // Extract the most user-friendly error message
+                const responseData = response.data;
+                error.value = responseData.message 
+                    || responseData.data?.error?.error_user_msg 
+                    || responseData.data?.error?.error_user_title
+                    || responseData.data?.error?.message 
+                    || 'Something went wrong';
             } else {
                 router.visit('/templates', { method: 'get' });
             }
         })
-        .catch(() => {});
+        .catch(err => {
+            isLoading.value = false;
+            
+            // Handle network/server errors
+            if (err.response?.data) {
+                const responseData = err.response.data;
+                error.value = responseData.message 
+                    || responseData.data?.error?.error_user_msg 
+                    || responseData.data?.error?.error_user_title
+                    || responseData.data?.error?.message 
+                    || 'Network error occurred';
+            } else {
+                error.value = 'Network error occurred';
+            }
+        });
     };
 
     function formatText(text) {

@@ -4,6 +4,9 @@
         Renders a WhatsApp-style carousel preview in the right panel.
         Receives the cards array and renders each card as a scrollable bubble.
         This component is used on BOTH the Add page and the Edit page.
+        
+        On Add page: shows placeholders (no media uploaded yet)
+        On Edit page: shows actual media from local_url or header_handle
     -->
     <div class="flex gap-x-2 overflow-x-auto pb-2">
         <div
@@ -12,16 +15,38 @@
             class="mr-auto rounded-lg rounded-tl-none my-1 p-1 text-sm bg-white flex flex-col relative speech-bubble-left flex-shrink-0"
             style="width: 22em;"
         >
-            <!-- HEADER placeholder (image or video) -->
-            <div class="mb-2 bg-[#ccd0d5] flex justify-center py-6 rounded">
-                <img
-                    v-if="card.header_type === 'IMAGE'"
-                    :src="'/images/image-placeholder.png'"
-                />
-                <img
-                    v-else
-                    :src="'/images/video-placeholder.png'"
-                />
+            <!-- HEADER with actual media or placeholder -->
+            <div class="mb-2 bg-[#ccd0d5] flex justify-center overflow-hidden rounded" :class="hasMedia(card) ? 'py-0' : 'py-6'">
+                <!-- Show actual media if available -->
+                <template v-if="hasMedia(card)">
+                    <img
+                        v-if="card.header_type === 'IMAGE'"
+                        :src="getMediaUrl(card)"
+                        class="w-full h-auto object-cover max-h-64"
+                        @error="handleImageError"
+                    />
+                    <video
+                        v-else-if="card.header_type === 'VIDEO'"
+                        :src="getMediaUrl(card)"
+                        class="w-full h-auto object-cover max-h-64"
+                        controls
+                        @error="handleVideoError"
+                    >
+                        {{ $t('Your browser does not support the video tag.') }}
+                    </video>
+                </template>
+                
+                <!-- Fallback placeholders -->
+                <template v-else>
+                    <img
+                        v-if="card.header_type === 'IMAGE'"
+                        :src="'/images/image-placeholder.png'"
+                    />
+                    <img
+                        v-else
+                        :src="'/images/video-placeholder.png'"
+                    />
+                </template>
             </div>
 
             <!-- BODY text -->
@@ -62,13 +87,67 @@
 defineProps({
     /**
      * Array of card objects.
-     * Each card: { header_type: 'IMAGE'|'VIDEO', body_text: string, buttons: [] }
-     * On the Add page, cards come from CarouselForm.
-     * On the Edit page, cards come from the existing template metadata.
+     * Each card: { 
+     *   header_type: 'IMAGE'|'VIDEO', 
+     *   header_handle: 'CDN_URL' (on edit),
+     *   local_url: 'LOCAL_URL' (on edit),
+     *   file: File (on add),
+     *   body_text: string, 
+     *   buttons: [] 
+     * }
      */
     cards: {
         type: Array,
         default: () => [],
     },
 });
+
+/**
+ * Check if card has media available (either local_url, header_handle, or file)
+ */
+function hasMedia(card) {
+    return !!(card.local_url || card.header_handle || card.file);
+}
+
+/**
+ * Get the media URL to display
+ * Priority: local_url > header_handle > file preview
+ */
+function getMediaUrl(card) {
+    // Priority 1: Local URL (Edit page)
+    if (card.local_url) {
+        return card.local_url;
+    }
+    
+    // Priority 2: CDN URL from Meta (Edit page fallback)
+    if (card.header_handle && card.header_handle.startsWith('http')) {
+        return card.header_handle;
+    }
+    
+    // Priority 3: File preview (Add page)
+    if (card.file) {
+        return URL.createObjectURL(card.file);
+    }
+    
+    return null;
+}
+
+/**
+ * Handle image load errors - fallback to placeholder
+ */
+function handleImageError(event) {
+    event.target.src = '/images/image-placeholder.png';
+    console.warn('Failed to load carousel image');
+}
+
+/**
+ * Handle video load errors - fallback to placeholder
+ */
+function handleVideoError(event) {
+    const placeholder = document.createElement('img');
+    placeholder.src = '/images/video-placeholder.png';
+    placeholder.className = event.target.className;
+    event.target.parentNode.replaceChild(placeholder, event.target);
+    console.warn('Failed to load carousel video');
+}
 </script>

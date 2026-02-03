@@ -1359,7 +1359,7 @@ class WhatsappService
             ],
         ];
 
-        \Log::debug(json_encode($requestData, JSON_PRETTY_PRINT));
+        // \Log::debug(json_encode($requestData, JSON_PRETTY_PRINT));
 
         // ── POST to Meta ────────────────────────────────────────────────────────
         $client = new Client();
@@ -1680,27 +1680,98 @@ class WhatsappService
         $existingMeta  = json_decode($template->metadata, true);
         $originalCards = $existingMeta['carousel_cards'] ?? [];
 
-        // What the frontend sent
+        // What the frontend sent (text edits only)
         $updatedCards        = $request->carousel_cards ?? [];
         $updatedMessageBody  = $request->carousel_message_body ?? '';
 
-        // ── Rebuild cards in the correct Meta format ───────────────────────────
+        \Log::info('REQUEST -> all', $request->all());
+        \Log::info('existingMeta', [$existingMeta]);
+
+        // ─── RE-UPLOAD MEDIA FROM LOCAL STORAGE ────────────────────────────────
+        $uploader = new MediaUploadService(
+            $this->accessToken,
+            $this->apiVersion,
+            $this->appId
+        );
+
+        $freshHandles = [];
+        foreach ($originalCards as $index => $originalCard) {
+            $localPath = $originalCard['local_path'] ?? null;
+            
+            if (!$localPath || !\Storage::disk('local')->exists($localPath)) {
+                \Log::error('Carousel card media missing', [
+                    'card_index' => $index,
+                    'local_path' => $localPath,
+                ]);
+                
+                $responseObject->success = false;
+                $responseObject->data    = new \stdClass();
+                $responseObject->data->error = new \stdClass();
+                $responseObject->data->error->message = "Media file missing for card " . ($index + 1);
+                return $responseObject;
+            }
+
+            // Read file from local storage
+            $fileContent = \Storage::disk('local')->get($localPath);
+            $mimeType    = \Storage::disk('local')->mimeType($localPath);
+            $fileName    = basename($localPath);
+
+            // Create a temporary UploadedFile instance
+            $tempPath = sys_get_temp_dir() . '/' . $fileName;
+            file_put_contents($tempPath, $fileContent);
+            
+            $uploadedFile = new \Illuminate\Http\UploadedFile(
+                $tempPath,
+                $fileName,
+                $mimeType,
+                null,
+                true // test mode - don't validate
+            );
+
+            // Re-upload to Meta → get fresh handle
+            $uploadResult = $uploader->uploadToMeta($uploadedFile);
+            
+            // Clean up temp file
+            @unlink($tempPath);
+
+            if (!$uploadResult->success) {
+                \Log::error('Failed to re-upload carousel card media', [
+                    'card_index' => $index,
+                    'error'      => $uploadResult->error,
+                ]);
+                
+                $responseObject->success = false;
+                $responseObject->data    = new \stdClass();
+                $responseObject->data->error = new \stdClass();
+                $responseObject->data->error->message = $uploadResult->error ?? 'Media upload failed';
+                return $responseObject;
+            }
+
+            $freshHandles[$index] = $uploadResult->handle;
+            
+            \Log::info('Fresh handle generated', [
+                'card_index' => $index,
+                'handle' => $uploadResult->handle,
+            ]);
+        }
+
+        // ─── BUILD PAYLOAD WITH FRESH HANDLES ──────────────────────────────────
         $metaCards = [];
 
         foreach ($originalCards as $index => $originalCard) {
-            $newCard = $updatedCards[$index] ?? $originalCard;   // fallback to original if missing
+            $newCard = $updatedCards[$index] ?? $originalCard;
             $cardComponents = [];
 
-            // HEADER — locked. Re-use the handle/URL from stored metadata.
+            // HEADER – use FRESH upload handle
             $cardComponents[] = [
                 'type'   => 'header',
                 'format' => strtolower($originalCard['header_type'] ?? 'image'),
                 'example' => [
-                    'header_handle' => [$originalCard['header_handle']],   // CDN URL after sync
+                    'header_handle' => [$freshHandles[$index]], // ← FRESH HANDLE as array
                 ],
             ];
 
-            // BODY — use the new text from the update request
+            // BODY – use updated text from request
             $bodyText = $newCard['body_text'] ?? $originalCard['body_text'] ?? null;
             if ($bodyText !== null && $bodyText !== '') {
                 $cardComponents[] = [
@@ -1709,19 +1780,22 @@ class WhatsappService
                 ];
             }
 
-            // BUTTONS — text is editable, type/url/phone are locked from original
+            // BUTTONS – text is editable, type/url/phone are locked
             $buttons = $newCard['buttons'] ?? $originalCard['buttons'] ?? [];
             if (!empty($buttons)) {
                 $buttonsPayload = [];
+                
                 foreach ($buttons as $btn) {
+                    $btnType = strtoupper($btn['type'] ?? '');
+                    
                     $btnItem = [
-                        'type' => strtolower($btn['type']),
+                        'type' => strtolower($btn['type']), // lowercase for Meta
                         'text' => $btn['text'] ?? '',
                     ];
 
-                    if (strtolower($btn['type']) === 'url') {
+                    if ($btnType === 'URL') {
                         $btnItem['url'] = $btn['url'] ?? '';
-                    } elseif (strtolower($btn['type']) === 'phone_number') {
+                    } elseif ($btnType === 'PHONE_NUMBER') {
                         $btnItem['phone_number'] = ($btn['country'] ?? '') . ($btn['phone_number'] ?? '');
                     }
 
@@ -1730,17 +1804,16 @@ class WhatsappService
 
                 $cardComponents[] = [
                     'type'    => 'buttons',
-                    'buttons' => $buttonsPayload,
+                    'buttons' => $buttonsPayload, // ← Must be array of button objects
                 ];
             }
 
-            // Each card wraps its components — same structure as create
             $metaCards[] = [
                 'components' => $cardComponents,
             ];
         }
 
-        // ── Full payload — matches create exactly ──────────────────────────────
+        // ─── FINAL PAYLOAD ─────────────────────────────────────────────────────
         $requestData = [
             'category'   => 'marketing',
             'components' => [
@@ -1755,9 +1828,12 @@ class WhatsappService
             ],
         ];
 
-        \Log::debug(json_encode($requestData, JSON_PRETTY_PRINT));
+        // Better logging - use print_r to avoid "over 9 levels" issue
+        \Log::debug('Carousel Update Payload', [
+            'payload_json' => json_encode($requestData, JSON_PRETTY_PRINT)
+        ]);
 
-        // ── POST to Meta ────────────────────────────────────────────────────────
+        // ─── POST TO META ──────────────────────────────────────────────────────
         $url    = "https://graph.facebook.com/{$this->apiVersion}/{$template->meta_id}";
         $client = new Client();
 
@@ -1773,14 +1849,15 @@ class WhatsappService
             $responseObject->success = true;
             $responseObject->data    = json_decode($response->getBody()->getContents());
 
-            // ── Update local metadata ───────────────────────────────────────────
-            // Keep everything that's already there, just update the editable parts
+            // ─── UPDATE LOCAL METADATA ─────────────────────────────────────────
             $updatedCarouselCards = [];
             foreach ($originalCards as $index => $originalCard) {
                 $newCard = $updatedCards[$index] ?? $originalCard;
                 $updatedCarouselCards[] = [
                     'header_type'   => $originalCard['header_type'],
-                    'header_handle' => $originalCard['header_handle'],
+                    'header_handle' => $originalCard['header_handle'], // Keep CDN URL for reference
+                    'local_path'    => $originalCard['local_path'],    // Preserve local file
+                    'local_url'     => $originalCard['local_url'] ?? null, // Preserve local URL
                     'body_text'     => $newCard['body_text'] ?? $originalCard['body_text'],
                     'buttons'       => $newCard['buttons']   ?? $originalCard['buttons'],
                 ];
@@ -1788,26 +1865,42 @@ class WhatsappService
 
             $existingMeta['carousel_cards']        = $updatedCarouselCards;
             $existingMeta['carousel_message_body'] = $updatedMessageBody;
-            $existingMeta['components']            = $requestData['components'];   // update components to match what we sent
+            $existingMeta['components']            = $requestData['components'];
 
             $template->metadata   = json_encode($existingMeta);
             $template->status     = 'PENDING';
             $template->updated_at = now();
             $template->save();
 
+            \Log::info('Template updated successfully', ['template_id' => $template->id]);
+
         } catch (ConnectException $e) {
+            \Log::error('Connection error updating carousel', ['error' => $e->getMessage()]);
             $responseObject->success = false;
             $responseObject->data    = new \stdClass();
             $responseObject->data->error = new \stdClass();
             $responseObject->data->error->message = $e->getMessage();
         } catch (GuzzleException $e) {
-            $response = $e->getResponse();
+           $response = $e->getResponse();
+            $errorBody = $response->getBody()->getContents();
+            \Log::error('Meta API error updating carousel', ['error' => $errorBody]);
+            
             $responseObject->success = false;
-            $responseObject->data    = json_decode($response->getBody()->getContents());
-            $responseObject->message = $responseObject->data->error->error_user_msg
-                ?? $responseObject->data->error->message
-                ?? $e->getMessage();
+            $responseObject->data    = json_decode($errorBody);
+            
+            // Prioritize user-friendly message
+            $errorData = $responseObject->data->error ?? null;
+            
+            if ($errorData) {
+                $responseObject->message = $errorData->error_user_msg 
+                    ?? $errorData->error_user_title 
+                    ?? $errorData->message 
+                    ?? 'Something went wrong';
+            } else {
+                $responseObject->message = 'Something went wrong';
+            }
         } catch (\Exception $e) {
+            \Log::error('Unexpected error updating carousel', ['error' => $e->getMessage()]);
             $responseObject->success = false;
             $responseObject->data    = new \stdClass();
             $responseObject->data->error = new \stdClass();

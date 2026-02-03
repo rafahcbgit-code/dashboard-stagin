@@ -44,20 +44,41 @@
             </div>
 
             <div class="px-4 py-3">
-                <!-- Media placeholder (read-only, no upload) -->
-                <div class="mb-3 bg-[#ccd0d5] flex justify-center py-4 rounded">
-                    <img
-                        v-if="card.header_type === 'IMAGE'"
-                        :src="'/images/image-placeholder.png'"
-                    />
-                    <img
-                        v-else
-                        :src="'/images/video-placeholder.png'"
-                    />
+                <!-- Media preview (read-only, shows actual media) -->
+                <div class="mb-3 bg-[#ccd0d5] flex justify-center overflow-hidden rounded" :class="hasMedia(card) ? '' : 'py-4'">
+                    <!-- Show actual media -->
+                    <template v-if="hasMedia(card)">
+                        <img
+                            v-if="card.header_type === 'IMAGE'"
+                            :src="getMediaUrl(card)"
+                            class="w-full h-auto object-cover max-h-48"
+                            @error="handleImageError"
+                        />
+                        <video
+                            v-else-if="card.header_type === 'VIDEO'"
+                            :src="getMediaUrl(card)"
+                            class="w-full h-auto object-cover max-h-48"
+                            controls
+                        >
+                            {{ $t('Your browser does not support the video tag.') }}
+                        </video>
+                    </template>
+                    
+                    <!-- Fallback placeholders -->
+                    <template v-else>
+                        <img
+                            v-if="card.header_type === 'IMAGE'"
+                            :src="'/images/image-placeholder.png'"
+                        />
+                        <img
+                            v-else
+                            :src="'/images/video-placeholder.png'"
+                        />
+                    </template>
                 </div>
                 <p class="text-[11px] text-slate-400 text-center -mt-1 mb-3">{{ $t('Media cannot be changed') }}</p>
 
-                <!-- Body text — EDITABLE -->
+                <!-- Body text – EDITABLE -->
                 <label class="text-slate-600 text-sm">{{ $t('Body text') }}</label>
                 <textarea
                     v-model="card.body_text"
@@ -67,7 +88,7 @@
                     :maxlength="1024"
                 ></textarea>
 
-                <!-- Buttons — only TEXT is editable, type/url/phone are locked -->
+                <!-- Buttons – only TEXT is editable, type/url/phone are locked -->
                 <div v-if="card.buttons && card.buttons.length" class="mt-2">
                     <label class="text-slate-600 text-sm">{{ $t('Buttons') }}</label>
                     <div v-for="(btn, btnIndex) in card.buttons" :key="btnIndex" class="flex items-center gap-x-2 mt-1">
@@ -93,13 +114,13 @@
 </template>
 
 <script setup>
-import { defineProps, defineEmits } from 'vue';
+import { defineProps } from 'vue';
 
 const props = defineProps({
     /**
-     * editableCards — array of card objects populated from the template's
+     * editableCards – array of card objects populated from the template's
      * metadata.carousel_cards when the Edit page loads.
-     * Each card: { header_type, handle, local_path, body_text, buttons[] }
+     * Each card: { header_type, header_handle, local_path, local_url, body_text, buttons[] }
      */
     editableCards: {
         type: Array,
@@ -107,8 +128,34 @@ const props = defineProps({
     },
 });
 
-// We don't need to emit here because editableCards is a reactive array
-// passed by reference from Edit.vue — mutations here flow up automatically.
-// If your setup requires explicit emit, add defineEmits(['update:editableCards'])
-// and call emit on every change.
+/**
+ * Check if card has media available
+ */
+function hasMedia(card) {
+    return !!(card.local_url || card.header_handle);
+}
+
+/**
+ * Get the media URL to display
+ * Priority: local_url > header_handle (CDN)
+ */
+function getMediaUrl(card) {
+    if (card.local_url) {
+        return card.local_url;
+    }
+    
+    if (card.header_handle && card.header_handle.startsWith('http')) {
+        return card.header_handle;
+    }
+    
+    return null;
+}
+
+/**
+ * Handle image load errors
+ */
+function handleImageError(event) {
+    event.target.src = '/images/image-placeholder.png';
+    console.warn('Failed to load carousel image');
+}
 </script>
