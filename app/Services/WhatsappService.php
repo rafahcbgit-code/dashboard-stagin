@@ -20,6 +20,7 @@ use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use App\Services\MediaUploadService;
 use Session;
 
 class WhatsappService
@@ -1246,7 +1247,7 @@ class WhatsappService
         $cards     = $request->input('cards', []);
         $cardFiles = $request->file('card_files', []);
 
-        $uploader = new \App\Services\MediaUploadService(
+        $uploader = new MediaUploadService(
             $this->accessToken,
             $this->apiVersion,
             $this->appId
