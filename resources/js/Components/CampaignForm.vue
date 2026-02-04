@@ -308,7 +308,7 @@
 </script>
 
 <template>
-    <div :class="'md:flex md:flex-grow-1'">
+    <div class="md:flex md:h-screen">
         <div v-if="!settings?.whatsapp" class="md:w-[50%] p-4 md:p-8 overflow-y-auto h-[90vh]">
             <div class="bg-slate-50 border border-primary shadow rounded-md p-4 py-8">
                 <div class="flex justify-center mb-4">
@@ -324,7 +324,7 @@
             </div>
         </div>
 
-        <form v-else @submit.prevent="submitForm()" class="overflow-y-auto md:w-[50%]" :class="isCampaignFlow ? 'p-4 md:p-8 h-[90vh]' : ' h-full'">
+        <form v-else @submit.prevent="submitForm()" class="md:w-[50%] overflow-y-auto" :class="isCampaignFlow ? 'p-4 md:p-8' : ''">
             <div v-if="displayTitle" class="m-1 rounded px-3 pt-3 pb-3 bg-slate-100 flex items-center justify-between mb-4">
                 <h3 class="text-[15px]">{{ $t('Send Template Message') }}</h3>
                 <button @click="viewTemplate()" class="text-sm md:inline-flex hidden justify-center rounded-md border border-transparent bg-red-800 px-4 py-1 text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">Cancel</button>
@@ -484,10 +484,10 @@
         </form>
 
         <!-- ── RIGHT PANEL: Preview ─────────────────────────────────────────── -->
-        <div class="md:w-[50%] py-20 flex justify-center chat-bg" :class="isCampaignFlow ? 'px-20' : 'px-10'">
-            <div>
+        <div class="hidden md:block md:w-[50%] py-10 px-10 overflow-y-auto chat-bg">
+            <div class="flex justify-center items-start min-h-full">
                 <!-- Carousel preview -->
-                <div v-if="isCarouselTemplate && form.template">
+                <div v-if="isCarouselTemplate && form.template" class="w-full max-w-md">
                     <!-- Top-level message body bubble -->
                     <div class="mr-auto rounded-lg rounded-tl-none my-1 p-1 text-sm bg-white flex flex-col relative speech-bubble-left w-[25em] mb-2">
                         <p class="px-2 normal-case whitespace-pre-wrap">{{ carouselMessageBody }}</p>
