@@ -113,6 +113,15 @@ class TemplateService
                 return response()->json(['success' => false,'message'=>'Some required fields have not been filled','errors'=>$validator->messages()->get('*')]);
             }
 
+            // If the frontend sends template_type = "carousel", route to
+            // the dedicated carousel creation method on WhatsappService.
+            // Everything else (UTILITY, AUTHENTICATION, standard MARKETING)
+            // continues through the original createTemplate method.
+            \Log::info("Request", $request->all());
+            if ($request->get('template_type') === 'carousel') {
+                return $this->whatsappService->createCarouselTemplate($request);
+            }
+
             return $this->whatsappService->createTemplate($request);
         }
     }
@@ -131,6 +140,17 @@ class TemplateService
 
         if ($validator->fails()) {
             return response()->json(['success' => false,'message'=>'Some required fields have not been filled','errors'=>$validator->messages()->get('*')]);
+        }
+
+        // Check if the existing template is a carousel by reading its
+        // metadata. If so, route to the carousel-specific update method
+        // which only allows text changes (no media re-upload).
+        $template = Template::where('uuid', $uuid)->first();
+        if ($template) {
+            $metadata = json_decode($template->metadata, true);
+            if (($metadata['template_type'] ?? null) === 'carousel') {
+                return $this->whatsappService->updateCarouselTemplate($request, $uuid);
+            }
         }
 
         return $this->whatsappService->updateTemplate($request, $uuid);

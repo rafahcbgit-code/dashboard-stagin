@@ -88,6 +88,52 @@ class ChatController extends BaseController
         );
     }
 
+    /**
+     * Send a carousel template message to a specific contact.
+     *
+     * Expected POST body:
+     * {
+     *   "template": "template-uuid"
+     * }
+     *
+     * @param  string  $uuid   The contact UUID (from route parameter)
+     * @return \Illuminate\Http\RedirectResponse
+     */
+    public function sendCarouselTemplateMessage(Request $request, $uuid)
+    {
+        $organizationId = session()->get('current_organization');
+
+        // Resolve template UUID → model
+        $template = \App\Models\Template::where('uuid', $request->template)
+            ->where('organization_id', $organizationId)
+            ->first();
+
+        if (! $template) {
+            return Redirect::back()->with('status', [
+                'type'    => 'error',
+                'message' => __('Template not found'),
+            ]);
+        }
+
+        // Verify it's actually a carousel template
+        $metadata = json_decode($template->metadata, true);
+        if (($metadata['template_type'] ?? null) !== 'carousel') {
+            return Redirect::back()->with('status', [
+                'type'    => 'error',
+                'message' => __('Invalid template type. Use the standard send method for non-carousel templates.'),
+            ]);
+        }
+
+        $chatService = new \App\Services\ChatService($organizationId);
+        $res = $chatService->sendCarouselTemplateMessage($uuid, $template->id);
+
+        return Redirect::back()->with('status', [
+            'type'    => $res->success === true ? 'success' : 'error',
+            'message' => $res->success === true ? __('Message sent successfully!') : ($res->message ?? __('Something went wrong.')),
+            'res'     => $res,
+        ]);
+    }
+
     public function deleteChats($uuid)
     {
         $this->chatService()->clearContactChat($uuid);

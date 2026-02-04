@@ -2,20 +2,21 @@
 
 namespace App\Jobs;
 
-use App\Events\CampaignProgressEvent;
 use App\Models\Campaign;
+use App\Models\Template;
 use App\Models\CampaignLog;
-use App\Services\OrganizationService;
-use App\Services\WhatsappService;
 use App\Traits\TemplateTrait;
 use Illuminate\Bus\Batchable;
 use Illuminate\Bus\Queueable;
-use Illuminate\Contracts\Queue\ShouldQueue;
-use Illuminate\Foundation\Bus\Dispatchable;
-use Illuminate\Queue\InteractsWithQueue;
-use Illuminate\Queue\SerializesModels;
+use App\Services\WhatsappService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use App\Events\CampaignProgressEvent;
+use App\Services\OrganizationService;
+use Illuminate\Queue\SerializesModels;
+use Illuminate\Queue\InteractsWithQueue;
+use Illuminate\Contracts\Queue\ShouldQueue;
+use Illuminate\Foundation\Bus\Dispatchable;
 
 class ProcessSingleCampaignLogJob implements ShouldQueue
 {
@@ -80,10 +81,34 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
                 $this->initializeWhatsappService();
 
                 try {
-                    $template = $this->buildTemplateRequest($this->campaignLog->campaign_id, $this->campaignLog->contact);
+
+                    // **NEW: Detect if this is a carousel template**
+                    $campaign = Campaign::find($this->campaignLog->campaign_id);
+                    $template = Template::find($campaign->template_id);
+                    $metadata = json_decode($template->metadata, true);
+                    $isCarousel = ($metadata['template_type'] ?? '') === 'carousel';
+
+                    if ($isCarousel) {
+                        // Build carousel template payload
+                        $templatePayload = $this->buildCarouselTemplateRequest(
+                            $campaign->template_id,
+                            $this->campaignLog->contact
+                        );
+                        
+                        // Enrich with fresh media IDs
+                        $templatePayload = $this->whatsappService->enrichCarouselWithMediaIds($templatePayload);
+                    } else {
+                        // Build regular template payload
+                        $templatePayload = $this->buildTemplateRequest(
+                            $this->campaignLog->campaign_id,
+                            $this->campaignLog->contact
+                        );
+                    }
+                    
+                    
                     $responseObject = $this->whatsappService->sendTemplateMessage(
                         $this->campaignLog->contact->uuid,
-                        $template,
+                        $templatePayload,
                         $campaign_user_id,
                         $this->campaignLog->campaign_id
                     );

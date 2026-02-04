@@ -166,9 +166,18 @@
                         </div>
                     </div>
 
-                    <div class="w-full rounded-lg p-5 mt-5 border chat-bg">
-                        <WhatsappTemplate :parameters="JSON.parse(props.campaign.metadata)" :placeholder="false" :visible="true"/>
+                    <!-- Carousel Preview -->
+                    <div v-if="isCarouselCampaign">
+                        <!-- Message body bubble -->
+                        <div class="bg-white rounded-lg rounded-tl-none p-3 shadow-sm mb-2 speech-bubble-left">
+                            <p class="text-sm">{{ carouselMessageBody }}</p>
+                        </div>
+                        <!-- Import and use CarouselPreview -->
+                        <CarouselPreview :cards="carouselCards" />
                     </div>
+
+                    <!-- Standard Template Preview -->
+                    <WhatsappTemplate v-else :parameters="JSON.parse(props.campaign.metadata)" :placeholder="false" :visible="true"/>
                 </div>
             </div>
         </div>
@@ -178,6 +187,8 @@
     import AppLayout from "./../Layout/App.vue";
     import CampaignLogTable from '@/Components/Tables/CampaignLogTable.vue';
     import WhatsappTemplate from '@/Components/WhatsappTemplate.vue';
+    import CarouselPreview from '@/Components/Template/CarouselPreview.vue';
+
     import { Link, router } from "@inertiajs/vue3";
     import { ref, computed, onMounted, onUnmounted } from 'vue';
     import Echo from 'laravel-echo';
@@ -231,6 +242,21 @@
             sent: props.campaign.total_sent_count,
             failed: props.campaign.total_failed_count,
         };
+    });
+
+    const campaignMetadata = computed(() => JSON.parse(props.campaign.template.metadata));
+
+    const isCarouselCampaign = computed(() => {
+        console.log(campaignMetadata);
+        return campaignMetadata.value?.template_type === 'carousel';
+    });
+
+    const carouselMessageBody = computed(() => {
+        return campaignMetadata.value?.carousel_message_body || '';
+    });
+
+    const carouselCards = computed(() => {
+        return campaignMetadata.value?.carousel_cards || [];
     });
 
     let echoChannel = null;
