@@ -828,6 +828,18 @@
   "Avg. Waiting Time": "Avg. Waiting Time",
   "No agent data found for the selected period": "No agent data found for the selected period",
   "enable_working_hours_first": "Please enable working hours from general settings first.",
+  "Total Chats": "Total Chats",
+  "Labels": "Labels",
+  "Apply Filters": "Apply Filters",
+  "Reset": "Reset",
+  "Team Member": "Team Member",
+  "Select Team Member": "Select Team Member",
+  "Select Labels": "Select Labels",
+  "unread": "Unread",
+  "unassigned": "Unassigned",
+  "open": "Open",
+  "closed": "Closed",
+  "assigned_to_me": "Assigned to Me",
   "trial_alert": {
     "message": "Your trial version is currently active.",
     "cta": "Contact us to start your subscription"
