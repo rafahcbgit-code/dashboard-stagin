@@ -39,7 +39,15 @@
                             <FormSelect v-model="form.category" :options="categoryOptions" :name="$t('Category')" :class="'sm:col-span-3'" :placeholder="$t('Select category')"/>
                             <FormSelect v-model="form.language" :options="langOptions" :name="$t('Language')" :class="'sm:col-span-3'" :placeholder="$t('Select language')"/>
                         </div>
-                        <div v-if="form.category === 'UTILITY' || form.category === 'MARKETING'">
+                        <!-- Standard / Carousel toggle — only visible when MARKETING -->
+                        <div v-if="form.category === 'MARKETING'" class="mb-6">
+                            <h2 class="text-slate-600 text-sm mb-1">{{ $t('Template type') }}</h2>
+                            <div class="grid grid-cols-2 bg-[#f9f9fa] rounded-lg">
+                                <button type="button" @click="templateType = 'standard'" class="text-center py-2 text-sm text-slate-800 m-1" :class="templateType === 'standard' ? 'bg-white shadow rounded-lg' : ''">{{ $t('Standard') }}</button>
+                                <button type="button" @click="templateType = 'carousel'" class="text-center py-2 text-sm text-slate-800 m-1" :class="templateType === 'carousel' ? 'bg-white shadow rounded-lg' : ''">{{ $t('Carousel') }}</button>
+                            </div>
+                        </div>
+                        <div v-if="(form.category === 'UTILITY' || form.category === 'MARKETING') && templateType !== 'carousel'">
                             <h2 class="text-slate-600">{{ $t('Header') }} <span class="text-xs">({{ $t('Optional') }})</span></h2>
                             <span class="text-slate-600 text-xs">{{ $t('Add a title or choose which type of media you\'ll use for this header') }}</span>
                             <div class="grid grid-cols-4 mt-2 bg-[#f9f9fa] rounded-lg mb-4">
@@ -221,6 +229,15 @@
                                 </div>
                             </div>
                         </div>
+                        <!-- Carousel card builder — shown only when MARKETING + Carousel selected -->
+                        <div v-if="form.category === 'MARKETING' && templateType === 'carousel'">
+                            <CarouselForm
+                                :cards="form.carousel_cards"
+                                @update:cards="form.carousel_cards = $event"
+                                :messageBody="form.carousel_message_body"
+                                @update:messageBody="form.carousel_message_body = $event"
+                            />
+                        </div>
                         <div v-if="form.category === 'AUTHENTICATION'">
                             <div class="mt-4 bg-gray-50 rounded-md p-3">
                                 <h2 class="text-slate-600">{{ $t('Code delivery setup') }}</h2>
@@ -352,6 +369,8 @@
                     </div>
                 </div>
                 <div class="md:w-[50%] py-20 px-4 md:px-20 overflow-y-auto" style="background-image: url('/images/whatsapp-bg-02.png');">
+                    <!-- Standard template preview -->
+                    <div v-if="templateType !== 'carousel'">
                     <div class="mr-auto rounded-lg rounded-tl-none my-1 p-1 text-sm bg-white flex flex-col relative speech-bubble-left w-[25em]">
                         <div v-if="form.header.format != 'TEXT'" class="mb-4 bg-[#ccd0d5] flex justify-center py-8 rounded">
                             <img v-if="form.header.format === 'IMAGE'" :src="'/images/image-placeholder.png'">
@@ -386,6 +405,11 @@
                             </span>
                             <span v-if="form.authentication_button.otp_type == 'one_tap'">{{ form.authentication_button.autofill_text }}</span>
                         </div>
+                    </div>
+                    </div>
+                    <!-- Carousel preview -->
+                    <div v-else>
+                        <CarouselPreview :cards="form.carousel_cards" />
                     </div>
                 </div>
             </div>
@@ -447,6 +471,8 @@
     import FormToggleSwitch from '@/Components/FormToggleSwitch.vue';
     import BodyTextArea from '@/Components/Template/BodyTextArea.vue';
     import HeaderTextArea from '@/Components/Template/HeaderTextArea.vue';
+    import CarouselForm from '@/Components/Template/CarouselForm.vue';
+    import CarouselPreview from '@/Components/Template/CarouselPreview.vue';
     import { ref, computed, watch } from 'vue';
     import { Link } from "@inertiajs/vue3";
     import Modal from '@/Components/Modal.vue';
@@ -466,6 +492,7 @@
     const isModalOpen = ref(false);
     const error = ref(null);
     const bodyExamples = ref([]);
+    const templateType = ref('standard');
     const form = ref({
         'name' : null,
         'category' : 'UTILITY',
@@ -490,19 +517,19 @@
         'code_expiration' : false,
         'set_custom_validity_period' : false,
         'buttons' : [],
-        'authentication_button' : {
-            'type' : 'OTP',
-            "otp_type": "zero_tap",
-            'text' : "Copy Code",
-            "autofill_text": "Autofill",
-            "zero_tap_terms_accepted": true,
-            "supported_apps": [
-                {
-                    "package_name": null,
-                    "signature_hash": null,
-                },
-            ]
-        }
+        'carousel_cards' : [],
+        'carousel_message_body' : '',
+        'type' : 'OTP',
+        "otp_type": "zero_tap",
+        'text' : "Copy Code",
+        "autofill_text": "Autofill",
+        "zero_tap_terms_accepted": true,
+        "supported_apps": [
+            {
+                "package_name": null,
+                "signature_hash": null,
+            },
+        ]
     });
     const config = ref(props.settings.metadata);
     const settings = ref(config.value ? JSON.parse(config.value) : null);
@@ -706,6 +733,39 @@
             return false;
         } 
         
+        // Carousel validation
+        if (templateType.value === 'carousel') {
+            // Top-level message body is required
+            if (!form.value.carousel_message_body || form.value.carousel_message_body.trim() === '') return false;
+
+            // Minimum 2 cards
+            if (form.value.carousel_cards.length < 2) return false;
+
+            for (const card of form.value.carousel_cards) {
+                // Every card must have a file
+                if (card.file == null) return false;
+
+                // Every card must have at least one button (Meta requirement)
+                if (!card.buttons || card.buttons.length === 0) return false;
+
+                // Every button must have text filled in
+                for (const btn of card.buttons) {
+                    if (!btn.text || btn.text.trim() === '') return false;
+
+                    // URL buttons must have a url
+                    if (btn.type === 'URL' && (!btn.url || btn.url.trim() === '')) return false;
+
+                    // Phone buttons must have both country and number
+                    if (btn.type === 'PHONE_NUMBER') {
+                        if (!btn.country || btn.country.trim() === '') return false;
+                        if (!btn.phone_number || btn.phone_number.trim() === '') return false;
+                    }
+                }
+            }
+
+            return true;
+        }
+
         // Exclude body.text validation if category is 'authentication'
         if (form.value.category !== 'AUTHENTICATION') {
             if (form.value.body.text === null || form.value.body.text.trim() === "") {
@@ -800,6 +860,50 @@
     const submitForm = () => {
         isLoading.value = true;
         isModalOpen.value = true;
+
+        // ── CAROUSEL: multipart FormData with one file per card ──
+        if (templateType.value === 'carousel') {
+            const formData = new FormData();
+            formData.append('name', form.value.name);
+            formData.append('category', 'MARKETING');
+            formData.append('language', form.value.language);
+            formData.append('template_type', 'carousel');
+            formData.append('carousel_message_body', form.value.carousel_message_body);
+
+            form.value.carousel_cards.forEach((card, index) => {
+                formData.append('cards[' + index + '][header_type]', card.header_type);
+                formData.append('cards[' + index + '][body_text]', card.body_text || '');
+
+                if (card.buttons) {
+                    card.buttons.forEach((btn, btnIdx) => {
+                        formData.append('cards[' + index + '][buttons][' + btnIdx + '][type]', btn.type);
+                        formData.append('cards[' + index + '][buttons][' + btnIdx + '][text]', btn.text || '');
+                        if (btn.url)          formData.append('cards[' + index + '][buttons][' + btnIdx + '][url]', btn.url);
+                        if (btn.country)      formData.append('cards[' + index + '][buttons][' + btnIdx + '][country]', btn.country);
+                        if (btn.phone_number) formData.append('cards[' + index + '][buttons][' + btnIdx + '][phone_number]', btn.phone_number);
+                    });
+                }
+
+                if (card.file) {
+                    formData.append('card_files[' + index + ']', card.file);
+                }
+            });
+
+            axios.post('/templates/create', formData)
+            .then(response => {
+                if (response.data.success === false) {
+                    isLoading.value = false;
+                    error.value = response.data.data?.error || { message: 'Something went wrong' };
+                } else {
+                    router.visit('/templates', { method: 'get' });
+                }
+            })
+            .catch(() => {});
+
+            return;
+        }
+
+        // ── STANDARD: existing logic unchanged ──
         axios.post('/templates/create', form.value, {
             headers: {
                 'Content-Type': 'multipart/form-data',
@@ -880,6 +984,16 @@
             error.value = null;
         }, 500);
     }
+
+    // Seed 2 blank cards when user switches to carousel for the first time
+    watch(templateType, (newVal) => {
+        if (newVal === 'carousel' && form.value.carousel_cards.length < 2) {
+            form.value.carousel_cards = [
+                { header_type: 'IMAGE', file: null, body_text: '', buttons: [{ type: 'QUICK_REPLY', text: '' }] },
+                { header_type: 'IMAGE', file: null, body_text: '', buttons: [{ type: 'QUICK_REPLY', text: '' }] },
+            ];
+        }
+    });
 
     watch(form, () => {
         isFormValid.value;

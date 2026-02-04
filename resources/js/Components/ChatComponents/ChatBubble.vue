@@ -109,6 +109,28 @@ const chatStatus = (logs) => {
     return status;
 };
 
+const isCarouselMessage = () => {
+    if (!props.content.metadata) return false;
+    const metadata = typeof props.content.metadata === 'string' 
+        ? JSON.parse(props.content.metadata) 
+        : props.content.metadata;
+    return metadata.type === 'carousel';
+};
+
+const getCarouselBody = () => {
+    const metadata = typeof props.content.metadata === 'string' 
+        ? JSON.parse(props.content.metadata) 
+        : props.content.metadata;
+    return metadata.carousel_message_body || '';
+};
+
+const getCarouselCards = () => {
+    const metadata = typeof props.content.metadata === 'string' 
+        ? JSON.parse(props.content.metadata) 
+        : props.content.metadata;
+    return metadata.cards || [];
+};
+
 const isModalOpen = ref(false);
 
 const getErrors = (logIndex = 0) => {
@@ -630,6 +652,66 @@ const viewContactDetails = async (data) => {
                             <img v-else :src="'/images/icons/reply.png'" class="h-4">
                         </span>
                         <span>{{ item.text }}</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Carousel Template -->
+            <div v-else-if="content.metadata && isCarouselMessage()" class="space-y-2">
+                <!-- Message body bubble -->
+                <div class="bg-white rounded-lg rounded-tl-none p-3 shadow-sm">
+                    <p class="text-sm">{{ getCarouselBody() }}</p>
+                    <!-- <span class="text-xs text-gray-400 float-right mt-1">{{ content.created_at }}</span> -->
+                </div>
+                
+                <!-- Carousel cards -->
+                <div class="flex gap-2 overflow-x-auto pb-2">
+                    <div
+                        v-for="(card, index) in getCarouselCards()"
+                        :key="index"
+                        class="bg-white rounded-lg shadow-sm flex-shrink-0"
+                        style="width: 18em;"
+                    >
+                        <!-- Media -->
+                        <div class="bg-gray-200 rounded-t-lg overflow-hidden">
+                            <img
+                                v-if="card.header_type === 'IMAGE'"
+                                :src="card.local_url || card.header_handle"
+                                class="w-full h-40 object-cover"
+                                @error="$event.target.src = '/images/image-placeholder.png'"
+                            />
+                            <video
+                                v-else-if="card.header_type === 'VIDEO'"
+                                :src="card.local_url || card.header_handle"
+                                class="w-full h-40 object-cover"
+                                controls
+                            >
+                            </video>
+                        </div>
+                        
+                        <!-- Body text -->
+                        <div class="p-3" v-if="card.body_text">
+                            <p class="text-sm">{{ card.body_text }}</p>
+                        </div>
+                        
+                        <!-- Buttons -->
+                        <div v-if="card.buttons && card.buttons.length" class="border-t">
+                            <div
+                                v-for="(btn, btnIdx) in card.buttons"
+                                :key="btnIdx"
+                                class="flex items-center justify-center gap-1 py-2 text-sm text-gray-700 border-b last:border-b-0"
+                            >
+                                <svg v-if="btn.type === 'PHONE_NUMBER'" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"><path fill="currentColor" d="M20 16v4c-2.758 0-5.07-.495-7-1.325c-3.841-1.652-6.176-4.63-7.5-7.675C4.4 8.472 4 5.898 4 4h4l1 4l-3.5 3c1.324 3.045 3.659 6.023 7.5 7.675L16 15l4 1z"/></svg>
+                                <svg v-else-if="btn.type === 'URL'" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"><path fill="currentColor" d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg>
+                                <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"><path fill="currentColor" d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+                                <span>{{ btn.text }}</span>
+                            </div>
+                        </div>
+                        
+                        <!-- Card number -->
+                        <!-- <div class="absolute bottom-1 right-1 bg-gray-200 text-gray-500 text-xs rounded-full w-5 h-5 flex items-center justify-center">
+                            {{ index + 1 }}
+                        </div> -->
                     </div>
                 </div>
             </div>

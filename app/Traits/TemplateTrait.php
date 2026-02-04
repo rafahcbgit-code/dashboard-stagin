@@ -171,5 +171,104 @@ trait TemplateTrait{
                 return 'Value not found for ' . $parameter;
             }
         }
+    }
+
+   
+
+ function buildCarouselTemplateRequest(int $templateId, object $contact): array
+{
+    \Log::info('buildCarouselTemplateRequest');
+    
+    $template = Template::where('id', $templateId)->first();
+    $metadata = json_decode($template->metadata, true);
+    $carouselCards = $metadata['carousel_cards'] ?? [];
+
+    $payload = [
+        'name' => $template->name,
+        'language' => ['code' => $template->language],
+        'components' => [],
+    ];
+
+    // Add body component
+    $payload['components'][] = [
+        'type' => 'body',
+    ];
+
+    // Build carousel cards
+    $metaCards = [];
+    
+    foreach ($carouselCards as $cardIndex => $card) {
+        $cardComponents = [];
+
+        // Add header if exists
+        $headerType = strtolower($card['header_type'] ?? 'image');
+        $headerHandle = $card['header_handle'] ?? null;
+
+        if ($headerHandle) {
+            $cardComponents[] = [
+                'type' => 'header',
+                'parameters' => [
+                    [
+                        'type' => $headerType,
+                        $headerType => [
+                            'link' => $headerHandle,
+                        ],
+                    ],
+                ],
+            ];
+        }
+
+        // Add buttons INSIDE card with proper indexing
+        $buttons = $card['buttons'] ?? [];
+        $buttonIndex = 0;
+        
+        foreach ($buttons as $btn) {
+            $btnType = strtoupper($btn['type'] ?? '');
+
+            if ($btnType === 'QUICK_REPLY') {
+                $cardComponents[] = [
+                    'type' => 'button',
+                    'sub_type' => 'quick_reply',
+                    'index' => $buttonIndex,
+                    'parameters' => [
+                        [
+                            'type' => 'payload',
+                            'payload' => $btn['text'] ?? '',
+                        ],
+                    ],
+                ];
+                $buttonIndex++;
+            } elseif ($btnType === 'URL') {
+                $cardComponents[] = [
+                    'type' => 'button',
+                    'sub_type' => 'url',
+                    'index' => $buttonIndex,
+                    'parameters' => [
+                        [
+                            'type' => 'text',
+                            'text' => $btn['url'] ?? '',
+                        ],
+                    ],
+                ];
+                $buttonIndex++;
+            }
+        }
+
+        // ✅ CRITICAL: Add card_index
+        $metaCards[] = [
+            'card_index' => $cardIndex,
+            'components' => $cardComponents,
+        ];
+    }
+
+    // Add carousel component
+    $payload['components'][] = [
+        'type' => 'carousel',
+        'cards' => $metaCards,
+    ];
+
+    \Log::info('Final Carousel Payload', ['payload' => $payload]);
+
+    return $payload;
 }
 }

@@ -148,6 +148,7 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::delete('/chats/{uuid}', [App\Http\Controllers\User\ChatController::class, 'deleteChats']);
                 Route::get('/chat/send', [App\Http\Controllers\User\ChatController::class, 'sendMessage']);
                 Route::post('/chat/{uuid}/send/template', [App\Http\Controllers\User\ChatController::class, 'sendTemplateMessage']);
+                Route::post('/chat/{uuid}/send/carousel-template', [App\Http\Controllers\User\ChatController::class, 'sendCarouselTemplateMessage']);
                 Route::get('/chat/test/{id}', [App\Http\Controllers\User\ChatController::class, 'sendAutoReply']);
                 Route::post('/chats/update-sort-direction', [App\Http\Controllers\User\ChatController::class, 'updateChatSortDirection']);
                 Route::get('/chats/{contactId}/messages', [App\Http\Controllers\User\ChatController::class, 'loadMoreMessages']);
