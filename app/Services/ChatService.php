@@ -292,6 +292,24 @@ class ChatService
      */
     private function findLeastLoadedAgent($organizationId)
     {
+        // Prefer agents from the assigned_agents table for this organization
+        $assignedAgentIds = DB::table('assigned_agents')
+            ->where('organization_id', $organizationId)
+            ->pluck('user_id')
+            ->toArray();
+
+        if (!empty($assignedAgentIds)) {
+            return Team::where('organization_id', $organizationId)
+                ->whereIn('user_id', $assignedAgentIds)
+                ->where('role', 'agent')
+                ->where('status', 'active')
+                ->withCount('tickets')
+                ->whereNull('deleted_at')
+                ->orderBy('tickets_count')
+                ->first();
+        }
+
+        // Fallback: pick any active agent in the organization with least tickets
         return Team::where('organization_id', $organizationId)
             ->where('role', 'agent')
             ->where('status', 'active')
