@@ -335,6 +335,6 @@ class Contact extends Model
             'id',
             'id',
             'assigned_to'
-        )->latest('chat_tickets.id');
+        )->whereNull('users.deleted_at')->latest('chat_tickets.id');
     }
 }

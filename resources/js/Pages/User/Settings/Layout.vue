@@ -34,29 +34,11 @@
                                 <path fill="#fff" d="M12 7l.8 2.4 2.4.8-2.4.8-.8 2.4-.8-2.4-2.4-.8 2.4-.8z"/>
                                 <path fill="#fff" d="M16 5l.5 1.5 1.5.5-1.5.5-.5 1.5-.5-1.5-1.5-.5 1.5-.5z"/>
                                 </svg>
-                                <span>{{ $t('Global reply') }}</span>
+                                <span>{{ $t('System replies') }}</span>
                             </Link>
                         </li>
-
-                        <li
-                        class="hover:bg-slate-50 hover:text-black rounded-[5px] px-1 truncate cursor-pointer"
-                        :class="$page.url.startsWith('/settings/greeting-message') ? 'bg-slate-50 text-black' : ''"
-                        >
-                        <Link
-                            rel="noopener noreferrer"
-                            href="/settings/greeting-message"
-                            class="flex items-center p-2 space-s-3 rounded-md"
-                        >
-                        <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24"
-                            fill="none" stroke="currentColor" stroke-width="1.8"
-                            stroke-linecap="round" stroke-linejoin="round">
-                        <path d="M21 15a4 4 0 0 1-4 4H7l-4 3v-3H5a4 4 0 0 1-4-4V7a4 4 0 0 1 4-4h10"/>
-                        <path d="M15 6l.8 2.2L18 9l-2.2.8L15 12l-.8-2.2L12 9l2.2-.8z"/>
-                        </svg>
-                        <span>{{ $t('Greeting Message') }}</span>
-                        </Link>
-                        </li>
-
+                        
+                        
 
                         <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-1 truncate cursor-pointer" :class="$page.url.startsWith('/settings/contacts') ? 'bg-slate-50 text-black' : ''">
                             <Link rel="noopener noreferrer" href="/settings/contacts" class="flex items-center p-2 space-s-3 rounded-md">
