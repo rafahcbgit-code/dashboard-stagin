@@ -204,6 +204,7 @@
                                 <span class="text-xs leading-none">9:15</span>
                             </div>
                         </div>
+                        <!-- Pass the full editableCards with all metadata -->
                         <CarouselPreview :cards="editableCards" />
                     </div>
                 </div>
