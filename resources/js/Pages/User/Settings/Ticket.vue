@@ -35,7 +35,7 @@
                                 <div class="text-md">
                                     <h4 class="text-[16px]">{{ $t('Auto assignment') }}</h4>
                                     <span class="flex items-center mt-1 text-slate-500">
-                                        {{ $t('Use auto-assignment rules to evenly distribute chats among agents automatically.') }}
+                                        {{ $t('Use auto-assignment rules to evenly distribute chats among agent automatically.') }}
                                     </span>
                                 </div>
                             </div>
@@ -129,9 +129,22 @@
                             </div>
                         </div>
                         <div class="mb-4">
-                            <AgentForm :agents="agents" :selected-agents="form.selected_agents"
-                                :assigned-to-specific-agents="true"
-                                @update:selected-agents="val => form.selected_agents = val" />
+                            <div :dir="$page.props.locale === 'ar' ? 'rtl' : 'ltr'"
+                                class="bg-white border border-slate-200 rounded-lg p-4">
+                                <h4 class="text-lg font-semibold mb-3">{{ $t('Select Agents') }}</h4>
+                                <ul class="space-y-2 max-h-64 overflow-y-auto">
+                                    <li v-for="agent in props.agents" :key="agent.id"
+                                        class="flex items-center p-2 border rounded-md bg-gray-50">
+                                        <input type="checkbox" class="mx-2"
+                                            :checked="form.selected_agents.includes(Number(agent.id))"
+                                            @change="toggleAgent(agent.id)" :id="'agent_' + agent.id">
+                                        <label :for="'agent_' + agent.id" class="cursor-pointer">
+                                            {{ agent.first_name }} {{ agent.last_name }}
+                                            <span class="text-gray-400 text-xs">(ID: {{ agent.id }})</span>
+                                        </label>
+                                    </li>
+                                </ul>
+                            </div>
                         </div>
                         <div class="mb-4 flex justify-end">
                             <button @click="submitForm" :disabled="form.selected_agents.length === 0"
@@ -199,13 +212,18 @@
 
 <script setup>
 import SettingLayout from "./Layout.vue";
-import { ref } from 'vue';
+import { ref, watch } from 'vue';
 import { useForm } from "@inertiajs/vue3";
-import AgentForm from '@/Components/AgentForm.vue';
 
 const props = defineProps(['rows', 'filters', 'settings', 'modules', 'agents', 'oldSelectedAgents']);
 const config = ref(props.settings.metadata);
 const settings = ref(config.value ? JSON.parse(config.value) : null);
+
+const toNumberArray = (arr) => {
+    if (!arr) return [];
+    const base = Array.isArray(arr) ? arr : Object.values(arr);
+    return Array.from(new Set(base.map(v => Number(v)).filter(v => !isNaN(v) && v > 0)));
+};
 
 const form = useForm({
     active: settings.value?.tickets?.active ?? false,
@@ -213,8 +231,29 @@ const form = useForm({
     auto_robinhood: settings.value?.tickets?.assigned_to_specific_agents ?? false,
     reassign_reopened_chats: settings.value?.tickets?.reassign_reopened_chats ?? false,
     allow_agents_to_view_all_chats: settings.value?.tickets?.allow_agents_to_view_all_chats ?? false,
-    selected_agents: props.oldSelectedAgents ?? (settings.value?.tickets?.selected_agents ?? [])
+    selected_agents: (() => {
+        const agentsArray = Array.isArray(props.agents) ? props.agents : Object.values(props.agents);
+        const validAgentIds = agentsArray.map(a => Number(a.id));
+        const initial = toNumberArray(settings.value?.tickets?.selected_agents ?? (props.oldSelectedAgents ?? []));
+        return initial.filter(id => validAgentIds.includes(id));
+    })()
 });
+
+watch(() => form.selected_agents, (curr) => {
+    console.log('Ticket.vue - form.selected_agents changed to:', curr);
+}, { deep: true });
+
+const toggleAgent = (agentId) => {
+    const id = Number(agentId);
+    const index = form.selected_agents.indexOf(id);
+
+    if (index > -1) {
+        form.selected_agents.splice(index, 1);
+    } else {
+        form.selected_agents.push(id);
+    }
+    console.log('Agent toggled. ID:', id, 'New selection:', form.selected_agents);
+};
 
 const toggleState1 = () => { form.active = !form.active; submitForm(); }
 const toggleAutoAssignment = (el) => {
@@ -228,9 +267,9 @@ const toggleAutoAssignment = (el) => {
         form.auto_robinhood = true;
     } else if (el === 'off') {
         form.selected_agents = [];
-        submitForm(); // حفظ مباشر عند اختيار Off
+        submitForm();
     }
-    // لا يتم الحفظ عند اختيار Auto أو Auto Robinhood حتى يتم تحديد الوكلاء
+
 }
 const toggleState2 = () => {
     form.reassign_reopened_chats = !form.reassign_reopened_chats;
@@ -239,6 +278,7 @@ const toggleState2 = () => {
 const toggleState3 = () => { form.allow_agents_to_view_all_chats = !form.allow_agents_to_view_all_chats; submitForm(); }
 
 const submitForm = async () => {
+    console.log('SUBMITTING POST TO SERVER:', form.data());
     form.post('/settings/tickets', { preserveScroll: true });
 }
 </script>
