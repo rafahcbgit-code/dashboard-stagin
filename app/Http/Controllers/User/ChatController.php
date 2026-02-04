@@ -38,17 +38,35 @@ class ChatController extends BaseController
         return $this->chatService()->sendMessage($request);
     }
 
+    /**
+     * Mark all inbound chats as read for the current user.
+     *
+     * This method updates `chats.is_read` to `1` for inbound messages
+     * within the current organization that are associated with chat
+     * tickets assigned to the authenticated user. It performs a join
+     * against `chat_tickets` using `contact_id` to scope updates to
+     * only those chats whose ticket `assigned_to` equals the current
+     * user's id. The method returns a JSON response containing the
+     * number of rows updated.
+     *
+     * Note: it updates the `chats` table directly via a joined query,
+     * and does not check other chat attributes (e.g. `deleted_at`) here.
+     *
+     * @param \Illuminate\Http\Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
     public function markAllAsRead(Request $request)
     {
         $organizationId = session()->get('current_organization');
         $userId = auth()->user()->id;
 
-        $updated = Chat::where('organization_id', $organizationId)
-            ->where('type', 'inbound')
-            ->where('is_read', 0)
-            ->where('user_id', $userId)
-            ->whereNull('deleted_at')
-            ->update(['is_read' => 1]);
+        $updated = Chat::join('chat_tickets', 'chats.contact_id', '=', 'chat_tickets.contact_id')
+        ->where('chat_tickets.assigned_to', $userId)
+        ->where('chats.organization_id', $organizationId)
+        ->where('chats.is_read', 0)
+        ->update([
+            'chats.is_read' => 1
+        ]);
 
         return response()->json([
             'success' => true,
