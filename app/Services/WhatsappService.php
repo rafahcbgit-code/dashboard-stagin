@@ -184,9 +184,32 @@ class WhatsappService
         $responseObject = $this->sendHttpRequest('POST', $url, $requestData, $headers);
         \Log::info("meta resp", [$responseObject]);
         if($responseObject->success === true){
-            if($campaignId != NULL){
-                $campaign = Campaign::where('id', $campaignId)->first();
-                $templateMetadata = json_decode($campaign->metadata);
+            // Determine metadata based on template type
+            $metadata = null;
+
+            if ($campaignId != NULL) {
+                // Campaign flow
+                $campaign = Campaign::find($campaignId);
+                $template = Template::find($campaign->template_id);
+                $templateMeta = json_decode($template->metadata, true);
+                
+                if (($templateMeta['template_type'] ?? '') === 'carousel') {
+                    // Carousel campaign
+                    $metadata = $this->buildCarouselTemplateChatMessage($contactUuId, $template->id);
+                } else {
+                    // Standard campaign
+                    $metadata = $this->buildCampaignTemplateChatMessage($templateMetadata, $contactUuId);
+                }
+            } else {
+                // Direct send flow
+                if (isset($templateContent['components']) && $this->isCarouselPayload($templateContent)) {
+                    // Carousel direct send
+                    $templateId = $this->resolveTemplateIdFromPayload($templateContent);
+                    $metadata = $this->buildCarouselTemplateChatMessage($contactUuId, $templateId);
+                } else {
+                    // Standard direct send
+                    $metadata = $this->buildTemplateChatMessage($templateContent, $contact);
+                }
             }
 
             $chat = Chat::create([
@@ -195,11 +218,7 @@ class WhatsappService
                 'contact_id' => $contact->id,
                 'type' => 'outbound',
                 'user_id' => $userId,
-                'metadata' => $campaignId != NULL
-                ? $this->buildCampaignTemplateChatMessage($templateMetadata, $contactUuId)
-                : (isset($templateContent['components']) && $this->isCarouselPayload($templateContent)
-                    ? $this->buildCarouselTemplateChatMessage($contactUuId, $this->resolveTemplateIdFromPayload($templateContent))
-                    : $this->buildTemplateChatMessage($templateContent, $contact)),
+                'metadata' => $metadata,
                 'media_id' => $campaignId != NULL ? $this->getMediaIdFromCampaign($campaignId) : $mediaId,
                 'status' => isset($responseObject->data->messages[0]->message_status) ? $responseObject->data->messages[0]->message_status : 'sent',
                 'created_at' => now()
