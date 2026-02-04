@@ -952,5 +952,6 @@
     "Avg. Waiting Time": "متوسط وقت الانتظار",
     "No agent data found for the selected period": "لم يتم العثور على بيانات وكلاء للفترة المختارة",
     "After Hours Reply Settings": "إعدادات الرد خارج أوقات العمل",
-    "Auto-reply for messages received outside working hours (max 3 buttons).": "رد تلقائي للرسائل المستلمة خارج أوقات العمل (بحد أقصى 3 أزرار)."
+    "Auto-reply for messages received outside working hours (max 3 buttons).": "رد تلقائي للرسائل المستلمة خارج أوقات العمل (بحد أقصى 3 أزرار).",
+    "System replies": "ردود النظام"
 }
