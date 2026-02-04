@@ -24,6 +24,6 @@ class ChatTicket extends Model {
     }
 
     public function user(){
-        return $this->belongsTo(User::class, 'assigned_to', 'id');
+        return $this->belongsTo(User::class, 'assigned_to', 'id')->whereNull('users.deleted_at');
     }
 }
