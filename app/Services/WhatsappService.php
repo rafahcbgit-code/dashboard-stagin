@@ -198,7 +198,7 @@ class WhatsappService
                     $metadata = $this->buildCarouselTemplateChatMessage($contactUuId, $template->id);
                 } else {
                     // Standard campaign
-                    $metadata = $this->buildCampaignTemplateChatMessage($templateMetadata, $contactUuId);
+                    $metadata = $this->buildCampaignTemplateChatMessage($templateMeta, $contactUuId);
                 }
             } else {
                 // Direct send flow
