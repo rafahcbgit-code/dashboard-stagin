@@ -625,6 +625,11 @@ const buildChatUrl = (contactUuid) => {
                                 <span class="ml-2">{{ content(contact?.last_chat?.metadata).reaction?.emoji }}</span>
                             </div>
                         </div>
+                        <div v-if="contentType(contact?.last_chat?.metadata) === 'carousel'"
+                            class="text-slate-500 text-xs truncate self-end">
+                            Carousel message
+                        </div>
+
                         <span v-if="contact.unread_messages > 0"
                             class="bg-green-600 text-white rounded-md py-[1px] px-[8px] min-w-10 text-[10px] flex items-center justify-center">{{
                                 contact.unread_messages }}</span>
