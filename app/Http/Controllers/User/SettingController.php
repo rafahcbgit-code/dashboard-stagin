@@ -16,7 +16,7 @@ use Illuminate\Http\Request;
 use App\Helpers\CustomHelper;
 use App\Services\WhatsappService;
 use App\Models\ContactContactGroup;
-use Illuminate\Support\Facades\URL;
+use Illuminate\Support\Facades\Log;
 use App\Services\ContactFieldService;
 use App\Http\Requests\StoreWhatsappProfile;
 use App\Http\Requests\StoreWhatsappSettings;
@@ -200,14 +200,15 @@ public function campaign(Request $request)
                 ->where('teams.organization_id', '=', session()->get('current_organization'))
                 ->where('teams.role', '=', 'agent')
                 ->whereNull('teams.deleted_at')
-                ->select('users.*')
+                ->select('users.id', 'users.first_name', 'users.last_name', 'users.email')
+                ->distinct()
                 ->get();
 
             $oldSelectedAgents = DB::table('assigned_agents')
                 ->where('organization_id', session()->get('current_organization'))
                 ->pluck('user_id')
                 ->toArray();
-//dd($agents, $oldSelectedAgents);
+
             return Inertia::render('User/Settings/Ticket', [
                 'title' => __('Settings'),
                 'filters' => $request->all(),
@@ -220,7 +221,6 @@ public function campaign(Request $request)
         } else if($request->isMethod('post')) {
             $currentOrganizationId = session()->get('current_organization');
             $organizationConfig = Organization::where('id', $currentOrganizationId)->first();
-    
             $metadataArray = $organizationConfig->metadata ? json_decode($organizationConfig->metadata, true) : [];
 
             $metadataArray['tickets']['active'] = $request->active;
@@ -228,21 +228,23 @@ public function campaign(Request $request)
             $metadataArray['tickets']['assigned_to_specific_agents'] = $request->auto_robinhood ?? false;
             $metadataArray['tickets']['reassign_reopened_chats'] = $request->reassign_reopened_chats;
             $metadataArray['tickets']['allow_agents_to_view_all_chats'] = $request->allow_agents_to_view_all_chats;
+            $metadataArray['tickets']['selected_agents'] = $request->selected_agents;
 
             $updatedMetadataJson = json_encode($metadataArray);
 
             $organizationConfig->metadata = $updatedMetadataJson;
             $organizationConfig->save();
 
-            if (is_array($request->selected_agents)) {
+            if (isset($request->selected_agents)) {
                 $this->syncAssignedAgents($currentOrganizationId, $request->selected_agents);
             }
-            /*return back()->with(
+
+            return back()->with(
                 'status', [
                     'type' => 'success', 
                     'message' => __('Settings updated successfully')
                 ]
-            );*/
+            );
         }
     }
 
@@ -905,7 +907,7 @@ public function campaign(Request $request)
     }
 
     private function syncAssignedAgents($organizationId, array $selectedAgents)
-    {
+    { 
         DB::table('assigned_agents')
             ->where('organization_id', $organizationId)
             ->delete();

@@ -1,0 +1,1 @@
+import{M as s}from"./index-3b1b0b99.js";import{C as r,f as t,g as l,a9 as n,aa as p,u as c,o as u,A as f}from"./app-72b1a20a.js";const _=r({__name:"SelectValue",props:{placeholder:{},asChild:{type:Boolean},as:{}},setup(a){const e=a;return(o,d)=>(u(),t(c(s),n(p(e)),{default:l(()=>[f(o.$slots,"default")]),_:3},16))}});export{_ as default};
