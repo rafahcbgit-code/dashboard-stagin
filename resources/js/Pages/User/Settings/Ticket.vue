@@ -140,7 +140,6 @@
                                             @change="toggleAgent(agent.id)" :id="'agent_' + agent.id">
                                         <label :for="'agent_' + agent.id" class="cursor-pointer">
                                             {{ agent.first_name }} {{ agent.last_name }}
-                                            <span class="text-gray-400 text-xs">(ID: {{ agent.id }})</span>
                                         </label>
                                     </li>
                                 </ul>
