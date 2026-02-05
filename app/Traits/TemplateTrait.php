@@ -116,8 +116,9 @@ trait TemplateTrait{
                             ? $parameter->value : $this->getParameters($contact, $parameter->value);
                     } else if($button->type === 'URL'){
                         $param['type'] = 'text';
-                        $param['text'] = $parameter->type === 'static' 
+                        $rawValue = $parameter->type === 'static'
                             ? $parameter->value : $this->getParameters($contact, $parameter->value);
+                        $param['text'] = $this->normalizeUrlButtonParam($rawValue);
                     } else if($button->type === 'COPY_CODE'){
                         $param['type'] = 'coupon_code';
                         $param['coupon_code'] = $parameter->type === 'static' 
@@ -133,6 +134,20 @@ trait TemplateTrait{
 
       //  dd($buttonComponent);
         return $buttonComponent;
+    }
+
+    private function normalizeUrlButtonParam($value)
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        $value = trim((string) $value);
+        if ($value === '') {
+            return '';
+        }
+
+        return rawurlencode($value);
     }
 
     function getParameters($contact, $parameter){
