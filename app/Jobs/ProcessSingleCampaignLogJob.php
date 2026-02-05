@@ -103,6 +103,18 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
                             $this->campaignLog->campaign_id,
                             $this->campaignLog->contact
                         );
+
+                        $validationError = $this->validateResolvedTemplate($templatePayload);
+                        if ($validationError) {
+                            $responseObject = (object) [
+                                'success' => false,
+                                'message' => $validationError,
+                                'data' => (object) [],
+                            ];
+
+                            $this->updateLogStatus($lockedLog, $responseObject);
+                            return;
+                        }
                     }
                     
                     

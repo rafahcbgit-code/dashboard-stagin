@@ -12,6 +12,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 
 class CreateCampaignLogsJob implements ShouldQueue
 {
@@ -57,17 +58,31 @@ class CreateCampaignLogsJob implements ShouldQueue
 
     protected function processCampaign(Campaign $campaign)
     {
+        $lock = Cache::lock('campaign_logs_create_'.$campaign->id, 120);
+
+        if (! $lock->get()) {
+            Log::info('Skipping campaign log creation due to active lock', [
+                'campaign_id' => $campaign->id,
+            ]);
+
+            return;
+        }
+
         $contacts = $this->getContactsForCampaign($campaign);
 
-        if ($this->createCampaignLogs($campaign, $contacts)) {
-            Campaign::where('uuid', $campaign->uuid)->update(['status' => 'ongoing']);
-            Log::info("Campaign {$campaign->uuid} marked ongoing.");
+        try {
+            if ($this->createCampaignLogs($campaign, $contacts)) {
+                Campaign::where('uuid', $campaign->uuid)->update(['status' => 'ongoing']);
+                Log::info("Campaign {$campaign->uuid} marked ongoing.");
 
-            // Dispatch ProcessCampaignMessagesJob for this org (Story 2.1: AC-2.1.1)
-            ProcessCampaignMessagesJob::dispatchForOrganization($campaign->organization_id);
-            Log::info("ProcessCampaignMessagesJob dispatched for org {$campaign->organization_id}.");
-        } else {
-            Log::info("Campaign {$campaign->uuid} not marked ongoing.");
+                // Dispatch ProcessCampaignMessagesJob for this org (Story 2.1: AC-2.1.1)
+                ProcessCampaignMessagesJob::dispatchForOrganization($campaign->organization_id);
+                Log::info("ProcessCampaignMessagesJob dispatched for org {$campaign->organization_id}.");
+            } else {
+                Log::info("Campaign {$campaign->uuid} not marked ongoing.");
+            }
+        } finally {
+            optional($lock)->release();
         }
     }
 
