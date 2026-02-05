@@ -95,6 +95,17 @@
         }
         return options;
     });
+
+    // Get current datetime in the format required for datetime-local input (YYYY-MM-DDTHH:MM)
+    const minDateTime = computed(() => {
+        const now = new Date();
+        const year = now.getFullYear();
+        const month = String(now.getMonth() + 1).padStart(2, '0');
+        const day = String(now.getDate()).padStart(2, '0');
+        const hours = String(now.getHours()).padStart(2, '0');
+        const minutes = String(now.getMinutes()).padStart(2, '0');
+        return `${year}-${month}-${day}T${hours}:${minutes}`;
+    });
     
     const form = useForm({
         name: null,
@@ -335,7 +346,7 @@
                 <FormInput v-if="isCampaignFlow" v-model="form.name" :name="$t('Campaign name')" :type="'text'" :error="form.errors.name" :required="true" :class="'sm:col-span-6'"/>
                 <FormSelect v-model="form.template" @update:modelValue="loadTemplate" :options="templateOptions" :required="true" :error="form.errors.template" :name="$t('Template')" :class="'sm:col-span-3'" :placeholder="$t('Select template')"/>
                 <FormSelect v-if="isCampaignFlow" v-model="form.contacts" :options="contactGroupOptions" :name="$t('Send to')" :required="true" :class="'sm:col-span-3'" :placeholder="$t('Select contacts')" :error="form.errors.contacts"/>
-                <FormInput v-if="isCampaignFlow && !form.skip_schedule" v-model="form.time" :name="$t('Scheduled time')" :type="'datetime-local'" :error="form.errors.time" :required="true" :class="'sm:col-span-6'"/>
+                <FormInput v-if="isCampaignFlow && !form.skip_schedule" v-model="form.time" :name="$t('Scheduled time')" :type="'datetime-local'" :min="minDateTime" :error="form.errors.time" :required="true" :class="'sm:col-span-6'"/>
                 <div v-if="isCampaignFlow" class="relative flex gap-x-3 sm:col-span-6">
                     <div class="flex h-6 items-center">
                         <input v-model="form.skip_schedule" id="skip-schedule" name="skip-schedule" type="checkbox" class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600">
