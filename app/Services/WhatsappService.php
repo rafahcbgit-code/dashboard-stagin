@@ -554,6 +554,11 @@ class WhatsappService
         $contact = Contact::where('uuid', $contactUuId)->first();
         $array = [];
         
+        // Convert to object if it's an array (from Campaign metadata which is already decoded)
+        if (is_array($templateMetadata)) {
+            $templateMetadata = json_decode(json_encode($templateMetadata));
+        }
+        
         if($templateMetadata->header->format == 'IMAGE' || $templateMetadata->header->format == 'VIDEO' || $templateMetadata->header->format == 'DOCUMENT' || $templateMetadata->header->format == 'LOCATION'){
             $array['type'] = strtolower($templateMetadata->header->format);
         } else {
@@ -584,25 +589,17 @@ class WhatsappService
         if(isset($templateMetadata->body->text)){
             $bodyText = $templateMetadata->body->text;
 
-
-
             if (isset($templateMetadata->body->parameters) && !empty($templateMetadata->body->parameters)) {
                 $bodyParameters = $templateMetadata->body->parameters;
-
-
 
                 if($bodyParameters && count($bodyParameters) >= 1){
                     foreach($bodyParameters as $index => $parameter){
                         $placeholder = '{{' . ($index + 1) . '}}';
                         $value = $parameter->selection === 'static' ? $parameter->value : $this->getParameters($contact, $parameter->value);
 
-
-
                         $bodyText = str_replace($placeholder, $value, $bodyText);
                     }
                 }
-
-
             }
 
             if($array['type'] == 'text'){
@@ -630,7 +627,6 @@ class WhatsappService
             }
         }
 
-        //dd(json_encode($array));
         return json_encode($array);
     }
 
