@@ -276,6 +276,44 @@
     const submitForm = () => {
         isLoading.value = true;
 
+        let hasValidationError = false;
+        const allowedDynamicValues = new Set((dynamicOptions.value || []).map(option => option.value));
+
+        // Validate body dynamic parameters (must exist in contact fields)
+        if (Array.isArray(form.body?.parameters)) {
+            form.body.parameters.forEach((param, index) => {
+                if (param?.selection === 'dynamic') {
+                    const value = typeof param.value === 'string' ? param.value.trim() : param.value;
+                    if (!value || !allowedDynamicValues.has(value)) {
+                        form.setError(`body.parameters.${index}.value`, trans('Invalid or missing dynamic field for body variable.'));
+                        hasValidationError = true;
+                    }
+                }
+            });
+        }
+
+        // Validate button dynamic parameters (must exist in contact fields)
+        if (Array.isArray(form.buttons)) {
+            form.buttons.forEach((button, buttonIndex) => {
+                if (Array.isArray(button?.parameters)) {
+                    button.parameters.forEach((param, paramIndex) => {
+                        if (param?.type === 'dynamic') {
+                            const value = typeof param.value === 'string' ? param.value.trim() : param.value;
+                            if (!value || !allowedDynamicValues.has(value)) {
+                                form.setError(`buttons.${buttonIndex}.parameters.${paramIndex}.value`, trans('Invalid or missing dynamic field for button variable.'));
+                                hasValidationError = true;
+                            }
+                        }
+                    });
+                }
+            });
+        }
+
+        if (hasValidationError) {
+            isLoading.value = false;
+            return;
+        }
+
         // Normalize URL button parameters (static values only)
         form.buttons = form.buttons.map((button) => {
             if (button.type !== 'URL' || !Array.isArray(button.parameters)) {

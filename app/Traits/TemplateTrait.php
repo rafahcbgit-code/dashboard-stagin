@@ -181,11 +181,77 @@ trait TemplateTrait{
 
             if (array_key_exists($parameter, $metadata)) {
                 return $metadata[$parameter];
-            } else {
-                Log::warning('Parameter not found in metadata', ['parameter' => $parameter, 'contact_id' => $contact->id]);
-                return 'Value not found for ' . $parameter;
+            }
+
+            $normalizedParam = Str::slug(trim((string) $parameter));
+            foreach ($metadata as $key => $value) {
+                $normalizedKey = Str::slug(trim((string) $key));
+                if ($normalizedKey === $normalizedParam) {
+                    return $value;
+                }
+            }
+
+            Log::warning('Parameter not found in metadata', ['parameter' => $parameter, 'contact_id' => $contact->id]);
+            return null;
+        }
+    }
+
+    private function validateResolvedTemplate(array $template): ?string
+    {
+        $components = $template['components'] ?? [];
+
+        foreach ($components as $component) {
+            $type = strtolower($component['type'] ?? '');
+
+            if ($type === 'header') {
+                foreach (($component['parameters'] ?? []) as $index => $param) {
+                    if (($param['type'] ?? '') === 'text') {
+                        $value = $param['text'] ?? null;
+                        if ($value === null || trim((string) $value) === '') {
+                            return __('Missing value for header variable :index.', [
+                                'index' => $index + 1,
+                            ]);
+                        }
+                    }
+                }
+            }
+
+            if ($type === 'body') {
+                foreach (($component['parameters'] ?? []) as $index => $param) {
+                    $value = $param['text'] ?? null;
+                    if ($value === null || trim((string) $value) === '') {
+                        return __('Missing value for body variable :index.', [
+                            'index' => $index + 1,
+                        ]);
+                    }
+                }
+            }
+
+            if ($type === 'button') {
+                foreach (($component['parameters'] ?? []) as $index => $param) {
+                    $paramType = $param['type'] ?? '';
+                    $value = null;
+
+                    if ($paramType === 'text') {
+                        $value = $param['text'] ?? null;
+                    } elseif ($paramType === 'payload') {
+                        $value = $param['payload'] ?? null;
+                    } elseif ($paramType === 'coupon_code') {
+                        $value = $param['coupon_code'] ?? null;
+                    }
+
+                    if ($value === null || trim((string) $value) === '') {
+                        $buttonIndex = isset($component['index']) ? ((int) $component['index'] + 1) : null;
+                        return __('Missing value for button parameter (button :button, param :param).', [
+                            'button' => $buttonIndex ?? '?',
+                            'param' => $index + 1,
+                        ]);
+                    }
+                }
             }
         }
+
+        return null;
     }
 
    

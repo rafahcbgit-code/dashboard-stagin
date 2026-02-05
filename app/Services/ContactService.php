@@ -148,7 +148,27 @@ class ContactService
         ]);
 
         $contact->address = $address;
-        $contact->metadata = json_encode($request->metadata);
+
+        $incomingMetadata = $request->metadata ?? null;
+        if (is_string($incomingMetadata)) {
+            $decodedMetadata = json_decode($incomingMetadata, true);
+            $incomingMetadata = json_last_error() === JSON_ERROR_NONE ? $decodedMetadata : [];
+        }
+
+        if (!is_array($incomingMetadata)) {
+            $incomingMetadata = [];
+        }
+
+        if ($uuid !== null) {
+            $existingMetadata = $contact->metadata ? json_decode($contact->metadata, true) : [];
+            if (!is_array($existingMetadata)) {
+                $existingMetadata = [];
+            }
+
+            $incomingMetadata = array_merge($existingMetadata, $incomingMetadata);
+        }
+
+        $contact->metadata = !empty($incomingMetadata) ? json_encode($incomingMetadata) : null;
         $contact->updated_at = now();
         $contact->save();
 

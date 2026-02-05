@@ -275,6 +275,17 @@ class SendCampaignJob implements ShouldQueue
                     $this->initializeWhatsappService();
             
                     $template = $this->buildTemplateRequest($campaignLog->campaign_id, $campaignLog->contact);
+                    $validationError = $this->validateResolvedTemplate($template);
+                    if ($validationError) {
+                        $responseObject = (object) [
+                            'success' => false,
+                            'message' => $validationError,
+                            'data' => (object) [],
+                        ];
+
+                        $this->updateCampaignLogStatus($campaignLog, $responseObject);
+                        return;
+                    }
                     $responseObject = $this->whatsappService->sendTemplateMessage($campaignLog->contact->uuid, $template, $campaign_user_id, $campaignLog->campaign_id);
                     
                     try {
@@ -321,6 +332,34 @@ class SendCampaignJob implements ShouldQueue
                     $this->initializeWhatsappService();
             
                     $template = $this->buildTemplateRequest($campaignLog->campaign_id, $campaignLog->contact);
+                    $validationError = $this->validateResolvedTemplate($template);
+                    if ($validationError) {
+                        $responseObject = (object) [
+                            'success' => false,
+                            'message' => $validationError,
+                            'data' => (object) [],
+                        ];
+
+                        $retryLog->chat_id = null;
+                        $retryLog->status = 'failed';
+                        $retryLog->metadata = json_encode($responseObject);
+                        $retryLog->save();
+
+                        $log = CampaignLog::find($campaignLog->id);
+                        $log->retry_count += 1;
+                        $log->status = 'failed';
+                        $log->save();
+
+                        $orgMetadata = json_decode($campaignLog->campaign->organization->metadata ?? '{}', true);
+                        $retryIntervals = $orgMetadata['campaigns']['resend_intervals'] ?? [];
+                        $maxRetries = count($retryIntervals);
+
+                        if ($log->status === 'failed' && $log->retry_count >= $maxRetries) {
+                            $this->addContactToFailedGroup($campaignLog);
+                        }
+
+                        return;
+                    }
                     $responseObject = $this->whatsappService->sendTemplateMessage($campaignLog->contact->uuid, $template, $campaign_user_id, $campaignLog->campaign_id);
                     $successStatus = ($responseObject->success === true) ? 'success' : 'failed';
                     //Log::info(json_encode($responseObject));

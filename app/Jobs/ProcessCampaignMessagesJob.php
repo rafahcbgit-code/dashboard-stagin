@@ -15,6 +15,7 @@ use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 
 class ProcessCampaignMessagesJob implements ShouldQueue, ShouldBeUnique
 {
@@ -55,6 +56,16 @@ class ProcessCampaignMessagesJob implements ShouldQueue, ShouldBeUnique
 
     public function handle()
     {
+        $lock = Cache::lock('campaign_messages_org_'.$this->organizationId, 300);
+
+        if (! $lock->get()) {
+            Log::info('Skipping ProcessCampaignMessagesJob due to active lock', [
+                'organization_id' => $this->organizationId,
+            ]);
+
+            return;
+        }
+
         // Task 2.2: Query count and timing instrumentation (AC-2.2.1, AC-2.2.4)
         $startTime = microtime(true);
         DB::enableQueryLog();
@@ -163,6 +174,8 @@ class ProcessCampaignMessagesJob implements ShouldQueue, ShouldBeUnique
         } catch (\Exception $e) {
             Log::error('Error in ProcessCampaignMessagesJob: ' . $e->getMessage());
             throw $e;
+        } finally {
+            optional($lock)->release();
         }
     }
 

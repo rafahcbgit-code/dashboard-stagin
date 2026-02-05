@@ -179,6 +179,13 @@ class WhatsappService
         $requestData['type'] = 'template';
         $requestData['template'] = $templateContent;
 
+        
+        \Log::info('Template variables payload', [
+            'template' => $templateContent['name'] ?? null,
+            'contact_id' => $contact->id ?? null,
+            'variables' => $this->extractTemplateVariables($templateContent),
+        ]);
+
         \Log::info('WhatsApp API Request: ' . json_encode($requestData));
 
         $responseObject = $this->sendHttpRequest('POST', $url, $requestData, $headers);
@@ -252,6 +259,60 @@ class WhatsappService
         ], $contact->organization_id);
 
         return $responseObject;
+    }
+
+    private function extractTemplateVariables(array $templateContent): array
+    {
+        $variables = [
+            'header' => [],
+            'body' => [],
+            'buttons' => [],
+        ];
+
+        foreach ($templateContent['components'] ?? [] as $component) {
+            $type = strtolower($component['type'] ?? '');
+
+            if ($type === 'header') {
+                foreach (($component['parameters'] ?? []) as $param) {
+                    $paramType = $param['type'] ?? null;
+                    if ($paramType === 'text') {
+                        $variables['header'][] = $param['text'] ?? null;
+                    } elseif (isset($param[$paramType]['link'])) {
+                        $variables['header'][] = $param[$paramType]['link'];
+                    } elseif (isset($param[$paramType]['id'])) {
+                        $variables['header'][] = $param[$paramType]['id'];
+                    }
+                }
+            }
+
+            if ($type === 'body') {
+                foreach (($component['parameters'] ?? []) as $param) {
+                    $variables['body'][] = $param['text'] ?? null;
+                }
+            }
+
+            if ($type === 'button') {
+                $buttonEntry = [
+                    'sub_type' => $component['sub_type'] ?? null,
+                    'index' => $component['index'] ?? null,
+                    'parameters' => [],
+                ];
+
+                foreach (($component['parameters'] ?? []) as $param) {
+                    if (isset($param['text'])) {
+                        $buttonEntry['parameters'][] = $param['text'];
+                    } elseif (isset($param['payload'])) {
+                        $buttonEntry['parameters'][] = $param['payload'];
+                    } elseif (isset($param['coupon_code'])) {
+                        $buttonEntry['parameters'][] = $param['coupon_code'];
+                    }
+                }
+
+                $variables['buttons'][] = $buttonEntry;
+            }
+        }
+
+        return $variables;
     }
 
     /**
