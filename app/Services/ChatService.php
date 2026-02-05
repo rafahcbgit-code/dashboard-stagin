@@ -624,6 +624,14 @@ class ChatService
         $template = Template::where('uuid', $request->template)->first();
         $contact = Contact::where('uuid', $uuid)->first();
 
+        $validationError = $this->validateTemplateParams($request);
+        if ($validationError) {
+            return (object) [
+                'success' => false,
+                'message' => $validationError,
+            ];
+        }
+
         // Extract media_id from request if already uploaded
         $mediaId = $request->media_id ?? null;
 
@@ -693,6 +701,37 @@ class ChatService
         $template = $this->buildTemplate($template->name, $template->language, json_decode(json_encode($metadata)), $contact);
 
         return $this->whatsappService->sendTemplateMessage($contact->uuid, $template, $userId, NULL, $mediaId);
+    }
+
+    private function validateTemplateParams(object $request): ?string
+    {
+        $bodyParams = $request->body['parameters'] ?? [];
+        foreach ($bodyParams as $index => $param) {
+            $value = $param['value'] ?? null;
+            if ($value === null || trim((string) $value) === '') {
+                return __('Body parameter value is required for variable :index.', [
+                    'index' => $index + 1,
+                ]);
+            }
+        }
+
+        $buttons = $request->buttons ?? [];
+        foreach ($buttons as $buttonIndex => $button) {
+            $params = $button['parameters'] ?? [];
+            foreach ($params as $paramIndex => $param) {
+                $value = $param['value'] ?? null;
+                if ($value === null || trim((string) $value) === '') {
+                    $type = $button['type'] ?? 'BUTTON';
+                    return __('Button parameter value is required for :type (button :button, param :param).', [
+                        'type' => $type,
+                        'button' => $buttonIndex + 1,
+                        'param' => $paramIndex + 1,
+                    ]);
+                }
+            }
+        }
+
+        return null;
     }
 
     /**

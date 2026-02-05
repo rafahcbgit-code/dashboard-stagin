@@ -276,6 +276,34 @@
     const submitForm = () => {
         isLoading.value = true;
 
+        // Normalize URL button parameters (static values only)
+        form.buttons = form.buttons.map((button) => {
+            if (button.type !== 'URL' || !Array.isArray(button.parameters)) {
+                return button;
+            }
+
+            const normalizedParams = button.parameters.map((param) => {
+                if (param?.type !== 'static') {
+                    return param;
+                }
+
+                const value = typeof param.value === 'string' ? param.value.trim() : param.value;
+                if (!value) {
+                    return param;
+                }
+
+                return {
+                    ...param,
+                    value: encodeURIComponent(value),
+                };
+            });
+
+            return {
+                ...button,
+                parameters: normalizedParams,
+            };
+        });
+
         if (isCarouselTemplate.value && !props.isCampaignFlow) {
             // ── CAROUSEL SEND (chat context only for now) ───────────────
             // Hits the dedicated carousel endpoint. Only needs the template UUID.
