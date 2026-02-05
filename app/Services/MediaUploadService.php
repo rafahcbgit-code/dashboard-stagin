@@ -107,7 +107,7 @@ class MediaUploadService
 
             // Public URL (same pattern as your working code)
             $mediaUrl = rtrim(config('app.url'), '/')
-                . '/media/'
+                . '/media/public/'
                 . $fileName;
 
             return [

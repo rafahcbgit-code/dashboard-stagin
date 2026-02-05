@@ -1,7 +1,7 @@
 <template>
     <AppLayout>
-        <div class="md:flex md:flex-col bg-white border-l py-4 text-[#000] overflow-y-hidden">
-            <div class="flex justify-between px-8 border-b pb-2 capitalize">
+        <div class="md:flex md:flex-col bg-white border-l text-[#000] h-screen overflow-y-auto">
+            <div class="flex justify-between px-8 border-b pb-2 capitalize sticky top-0 bg-white z-10 py-4">
                 <div>
                     <h2 class="text-xl mb-1">{{ $t('New campaign') }}</h2>
                     <p class="flex items-center text-sm leading-6 text-gray-600">
@@ -13,12 +13,15 @@
                     <Link href="/campaigns" class="rounded-md bg-black px-3 py-2 text-sm text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">{{ $t('Back') }}</Link>
                 </div>
             </div>
-       <CampaignForm 
-            :templates="templates" 
-            :contactGroups="contactGroups" 
-            :settings="settings"
-            :contactFields="contactFields"
-        />
+            
+            <div class="pb-24">
+                <CampaignForm 
+                    :templates="templates" 
+                    :contactGroups="contactGroups" 
+                    :settings="settings"
+                    :contactFields="contactFields"
+                />
+            </div>
         </div>
     </AppLayout>
 </template>
