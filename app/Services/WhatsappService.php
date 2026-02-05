@@ -190,15 +190,19 @@ class WhatsappService
             if ($campaignId != NULL) {
                 // Campaign flow
                 $campaign = Campaign::find($campaignId);
+                $campaignMetadata = json_decode($campaign->metadata);
+                
                 $template = Template::find($campaign->template_id);
                 $templateMeta = json_decode($template->metadata, true);
                 
+                logger($templateMeta);
+
                 if (($templateMeta['template_type'] ?? '') === 'carousel') {
                     // Carousel campaign
                     $metadata = $this->buildCarouselTemplateChatMessage($contactUuId, $template->id);
                 } else {
                     // Standard campaign
-                    $metadata = $this->buildCampaignTemplateChatMessage($templateMeta, $contactUuId);
+                    $metadata = $this->buildCampaignTemplateChatMessage($campaignMetadata, $contactUuId);
                 }
             } else {
                 // Direct send flow
@@ -554,79 +558,84 @@ class WhatsappService
         $contact = Contact::where('uuid', $contactUuId)->first();
         $array = [];
         
-        // Convert to object if it's an array (from Campaign metadata which is already decoded)
+        // Convert to object if it's an array (from carousel implementation)
         if (is_array($templateMetadata)) {
             $templateMetadata = json_decode(json_encode($templateMetadata));
         }
         
-        if($templateMetadata->header->format == 'IMAGE' || $templateMetadata->header->format == 'VIDEO' || $templateMetadata->header->format == 'DOCUMENT' || $templateMetadata->header->format == 'LOCATION'){
-            $array['type'] = strtolower($templateMetadata->header->format);
-        } else {
-            $array['type'] = 'text';
-        }
-
-        //HEADER
-        if(isset($templateMetadata->header->text)){
-            $headerText = $templateMetadata->header->text;
-
-            if (isset($templateMetadata->header->parameters) && !empty($templateMetadata->header->parameters)) {
-                $headerParameters = $templateMetadata->header->parameters;
-
-                if($headerParameters && count($headerParameters) >= 1){
-                    foreach($headerParameters as $index => $parameter){
-                        $placeholder = '{{' . ($index + 1) . '}}';
-                        $value = $parameter->selection === 'static' ? $parameter->value : $this->getParameters($contact, $parameter->value);
-
-                        $headerText = str_replace($placeholder, $value, $headerText);
+        // Default type
+        $array['type'] = 'text';
+        
+        // HEADER - check if exists first
+        if (isset($templateMetadata->header)) {
+            if (isset($templateMetadata->header->format) && 
+                ($templateMetadata->header->format == 'IMAGE' || 
+                $templateMetadata->header->format == 'VIDEO' || 
+                $templateMetadata->header->format == 'DOCUMENT' || 
+                $templateMetadata->header->format == 'LOCATION')) {
+                $array['type'] = strtolower($templateMetadata->header->format);
+            }
+            
+            if (isset($templateMetadata->header->text)) {
+                $headerText = $templateMetadata->header->text;
+                
+                if (isset($templateMetadata->header->parameters) && !empty($templateMetadata->header->parameters)) {
+                    $headerParameters = $templateMetadata->header->parameters;
+                    
+                    if ($headerParameters && count($headerParameters) >= 1) {
+                        foreach ($headerParameters as $index => $parameter) {
+                            $placeholder = '{{' . ($index + 1) . '}}';
+                            $value = $parameter->selection === 'static' ? $parameter->value : $this->getParameters($contact, $parameter->value);
+                            $headerText = str_replace($placeholder, $value, $headerText);
+                        }
                     }
                 }
+                
+                $array['header']['text'] = $headerText;
             }
-
-            $array['header']['text'] = $headerText;
         }
-
-        //BODY
-        if(isset($templateMetadata->body->text)){
+        
+        // BODY
+        if (isset($templateMetadata->body->text)) {
             $bodyText = $templateMetadata->body->text;
-
+            
             if (isset($templateMetadata->body->parameters) && !empty($templateMetadata->body->parameters)) {
                 $bodyParameters = $templateMetadata->body->parameters;
-
-                if($bodyParameters && count($bodyParameters) >= 1){
-                    foreach($bodyParameters as $index => $parameter){
+                
+                if ($bodyParameters && count($bodyParameters) >= 1) {
+                    foreach ($bodyParameters as $index => $parameter) {
                         $placeholder = '{{' . ($index + 1) . '}}';
                         $value = $parameter->selection === 'static' ? $parameter->value : $this->getParameters($contact, $parameter->value);
-
                         $bodyText = str_replace($placeholder, $value, $bodyText);
                     }
                 }
             }
-
-            if($array['type'] == 'text'){
+            
+            if ($array['type'] == 'text') {
                 $array[$array['type']]['body'] = $bodyText;
             } else {
                 $array[$array['type']]['caption'] = $bodyText;
             }
         }
-
-        //FOOTER
-        if(isset($templateMetadata->footer->text)){
+        
+        // FOOTER
+        if (isset($templateMetadata->footer->text)) {
             $array[$array['type']]['footer'] = $templateMetadata->footer->text;
         }
-
-        //BUTTONS
-        if(isset($templateMetadata->buttons)){
-            foreach($templateMetadata->buttons as $key => $button){
+        
+        // BUTTONS
+        if (isset($templateMetadata->buttons)) {
+            foreach ($templateMetadata->buttons as $key => $button) {
                 $array['buttons'][$key]['type'] = $button->type;
                 $array['buttons'][$key]['text'] = $button->text;
                 $array['buttons'][$key]['value'] = $button->value;
-
-                if(isset($button->parameters)){
+                
+                if (isset($button->parameters)) {
                     $array['buttons'][$key]['parameters'] = $button->parameters;
                 }
             }
         }
-
+        
         return json_encode($array);
     }
 
