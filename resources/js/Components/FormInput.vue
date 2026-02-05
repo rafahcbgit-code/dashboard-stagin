@@ -7,7 +7,7 @@
         name: String,
         placeholder: String,
         type: String,
-        min: Number,
+        min: [Number, String],
         className: String,
         labelClass: String,
         required: Boolean,
