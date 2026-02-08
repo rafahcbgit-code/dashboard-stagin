@@ -95,77 +95,91 @@ class ContactController extends BaseController
 
     public function exportContactsAsCsv()
     {
-        $organizationId = $this->getCurrentOrganizationId();
-        $contacts = Contact::with('contactGroups')
-            ->where('organization_id', $organizationId)
-            ->whereNull('deleted_at')
-            ->get();
+        try {
+            $organizationId = $this->getCurrentOrganizationId();
+            $contacts = Contact::with('contactGroups')
+                ->where('organization_id', $organizationId)
+                ->whereNull('deleted_at')
+                ->get();
 
-        // Get dynamic fields from the contact_fields table
-        $dynamicFields = ContactField::where('organization_id', $organizationId)
-            ->whereNull('deleted_at')
-            ->get();
+            // Get dynamic fields from the contact_fields table
+            $dynamicFields = ContactField::where('organization_id', $organizationId)
+                ->whereNull('deleted_at')
+                ->get();
 
-        // Extract field names from the dynamic fields
-        $fieldNames = $dynamicFields->pluck('name')->toArray();
+            // Extract field names from the dynamic fields
+            $fieldNames = $dynamicFields->pluck('name')->toArray();
 
-        // Define headers
-        $headers = [
-            'First name',
-            'Last name',
-            'Phone',
-            'Email',
-            'Group name',
-            'Street',
-            'City',
-            'State',
-            'Zip',
-            'Country'
-        ];
-
-        // Add dynamic field names to headers
-        foreach ($fieldNames as $fieldName) {
-            $headers[] = $fieldName;
-        }
-
-        // Create a temporary file
-        $tempFile = tempnam(sys_get_temp_dir(), 'contacts_export_');
-
-        // Open file for writing
-        $handle = fopen($tempFile, 'w');
-
-        // Write headers
-        fputcsv($handle, $headers);
-
-        // Write data
-        foreach ($contacts as $contact) {
-            $address = json_decode($contact->address, true);
-            $row = [
-                $contact->first_name,
-                $contact->last_name,
-                $contact->formatted_phone_number,
-                $contact->email,
-                $contact->contactGroups->pluck('name')->implode('|'),
-                $address['street'] ?? null,
-                $address['city'] ?? null,
-                $address['state'] ?? null,
-                $address['zip'] ?? null,
-                $address['country'] ?? null,
+            // Define headers
+            $headers = [
+                'First name',
+                'Last name',
+                'Phone',
+                'Email',
+                'Group name',
+                'Street',
+                'City',
+                'State',
+                'Zip',
+                'Country'
             ];
 
-            // Add custom field values
+            // Add dynamic field names to headers
             foreach ($fieldNames as $fieldName) {
-                $metadata = json_decode($contact->metadata, true);
-                $row[] = $metadata[$fieldName] ?? null;
+                $headers[] = $fieldName;
             }
 
-            fputcsv($handle, $row);
+            // Create a temporary file
+            $tempFile = tempnam(sys_get_temp_dir(), 'contacts_export_');
+
+            // Open file for writing
+            $handle = fopen($tempFile, 'w');
+
+            // Write headers
+            fputcsv($handle, $headers);
+
+            // Write data
+            foreach ($contacts as $contact) {
+                $address = json_decode($contact->address, true);
+                $row = [
+                    $contact->first_name,
+                    $contact->last_name,
+                    $contact->formatted_phone_number,
+                    $contact->email,
+                    $contact->contactGroups->pluck('name')->implode('|'),
+                    $address['street'] ?? null,
+                    $address['city'] ?? null,
+                    $address['state'] ?? null,
+                    $address['zip'] ?? null,
+                    $address['country'] ?? null,
+                ];
+
+                // Add custom field values
+                foreach ($fieldNames as $fieldName) {
+                    $metadata = json_decode($contact->metadata, true);
+                    $row[] = $metadata[$fieldName] ?? null;
+                }
+
+                fputcsv($handle, $row);
+            }
+
+            fclose($handle);
+
+            // Return the file as download
+            return response()->download($tempFile, 'contacts.csv')->deleteFileAfterSend(true);
+        } catch (\Exception $e) {
+            Log::error('Export CSV Error', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Export failed',
+                'error' => $e->getMessage(),
+            ], 500);
         }
-
-        fclose($handle);
-
-        // Return the file as download
-        return response()->download($tempFile, 'contacts.csv')->deleteFileAfterSend(true);
     }
 
     public function downloadTemplate()
