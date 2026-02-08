@@ -34,18 +34,19 @@ class ContactController extends BaseController
         return session()->get('current_organization');
     }
 
-    public function index(Request $request, $uuid = null){
+    public function index(Request $request, $uuid = null)
+    {
         $organizationId = $this->getCurrentOrganizationId();
         $contactModel = new Contact;
 
-        if($uuid === 'export') {
+        if ($uuid === 'export') {
             $format = $request->query('format', 'xlsx');
             return $this->exportContacts($format);
-        } else if($uuid === 'template') {
+        } else if ($uuid === 'template') {
             return $this->downloadTemplate();
         } else {
             $searchTerm = $request->query('search');
-            $uuid = $request->query('id') ? $request->query('id') : $uuid ;
+            $uuid = $request->query('id') ? $request->query('id') : $uuid;
             $editContact = $request->query('edit') === 'true' ? true : false;
 
             $contacts = $contactModel->getAllContacts($organizationId, $searchTerm);
@@ -79,6 +80,11 @@ class ContactController extends BaseController
 
             return Excel::download(new ContactsExport, 'contacts.xlsx');
         } catch (\Exception $e) {
+            Log::error('Export Error', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
             return response()->json([
                 'status' => 'error',
                 'message' => 'Export failed',
@@ -124,13 +130,13 @@ class ContactController extends BaseController
 
         // Create a temporary file
         $tempFile = tempnam(sys_get_temp_dir(), 'contacts_export_');
-        
+
         // Open file for writing
         $handle = fopen($tempFile, 'w');
-        
+
         // Write headers
         fputcsv($handle, $headers);
-        
+
         // Write data
         foreach ($contacts as $contact) {
             $address = json_decode($contact->address, true);
@@ -155,7 +161,7 @@ class ContactController extends BaseController
 
             fputcsv($handle, $row);
         }
-        
+
         fclose($handle);
 
         // Return the file as download
@@ -165,7 +171,7 @@ class ContactController extends BaseController
     public function downloadTemplate()
     {
         $organizationId = $this->getCurrentOrganizationId();
-        
+
         // Get custom contact fields for this organization
         $customFields = ContactField::where('organization_id', $organizationId)
             ->where('deleted_at', null)
@@ -175,7 +181,7 @@ class ContactController extends BaseController
         // Define the standard columns in the order specified
         $standardColumns = [
             'first_name',
-            'last_name', 
+            'last_name',
             'phone',
             'email',
             'group_name',
@@ -212,13 +218,13 @@ class ContactController extends BaseController
 
         // Create a temporary file
         $tempFile = tempnam(sys_get_temp_dir(), 'contacts_template_');
-        
+
         // Open file for writing
         $handle = fopen($tempFile, 'w');
-        
+
         // Write headers
         fputcsv($handle, $allColumns);
-        
+
         // Write sample data
         foreach ($sampleData as $row) {
             $csvRow = [];
@@ -227,19 +233,20 @@ class ContactController extends BaseController
             }
             fputcsv($handle, $csvRow);
         }
-        
+
         fclose($handle);
 
         // Return the file as download
         return response()->download($tempFile, 'contacts_template.csv')->deleteFileAfterSend(true);
     }
-    public function import(Request $request) {
+    public function import(Request $request)
+    {
 
-            try {
-            set_time_limit(0); 
+        try {
+            set_time_limit(0);
             ini_set('memory_limit', '2048M'); // 2GB RAM
             ini_set('max_execution_time', 0);
-            
+
             // Disable MySQL strict mode temporarily for better performance
             DB::statement("SET SESSION sql_mode=''");
             // Initialize the import process
@@ -266,8 +273,9 @@ class ContactController extends BaseController
             }
 
             return redirect('/contacts')->with(
-                'status', [
-                    'type' => $statusType, 
+                'status',
+                [
+                    'type' => $statusType,
                     'message' => $statusMessage,
                     'import_summary' => array(
                         'total_imports' => $totalImports,
@@ -280,30 +288,32 @@ class ContactController extends BaseController
                     ),
                 ]
             );
-
-            } catch (\Exception $e) {
+        } catch (\Exception $e) {
             Log::error('Import Error: ' . $e->getMessage());
         }
-        }
+    }
 
-    public function store(StoreContact $request){
+    public function store(StoreContact $request)
+    {
         $contact = $this->contactService()->store($request);
-        
+
         return redirect('/contacts?id=' . $contact->uuid)->with(
-            'status', [
-                'type' => 'success', 
+            'status',
+            [
+                'type' => 'success',
                 'message' => __('Contact added successfully!')
             ]
         );
     }
-        
+
     public function update(StoreContact $request, $uuid)
     {
         $contact = $this->contactService()->store($request, $uuid);
 
         return redirect('/contacts/' . $contact->uuid)->with(
-            'status', [
-                'type' => 'success', 
+            'status',
+            [
+                'type' => 'success',
                 'message' => __('Contact updated successfully!')
             ]
         );
@@ -314,8 +324,9 @@ class ContactController extends BaseController
         $this->contactService()->favorite($request, $uuid);
 
         return redirect('/contacts/' . $uuid)->with(
-            'status', [
-                'type' => 'success', 
+            'status',
+            [
+                'type' => 'success',
                 'message' => __('Contact updated successfully!')
             ]
         );
@@ -327,14 +338,16 @@ class ContactController extends BaseController
         $this->contactService()->delete($uuids);
 
         return redirect('/contacts')->with(
-            'status', [
-                'type' => 'success', 
+            'status',
+            [
+                'type' => 'success',
                 'message' => __('Contact(s) deleted successfully')
             ]
         );
     }
 
-    private function getLocationSettings(){
+    private function getLocationSettings()
+    {
         // Retrieve the settings for the current organization
         $settings = Organization::where('id', session()->get('current_organization'))->first();
 
@@ -357,8 +370,9 @@ class ContactController extends BaseController
     }
 
 
-    public function updateLabels(Request $request, $uuid){
-                 
+    public function updateLabels(Request $request, $uuid)
+    {
+
         $contact = Contact::where('uuid', $uuid)
             ->whereNull('deleted_at')
             ->first();
@@ -379,11 +393,11 @@ class ContactController extends BaseController
         $contact = Contact::with('labels')->where('uuid', $uuid)
             ->where('organization_id', session()->get('current_organization'))
             ->firstOrFail();
-        
+
         $availableLabels = \App\Models\Label::where('organization_id', session()->get('current_organization'))
             ->orderBy('title')
             ->get();
-        
+
         return response()->json([
             'availableLabels' => $availableLabels,
             'contactLabels' => $contact->labels
@@ -393,7 +407,7 @@ class ContactController extends BaseController
     public function toggleBot(Request $request, $uuid)
     {
         $organizationId = $this->getCurrentOrganizationId();
-        
+
         // Validate the request
         $validated = $request->validate([
             'bot_enable' => 'required|boolean'
@@ -411,12 +425,13 @@ class ContactController extends BaseController
         $contact->save();
 
         return back()->with('status', [
-            'type' => 'success', 
+            'type' => 'success',
             'message' => __('Bot status updated successfully!')
         ]);
     }
 
-    public function chatViewDetails(Request $request){
+    public function chatViewDetails(Request $request)
+    {
         $organizationId = $this->getCurrentOrganizationId();
 
         $validated = $request->validate([
@@ -431,13 +446,13 @@ class ContactController extends BaseController
             ->where('phone', $phone)
             ->whereNull('deleted_at')
             ->first();
-        
-            if ($contact) {
-                if ($contact->trashed()) {
-                    $contact->restore();
+
+        if ($contact) {
+            if ($contact->trashed()) {
+                $contact->restore();
             }
         } else {
-             $contact = Contact::create([
+            $contact = Contact::create([
                 'organization_id' => $organizationId,
                 'phone'           => $phone,
                 'first_name'            => $validated['name'] ?? 'Unknown Contact',
@@ -450,7 +465,7 @@ class ContactController extends BaseController
                 'bot_enable' => 1
             ]);
         }
- 
+
 
         return response()->json([
             'redirect' => '/contacts?id=' . $contact->uuid,
