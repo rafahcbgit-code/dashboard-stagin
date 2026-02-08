@@ -5,61 +5,45 @@ namespace App\Exports;
 use App\Models\Contact;
 use App\Models\ContactField;
 use Illuminate\Support\Facades\Log;
-use Maatwebsite\Excel\Concerns\FromCollection;
+use Maatwebsite\Excel\Concerns\FromQuery;
+use Maatwebsite\Excel\Concerns\WithChunkReading;
 use Maatwebsite\Excel\Concerns\WithHeadings;
+use Maatwebsite\Excel\Concerns\WithMapping;
 
-class ContactsExport implements FromCollection, WithHeadings
+class ContactsExport implements FromQuery, WithChunkReading, WithMapping, WithHeadings
 {
-    /**
-    * @return \Illuminate\Support\Collection
-    */
-    public function collection()
+    private int $organizationId;
+    private array $fieldNames = [];
+
+    public function __construct()
+    {
+        $this->organizationId = (int) session()->get('current_organization');
+        $this->fieldNames = ContactField::where('organization_id', $this->organizationId)
+            ->whereNull('deleted_at')
+            ->pluck('name')
+            ->toArray();
+    }
+
+    public function query()
     {
         try {
-            $contacts = Contact::with('contactGroups')
-                ->where('organization_id', session()->get('current_organization'))
+            return Contact::query()
+                ->with(['contactGroups:id,name'])
+                ->where('organization_id', $this->organizationId)
                 ->whereNull('deleted_at')
-                ->get();
-
-            // Get dynamic fields from the contact_fields table
-            $dynamicFields = ContactField::where('organization_id', session()->get('current_organization'))
-                ->whereNull('deleted_at')
-                ->get();
-
-            // Extract field names from the dynamic fields
-            $fieldNames = $dynamicFields->pluck('name')->toArray();
-
-            // Modify the collection to include formatted phone numbers and group names
-            return $contacts->map(function ($contact) use ($fieldNames) {
-                $address = json_decode($contact->address, true);
-                $row = [
-                    'first_name' => $contact->first_name,
-                    'last_name' => $contact->last_name,
-                    'phone' => $contact->formatted_phone_number, // Assuming formatted_phone_number is defined
-                    'subscription' => ((int) $contact->is_subscribed == 1) ? 'Subscribed' : 'Not subscribed',
-                    'email' => $contact->email,
-                    'group_name' => $contact->contactGroups->pluck('name')->implode('|'),
-                    'street' => $address['street'] ?? null,
-                    'city' => $address['city'] ?? null,
-                    'state' => $address['state'] ?? null,
-                    'zip' => $address['zip'] ?? null,
-                    'country' => $address['country'] ?? null,
-                ];
-
-                foreach ($fieldNames as $fieldName) {
-                    $metadata = json_decode($contact->metadata, true);
-
-                    if (isset($metadata[$fieldName])) {
-                        $row[$fieldName] = $metadata[$fieldName];
-                    } else {
-                        $row[$fieldName] = null;
-                    }
-                }
-
-                return $row;
-            });
+                ->select([
+                    'id',
+                    'organization_id',
+                    'first_name',
+                    'last_name',
+                    'phone',
+                    'email',
+                    'address',
+                    'metadata',
+                    'is_subscribed',
+                ]);
         } catch (\Exception $e) {
-            Log::error('ContactsExport collection error', [
+            Log::error('ContactsExport query error', [
                 'message' => $e->getMessage(),
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
@@ -69,15 +53,50 @@ class ContactsExport implements FromCollection, WithHeadings
         }
     }
 
+    public function map($contact): array
+    {
+        try {
+            $address = json_decode($contact->address, true);
+            $metadata = json_decode($contact->metadata, true) ?: [];
+
+            $row = [
+                $contact->first_name,
+                $contact->last_name,
+                $contact->formatted_phone_number,
+                ((int) $contact->is_subscribed === 1) ? 'Subscribed' : 'Not subscribed',
+                $contact->email,
+                $contact->contactGroups->pluck('name')->implode('|'),
+                $address['street'] ?? null,
+                $address['city'] ?? null,
+                $address['state'] ?? null,
+                $address['zip'] ?? null,
+                $address['country'] ?? null,
+            ];
+
+            foreach ($this->fieldNames as $fieldName) {
+                $row[] = $metadata[$fieldName] ?? null;
+            }
+
+            return $row;
+        } catch (\Exception $e) {
+            Log::error('ContactsExport map error', [
+                'message' => $e->getMessage(),
+                'file' => $e->getFile(),
+                'line' => $e->getLine(),
+            ]);
+
+            throw $e;
+        }
+    }
+
+    public function chunkSize(): int
+    {
+        return 1000;
+    }
+
     public function headings(): array
     {
         try {
-            $dynamicFields = ContactField::where('organization_id', session()->get('current_organization'))
-                ->whereNull('deleted_at')
-                ->get();
-
-            $fieldNames = $dynamicFields->pluck('name')->toArray();
-
             // Define your headers here
             $headers = [
                 'First name',
@@ -94,7 +113,7 @@ class ContactsExport implements FromCollection, WithHeadings
             ];
 
             // Add dynamic field names to headers
-            foreach ($fieldNames as $fieldName) {
+            foreach ($this->fieldNames as $fieldName) {
                 $headers[] = $fieldName;
             }
 
