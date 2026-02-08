@@ -74,6 +74,10 @@ class ContactController extends BaseController
     public function exportContacts($format = 'xlsx')
     {
         try {
+            Log::error('Export', [
+                'message' => "start exporting"
+            ]);
+            
             if ($format === 'csv') {
                 return $this->exportContactsAsCsv();
             }
