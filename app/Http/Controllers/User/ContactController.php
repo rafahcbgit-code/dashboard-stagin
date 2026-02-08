@@ -72,10 +72,18 @@ class ContactController extends BaseController
 
     public function exportContacts($format = 'xlsx')
     {
-        if ($format === 'csv') {
-            return $this->exportContactsAsCsv();
-        } else {
+        try {
+            if ($format === 'csv') {
+                return $this->exportContactsAsCsv();
+            }
+
             return Excel::download(new ContactsExport, 'contacts.xlsx');
+        } catch (\Exception $e) {
+            return response()->json([
+                'status' => 'error',
+                'message' => 'Export failed',
+                'error' => $e->getMessage(),
+            ], 500);
         }
     }
 
