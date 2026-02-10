@@ -9,17 +9,20 @@ use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 
-trait TemplateTrait{
-    function buildTemplateRequest($campaignId, $contact){
+trait TemplateTrait
+{
+    function buildTemplateRequest($campaignId, $contact)
+    {
         $campaign = Campaign::where('id', $campaignId)->first();
         $campaignTemplate = Template::where('id', $campaign->template_id)->first();
 
         $metadata = json_decode($campaign->metadata);
-        
+
         return $this->buildTemplate($campaignTemplate->name, $campaignTemplate->language, $metadata, $contact);
     }
 
-    function buildTemplate($templateName, $templateLanguage, $metadata, $contact){
+    function buildTemplate($templateName, $templateLanguage, $metadata, $contact)
+    {
         $template = [
             'name' => $templateName,
             'language' => ['code' => $templateLanguage],
@@ -30,7 +33,7 @@ trait TemplateTrait{
             $headerComponent = $this->buildHeaderComponent($metadata, $contact);
             $template['components'][] = $headerComponent;
         }
-        
+
         if ($metadata->body && property_exists($metadata->body, 'parameters')) {
             $bodyComponent = $this->buildBodyComponent($metadata, $contact);
             $template['components'][] = $bodyComponent;
@@ -57,42 +60,44 @@ trait TemplateTrait{
         return $template;
     }
 
-    function buildHeaderComponent($metadata, $contact) {
+    function buildHeaderComponent($metadata, $contact)
+    {
         //dd($metadata->header);
         $headerComponent = [
             'type' => 'header',
             'parameters' => [],
         ];
 
-        if($metadata->header->parameters){
-            foreach($metadata->header->parameters as $parameter){
+        if ($metadata->header->parameters) {
+            foreach ($metadata->header->parameters as $parameter) {
                 $param['type'] = strtolower($parameter->type);
-                if($parameter->type === 'IMAGE'){
+                if ($parameter->type === 'IMAGE') {
                     $param['image']['link'] = $parameter->value;
-                } else if($parameter->type === 'VIDEO') {
+                } else if ($parameter->type === 'VIDEO') {
                     $param['video']['link'] = $parameter->value;
-                } else if($parameter->type === 'DOCUMENT') {
+                } else if ($parameter->type === 'DOCUMENT') {
                     $param['document']['link'] = $parameter->value;
-                } else if($parameter->type === 'text') {
-                    $param['text'] = $parameter->selection === 'static' 
-                    ? $parameter->value : $this->getParameters($contact, $parameter->value);
+                } else if ($parameter->type === 'text') {
+                    $param['text'] = $parameter->selection === 'static'
+                        ? $parameter->value : $this->getParameters($contact, $parameter->value);
                 }
-    
+
                 $headerComponent['parameters'][] = $param;
             }
         }
 
         return $headerComponent;
     }
-    
-    function buildBodyComponent($metadata, $contact) {
+
+    function buildBodyComponent($metadata, $contact)
+    {
         $bodyComponent = [
             'type' => 'body',
             'parameters' => [],
         ];
 
-        if($metadata->body->parameters){
-            foreach($metadata->body->parameters as $parameter){
+        if ($metadata->body->parameters) {
+            foreach ($metadata->body->parameters as $parameter) {
                 $value = $parameter->selection === 'static'
                     ? $parameter->value
                     : $this->getParameters($contact, $parameter->value);
@@ -110,14 +115,15 @@ trait TemplateTrait{
         return $bodyComponent;
     }
 
-    function buildButtonComponent($metadata, $contact) {
+    function buildButtonComponent($metadata, $contact)
+    {
         //dd($metadata->buttons);
         $buttons = $metadata->buttons;
         $buttonComponent = [];
         $buttonIndex = 0;
 
-        foreach($buttons as $key => $button){
-            if(!empty($button->parameters)){
+        foreach ($buttons as $key => $button) {
+            if (!empty($button->parameters) || $button->type === 'QUICK_REPLY') {
                 $buttonComponent[] = [
                     'type' => 'button',
                     'sub_type' => strtolower($button->type),
@@ -125,39 +131,46 @@ trait TemplateTrait{
                     'parameters' => [],
                 ];
 
-                foreach($button->parameters as $parameter){
-                    $param = [];
+                if ($button->type === 'QUICK_REPLY' && empty($button->parameters)) {
+                    $buttonComponent[$buttonIndex]['parameters'][] = [
+                        'type' => 'payload',
+                        'payload' => $button->text
+                    ];
+                } else {
+                    foreach ($button->parameters as $parameter) {
+                        $param = [];
 
-                    if($button->type === 'QUICK_REPLY'){
-                        $payload = $parameter->type === 'static'
-                            ? $parameter->value
-                            : $this->getParameters($contact, $parameter->value);
+                        if ($button->type === 'QUICK_REPLY') {
+                            $payload = $parameter->type === 'static'
+                                ? $parameter->value
+                                : $this->getParameters($contact, $parameter->value);
 
-                        if ($payload === null || trim((string)$payload) === '') {
-                            $payload = 'DEFAULT_REPLY';
+                            if ($payload === null || trim((string)$payload) === '') {
+                                $payload = $button->text;
+                            }
+
+                            $param['type'] = 'payload';
+                            $param['payload'] = (string) $payload;
+                        } else if ($button->type === 'URL') {
+                            $param['type'] = 'text';
+                            $rawValue = $parameter->type === 'static'
+                                ? $parameter->value : $this->getParameters($contact, $parameter->value);
+                            $param['text'] = $this->normalizeUrlButtonParam($rawValue);
+                        } else if ($button->type === 'COPY_CODE') {
+                            $param['type'] = 'coupon_code';
+                            $param['coupon_code'] = $parameter->type === 'static'
+                                ? $parameter->value : $this->getParameters($contact, $parameter->value);
                         }
 
-                        $param['type'] = 'payload';
-                        $param['payload'] = (string) $payload;
-                    } else if($button->type === 'URL'){
-                        $param['type'] = 'text';
-                        $rawValue = $parameter->type === 'static'
-                            ? $parameter->value : $this->getParameters($contact, $parameter->value);
-                        $param['text'] = $this->normalizeUrlButtonParam($rawValue);
-                    } else if($button->type === 'COPY_CODE'){
-                        $param['type'] = 'coupon_code';
-                        $param['coupon_code'] = $parameter->type === 'static' 
-                        ? $parameter->value : $this->getParameters($contact, $parameter->value);
+                        $buttonComponent[$buttonIndex]['parameters'][] = $param;
                     }
-        
-                    $buttonComponent[$buttonIndex]['parameters'][] = $param;
                 }
 
                 $buttonIndex++;
             }
         }
 
-      //  dd($buttonComponent);
+        //  dd($buttonComponent);
         return $buttonComponent;
     }
 
@@ -177,7 +190,8 @@ trait TemplateTrait{
         return $value;
     }
 
-    function getParameters($contact, $parameter){
+    function getParameters($contact, $parameter)
+    {
         if (empty($parameter)) {
             Log::warning('Parameter is empty', ['contact_id' => $contact->id]);
             return null;
@@ -203,7 +217,7 @@ trait TemplateTrait{
             $metadata = json_decode($contact->metadata, true);  // Convert the column to an array
             if ($metadata === null) {
                 Log::error('Invalid metadata format', ['contact_id' => $contact->id, 'metadata' => $contact->metadata]);
-                return null;  
+                return null;
             }
 
             if (array_key_exists($parameter, $metadata)) {
@@ -255,6 +269,10 @@ trait TemplateTrait{
             }
 
             if ($type === 'button') {
+                if (($component['sub_type'] ?? '') === 'quick_reply' && empty($component['parameters'])) {
+                    // Quick reply can be empty if handled by sender
+                    continue;
+                }
                 foreach (($component['parameters'] ?? []) as $index => $param) {
                     $paramType = $param['type'] ?? '';
                     $value = null;
@@ -281,102 +299,102 @@ trait TemplateTrait{
         return null;
     }
 
-   
 
- function buildCarouselTemplateRequest(int $templateId, object $contact): array
-{
-    \Log::info('buildCarouselTemplateRequest');
-    
-    $template = Template::where('id', $templateId)->first();
-    $metadata = json_decode($template->metadata, true);
-    $carouselCards = $metadata['carousel_cards'] ?? [];
 
-    $payload = [
-        'name' => $template->name,
-        'language' => ['code' => $template->language],
-        'components' => [],
-    ];
+    function buildCarouselTemplateRequest(int $templateId, object $contact): array
+    {
+        \Log::info('buildCarouselTemplateRequest');
 
-    // Add body component
-    $payload['components'][] = [
-        'type' => 'body',
-    ];
+        $template = Template::where('id', $templateId)->first();
+        $metadata = json_decode($template->metadata, true);
+        $carouselCards = $metadata['carousel_cards'] ?? [];
 
-    // Build carousel cards
-    $metaCards = [];
-    
-    foreach ($carouselCards as $cardIndex => $card) {
-        $cardComponents = [];
+        $payload = [
+            'name' => $template->name,
+            'language' => ['code' => $template->language],
+            'components' => [],
+        ];
 
-        // Add header if exists
-        $headerType = strtolower($card['header_type'] ?? 'image');
-        $headerHandle = $card['header_handle'] ?? null;
+        // Add body component
+        $payload['components'][] = [
+            'type' => 'body',
+        ];
 
-        if ($headerHandle) {
-            $cardComponents[] = [
-                'type' => 'header',
-                'parameters' => [
-                    [
-                        'type' => $headerType,
-                        $headerType => [
-                            'link' => $headerHandle,
+        // Build carousel cards
+        $metaCards = [];
+
+        foreach ($carouselCards as $cardIndex => $card) {
+            $cardComponents = [];
+
+            // Add header if exists
+            $headerType = strtolower($card['header_type'] ?? 'image');
+            $headerHandle = $card['header_handle'] ?? null;
+
+            if ($headerHandle) {
+                $cardComponents[] = [
+                    'type' => 'header',
+                    'parameters' => [
+                        [
+                            'type' => $headerType,
+                            $headerType => [
+                                'link' => $headerHandle,
+                            ],
                         ],
                     ],
-                ],
+                ];
+            }
+
+            // Add buttons INSIDE card with proper indexing
+            $buttons = $card['buttons'] ?? [];
+            $buttonIndex = 0;
+
+            foreach ($buttons as $btn) {
+                $btnType = strtoupper($btn['type'] ?? '');
+
+                if ($btnType === 'QUICK_REPLY') {
+                    $cardComponents[] = [
+                        'type' => 'button',
+                        'sub_type' => 'quick_reply',
+                        'index' => $buttonIndex,
+                        'parameters' => [
+                            [
+                                'type' => 'payload',
+                                'payload' => $btn['text'] ?? '',
+                            ],
+                        ],
+                    ];
+                    $buttonIndex++;
+                } elseif ($btnType === 'URL') {
+                    $cardComponents[] = [
+                        'type' => 'button',
+                        'sub_type' => 'url',
+                        'index' => $buttonIndex,
+                        'parameters' => [
+                            [
+                                'type' => 'text',
+                                'text' => $btn['url'] ?? '',
+                            ],
+                        ],
+                    ];
+                    $buttonIndex++;
+                }
+            }
+
+            // ✅ CRITICAL: Add card_index
+            $metaCards[] = [
+                'card_index' => $cardIndex,
+                'components' => $cardComponents,
             ];
         }
 
-        // Add buttons INSIDE card with proper indexing
-        $buttons = $card['buttons'] ?? [];
-        $buttonIndex = 0;
-        
-        foreach ($buttons as $btn) {
-            $btnType = strtoupper($btn['type'] ?? '');
-
-            if ($btnType === 'QUICK_REPLY') {
-                $cardComponents[] = [
-                    'type' => 'button',
-                    'sub_type' => 'quick_reply',
-                    'index' => $buttonIndex,
-                    'parameters' => [
-                        [
-                            'type' => 'payload',
-                            'payload' => $btn['text'] ?? '',
-                        ],
-                    ],
-                ];
-                $buttonIndex++;
-            } elseif ($btnType === 'URL') {
-                $cardComponents[] = [
-                    'type' => 'button',
-                    'sub_type' => 'url',
-                    'index' => $buttonIndex,
-                    'parameters' => [
-                        [
-                            'type' => 'text',
-                            'text' => $btn['url'] ?? '',
-                        ],
-                    ],
-                ];
-                $buttonIndex++;
-            }
-        }
-
-        // ✅ CRITICAL: Add card_index
-        $metaCards[] = [
-            'card_index' => $cardIndex,
-            'components' => $cardComponents,
+        // Add carousel component
+        $payload['components'][] = [
+            'type' => 'carousel',
+            'cards' => $metaCards,
         ];
+
+        \Log::info('Final Carousel Payload', ['payload' => $payload]);
+
+        return $payload;
     }
-
-    // Add carousel component
-    $payload['components'][] = [
-        'type' => 'carousel',
-        'cards' => $metaCards,
-    ];
-
-    \Log::info('Final Carousel Payload', ['payload' => $payload]);
-
-    return $payload;
-}
 }
