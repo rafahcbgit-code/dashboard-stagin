@@ -726,7 +726,7 @@ class ChatService
                 $type = $param['type'] ?? ($param['selection'] ?? 'dynamic');
                 if ($value === null || trim((string) $value) === '') {
                     $label = $button['text'] ?? ($button['type'] ?? 'BUTTON');
-                    return __('Button parameter value is required for :label (button :button, param :param).', [
+                    return __(':label (button :button, param :param).', [
                         'label' => $label,
                         'button' => $buttonIndex + 1,
                         'param' => $paramIndex + 1,

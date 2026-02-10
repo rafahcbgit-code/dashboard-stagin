@@ -77,7 +77,7 @@ trait TemplateTrait
                     $param['video']['link'] = $parameter->value;
                 } else if ($parameter->type === 'DOCUMENT') {
                     $param['document']['link'] = $parameter->value;
-                } else if ($parameter->type === 'text' || $parameter->type === 'custom_field') {
+                } else if ($parameter->type === 'text') {
                     $value = $parameter->selection === 'static'
                         ? $parameter->value : $this->getParameters($contact, $parameter->value);
 
@@ -103,7 +103,7 @@ trait TemplateTrait
 
         if ($metadata->body->parameters) {
             foreach ($metadata->body->parameters as $parameter) {
-                // Treat selection like custom_field if set, or backtrack to dynamic logic if selection is missing but parameters exist
+                // Treat selection like dynamic if selection is missing but parameters exist
                 $selection = $parameter->selection ?? ($parameter->type ?? 'dynamic');
 
                 $value = ($selection === 'static')
