@@ -20,9 +20,11 @@ trait TemplateTrait{
     }
 
     function buildTemplate($templateName, $templateLanguage, $metadata, $contact){
-        $template['name'] = $templateName;
-        $template['language']['code'] = $templateLanguage;
-        $template['components'] = [];
+        $template = [
+            'name' => $templateName,
+            'language' => ['code' => $templateLanguage],
+            'components' => [],
+        ];
 
         if ($metadata->header && $metadata->header->parameters) {
             $headerComponent = $this->buildHeaderComponent($metadata, $contact);
@@ -39,6 +41,16 @@ trait TemplateTrait{
             foreach ($buttonComponents as $buttonComponent) {
                 $template['components'][] = $buttonComponent;
             }
+        }
+
+        $error = $this->validateResolvedTemplate($template);
+
+        if ($error !== null) {
+            Log::error('Invalid template payload', [
+                'error' => $error,
+                'template' => $template,
+            ]);
+            throw new \RuntimeException($error);
         }
 
         //\Log::info($template);
@@ -81,10 +93,16 @@ trait TemplateTrait{
 
         if($metadata->body->parameters){
             foreach($metadata->body->parameters as $parameter){
-                $param['type'] = $parameter->type;
-                $param['text'] = $parameter->selection === 'static' 
-                    ? $parameter->value : $this->getParameters($contact, $parameter->value);
-    
+                $value = $parameter->selection === 'static'
+                    ? $parameter->value
+                    : $this->getParameters($contact, $parameter->value);
+
+                if ($value === null || trim((string)$value) === '') {
+                    $value = 'N/A'; // or throw, depending on policy
+                }
+
+                $param['type'] = 'text';
+                $param['text'] = (string) $value;
                 $bodyComponent['parameters'][] = $param;
             }
         }
@@ -111,9 +129,16 @@ trait TemplateTrait{
                     $param = [];
 
                     if($button->type === 'QUICK_REPLY'){
+                        $payload = $parameter->type === 'static'
+                            ? $parameter->value
+                            : $this->getParameters($contact, $parameter->value);
+
+                        if ($payload === null || trim((string)$payload) === '') {
+                            $payload = 'DEFAULT_REPLY';
+                        }
+
                         $param['type'] = 'payload';
-                        $param['payload'] = $parameter->type === 'static' 
-                            ? $parameter->value : $this->getParameters($contact, $parameter->value);
+                        $param['payload'] = (string) $payload;
                     } else if($button->type === 'URL'){
                         $param['type'] = 'text';
                         $rawValue = $parameter->type === 'static'
@@ -139,15 +164,17 @@ trait TemplateTrait{
     private function normalizeUrlButtonParam($value)
     {
         if ($value === null) {
-            return null;
+            return 'https://example.com'; // safe fallback OR throw
         }
 
         $value = trim((string) $value);
+
         if ($value === '') {
-            return '';
+            return 'https://example.com';
         }
 
-        return rawurlencode($value);
+        // DO NOT encode — Meta expects raw URL
+        return $value;
     }
 
     function getParameters($contact, $parameter){
