@@ -82,7 +82,7 @@ class CreateCampaignLogsJob implements ShouldQueue
                 Log::info("Campaign {$campaign->uuid} not marked ongoing.");
             }
         } finally {
-            optional($lock)->release();
+            // optional($lock)->release();
         }
     }
 

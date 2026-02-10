@@ -175,7 +175,7 @@ class ProcessCampaignMessagesJob implements ShouldQueue, ShouldBeUnique
             Log::error('Error in ProcessCampaignMessagesJob: ' . $e->getMessage());
             throw $e;
         } finally {
-            optional($lock)->release();
+            // optional($lock)->release();
         }
     }
 
