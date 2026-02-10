@@ -77,9 +77,14 @@ trait TemplateTrait
                     $param['video']['link'] = $parameter->value;
                 } else if ($parameter->type === 'DOCUMENT') {
                     $param['document']['link'] = $parameter->value;
-                } else if ($parameter->type === 'text') {
-                    $param['text'] = $parameter->selection === 'static'
+                } else if ($parameter->type === 'text' || $parameter->type === 'custom_field') {
+                    $value = $parameter->selection === 'static'
                         ? $parameter->value : $this->getParameters($contact, $parameter->value);
+
+                    if ($value === null || trim((string)$value) === '') {
+                        $value = 'N/A';
+                    }
+                    $param['text'] = (string) $value;
                 }
 
                 $headerComponent['parameters'][] = $param;
@@ -98,12 +103,15 @@ trait TemplateTrait
 
         if ($metadata->body->parameters) {
             foreach ($metadata->body->parameters as $parameter) {
-                $value = $parameter->selection === 'static'
+                // Treat selection like custom_field if set, or backtrack to dynamic logic if selection is missing but parameters exist
+                $selection = $parameter->selection ?? ($parameter->type ?? 'dynamic');
+
+                $value = ($selection === 'static')
                     ? $parameter->value
                     : $this->getParameters($contact, $parameter->value);
 
                 if ($value === null || trim((string)$value) === '') {
-                    $value = 'N/A'; // or throw, depending on policy
+                    $value = 'N/A';
                 }
 
                 $param['type'] = 'text';
@@ -141,7 +149,8 @@ trait TemplateTrait
                         $param = [];
 
                         if ($button->type === 'QUICK_REPLY') {
-                            $payload = $parameter->type === 'static'
+                            $type = $parameter->type ?? 'static';
+                            $payload = $type === 'static'
                                 ? $parameter->value
                                 : $this->getParameters($contact, $parameter->value);
 
@@ -153,13 +162,24 @@ trait TemplateTrait
                             $param['payload'] = (string) $payload;
                         } else if ($button->type === 'URL') {
                             $param['type'] = 'text';
-                            $rawValue = $parameter->type === 'static'
+                            $type = $parameter->type ?? 'static';
+                            $rawValue = $type === 'static'
                                 ? $parameter->value : $this->getParameters($contact, $parameter->value);
+
+                            if ($rawValue === null || trim((string)$rawValue) === '') {
+                                $rawValue = 'N/A';
+                            }
                             $param['text'] = $this->normalizeUrlButtonParam($rawValue);
                         } else if ($button->type === 'COPY_CODE') {
                             $param['type'] = 'coupon_code';
-                            $param['coupon_code'] = $parameter->type === 'static'
+                            $type = $parameter->type ?? 'static';
+                            $value = $type === 'static'
                                 ? $parameter->value : $this->getParameters($contact, $parameter->value);
+
+                            if ($value === null || trim((string)$value) === '') {
+                                $value = 'N/A';
+                            }
+                            $param['coupon_code'] = (string) $value;
                         }
 
                         $buttonComponent[$buttonIndex]['parameters'][] = $param;

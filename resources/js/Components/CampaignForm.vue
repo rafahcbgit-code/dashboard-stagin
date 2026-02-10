@@ -57,6 +57,7 @@ const carouselMessageBody = ref("");
 const variableOptions = ref([
   { value: "static", label: trans("static") },
   { value: "dynamic", label: trans("dynamic") },
+  { value: "custom_field", label: trans("custom field") },
 ]);
 
 const baseDynamicOptions = [
@@ -321,13 +322,19 @@ const submitForm = () => {
   // Validate body dynamic parameters (must exist in contact fields)
   if (Array.isArray(form.body?.parameters)) {
     form.body.parameters.forEach((param, index) => {
-      if (param?.selection === "dynamic") {
+      if (
+        param?.selection === "dynamic" ||
+        param?.selection === "custom_field"
+      ) {
         const value =
           typeof param.value === "string" ? param.value.trim() : param.value;
-        if (!value || !allowedDynamicValues.has(value)) {
+        if (
+          !value ||
+          (param?.selection === "dynamic" && !allowedDynamicValues.has(value))
+        ) {
           form.setError(
             `body.parameters.${index}.value`,
-            trans("Invalid or missing dynamic field for body variable."),
+            trans("Invalid or missing field for body variable."),
           );
           hasValidationError = true;
         }
@@ -340,15 +347,18 @@ const submitForm = () => {
     form.buttons.forEach((button, buttonIndex) => {
       if (Array.isArray(button?.parameters)) {
         button.parameters.forEach((param, paramIndex) => {
-          if (param?.type === "dynamic") {
+          if (param?.type === "dynamic" || param?.type === "custom_field") {
             const value =
               typeof param.value === "string"
                 ? param.value.trim()
                 : param.value;
-            if (!value || !allowedDynamicValues.has(value)) {
+            if (
+              !value ||
+              (param?.type === "dynamic" && !allowedDynamicValues.has(value))
+            ) {
               form.setError(
                 `buttons.${buttonIndex}.parameters.${paramIndex}.value`,
-                trans("Invalid or missing dynamic field for button variable."),
+                trans("Invalid or missing field for button variable."),
               );
               hasValidationError = true;
             }
@@ -722,6 +732,18 @@ onMounted(() => {
                   :options="dynamicOptions"
                   :class="'sm:col-span-6'"
                 />
+                <FormInput
+                  v-if="
+                    form.header.parameters[index].selection === 'custom_field'
+                  "
+                  :name="$t('Custom Field Key')"
+                  :placeholder="$t('Enter field key (e.g. city)')"
+                  :required="true"
+                  :error="form.errors['header.parameters.0.value']"
+                  v-model="form.header.parameters[index].value"
+                  :type="'text'"
+                  :class="'sm:col-span-6'"
+                />
               </div>
               <div
                 v-if="
@@ -856,7 +878,7 @@ onMounted(() => {
                   v-if="form.body.parameters[index].selection === 'static'"
                   v-model="form.body.parameters[index].value"
                   :required="true"
-                  :error="form.errors['body.parameters.0.value']"
+                  :error="form.errors['body.parameters.' + index + '.value']"
                   :type="'text'"
                   :class="'sm:col-span-6'"
                 />
@@ -864,8 +886,19 @@ onMounted(() => {
                   v-if="form.body.parameters[index].selection === 'dynamic'"
                   v-model="form.body.parameters[index].value"
                   :required="true"
-                  :error="form.errors['body.parameters.0.value']"
+                  :error="form.errors['body.parameters.' + index + '.value']"
                   :options="dynamicOptions"
+                  :class="'sm:col-span-6'"
+                />
+                <FormInput
+                  v-if="
+                    form.body.parameters[index].selection === 'custom_field'
+                  "
+                  v-model="form.body.parameters[index].value"
+                  :placeholder="$t('Enter field key')"
+                  :required="true"
+                  :error="form.errors['body.parameters.' + index + '.value']"
+                  :type="'text'"
                   :class="'sm:col-span-6'"
                 />
               </div>
