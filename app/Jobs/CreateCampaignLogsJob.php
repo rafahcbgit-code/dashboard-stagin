@@ -58,7 +58,7 @@ class CreateCampaignLogsJob implements ShouldQueue
 
     protected function processCampaign(Campaign $campaign)
     {
-        $lock = Cache::lock('campaign_logs_create_'.$campaign->id, 120);
+        /* $lock = Cache::lock('campaign_logs_create_'.$campaign->id, 120);
 
         if (! $lock->get()) {
             Log::info('Skipping campaign log creation due to active lock', [
@@ -66,7 +66,7 @@ class CreateCampaignLogsJob implements ShouldQueue
             ]);
 
             return;
-        }
+        } */
 
         $contacts = $this->getContactsForCampaign($campaign);
 
