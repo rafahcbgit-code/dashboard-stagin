@@ -56,7 +56,7 @@ class ProcessCampaignMessagesJob implements ShouldQueue, ShouldBeUnique
 
     public function handle()
     {
-        $lock = Cache::lock('campaign_messages_org_'.$this->organizationId, 300);
+        /* $lock = Cache::lock('campaign_messages_org_'.$this->organizationId, 300);
 
         if (! $lock->get()) {
             Log::info('Skipping ProcessCampaignMessagesJob due to active lock', [
@@ -64,7 +64,7 @@ class ProcessCampaignMessagesJob implements ShouldQueue, ShouldBeUnique
             ]);
 
             return;
-        }
+        } */
 
         // Task 2.2: Query count and timing instrumentation (AC-2.2.1, AC-2.2.4)
         $startTime = microtime(true);
@@ -175,7 +175,7 @@ class ProcessCampaignMessagesJob implements ShouldQueue, ShouldBeUnique
             Log::error('Error in ProcessCampaignMessagesJob: ' . $e->getMessage());
             throw $e;
         } finally {
-            optional($lock)->release();
+            // optional($lock)->release();
         }
     }
 
