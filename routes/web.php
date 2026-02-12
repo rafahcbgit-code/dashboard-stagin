@@ -156,6 +156,10 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::get('/chats/team-members/filter-data', [App\Http\Controllers\User\ChatController::class, 'getTeamMembersForFilter']);
                 Route::post('/chats/mark-all-read', [App\Http\Controllers\User\ChatController::class, 'markAllAsRead']);
 
+                Route::get('/reports/agent', [App\Http\Controllers\User\ReportController::class, 'agentReports'])->name('reports.agent');
+                Route::get('/reports/general', [App\Http\Controllers\User\ReportController::class, 'index'])->name('reports.general');
+                Route::get('/reports/label-count', [App\Http\Controllers\User\ReportController::class, 'countContactsByLabel']);
+                   
                 Route::get('/tickets/{status}', [App\Http\Controllers\User\ChatTicketController::class, 'index']);
                 Route::put('/tickets/{uuid}/update', [App\Http\Controllers\User\ChatTicketController::class, 'update']);
                 Route::put('/tickets/{uuid}/assign', [App\Http\Controllers\User\ChatTicketController::class, 'assign']);
@@ -234,7 +238,6 @@ Route::middleware(['auth:user'])->group(function () {
                     Route::get('/settings/greeting-message', [App\Http\Controllers\User\SettingController::class, 'greetingMessageSettings']);
                     Route::post('/settings/greeting-message', [App\Http\Controllers\User\SettingController::class, 'updateGreetingMessageSettings']);
 
-
                     Route::get('/settings/labels', [App\Http\Controllers\User\SettingController::class, 'labels'])->name('settings.labels');
                     Route::post('/settings/labels', [App\Http\Controllers\User\SettingController::class, 'labels']);
                     Route::post('/settings/labels/create-group', [App\Http\Controllers\User\SettingController::class, 'createGroupFromLabel']);
@@ -257,10 +260,7 @@ Route::middleware(['auth:user'])->group(function () {
                     Route::delete('/team/{uuid}', [App\Http\Controllers\User\TeamController::class, 'delete'])->name('team.destroy');
 
                     Route::get('/developer-tools/access-tokens', [App\Http\Controllers\User\DeveloperController::class, 'index']);
-                    Route::get('/reports/agent', [App\Http\Controllers\User\ReportController::class, 'agentReports'])->name('reports.agent');
-                    Route::get('/reports/general', [App\Http\Controllers\User\ReportController::class, 'index'])->name('reports.general');
-                    Route::get('/reports/label-count', [App\Http\Controllers\User\ReportController::class, 'countContactsByLabel']);
-                    Route::post('/developer-tools/access-tokens', [App\Http\Controllers\User\DeveloperController::class, 'store']);
+                     Route::post('/developer-tools/access-tokens', [App\Http\Controllers\User\DeveloperController::class, 'store']);
                     Route::delete('/developer-tools/access-tokens/{uuid}', [App\Http\Controllers\User\DeveloperController::class, 'delete']);
                 });
 
