@@ -909,14 +909,13 @@ onMounted(() => {
             </h2>
             <div v-for="(item, index) in form.buttons" :key="index">
               <div
-                v-if="item.parameters.length > 0 || item.type === 'QUICK_REPLY'"
+                v-if="item.parameters.length > 0"
                 class="mt-4 bg-slate-50 p-3"
               >
                 <div class="w-[100%] mb-1">
                   <span>{{ $t("Label") }}: {{ item.text }}</span>
                 </div>
                 <div
-                  v-if="item.type !== 'QUICK_REPLY'"
                   v-for="(value, key) in item.parameters"
                   :key="key"
                   class="flex items-center space-x-4"
@@ -953,9 +952,6 @@ onMounted(() => {
                       :class="'sm:col-span-6'"
                     />
                   </div>
-                </div>
-                <div v-else class="text-xs text-gray-500 italic mt-1">
-                  {{ $t("Quick reply buttons use the label as their value.") }}
                 </div>
               </div>
             </div>
