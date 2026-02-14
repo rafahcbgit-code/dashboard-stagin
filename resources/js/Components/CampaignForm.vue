@@ -67,6 +67,12 @@ const baseDynamicOptions = [
   { value: "email", label: trans("contact email") },
 ];
 
+const hasButtonVariables = computed(() => {
+  return form.buttons.some(
+    (button) => button.parameters && button.parameters.length > 0,
+  );
+});
+
 const dynamicOptions = computed(() => {
   let options = [...baseDynamicOptions];
   if (props.contactFields) {
@@ -872,10 +878,7 @@ onMounted(() => {
             </div>
           </div>
 
-          <div
-            v-if="form.buttons.length > 0"
-            class="bg-slate-100 p-3 mt-1 text-sm"
-          >
+          <div v-if="hasButtonVariables" class="bg-slate-100 p-3 mt-1 text-sm">
             <h2
               class="flex items-center justify-between space-x-2 pb-2 border-b"
             >
