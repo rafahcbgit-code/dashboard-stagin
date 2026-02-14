@@ -315,15 +315,15 @@ const performChatUpdate = async () => {
     // Get active filters from the filter store
     const filterStore = useChatFilterStore();
     const params = {};
-    
+
     // Only add filter parameters if they exist
     if (filterStore.search) params.search = filterStore.search;
     if (filterStore.labels) params.labels = filterStore.labels;
     if (filterStore.assigned_to) params.assigned_to = filterStore.assigned_to;
     if (filterStore.status) params.status = filterStore.status;
-    
+
     debugLog("Fetching chats with filters:", params);
-    
+
     const response = await axios.get("/chats", {
       params: params,
       headers: {
