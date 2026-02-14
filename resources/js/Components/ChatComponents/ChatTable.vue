@@ -433,28 +433,29 @@ const buildChatUrl = (contactUuid) => {
         <!-- Filter Section -->
         <div class="mt-3 space-y-3">
             <!-- Filter Buttons Row -->
-            <div class="flex items-center space-x-2 flex-wrap gap-2 relative">
-                <!-- Team Member Filter Button -->
-                <div class="relative team-member-filter-container">
-                    <button @click="loadTeamMembers" :disabled="loadingTeamMembers"
-                        :class="tempSelectedTeamMember ? 'bg-blue-500 text-white hover:bg-blue-600' : 'bg-gray-100 hover:bg-gray-200'"
-                        class="flex items-center space-x-1 px-3 py-1 rounded-md text-sm transition-colors">
-                        <svg v-if="loadingTeamMembers" class="animate-spin w-4 h-4" xmlns="http://www.w3.org/2000/svg"
-                            fill="none" viewBox="0 0 24 24">
-                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
-                            </circle>
-                            <path class="opacity-75" fill="currentColor"
-                                d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
-                            </path>
-                        </svg>
-                        <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-                            fill="white" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round">
-                            <path fill="white" stroke="currentColor"
-                                d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4s-4 1.79-4 4s1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
-                        </svg>
-                        <span>{{tempSelectedTeamMember ? availableTeamMembers.find(m => m.user_id ===
-                            tempSelectedTeamMember)?.first_name || $t('Team Member') : $t('Team Member')}}</span>
-                    </button>
+            <div class="flex items-start space-x-2 flex-wrap gap-2 relative">
+                <div class="flex flex-col gap-2">
+                    <!-- Team Member Filter Button -->
+                    <div class="relative team-member-filter-container">
+                        <button @click="loadTeamMembers" :disabled="loadingTeamMembers"
+                            :class="tempSelectedTeamMember ? 'border border-blue-500 text-blue-600 hover:bg-blue-50' : 'bg-gray-100 hover:bg-gray-200'"
+                            class="flex items-center space-x-1 px-3 py-1 rounded-md text-sm transition-colors">
+                            <svg v-if="loadingTeamMembers" class="animate-spin w-4 h-4" xmlns="http://www.w3.org/2000/svg"
+                                fill="none" viewBox="0 0 24 24">
+                                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
+                                </circle>
+                                <path class="opacity-75" fill="currentColor"
+                                    d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z">
+                                </path>
+                            </svg>
+                            <svg v-else xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
+                                fill="white" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round">
+                                <path fill="white" stroke="currentColor"
+                                    d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4s-4 1.79-4 4s1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z" />
+                            </svg>
+                            <span>{{tempSelectedTeamMember ? availableTeamMembers.find(m => m.user_id ===
+                                tempSelectedTeamMember)?.first_name || $t('Team Member') : $t('Team Member')}}</span>
+                        </button>
 
                     <!-- Team Member Filter Dropdown -->
                     <div v-if="showTeamMemberFilter && availableTeamMembers.length > 0"
@@ -483,12 +484,66 @@ const buildChatUrl = (contactUuid) => {
                             </div>
                         </div>
                     </div>
+                    </div>
+
+                    <!-- Status Dropdown -->
+                    <div class="relative status-filter-container">
+                        <button @click="showStatusFilter = !showStatusFilter"
+                            :class="tempSelectedStatus !== 'all' ? 'border border-purple-500 text-purple-600 hover:bg-purple-50' : 'bg-gray-100 hover:bg-gray-200'"
+                            class="flex items-center space-x-1 px-3 py-1 rounded-md text-sm transition-colors">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
+                                <path fill="currentColor" d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10s10-4.5 10-10S17.5 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8s8 3.59 8 8s-3.59 8-8 8z"/>
+                            </svg>
+                            <span class="capitalize">{{ $t(tempSelectedStatus) }}</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
+                                <path fill="currentColor" d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6l-6-6l1.41-1.41z"/>
+                            </svg>
+                        </button>
+
+                        <!-- Status Filter Dropdown -->
+                        <div v-if="showStatusFilter"
+                            class="absolute top-full left-0 mt-1 w-48 bg-white border border-gray-200 rounded-md shadow-lg z-20">
+                            <div class="p-1">
+                                <div v-if="teamRole === 'agent'" 
+                                    @click="selectStatus('assigned_to_me')"
+                                    :class="tempSelectedStatus === 'assigned_to_me' ? 'bg-purple-50 text-purple-700' : 'hover:bg-gray-50'"
+                                    class="px-3 py-2 text-sm cursor-pointer rounded">
+                                    {{ $t('Assigned to Me') }}
+                                </div>
+                                <div @click="selectStatus('unassigned')"
+                                    :class="tempSelectedStatus === 'unassigned' ? 'bg-purple-50 text-purple-700' : 'hover:bg-gray-50'"
+                                    class="px-3 py-2 text-sm cursor-pointer rounded">
+                                    {{ $t('Unassigned') }}
+                                </div>
+                                <div @click="selectStatus('open')"
+                                    :class="tempSelectedStatus === 'open' ? 'bg-purple-50 text-purple-700' : 'hover:bg-gray-50'"
+                                    class="px-3 py-2 text-sm cursor-pointer rounded">
+                                    {{ $t('Open') }}
+                                </div>
+                                <div @click="selectStatus('closed')"
+                                    :class="tempSelectedStatus === 'closed' ? 'bg-purple-50 text-purple-700' : 'hover:bg-gray-50'"
+                                    class="px-3 py-2 text-sm cursor-pointer rounded">
+                                    {{ $t('Closed') }}
+                                </div>
+                                <div @click="selectStatus('all')"
+                                    :class="tempSelectedStatus === 'all' ? 'bg-purple-50 text-purple-700' : 'hover:bg-gray-50'"
+                                    class="px-3 py-2 text-sm cursor-pointer rounded">
+                                    {{ $t('All') }}
+                                </div>
+                                <div @click="selectStatus('unread')"
+                                    :class="tempSelectedStatus === 'unread' ? 'bg-purple-50 text-purple-700' : 'hover:bg-gray-50'"
+                                    class="px-3 py-2 text-sm cursor-pointer rounded">
+                                    {{ $t('Unread Only') }}
+                                </div>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <!-- Labels Filter Button -->
                 <div class="relative label-filter-container">
                     <button @click="loadLabels" :disabled="loadingLabels"
-                        :class="tempSelectedLabels.length > 0 ? 'bg-green-500 text-white hover:bg-green-600' : 'bg-gray-100 hover:bg-gray-200'"
+                        :class="tempSelectedLabels.length > 0 ? 'border border-green-500 text-green-600 hover:bg-green-50' : 'bg-gray-100 hover:bg-gray-200'"
                         class="flex items-center space-x-1 px-3 py-1 rounded-md text-sm transition-colors">
                         <svg v-if="loadingLabels" class="animate-spin w-4 h-4" xmlns="http://www.w3.org/2000/svg"
                             fill="none" viewBox="0 0 24 24">
@@ -536,58 +591,6 @@ const buildChatUrl = (contactUuid) => {
                     </div>
                 </div>
 
-                <!-- Status Dropdown -->
-                <div class="relative status-filter-container">
-                    <button @click="showStatusFilter = !showStatusFilter"
-                        :class="tempSelectedStatus !== 'all' ? 'bg-purple-500 text-white hover:bg-purple-600' : 'bg-gray-100 hover:bg-gray-200'"
-                        class="flex items-center space-x-1 px-3 py-1 rounded-md text-sm transition-colors">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
-                            <path fill="currentColor" d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10s10-4.5 10-10S17.5 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8s8 3.59 8 8s-3.59 8-8 8z"/>
-                        </svg>
-                        <span class="capitalize">{{ $t(tempSelectedStatus) }}</span>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
-                            <path fill="currentColor" d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6l-6-6l1.41-1.41z"/>
-                        </svg>
-                    </button>
-
-                    <!-- Status Filter Dropdown -->
-                    <div v-if="showStatusFilter"
-                        class="absolute top-full left-0 mt-1 w-48 bg-white border border-gray-200 rounded-md shadow-lg z-20">
-                        <div class="p-1">
-                            <div v-if="teamRole === 'agent'" 
-                                @click="selectStatus('assigned_to_me')"
-                                :class="tempSelectedStatus === 'assigned_to_me' ? 'bg-purple-50 text-purple-700' : 'hover:bg-gray-50'"
-                                class="px-3 py-2 text-sm cursor-pointer rounded">
-                                {{ $t('Assigned to Me') }}
-                            </div>
-                            <div @click="selectStatus('unassigned')"
-                                :class="tempSelectedStatus === 'unassigned' ? 'bg-purple-50 text-purple-700' : 'hover:bg-gray-50'"
-                                class="px-3 py-2 text-sm cursor-pointer rounded">
-                                {{ $t('Unassigned') }}
-                            </div>
-                            <div @click="selectStatus('open')"
-                                :class="tempSelectedStatus === 'open' ? 'bg-purple-50 text-purple-700' : 'hover:bg-gray-50'"
-                                class="px-3 py-2 text-sm cursor-pointer rounded">
-                                {{ $t('Open') }}
-                            </div>
-                            <div @click="selectStatus('closed')"
-                                :class="tempSelectedStatus === 'closed' ? 'bg-purple-50 text-purple-700' : 'hover:bg-gray-50'"
-                                class="px-3 py-2 text-sm cursor-pointer rounded">
-                                {{ $t('Closed') }}
-                            </div>
-                            <div @click="selectStatus('all')"
-                                :class="tempSelectedStatus === 'all' ? 'bg-purple-50 text-purple-700' : 'hover:bg-gray-50'"
-                                class="px-3 py-2 text-sm cursor-pointer rounded">
-                                {{ $t('All') }}
-                            </div>
-                            <div @click="selectStatus('unread')"
-                                :class="tempSelectedStatus === 'unread' ? 'bg-purple-50 text-purple-700' : 'hover:bg-gray-50'"
-                                class="px-3 py-2 text-sm cursor-pointer rounded">
-                                {{ $t('Unread Only') }}
-                            </div>
-                        </div>
-                    </div>
-                </div>
             </div>
 
             <!-- Action Buttons -->
@@ -595,8 +598,8 @@ const buildChatUrl = (contactUuid) => {
                 class="flex items-center space-x-2">
                 <button @click="applyFilters" 
                     :disabled="!hasUnappliedFilters"
-                    :class="hasUnappliedFilters ? 'bg-blue-600 hover:bg-blue-700' : 'bg-gray-300 cursor-not-allowed'"
-                    class="flex items-center space-x-2 px-4 py-2 text-white rounded-md text-sm font-medium transition-colors">
+                    :class="hasUnappliedFilters ? 'border border-blue-500 text-blue-600 hover:bg-blue-50' : 'border border-gray-300 text-gray-400 cursor-not-allowed'"
+                    class="flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-colors">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
                         <path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19L21 7l-1.41-1.41L9 16.17z"/>
                     </svg>
@@ -605,7 +608,7 @@ const buildChatUrl = (contactUuid) => {
 
                 <button @click="resetFilters" 
                     v-if="tempSelectedLabels.length > 0 || tempSelectedTeamMember || tempSelectedStatus !== 'all'"
-                    class="flex items-center space-x-2 px-4 py-2 bg-red-500 hover:bg-red-600 text-white rounded-md text-sm font-medium transition-colors">
+                    class="flex items-center space-x-2 px-4 py-2 border border-red-500 text-red-600 hover:bg-red-50 rounded-md text-sm font-medium transition-colors">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
                         <path fill="currentColor" d="M19 6.41L17.59 5L12 10.59L6.41 5L5 6.41L10.59 12L5 17.59L6.41 19L12 13.41L17.59 19L19 17.59L13.41 12L19 6.41z"/>
                     </svg>
