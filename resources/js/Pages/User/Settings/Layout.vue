@@ -105,11 +105,15 @@
                             :class="$page.url.startsWith('/settings/automation') ? 'bg-slate-50 text-black' : ''">
                             <Link rel="noopener noreferrer" href="/settings/automation"
                                 class="flex items-center p-2 space-s-3 rounded-md">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 32 32">
-                                    <path fill="currentColor"
-                                        d="M16 27c-3.6 0-7.1-1.8-9.2-5H12v-2H4v8h2v-3.7c2.5 3 6.1 4.7 10 4.7zm15-4v-2h-2.1c-.1-.6-.4-1.2-.7-1.8l1.5-1.5l-1.4-1.4l-1.5 1.5c-.5-.3-1.1-.6-1.8-.7V15h-2v2.1c-.6.1-1.2.4-1.8.7l-1.5-1.5l-1.4 1.4l1.5 1.5c-.3.5-.6 1.1-.7 1.8H17v2h2.1c.1.6.4 1.2.7 1.8l-1.5 1.5l1.4 1.4l1.5-1.5c.5.3 1.1.6 1.8.7V29h2v-2.1c.6-.1 1.2-.4 1.8-.7l1.5 1.5l1.4-1.4l-1.5-1.5c.3-.5.6-1.1.7-1.8zm-7 2c-1.7 0-3-1.3-3-3s1.3-3 3-3s3 1.3 3 3s-1.3 3-3 3m-4-15h5.2C21.9 4.9 15.1 3.5 10 6.8c-3.1 2-5 5.5-5 9.2H3C3 8.8 8.8 3 16 3c3.9 0 7.5 1.7 10 4.7V4h2v8h-8z">
-                                    </path>
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 32 32"
+                                    fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
+                                    stroke-linejoin="round">
+
+                                    <path
+                                        d="M16 27c-3.6 0-7.1-1.8-9.2-5H12v-2H4v8h2v-3.7c2.5 3 6.1 4.7 10 4.7zm15-4v-2h-2.1c-.1-.6-.4-1.2-.7-1.8l1.5-1.5l-1.4-1.4l-1.5 1.5c-.5-.3-1.1-.6-1.8-.7V15h-2v2.1c-.6.1-1.2.4-1.8.7l-1.5-1.5l-1.4 1.4l1.5 1.5c-.3.5-.6 1.1-.7 1.8H17v2h2.1c.1.6.4 1.2.7 1.8l-1.5 1.5l1.4 1.4l1.5-1.5c.5.3 1.1.6 1.8.7V29h2v-2.1c.6-.1 1.2-.4 1.8-.7l1.5 1.5l1.4-1.4l-1.5-1.5c.3-.5.6-1.1.7-1.8zm-7 2c-1.7 0-3-1.3-3-3s1.3-3 3-3s3 1.3 3 3s-1.3 3-3 3m-4-15h5.2C21.9 4.9 15.1 3.5 10 6.8c-3.1 2-5 5.5-5 9.2H3C3 8.8 8.8 3 16 3c3.9 0 7.5 1.7 10 4.7V4h2v8h-8z" />
+
                                 </svg>
+
                                 <span>{{ $t('Automation settings') }}</span>
                             </Link>
                         </li>
@@ -135,13 +139,17 @@
                                 <!-- Speaker with X Icon -->
                                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
                                     aria-label="Speaker with X">
-                                    <path fill="#fff" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"
+
+                                    <path fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"
                                         d="M3 9v6h4l5 5V4L7 9H3z" />
-                                    <line x1="16" y1="8" x2="22" y2="14" stroke="currentColor" stroke-width="2"
+
+                                    <line x1="16" y1="8" x2="22" y2="14" stroke="currentColor" stroke-width="3"
                                         stroke-linecap="round" />
-                                    <line x1="22" y1="8" x2="16" y2="14" stroke="currentColor" stroke-width="2"
+
+                                    <line x1="22" y1="8" x2="16" y2="14" stroke="currentColor" stroke-width="3"
                                         stroke-linecap="round" />
                                 </svg>
+
                                 <span>{{ $t('Campaign Settings') }}</span>
                             </Link>
                         </li>
