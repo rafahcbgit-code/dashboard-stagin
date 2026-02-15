@@ -384,7 +384,7 @@ const buildChatUrl = (contactUuid) => {
 <template>
     <div class="px-4 py-4 border-b">
         <div class="flex items-center justify-between space-x-1 text-xl">
-            <div class="flex space-x-1">
+            <div class="flex items-center space-x-3">
                 <h2>{{ $t('Chats') }}</h2>
                 <span class="text-slate-500">{{ rowCount }}</span>
             </div>
@@ -623,9 +623,26 @@ const buildChatUrl = (contactUuid) => {
         </div>
 
         <div v-if="ticketingIsEnabled" class="grid grid-cols-2 mt-4 items-center w-full">
-            <div class="flex items-center space-x-2">
-                <span class="text-sm text-gray-600">{{ $t('Total Chats') }}:</span>
-                <span class="text-sm font-bold">{{ rowCount }}</span>
+            <div class="flex items-center flex-nowrap">
+                <span class="text-sm text-gray-600 whitespace-nowrap">{{ $t('Total Chats') }}:<span class="font-bold text-slate-900">{{ rowCount }}</span></span>
+                 <button
+                    @click="markAllAsRead"
+                    :disabled="isMarkingAllRead"
+                    class="flex items-center space-x-1 text-sm text-slate-600 hover:text-slate-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                    :title="$t('Mark all as read')"
+                    aria-label="Mark all as read"
+                >
+                    <svg v-if="!isMarkingAllRead" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="9" fill="none" stroke="#ffffff" stroke-width="2" />
+                        <path fill="none" stroke="#16a34a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M7 12.5l2.2 2.2l4.8-4.8"/>
+                        <path fill="none" stroke="#16a34a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M11.5 12.5l2.2 2.2l3.3-3.3"/>
+                    </svg>
+                    <svg v-else class="animate-spin" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" fill="none" opacity="0.25" />
+                        <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" stroke-width="3" fill="none" />
+                    </svg>
+                    <!-- <span>{{ $t('Mark all read') }}</span> -->
+                </button> 
             </div>
             <div class="flex ml-auto gap-x-1">
                 <SortDirectionToggle :direction="props.chatSortDirection" :url="'/chats/update-sort-direction'" />

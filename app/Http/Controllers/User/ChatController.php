@@ -7,6 +7,7 @@ use App\Models\Chat;
 use Inertia\Inertia;
 use App\Models\Label;
 use App\Models\Contact;
+use App\Models\Team;
 use App\Models\AutoReply;
 use App\Models\Organization;
 use Illuminate\Http\Request;
@@ -60,11 +61,21 @@ class ChatController extends BaseController
         $organizationId = session()->get('current_organization');
         $userId = auth()->user()->id;
 
-        $updated = Chat::join('chat_tickets', 'chats.contact_id', '=', 'chat_tickets.contact_id')
-        ->where('chat_tickets.assigned_to', $userId)
-        ->where('chats.organization_id', $organizationId)
-        ->where('chats.is_read', 0)
-        ->update([
+        $team = Team::where('organization_id', $organizationId)
+            ->where('user_id', $userId)
+            ->first();
+
+        $role = $team?->role;
+
+        $chatQuery = Chat::where('chats.organization_id', $organizationId)
+            ->where('chats.is_read', 0);
+
+        if (!in_array($role, ['owner', 'manager'], true)) {
+            $chatQuery->join('chat_tickets', 'chats.contact_id', '=', 'chat_tickets.contact_id')
+                ->where('chat_tickets.assigned_to', $userId);
+        }
+
+        $updated = $chatQuery->update([
             'chats.is_read' => 1
         ]);
 
