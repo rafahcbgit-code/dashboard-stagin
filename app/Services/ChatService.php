@@ -717,13 +717,17 @@ class ChatService
 
         $buttons = $request->buttons ?? [];
         foreach ($buttons as $buttonIndex => $button) {
+            if ($button['type'] === 'QUICK_REPLY') {
+                continue;
+            }
             $params = $button['parameters'] ?? [];
             foreach ($params as $paramIndex => $param) {
                 $value = $param['value'] ?? null;
+                $type = $param['type'] ?? ($param['selection'] ?? 'dynamic');
                 if ($value === null || trim((string) $value) === '') {
-                    $type = $button['type'] ?? 'BUTTON';
-                    return __('Button parameter value is required for :type (button :button, param :param).', [
-                        'type' => $type,
+                    $label = $button['text'] ?? ($button['type'] ?? 'BUTTON');
+                    return __(':label (button :button, param :param).', [
+                        'label' => $label,
                         'button' => $buttonIndex + 1,
                         'param' => $paramIndex + 1,
                     ]);
@@ -748,7 +752,7 @@ class ChatService
      */
     public function sendCarouselTemplateMessage(string $contactUuid, int $templateId): object
     {
-        
+
         $contact  = Contact::where('uuid', $contactUuid)->first();
         $template = Template::where('id', $templateId)->first();
         $userId  = $this->getUserId();

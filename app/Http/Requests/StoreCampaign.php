@@ -82,7 +82,7 @@ class StoreCampaign extends FormRequest
             
             switch ($buttonType) {
                 case 'QUICK_REPLY':
-                    $rules["buttons.$index.parameters.0.value"] = 'required|max:25'; // Adjust max as needed
+                    // Quick reply buttons no longer require parameters as the label is used as value.
                     break;
                 case 'COPY_CODE':
                     $rules["buttons.$index.parameters.0.value"] = 'required|max:15'; // Adjust max as needed
