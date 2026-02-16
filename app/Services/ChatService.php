@@ -299,19 +299,21 @@ class ChatService
             ->toArray();
 
         if (!empty($assignedAgentIds)) {
-            return Team::where('organization_id', $organizationId)
+            $assignedAgent = Team::where('organization_id', $organizationId)
                 ->whereIn('user_id', $assignedAgentIds)
-                ->where('role', 'agent')
                 ->where('status', 'active')
                 ->withCount('tickets')
                 ->whereNull('deleted_at')
                 ->orderBy('tickets_count')
                 ->first();
+
+            // If a specific agent list exists, do not fall back to all team members
+            // when none of those agents are eligible.
+            return $assignedAgent;
         }
 
         // Fallback: pick any active agent in the organization with least tickets
         return Team::where('organization_id', $organizationId)
-            ->where('role', 'agent')
             ->where('status', 'active')
             ->withCount('tickets')
             ->whereNull('deleted_at')
@@ -516,10 +518,14 @@ class ChatService
 
             if ($shouldReassign) {
                 // 1. Get the list of agents assigned to this organization
-                $agents = DB::table('assigned_agents')
-                    ->where('organization_id', $organizationId)
-                    ->orderBy('id')
-                    ->pluck('user_id')
+                $agents = DB::table('assigned_agents as aa')
+                    ->join('teams as t', 'aa.user_id', '=', 't.user_id')
+                    ->where('aa.organization_id', $organizationId)
+                    ->where('t.organization_id', $organizationId)
+                    ->where('t.status', 'active')
+                    ->whereNull('t.deleted_at')
+                    ->orderBy('aa.id')
+                    ->pluck('aa.user_id')
                     ->toArray();
 
                 if (!empty($agents)) {
