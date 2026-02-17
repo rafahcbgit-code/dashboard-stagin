@@ -25,6 +25,7 @@ const isOpenLabelsModal = ref(false);
 const availableLabels = ref([]);
 const selectedLabels = ref([]);
 const loadingLabels = ref(false);
+const isSavingLabels = ref(false);
 const user = ref({
     'label': props.ticket?.user ? props.ticket?.user?.full_name : t('Unassigned'),
     'value': props.ticket?.user ? props.ticket?.user?.id : 0,
@@ -157,34 +158,32 @@ const unselectedLabelsList = computed(() => {
     return availableLabels.value.filter(label => !labelsForm.labels.includes(label.id));
 });
 
-const saveLabels = () => {
-    labelsForm.put(`/contacts/${props.contact.uuid}/labels`, {
-        onSuccess: () => {
-            isOpenLabelsModal.value = false;
+const saveLabels = async () => {
+    if (isSavingLabels.value) {
+        return;
+    }
 
-            emit('labelsUpdated', props.contact);;
-            // Update the local contact data with selected labels
-            const updatedLabels = availableLabels.value.filter(label =>
-                labelsForm.labels.includes(label.id)
-            );
+    isSavingLabels.value = true;
+    if (typeof labelsForm.clearErrors === 'function') {
+        labelsForm.clearErrors();
+    }
 
-            // Update the contact prop (this might need to be emitted to parent)
-            if (props.contact.labels) {
-                props.contact.labels = updatedLabels;
-            }
+    try {
+        const response = await axios.put(`/contacts/${props.contact.uuid}/labels`, {
+            labels: labelsForm.labels,
+        });
 
-            if (props.labelColors) {
-                props.labelColors.splice(
-                    0,
-                    props.labelColors.length,
-                    ...updatedLabels.map(l => l.color)
-                );
-            }
-        },
-        onError: (errors) => {
-            console.error('Error saving labels:', errors);
-        }
-    });
+        const updatedLabels = Array.isArray(response?.data?.labels)
+            ? response.data.labels
+            : availableLabels.value.filter(label => labelsForm.labels.includes(label.id));
+
+        emit('labelsUpdated', updatedLabels);
+        isOpenLabelsModal.value = false;
+    } catch (error) {
+        console.error('Error saving labels:', error);
+    } finally {
+        isSavingLabels.value = false;
+    }
 }
 
 const showDropdown = ref(false);
@@ -367,7 +366,7 @@ onUnmounted(() => {
     </div>
 
     <!-- Add Note Modal -->
-    <Modal :label="'Add Note'" :isOpen="isOpenModal">
+    <Modal :label="'Add Note'" :isOpen="isOpenModal" @close="isOpenModal = false">
         <div class="mt-5 grid grid-cols-1 gap-x-6 gap-y-4">
             <form @submit.prevent="submitForm()" class="">
                 <FormTextArea v-model="form2.notes" :error="form2.errors.note" :name="''" :class="'col-span-2'" />
@@ -396,7 +395,7 @@ onUnmounted(() => {
     </Modal>
 
     <!-- Manage Labels Modal -->
-    <Modal :label="$t('Manage labels')" :isOpen="isOpenLabelsModal">
+    <Modal :label="$t('Manage labels')" :isOpen="isOpenLabelsModal" @close="isOpenLabelsModal = false">
         <div class="mt-5">
             <div v-if="loadingLabels" class="flex justify-center py-4">
                 <svg class="animate-spin h-8 w-8 text-gray-600" xmlns="http://www.w3.org/2000/svg" fill="none"
@@ -508,9 +507,9 @@ onUnmounted(() => {
                             {{ $t('Cancel') }}
                         </button>
                         <button @click="saveLabels"
-                            :class="['inline-flex justify-center rounded-md border border-transparent bg-primary px-4 py-2 text-sm text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2', { 'opacity-50': labelsForm.processing }]"
-                            :disabled="labelsForm.processing">
-                            <svg v-if="labelsForm.processing" xmlns="http://www.w3.org/2000/svg" width="20" height="20"
+                            :class="['inline-flex justify-center rounded-md border border-transparent bg-primary px-4 py-2 text-sm text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2', { 'opacity-50': isSavingLabels }]"
+                            :disabled="isSavingLabels">
+                            <svg v-if="isSavingLabels" xmlns="http://www.w3.org/2000/svg" width="20" height="20"
                                 viewBox="0 0 24 24">
                                 <path fill="currentColor"
                                     d="M12 2A10 10 0 1 0 22 12A10 10 0 0 0 12 2Zm0 18a8 8 0 1 1 8-8A8 8 0 0 1 12 20Z"

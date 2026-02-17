@@ -393,8 +393,9 @@ class ContactController extends BaseController
     {
 
         $contact = Contact::where('uuid', $uuid)
+            ->where('organization_id', session()->get('current_organization'))
             ->whereNull('deleted_at')
-            ->first();
+            ->firstOrFail();
 
         $validated = $request->validate([
             'labels' => 'array',
@@ -403,6 +404,16 @@ class ContactController extends BaseController
 
         // sync keeps only the selected labels (removes unselected ones)
         $contact->labels()->sync($validated['labels'] ?? []);
+
+        if ($request->ajax() || $request->expectsJson()) {
+            $contact->load('labels');
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Labels updated successfully.',
+                'labels' => $contact->labels,
+            ]);
+        }
 
         return back()->with('success', 'Labels updated successfully.');
     }

@@ -292,27 +292,7 @@ class ChatService
      */
     private function findLeastLoadedAgent($organizationId)
     {
-        // Prefer agents from the assigned_agents table for this organization
-        $assignedAgentIds = DB::table('assigned_agents')
-            ->where('organization_id', $organizationId)
-            ->pluck('user_id')
-            ->toArray();
-
-        if (!empty($assignedAgentIds)) {
-            return Team::where('organization_id', $organizationId)
-                ->whereIn('user_id', $assignedAgentIds)
-                ->where('role', 'agent')
-                ->where('status', 'active')
-                ->withCount('tickets')
-                ->whereNull('deleted_at')
-                ->orderBy('tickets_count')
-                ->first();
-        }
-
-        // Fallback: pick any active agent in the organization with least tickets
         return Team::where('organization_id', $organizationId)
-            ->where('role', 'agent')
-            ->where('status', 'active')
             ->withCount('tickets')
             ->whereNull('deleted_at')
             ->orderBy('tickets_count')
@@ -460,8 +440,7 @@ class ChatService
 
             // Case 1: Assign tickets to specific agents in a round-robin style
             if ($isSpecificAgentEnabled) {
-                $reassignOnReopen = $settings->tickets->reassign_reopened_chats;
-                $this->assignTicketToSpecificAgent($contactId, $organizationId, $reassignOnReopen);
+                $this->assignTicketToSpecificAgent($contactId, $organizationId);
                 return;
             }
 
@@ -491,85 +470,73 @@ class ChatService
     }
 
 
-    private function assignTicketToSpecificAgent($contactId, $organizationId, $reassignOnReopen)
+    private function assignTicketToSpecificAgent($contactId, $organizationId)
     {
-        return DB::transaction(function () use ($contactId, $organizationId, $reassignOnReopen) {
-            $ticket = ChatTicket::where('contact_id', $contactId)->lockForUpdate()->first();
-            $isNewTicket = false;
-            $wasClosed = false;
+        $ticket = ChatTicket::where('contact_id', $contactId)->first();
+        $isNewTicket = false;
+        $wasClosed = false;
 
-            if (!$ticket) {
-                // Create a new ticket
-                $ticket = new ChatTicket();
-                $ticket->contact_id = $contactId;
-                $ticket->created_at = now();
-                $isNewTicket = true;
+        if (!$ticket) {
+            // Create a new ticket
+            $ticket = new ChatTicket();
+            $ticket->contact_id = $contactId;
+            $ticket->created_at = now();
+            $isNewTicket = true;
+        } else {
+            // Check if ticket was closed
+            $wasClosed = ($ticket->status === 'closed');
+        }
+
+        $ticket->status = 'open';
+
+        // 1. Get the list of agents assigned to this organization
+        $agents = DB::table('assigned_agents')
+            ->where('organization_id', $organizationId)
+            ->orderBy('id')
+            ->pluck('user_id')
+            ->toArray();
+
+        if (!empty($agents)) {
+            // 2. Find the last ticket assigned among these agents
+            $lastTicket = ChatTicket::whereIn('assigned_to', $agents)
+                ->latest()
+                ->first();
+
+            if ($lastTicket) {
+                $lastIndex = array_search($lastTicket->assigned_to, $agents);
+                $nextIndex = ($lastIndex === false) ? 0 : ($lastIndex + 1) % count($agents);
             } else {
-                // Check if ticket was closed
-                $wasClosed = ($ticket->status === 'closed');
+                $nextIndex = 0;
             }
 
-            $ticket->status = 'open';
+            // 3. Assign the next agent in sequence
+            $ticket->assigned_to = $agents[$nextIndex];
+        }
+        
+        // Log appropriate event based on ticket state
+        if ($isNewTicket) {
+            $this->logTicketEvent($contactId, 'Conversation was opened');
+        } elseif ($wasClosed) {
+            $this->logTicketEvent($contactId, 'Conversation was moved from closed to open');
+        }
+        
+        $ticket->updated_at = now();
+        $ticket->save();
 
-            // Only reassign if ticket is new OR if it was closed and reassignOnReopen is enabled
-            $shouldReassign = !$wasClosed || $reassignOnReopen;
+        // Send assignment notification
+        try {
+            $notificationService = new \App\Services\ApiNotificationService();
+            $notificationService->sendAssignmentNotification(
+                $contactId,
+                $ticket->assigned_to,
+                auth('sanctum')->id() ?? auth()->id() ?? 0,
+                $organizationId
+            );
+        } catch (\Exception $e) {
+            Log::error('Failed to send assignment notification: ' . $e->getMessage());
+        }
 
-            if ($shouldReassign) {
-                // 1. Get the list of agents assigned to this organization
-                $agents = DB::table('assigned_agents')
-                    ->where('organization_id', $organizationId)
-                    ->orderBy('id')
-                    ->pluck('user_id')
-                    ->toArray();
-
-                if (!empty($agents)) {
-                    // 2. Find the last ticket assigned among these agents (with pessimistic locking to prevent race conditions)
-                    // Also scope by organization using a join to ensure organization context
-                    $lastTicket = ChatTicket::whereIn('assigned_to', $agents)
-                        ->join('contacts', 'chat_tickets.contact_id', '=', 'contacts.id')
-                        ->where('contacts.organization_id', $organizationId)
-                        ->select('chat_tickets.*')
-                        ->latest('chat_tickets.id')
-                        ->lockForUpdate()
-                        ->first();
-
-                    if ($lastTicket) {
-                        $lastIndex = array_search($lastTicket->assigned_to, $agents);
-                        $nextIndex = ($lastIndex === false) ? 0 : ($lastIndex + 1) % count($agents);
-                    } else {
-                        $nextIndex = 0;
-                    }
-
-                    // 3. Assign the next agent in sequence
-                    $ticket->assigned_to = $agents[$nextIndex];
-                }
-            }
-
-            // Log appropriate event based on ticket state
-            if ($isNewTicket) {
-                $this->logTicketEvent($contactId, 'Conversation was opened');
-            } elseif ($wasClosed) {
-                $this->logTicketEvent($contactId, 'Conversation was moved from closed to open');
-            }
-
-            $ticket->updated_at = now();
-            $ticket->save();
-
-            // Send assignment notification
-            try {
-                $notificationService = new \App\Services\ApiNotificationService();
-                $notificationService->sendAssignmentNotification(
-                    $contactId,
-                    $ticket->assigned_to,
-                    auth('sanctum')->id() ?? auth()->id() ?? 0,
-                    $organizationId
-                );
-            } catch (\Exception $e) {
-                Log::error('Failed to send assignment notification: ' . $e->getMessage());
-            }
-
-            return $ticket;
-        });
+        return $ticket;
     }
 
     public function sendMessage(object $request)
@@ -623,14 +590,6 @@ class ChatService
 
         $template = Template::where('uuid', $request->template)->first();
         $contact = Contact::where('uuid', $uuid)->first();
-
-        $validationError = $this->validateTemplateParams($request);
-        if ($validationError) {
-            return (object) [
-                'success' => false,
-                'message' => $validationError,
-            ];
-        }
 
         // Extract media_id from request if already uploaded
         $mediaId = $request->media_id ?? null;
@@ -701,80 +660,6 @@ class ChatService
         $template = $this->buildTemplate($template->name, $template->language, json_decode(json_encode($metadata)), $contact);
 
         return $this->whatsappService->sendTemplateMessage($contact->uuid, $template, $userId, NULL, $mediaId);
-    }
-
-    private function validateTemplateParams(object $request): ?string
-    {
-        $bodyParams = $request->body['parameters'] ?? [];
-        foreach ($bodyParams as $index => $param) {
-            $value = $param['value'] ?? null;
-            if ($value === null || trim((string) $value) === '') {
-                return __('Body parameter value is required for variable :index.', [
-                    'index' => $index + 1,
-                ]);
-            }
-        }
-
-        $buttons = $request->buttons ?? [];
-        foreach ($buttons as $buttonIndex => $button) {
-            if ($button['type'] === 'QUICK_REPLY') {
-                continue;
-            }
-            $params = $button['parameters'] ?? [];
-            foreach ($params as $paramIndex => $param) {
-                $value = $param['value'] ?? null;
-                $type = $param['type'] ?? ($param['selection'] ?? 'dynamic');
-                if ($value === null || trim((string) $value) === '') {
-                    $label = $button['text'] ?? ($button['type'] ?? 'BUTTON');
-                    return __(':label (button :button, param :param).', [
-                        'label' => $label,
-                        'button' => $buttonIndex + 1,
-                        'param' => $paramIndex + 1,
-                    ]);
-                }
-            }
-        }
-
-        return null;
-    }
-
-    /**
-     * Send a carousel template message to a contact.
-     *
-     * This is intentionally separate from sendTemplateMessage() because the
-     * carousel payload structure is fundamentally different from standard
-     * templates — it has nested card components rather than a flat
-     * header/body/buttons layout.
-     *
-     * @param  string  $contactUuid   The UUID of the contact to send to
-     * @param  int     $templateId    The Template model ID (resolved from UUID by the caller)
-     * @return object                 The response object from WhatsappService
-     */
-    public function sendCarouselTemplateMessage(string $contactUuid, int $templateId): object
-    {
-
-        $contact  = Contact::where('uuid', $contactUuid)->first();
-        $template = Template::where('id', $templateId)->first();
-        $userId  = $this->getUserId();
-
-        // Build the carousel payload using the trait method
-        $templateContent = $this->buildCarouselTemplateRequest($templateId, $contact);
-
-        $enrichedPayload = $this->whatsappService->enrichCarouselWithMediaIds($templateContent);
-
-        // Send via WhatsappService — reuses the same sendTemplateMessage method
-        // since it just POSTs whatever templateContent it receives to Meta.
-        // We pass null for campaignId and mediaId since carousel templates
-        // don't use those fields.
-        $responseObject = $this->whatsappService->sendTemplateMessage(
-            $contactUuid,
-            $enrichedPayload,
-            $userId,
-            null,  // campaignId
-            null   // mediaId
-        );
-
-        return $responseObject;
     }
 
     public function clearMessage($uuid)

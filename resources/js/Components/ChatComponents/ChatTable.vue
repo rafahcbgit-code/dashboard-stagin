@@ -386,7 +386,7 @@ const buildChatUrl = (contactUuid) => {
         <div class="flex items-center justify-between space-x-1 text-xl">
             <div class="flex items-center space-x-3">
                 <h2>{{ $t('Chats') }}</h2>
-                <span class="text-slate-500">{{ rowCount }}</span>
+                <!-- <span class="text-slate-500">{{ rowCount }}</span> -->
             </div>
         </div>
         <div class="bg-slate-50 rounded-md mt-3 flex items-center py-[2px]">

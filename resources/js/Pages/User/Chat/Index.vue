@@ -12,7 +12,7 @@
         <ChatHeader v-if="contact" :ticketingIsEnabled="ticketingIsEnabled" :contact="contact"
           :displayContactInfo="displayContactInfo" :labelColors="labelColors" :ticket="ticket" :addon="addon"
           :teamRole="props.teamRole" :currentPage="rows.meta?.current_page" @toggleView="toggleContactView"
-          @deleteThread="deleteThread" @closeThread="closeThread" />
+          @deleteThread="deleteThread" @closeThread="closeThread" @labelsUpdated="handleLabelsUpdated" />
         <div v-if="contact && !displayTemplate" class="flex-1 overflow-y-auto" ref="scrollContainer2">
           <ChatThread v-if="!displayContactInfo && !loadingThread && !displayTemplate" :contactId="contact.id"
             :initialMessages="chatThread" :hasMoreMessages="hasMoreMessages" :initialNextPage="nextPage" />
@@ -114,6 +114,7 @@ const LEADER_KEY = `chat-leader-${props.organizationId}`;
 const LEADER_HEARTBEAT = 2000;
 const TAB_ID = Math.random().toString(36).substring(2, 15);
 let storageEventHandler = null;
+let isComponentMounted = true;
 
 // Debug logger
 const debugLog = (...args) => {
@@ -294,7 +295,40 @@ const updateChatThread = (chat) => {
   }
 };
 
+const handleLabelsUpdated = (updatedLabels) => {
+  const normalizedLabels = Array.isArray(updatedLabels) ? updatedLabels : [];
+
+  if (contact.value) {
+    contact.value = {
+      ...contact.value,
+      labels: normalizedLabels,
+    };
+  }
+
+  labelColors.value = normalizedLabels.map((label) => label.color);
+
+  if (rows.value && Array.isArray(rows.value.data) && contact.value) {
+    const updatedData = rows.value.data.map((row) => {
+      if (row.uuid === contact.value.uuid) {
+        return {
+          ...row,
+          labels: normalizedLabels,
+        };
+      }
+      return row;
+    });
+
+    rows.value = {
+      ...rows.value,
+      data: updatedData,
+    };
+  }
+};
+
 const performChatUpdate = async () => {
+  if (!isComponentMounted) {
+    return;
+  }
   if (!isLeaderTab.value) {
     debugLog("Not leader tab, skipping API call");
     pendingChats = [];
@@ -330,6 +364,9 @@ const performChatUpdate = async () => {
         Accept: "application/json",
       },
     });
+    if (!isComponentMounted) {
+      return;
+    }
     debugLog("API call successful", response.data);
 
     // Check if server says to wait
@@ -364,13 +401,17 @@ const performChatUpdate = async () => {
       rows.value = newResult;
 
       if (broadcastChannel) {
-        // Broadcast the result that includes the preserved meta page
-        broadcastChannel.postMessage({
-          type: "ROWS_UPDATED",
-          data: newResult,
-          timestamp: Date.now(),
-        });
-        debugLog("Broadcasted to other tabs");
+        try {
+          // Broadcast the result that includes the preserved meta page
+          broadcastChannel.postMessage({
+            type: "ROWS_UPDATED",
+            data: newResult,
+            timestamp: Date.now(),
+          });
+          debugLog("Broadcasted to other tabs");
+        } catch (e) {
+          debugLog("BroadcastChannel post failed", e);
+        }
       }
     }
   } catch (error) {
@@ -383,6 +424,9 @@ const performChatUpdate = async () => {
 };
 
 const updateSidePanelThrottled = async () => {
+  if (!isComponentMounted) {
+    return;
+  }
   // If we are already waiting on a timer, mark that we need another update when it finishes
   if (throttleTimer) {
     debugLog("Throttled - queuing update for later");
@@ -396,6 +440,10 @@ const updateSidePanelThrottled = async () => {
   // Start the cooldown timer
   throttleTimer = setTimeout(() => {
     throttleTimer = null;
+    if (!isComponentMounted) {
+      pendingUpdate = false;
+      return;
+    }
     debugLog("Throttle timer finished");
 
     // If updates came in while we were waiting, run one more update now
@@ -408,6 +456,9 @@ const updateSidePanelThrottled = async () => {
 };
 
 const updateSidePanel = async (chat) => {
+  if (!isComponentMounted) {
+    return;
+  }
   debugLog("New chat event received", chat[0]?.value);
 
   if (contact.value && contact.value.id == chat[0].value.contact_id) {
@@ -425,6 +476,10 @@ const onCloseDemoModal = () => {
 
 const setupBroadcastChannel = () => {
   if ("BroadcastChannel" in window) {
+    if (broadcastChannel) {
+      broadcastChannel.close();
+      broadcastChannel = null;
+    }
     broadcastChannel = new BroadcastChannel(BROADCAST_CHANNEL_NAME);
     debugLog("BroadcastChannel created:", BROADCAST_CHANNEL_NAME);
 
@@ -505,6 +560,7 @@ onMounted(() => {
 });
 
 onUnmounted(() => {
+  isComponentMounted = false;
   // Cleanup throttle timer
   if (throttleTimer) {
     clearTimeout(throttleTimer);
@@ -529,6 +585,7 @@ onUnmounted(() => {
   // Close broadcast channel
   if (broadcastChannel) {
     broadcastChannel.close();
+    broadcastChannel = null;
   }
 });
 </script>
