@@ -169,30 +169,16 @@ const saveLabels = async () => {
     }
 
     try {
-        await axios.put(`/contacts/${props.contact.uuid}/labels`, {
+        const response = await axios.put(`/contacts/${props.contact.uuid}/labels`, {
             labels: labelsForm.labels,
         });
 
+        const updatedLabels = Array.isArray(response?.data?.labels)
+            ? response.data.labels
+            : availableLabels.value.filter(label => labelsForm.labels.includes(label.id));
+
+        emit('labelsUpdated', updatedLabels);
         isOpenLabelsModal.value = false;
-
-        emit('labelsUpdated', props.contact);
-        // Update the local contact data with selected labels
-        const updatedLabels = availableLabels.value.filter(label =>
-            labelsForm.labels.includes(label.id)
-        );
-
-        // Update the contact prop (this might need to be emitted to parent)
-        if (props.contact.labels) {
-            props.contact.labels = updatedLabels;
-        }
-
-        if (props.labelColors) {
-            props.labelColors.splice(
-                0,
-                props.labelColors.length,
-                ...updatedLabels.map(l => l.color)
-            );
-        }
     } catch (error) {
         console.error('Error saving labels:', error);
     } finally {

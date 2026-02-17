@@ -12,7 +12,7 @@
         <ChatHeader v-if="contact" :ticketingIsEnabled="ticketingIsEnabled" :contact="contact"
           :displayContactInfo="displayContactInfo" :labelColors="labelColors" :ticket="ticket" :addon="addon"
           :teamRole="props.teamRole" :currentPage="rows.meta?.current_page" @toggleView="toggleContactView"
-          @deleteThread="deleteThread" @closeThread="closeThread" />
+          @deleteThread="deleteThread" @closeThread="closeThread" @labelsUpdated="handleLabelsUpdated" />
         <div v-if="contact && !displayTemplate" class="flex-1 overflow-y-auto" ref="scrollContainer2">
           <ChatThread v-if="!displayContactInfo && !loadingThread && !displayTemplate" :contactId="contact.id"
             :initialMessages="chatThread" :hasMoreMessages="hasMoreMessages" :initialNextPage="nextPage" />
@@ -292,6 +292,36 @@ const updateChatThread = (chat) => {
   if (!wamIdExists && chat[0].value.deleted_at == null) {
     chatThread.value.push(chat);
     setTimeout(scrollToBottom, 100);
+  }
+};
+
+const handleLabelsUpdated = (updatedLabels) => {
+  const normalizedLabels = Array.isArray(updatedLabels) ? updatedLabels : [];
+
+  if (contact.value) {
+    contact.value = {
+      ...contact.value,
+      labels: normalizedLabels,
+    };
+  }
+
+  labelColors.value = normalizedLabels.map((label) => label.color);
+
+  if (rows.value && Array.isArray(rows.value.data) && contact.value) {
+    const updatedData = rows.value.data.map((row) => {
+      if (row.uuid === contact.value.uuid) {
+        return {
+          ...row,
+          labels: normalizedLabels,
+        };
+      }
+      return row;
+    });
+
+    rows.value = {
+      ...rows.value,
+      data: updatedData,
+    };
   }
 };
 
