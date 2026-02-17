@@ -230,20 +230,36 @@ const loadTemplate = async () => {
 
       const buttons = extractComponent(metadata, "BUTTONS", "buttons");
       if (buttons) {
-        form.buttons = buttons.map((item) => ({
-          type: item.type,
-          text: item.text,
-          value: item[item.type.toLowerCase()] ?? null,
-          parameters:
-            item.type === "QUICK_REPLY"
-              ? []
-              : item.example
-                ? item.example.map((param) => ({
-                    type: "dynamic",
-                    value: param,
-                  }))
-                : [],
-        }));
+        form.buttons = buttons.map((item) => {
+          let parameters = [];
+          if (item.type !== "QUICK_REPLY" && item.example) {
+            parameters = item.example.map((param) => {
+              let value = param;
+              // If it's a URL button with a variable, try to strip the base URL from the example
+              if (
+                item.type === "URL" &&
+                item.url &&
+                item.url.includes("{{1}}")
+              ) {
+                const baseUrl = item.url.split("{{1}}")[0];
+                if (value.startsWith(baseUrl)) {
+                  value = value.substring(baseUrl.length);
+                }
+              }
+              return {
+                type: "dynamic",
+                value: value,
+              };
+            });
+          }
+
+          return {
+            type: item.type,
+            text: item.text,
+            value: item[item.type.toLowerCase()] ?? null,
+            parameters: parameters,
+          };
+        });
       } else {
         form.buttons = [];
       }
@@ -388,7 +404,7 @@ const submitForm = () => {
 
       return {
         ...param,
-        value: encodeURIComponent(value),
+        value: value,
       };
     });
 

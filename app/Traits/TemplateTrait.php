@@ -70,14 +70,17 @@ trait TemplateTrait
 
         if ($metadata->header->parameters) {
             foreach ($metadata->header->parameters as $parameter) {
-                $param['type'] = strtolower($parameter->type);
-                if ($parameter->type === 'IMAGE') {
+                $param = [];
+                $paramType = strtolower($parameter->type);
+                $param['type'] = $paramType;
+                
+                if ($paramType === 'image') {
                     $param['image']['link'] = $parameter->value;
-                } else if ($parameter->type === 'VIDEO') {
+                } else if ($paramType === 'video') {
                     $param['video']['link'] = $parameter->value;
-                } else if ($parameter->type === 'DOCUMENT') {
+                } else if ($paramType === 'document') {
                     $param['document']['link'] = $parameter->value;
-                } else if ($parameter->type === 'text') {
+                } else if ($paramType === 'text') {
                     $value = $parameter->selection === 'static'
                         ? $parameter->value : $this->getParameters($contact, $parameter->value);
 
@@ -103,6 +106,7 @@ trait TemplateTrait
 
         if ($metadata->body->parameters) {
             foreach ($metadata->body->parameters as $parameter) {
+                $param = [];
                 // Treat selection like dynamic if selection is missing but parameters exist
                 $selection = $parameter->selection ?? ($parameter->type ?? 'dynamic');
 
