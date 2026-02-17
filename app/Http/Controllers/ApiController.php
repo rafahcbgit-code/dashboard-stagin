@@ -585,7 +585,7 @@ class ApiController extends Controller
         } else {
             $contact = new Contact();
             $contact->organization_id = $request->organization;
-            $contact->first_name = $request->first_name;
+            $contact->first_name = $request->first_name ?? "name";
             $contact->last_name = $request->last_name;
             $contact->email = $request->email;
             $contact->phone = $phone;
