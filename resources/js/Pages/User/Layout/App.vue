@@ -69,7 +69,7 @@
     const organizations = computed(() => usePage().props.organizations);
     const currentPageTitle = computed(() => usePage().props.title);
     const displayCreateBtn = computed(() => usePage().props.allowCreate);
-    const unreadMessages = ref(usePage().props.unreadMessages);
+    const unreadMessages = ref(Number(usePage().props.unreadMessages) || 0);
     
     const isTrial = computed(() => usePage().props.is_trial); 
     const whatsapp_link = computed(() => usePage().props.whatsapp_link);
@@ -128,7 +128,7 @@
                 const chat = event.chat;
                 if (chat[0].value.deleted_at == null && chat[0].value.type === 'inbound') {
                     playSound();
-                    unreadMessages.value += 1;
+                    unreadMessages.value = Number(unreadMessages.value || 0) + 1;
                 }
             });
         }
