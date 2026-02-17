@@ -65,7 +65,8 @@ class CampaignController extends BaseController
             $data['contactFields'] = $contactFieldService->get($request);
 
             $data['contactGroups'] = ContactGroup::where('organization_id', $organizationId)
-                ->where('deleted_at', null)
+                ->whereNull('deleted_at')
+                ->whereHas('contacts')
                 ->get();
 
             $data['title'] = __('Create campaign');
