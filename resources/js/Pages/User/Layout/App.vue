@@ -3,12 +3,12 @@
         <MobileSidebar :user="user" :config="config" :organization="organization" :organizations="organizations"
             :title="currentPageTitle" :displayCreateBtn="displayCreateBtn" :displayTopBar="viewTopBar"></MobileSidebar>
 
-        <div class="md:mt-0 md:pt-0 flex md:h-screen w-full tracking-[0.3px] bg-gray-300/10"
+        <div class="md:mt-0 md:pt-0 flex md:h-screen md:overflow-hidden w-full tracking-[0.3px] bg-gray-300/10"
             :class="viewTopBar === false ? 'mt-0 pt-0' : ''">
             <Sidebar :user="user" :config="config" :organization="organization" :organizations="organizations"
                 :unreadMessages="unreadMessages"></Sidebar>
 
-            <div class="md:min-h-screen flex flex-col w-full min-w-0">
+            <div class="flex flex-col w-full min-w-0 md:h-screen md:min-h-0 md:overflow-hidden">
 
                 <div v-if="isTrialActive" 
                     class="fixed top-6 left-1/2 transform -translate-x-1/2 z-50 w-[90%] sm:w-auto">
@@ -43,7 +43,9 @@
                         </button>
                     </div>
                 </div>
-                <slot :user="user" :toggleNavBar="toggleTopBar"></slot>
+                <div class="flex-1 min-h-0 md:overflow-y-auto">
+                    <slot :user="user" :toggleNavBar="toggleTopBar"></slot>
+                </div>
             </div>
         </div>
 

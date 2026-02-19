@@ -188,7 +188,7 @@
                     </Link>
                 </li>
                 <li v-if="!isAgent" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
-                    :class="$page.url.startsWith('/settings') ? 'bg-slate-50 text-black' : ''">
+                    :class="($page.url.startsWith('/settings') || $page.url.startsWith('/web-widget')) ? 'bg-slate-50 text-black' : ''">
                     <Link rel="noopener noreferrer" href="/settings"
                         class="md:flex items-center p-2 space-s-3 rounded-md hidden">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 16 16">
