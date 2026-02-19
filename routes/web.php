@@ -17,6 +17,8 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::post('/webhook/{organization}', [App\Http\Controllers\WebhookController::class, 'handlePostRequest']);
+Route::get('/widget/{organization}', [App\Http\Controllers\WebWidgetController::class, 'showPublicConfig']);
+Route::get('/widget.js', [App\Http\Controllers\WebWidgetController::class, 'script']);
 
 //Installer routes
 Route::get('/install/{step?}', [App\Http\Controllers\InstallerController::class, 'index'])->name('install');
@@ -222,6 +224,8 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::group(['middleware' => 'check.client.role'], function () {
                     Route::get('/settings', [App\Http\Controllers\User\SettingController::class, 'index']);
                     Route::get('/settings/m', [App\Http\Controllers\User\SettingController::class, 'mobileView']);
+                    Route::get('/web-widget', [App\Http\Controllers\WebWidgetController::class, 'index'])->name('user.web-widget.index');
+                    Route::post('/web-widget', [App\Http\Controllers\WebWidgetController::class, 'store'])->name('user.web-widget.store');
 
                     Route::match(['get', 'post'], '/settings/campaign', [App\Http\Controllers\User\SettingController::class, 'campaign']);
 

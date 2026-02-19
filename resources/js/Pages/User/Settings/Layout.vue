@@ -45,6 +45,23 @@
                             </Link>
                         </li>
                         <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-1 truncate cursor-pointer"
+                            :class="$page.url.startsWith('/web-widget') ? 'bg-slate-50 text-black' : ''">
+                            <Link rel="noopener noreferrer" href="/web-widget"
+                                class="flex items-center p-2 space-s-3 rounded-md">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+                                    <g fill="none" stroke="currentColor" stroke-linecap="round"
+                                        stroke-linejoin="round" stroke-width="2">
+                                        <path d="M12 21a9 9 0 1 0 0-18a9 9 0 0 0 0 18" />
+                                        <path d="M3.6 9h16.8" />
+                                        <path d="M3.6 15h16.8" />
+                                        <path d="M12 3c2.5 2.7 2.5 15.3 0 18" />
+                                        <path d="M12 3c-2.5 2.7-2.5 15.3 0 18" />
+                                    </g>
+                                </svg>
+                                <span>{{ $t('Web Widget') }}</span>
+                            </Link>
+                        </li>
+                        <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-1 truncate cursor-pointer"
                             :class="$page.url.startsWith('/settings/global-reply') ? 'bg-slate-50 text-black' : ''">
                             <Link rel="noopener noreferrer" href="/settings/global-reply"
                                 class="flex items-center p-2 space-s-3 rounded-md">

@@ -6,6 +6,7 @@ use App\Http\Traits\HasUuid;
 use App\Services\OrganizationService;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Organization extends Model
@@ -81,5 +82,10 @@ class Organization extends Model
     public function labels()
     {
         return $this->hasMany(Label::class);
+    }
+
+    public function webWidget(): HasOne
+    {
+        return $this->hasOne(WebWidget::class);
     }
 }
