@@ -258,6 +258,18 @@ const selectStatus = (status) => {
     hasUnappliedFilters.value = true;
 };
 
+const getStatusLabel = (status) => {
+    const statusLabels = {
+        'all': 'All',
+        'open': 'Open',
+        'closed': 'Closed',
+        'unassigned': 'Unassigned',
+        'assigned_to_me': 'Assigned to Me',
+        'unread': 'Unread Only'
+    };
+    return statusLabels[status] || status;
+};
+
 const applyFilters = () => {
     // Apply temporary filters to actual filters
     selectedLabels.value = [...tempSelectedLabels.value];
@@ -498,7 +510,7 @@ const buildChatUrl = (contactUuid) => {
                                 <path fill="currentColor"
                                     d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10s10-4.5 10-10S17.5 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8s8 3.59 8 8s-3.59 8-8 8z" />
                             </svg>
-                            <span class="capitalize">{{ $t(tempSelectedStatus) }}</span>
+                            <span>{{ $t(getStatusLabel(tempSelectedStatus)) }}</span>
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
                                 <path fill="currentColor"
                                     d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6l-6-6l1.41-1.41z" />
@@ -507,7 +519,7 @@ const buildChatUrl = (contactUuid) => {
 
                         <!-- Status Filter Dropdown -->
                         <div v-if="showStatusFilter"
-                            class="absolute top-full left-0 mt-1 w-48 bg-white border border-gray-200 rounded-md shadow-lg z-20">
+                            class="absolute top-full ltr:left-0 rtl:right-0 rtl:left-auto mt-1 w-48 bg-white border border-gray-200 rounded-md shadow-lg z-20">
                             <div class="p-1">
                                 <div v-if="teamRole === 'agent'" @click="selectStatus('assigned_to_me')"
                                     :class="tempSelectedStatus === 'assigned_to_me' ? 'bg-purple-50 text-purple-700' : 'hover:bg-gray-50'"
