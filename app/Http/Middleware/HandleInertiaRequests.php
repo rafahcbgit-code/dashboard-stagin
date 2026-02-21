@@ -9,6 +9,7 @@ use App\Models\Organization;
 use App\Models\Setting;
 use App\Models\Team;
 use App\Models\User;
+use App\Helpers\CustomHelper;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Config;
@@ -130,6 +131,11 @@ class HandleInertiaRequests extends Middleware
                 'enabled' => $user ? $user->tfa : false,
             ],
             'isRtl' => $isRtl,
+            // Module flags shared globally so the main sidebar can show/hide nav items
+            // without each controller needing to pass them individually
+            'meta_flows_module' => fn() => $user && $user->role === 'user'
+                ? CustomHelper::isModuleEnabled('Meta Flows')
+                : false,
         ]);
     }
 

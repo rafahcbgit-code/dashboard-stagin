@@ -584,6 +584,104 @@ class ChatService
         }
     }
 
+    // Send a Meta WhatsApp Flow to a contact from the chat window
+    public function sendMetaFlowMessage(object $request, string $contactUuid): \stdClass
+    {
+        // Log everything received from the chat UI so we can trace issues end-to-end
+        Log::info('ChatService: sendMetaFlowMessage request received', [
+            'contact_uuid'   => $contactUuid,
+            'meta_flow_uuid' => $request->meta_flow_uuid ?? null,
+            'body'           => $request->body ?? null,
+            'cta'            => $request->cta  ?? null,
+            'organization_id'=> $this->organizationId,
+        ]);
+
+        $result = new \stdClass();
+
+        $contact = Contact::where('uuid', $contactUuid)
+            ->where('organization_id', $this->organizationId)
+            ->first();
+
+        if (!$contact) {
+            $result->success = false;
+            $result->message = 'Contact not found.';
+            return $result;
+        }
+
+        $flow = \Modules\MetaFlows\Models\MetaFlow::where('uuid', $request->meta_flow_uuid)
+            ->where('organization_id', $this->organizationId)
+            ->first();
+
+        if (!$flow) {
+            $result->success = false;
+            $result->message = 'Meta Flow not found.';
+            return $result;
+        }
+
+        $options = [
+            'body'    => $request->body ?? 'Please complete the form.',
+            'cta'     => $request->cta  ?? 'Open',
+            'header'  => $flow->name,
+            'screen'  => 'INTRO',
+        ];
+
+        $sendResult = \Modules\MetaFlows\Services\MetaFlowService::fromOrganization($this->organizationId)
+            ->sendFlowToContact($flow, $contact, $options);
+
+        if (!($sendResult['success'] ?? false)) {
+            $result->success = false;
+            $result->message = $sendResult['message'] ?? 'Failed to send flow via Meta API.';
+            return $result;
+        }
+
+        // Build the metadata the chat bubble will render
+        $chatMetadata = [
+            'type'      => 'interactive',
+            'flow_name' => $flow->name,
+            'interactive' => [
+                'type' => 'flow',
+                'body' => ['text' => $options['body']],
+                'action' => [
+                    'name'       => 'flow',
+                    'parameters' => [
+                        'flow_id'  => $flow->meta_flow_id,
+                        'flow_cta' => $options['cta'],
+                    ],
+                ],
+            ],
+        ];
+
+        $userId = $this->getUserId();
+
+        $chat = Chat::create([
+            'organization_id' => $this->organizationId,
+            'wam_id'          => $sendResult['data']->messages[0]->id ?? null,
+            'contact_id'      => $contact->id,
+            'type'            => 'outbound',
+            'user_id'         => $userId,
+            'metadata'        => json_encode($chatMetadata),
+            'status'          => 'delivered',
+            'created_at'      => now(),
+        ]);
+
+        $chatlogId = ChatLog::insertGetId([
+            'contact_id'  => $contact->id,
+            'entity_type' => 'chat',
+            'entity_id'   => $chat->id,
+            'created_at'  => now(),
+        ]);
+
+        $chatLogEntry = ChatLog::where('id', $chatlogId)->whereNull('deleted_at')->first();
+
+        event(new NewChatEvent(
+            [['type' => 'chat', 'value' => $chatLogEntry->relatedEntities]],
+            $contact->organization_id
+        ));
+
+        $result->success = true;
+        return $result;
+    }
+
     public function sendTemplateMessage(object $request, $uuid)
     {
         $userId = $request->user_id ?? $this->getUserId();

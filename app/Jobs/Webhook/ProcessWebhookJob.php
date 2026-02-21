@@ -23,6 +23,7 @@ use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use App\Services\WorkingHoursService;
+use Modules\MetaFlows\Services\MetaFlowService;
 
 /**
  * ProcessWebhookJob - Async webhook processing job.
@@ -291,6 +292,12 @@ class ProcessWebhookJob implements ShouldQueue
             'entity_id' => $chat->id,
             'created_at' => now(),
         ]);
+
+        // When the user submits a Meta Flow, Meta sends an interactive message with
+        // type nfm_reply. Store the response so it can be reviewed in the dashboard.
+        if ($messageType === 'interactive') {
+            $this->processMetaFlowResponse($message, $contact->id);
+        }
 
         // AC-1.7.4: Process any pending MissedChatStatusUpdates for this wam_id
         $this->processPendingStatusUpdates($chat, $contact);
@@ -1598,6 +1605,44 @@ class ProcessWebhookJob implements ShouldQueue
 
         // Account updates can trigger notifications to admins
         // or update organization metadata as needed
+    }
+
+    /**
+     * Handle an nfm_reply interactive message from a Meta Flow submission.
+     *
+     * When a user completes a Meta Flow inside WhatsApp, Meta delivers the
+     * response as an interactive message with type nfm_reply. This method
+     * passes the raw message to MetaFlowService which stores the response.
+     *
+     * The MetaFlows module may not be installed on every deployment, so the
+     * call is wrapped in a class_exists check to avoid hard failures.
+     *
+     * @param array $message The raw message payload from the webhook
+     * @param int   $contactId The local contact ID for the sender
+     */
+    protected function processMetaFlowResponse(array $message, int $contactId): void
+    {
+        $interactive = $message['interactive'] ?? [];
+
+        if (($interactive['type'] ?? '') !== 'nfm_reply') {
+            return;
+        }
+
+        if (!class_exists(MetaFlowService::class)) {
+            return;
+        }
+
+        try {
+            $service = MetaFlowService::fromOrganization($this->organizationId);
+            $service->handleFlowResponse($message, $contactId);
+        } catch (\Throwable $e) {
+            // Non-blocking: a Meta Flow response failure must not interrupt message storage
+            Log::channel('webhook')->warning('MetaFlows: nfm_reply handling failed (non-blocking)', [
+                'organization_id' => $this->organizationId,
+                'contact_id'      => $contactId,
+                'error'           => $e->getMessage(),
+            ]);
+        }
     }
 
     /**

@@ -86,6 +86,22 @@ class ChatController extends BaseController
         ]);
     }
 
+    public function sendMetaFlowMessage(Request $request, $uuid)
+    {
+        $request->validate([
+            'meta_flow_uuid' => 'required|string',
+            'body'           => 'nullable|string|max:1024',
+            'cta'            => 'nullable|string|max:20',
+        ]);
+
+        $result = $this->chatService()->sendMetaFlowMessage($request, $uuid);
+
+        return response()->json([
+            'success' => $result->success ?? false,
+            'message' => $result->success ? __('Flow sent successfully!') : ($result->message ?? __('Failed to send flow.')),
+        ], $result->success ? 200 : 422);
+    }
+
     public function sendTemplateMessage(Request $request, $uuid)
     {
         $res = $this->chatService()->sendTemplateMessage($request, $uuid);
