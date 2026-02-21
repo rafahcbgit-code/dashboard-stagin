@@ -6,6 +6,9 @@ import { Link, router } from "@inertiajs/vue3";
 import Pagination from '@/Components/Pagination.vue';
 import SortDirectionToggle from '@/Components/SortDirectionToggle.vue';
 import { useChatFilterStore } from '@/stores/chatFilterStore.js';
+import { useI18n } from 'vue-i18n';
+
+const { t } = useI18n();
 
 const props = defineProps({
     rows: {
@@ -258,6 +261,18 @@ const selectStatus = (status) => {
     hasUnappliedFilters.value = true;
 };
 
+const getStatusLabel = (status) => {
+    const statusLabels = {
+        'all': 'All',
+        'open': 'Open',
+        'closed': 'Closed',
+        'unassigned': 'Unassigned',
+        'assigned_to_me': 'Assigned to Me',
+        'unread': 'Unread Only'
+    };
+    return statusLabels[status] || status;
+};
+
 const applyFilters = () => {
     // Apply temporary filters to actual filters
     selectedLabels.value = [...tempSelectedLabels.value];
@@ -294,7 +309,7 @@ const isMarkingAllRead = ref(false);
 const markAllAsRead = async () => {
     if (isMarkingAllRead.value) return;
 
-    if (!confirm('Are you sure you want to mark all messages as read?')) {
+    if (!confirm(t('Are you sure you want to mark all messages as read?'))) {
         return;
     }
 
@@ -460,7 +475,7 @@ const buildChatUrl = (contactUuid) => {
 
                         <!-- Team Member Filter Dropdown -->
                         <div v-if="showTeamMemberFilter && availableTeamMembers.length > 0"
-                            class="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-md shadow-lg z-20 max-h-60 overflow-y-auto">
+                            class="absolute top-full ltr:left-0 rtl:right-0 rtl:left-auto mt-1 w-64 bg-white border border-gray-200 rounded-md shadow-lg z-20 max-h-60 overflow-y-auto">
                             <div class="p-2">
                                 <div class="text-sm font-medium text-gray-700 mb-2">{{ $t('Select Team Member') }}</div>
                                 <div class="space-y-1">
@@ -498,7 +513,7 @@ const buildChatUrl = (contactUuid) => {
                                 <path fill="currentColor"
                                     d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10s10-4.5 10-10S17.5 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8s8 3.59 8 8s-3.59 8-8 8z" />
                             </svg>
-                            <span class="capitalize">{{ $t(tempSelectedStatus) }}</span>
+                            <span>{{ $t(getStatusLabel(tempSelectedStatus)) }}</span>
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
                                 <path fill="currentColor"
                                     d="M7.41 8.59L12 13.17l4.59-4.58L18 10l-6 6l-6-6l1.41-1.41z" />
@@ -507,7 +522,7 @@ const buildChatUrl = (contactUuid) => {
 
                         <!-- Status Filter Dropdown -->
                         <div v-if="showStatusFilter"
-                            class="absolute top-full left-0 mt-1 w-48 bg-white border border-gray-200 rounded-md shadow-lg z-20">
+                            class="absolute top-full ltr:left-0 rtl:right-0 rtl:left-auto mt-1 w-48 bg-white border border-gray-200 rounded-md shadow-lg z-20">
                             <div class="p-1">
                                 <div v-if="teamRole === 'agent'" @click="selectStatus('assigned_to_me')"
                                     :class="tempSelectedStatus === 'assigned_to_me' ? 'bg-purple-50 text-purple-700' : 'hover:bg-gray-50'"
@@ -570,7 +585,7 @@ const buildChatUrl = (contactUuid) => {
 
                     <!-- Label Filter Dropdown -->
                     <div v-if="showLabelFilter && availableLabels.length > 0"
-                        class="absolute top-full left-0 mt-1 w-64 bg-white border border-gray-200 rounded-md shadow-lg z-20 max-h-60 overflow-y-auto">
+                        class="absolute top-full ltr:left-0 rtl:right-0 rtl:left-auto mt-1 w-64 bg-white border border-gray-200 rounded-md shadow-lg z-20 max-h-60 overflow-y-auto">
                         <div class="p-2">
                             <div class="text-sm font-medium text-gray-700 mb-2">{{ $t('Select Labels') }}</div>
                             <div class="space-y-2">
@@ -600,10 +615,10 @@ const buildChatUrl = (contactUuid) => {
 
             <!-- Action Buttons -->
             <div v-if="hasUnappliedFilters || tempSelectedLabels.length > 0 || tempSelectedTeamMember || tempSelectedStatus !== 'all'"
-                class="flex items-center space-x-2">
+                class="flex items-center gap-2">
                 <button @click="applyFilters" :disabled="!hasUnappliedFilters"
                     :class="hasUnappliedFilters ? 'border border-blue-500 text-blue-600 hover:bg-blue-50' : 'border border-gray-300 text-gray-400 cursor-not-allowed'"
-                    class="flex items-center space-x-2 px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                    class="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
                         <path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19L21 7l-1.41-1.41L9 16.17z" />
                     </svg>
@@ -612,7 +627,7 @@ const buildChatUrl = (contactUuid) => {
 
                 <button @click="resetFilters"
                     v-if="tempSelectedLabels.length > 0 || tempSelectedTeamMember || tempSelectedStatus !== 'all'"
-                    class="flex items-center space-x-2 px-4 py-2 border border-red-500 text-red-600 hover:bg-red-50 rounded-md text-sm font-medium transition-colors">
+                    class="flex items-center gap-2 px-4 py-2 border border-red-500 text-red-600 hover:bg-red-50 rounded-md text-sm font-medium transition-colors">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
                         <path fill="currentColor"
                             d="M19 6.41L17.59 5L12 10.59L6.41 5L5 6.41L10.59 12L5 17.59L6.41 19L12 13.41L17.59 19L19 17.59L13.41 12L19 6.41z" />
@@ -622,29 +637,31 @@ const buildChatUrl = (contactUuid) => {
             </div>
         </div>
 
-        <div v-if="ticketingIsEnabled" class="grid grid-cols-2 mt-4 items-center w-full">
-            <div class="flex items-center flex-nowrap">
-                <span class="text-sm text-gray-600 whitespace-nowrap">{{ $t('Total Chats') }}:<span class="font-bold text-slate-900">{{ rowCount }}</span></span>
-                 <button
-                    @click="markAllAsRead"
-                    :disabled="isMarkingAllRead"
-                    class="flex items-center space-x-1 text-sm text-slate-600 hover:text-slate-900 disabled:opacity-50 disabled:cursor-not-allowed"
-                    :title="$t('Mark all as read')"
-                    aria-label="Mark all as read"
-                >
-                    <svg v-if="!isMarkingAllRead" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24">
+        <div class="grid grid-cols-2 mt-4 items-center w-full">
+            <div class="flex items-center flex-nowrap gap-2">
+                <span class="text-sm text-gray-600 whitespace-nowrap">{{ $t('Total Chats') }}: <span
+                        class="font-bold text-slate-900">{{ rowCount }}</span></span>
+                <button @click="markAllAsRead" :disabled="isMarkingAllRead"
+                    class="flex items-center text-sm text-slate-600 hover:text-slate-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                    :title="$t('Mark all as read')" aria-label="Mark all as read">
+                    <svg v-if="!isMarkingAllRead" xmlns="http://www.w3.org/2000/svg" width="32" height="32"
+                        viewBox="0 0 24 24">
                         <circle cx="12" cy="12" r="9" fill="none" stroke="#ffffff" stroke-width="2" />
-                        <path fill="none" stroke="#16a34a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M7 12.5l2.2 2.2l4.8-4.8"/>
-                        <path fill="none" stroke="#16a34a" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" d="M11.5 12.5l2.2 2.2l3.3-3.3"/>
+                        <path fill="none" stroke="#16a34a" stroke-width="2.2" stroke-linecap="round"
+                            stroke-linejoin="round" d="M7 12.5l2.2 2.2l4.8-4.8" />
+                        <path fill="none" stroke="#16a34a" stroke-width="2.2" stroke-linecap="round"
+                            stroke-linejoin="round" d="M11.5 12.5l2.2 2.2l3.3-3.3" />
                     </svg>
-                    <svg v-else class="animate-spin" xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 24 24">
-                        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" fill="none" opacity="0.25" />
+                    <svg v-else class="animate-spin" xmlns="http://www.w3.org/2000/svg" width="32" height="32"
+                        viewBox="0 0 24 24">
+                        <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" fill="none"
+                            opacity="0.25" />
                         <path d="M22 12a10 10 0 0 1-10 10" stroke="currentColor" stroke-width="3" fill="none" />
                     </svg>
                     <!-- <span>{{ $t('Mark all read') }}</span> -->
-                </button> 
+                </button>
             </div>
-            <div class="flex ml-auto gap-x-1">
+            <div class="flex ltr:ml-auto rtl:mr-auto gap-1">
                 <SortDirectionToggle :direction="props.chatSortDirection" :url="'/chats/update-sort-direction'" />
             </div>
         </div>
