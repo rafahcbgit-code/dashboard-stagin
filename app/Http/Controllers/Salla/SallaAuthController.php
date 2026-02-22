@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\SallaStore;
 use Illuminate\Http\Client\Response;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
@@ -188,7 +189,13 @@ class SallaAuthController extends Controller
                     'access_token' => $accessToken,
                     'refresh_token' => $refreshToken,
                     'expires_at' => $expiresAt,
+                    'refresh_token_expires_at' => now()->addDays(30), // Refresh token valid for 30 days
+                    'refresh_token_used_at' => null, // Reset on new connection
                     'scopes' => $scopes,
+                    'token_version' => DB::raw('COALESCE(token_version, 0) + 1'), // Increment version
+                    'is_revoked' => false, // Reset revocation status
+                    'revoked_at' => null,
+                    'revocation_reason' => null,
                 ]
             );
         } catch (\Throwable $e) {

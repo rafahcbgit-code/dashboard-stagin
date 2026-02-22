@@ -160,6 +160,8 @@ Route::middleware(['auth:user'])->group(function () {
                 
                 // Salla Integration Routes
                 Route::get('/settings/salla', [App\Http\Controllers\User\SallaController::class, 'index'])->name('salla.index');
+                Route::post('/settings/salla/{id}/refresh', [App\Http\Controllers\User\SallaController::class, 'refreshToken'])->name('salla.refresh');
+                Route::delete('/settings/salla/{id}', [App\Http\Controllers\User\SallaController::class, 'disconnect'])->name('salla.disconnect');
                 Route::get('/salla-auth', [App\Http\Controllers\Salla\SallaAuthController::class, 'storeAuth']);
                 Route::get('/salla/public/auth/callback', [App\Http\Controllers\Salla\SallaAuthController::class, 'callback']);
 

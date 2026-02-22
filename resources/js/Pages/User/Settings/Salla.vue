@@ -112,10 +112,11 @@
                                     </div>
                                 </div>
 
-                                <div class="flex gap-2">
-                                    <button v-if="isExpired(store.expires_at)" @click="refreshToken(store.id)"
+                                <div class="flex flex-wrap gap-2">
+                                    <button @click="refreshToken(store.id)"
                                         :disabled="refreshing[store.id]"
-                                        class="inline-flex items-center gap-2 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white text-sm rounded-lg transition-colors disabled:opacity-50">
+                                        class="inline-flex items-center gap-2 px-4 py-2 text-white text-sm rounded-lg transition-colors disabled:opacity-50"
+                                        :class="isExpired(store.expires_at) ? 'bg-blue-600 hover:bg-blue-700' : 'bg-green-600 hover:bg-green-700'">
                                         <svg v-if="refreshing[store.id]" class="animate-spin h-4 w-4"
                                             xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
