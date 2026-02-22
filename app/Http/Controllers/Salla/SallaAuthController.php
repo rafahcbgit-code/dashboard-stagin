@@ -12,12 +12,12 @@ use Illuminate\Support\Str;
 
 class SallaAuthController extends Controller
 {
-        public function storeAuth()
+    public function storeAuth()
     {
         $data = [
             'client_id'     => config('salla.client_id'),
             'client_secret' => config('salla.client_secret'),
-            'response_type'=> 'code',
+            'response_type' => 'code',
             'scope'        => 'offline_access',
             'redirect_url' => config('salla.callback_url'),
             'state'        => rand(1111111110, 9999999999)
@@ -29,21 +29,16 @@ class SallaAuthController extends Controller
     }
 
 
-public function callback(Request $request)
+    public function callback(Request $request)
     {
-        $requestId = (string) Str::uuid();
-
+        $organizationId = (int) $request->session()->get('current_organization');
         if ($request->filled('error')) {
             Log::warning('Salla OAuth callback: authorization error returned', [
-                'request_id' => $requestId,
                 'error' => (string) $request->input('error'),
                 'error_description' => (string) $request->input('error_description'),
             ]);
 
-            return response()->json([
-                'success' => false,
-                'message' => 'Authorization failed.',
-            ], 400);
+            return redirect('/settings/salla')->with('error', __('Authorization was denied or cancelled.'));
         }
 
         $code = (string) $request->input('code', '');
@@ -51,65 +46,39 @@ public function callback(Request $request)
         $scopeParam = $request->input('scope');
 
         Log::info('Salla OAuth callback: received', [
-            'request_id' => $requestId,
-            'ip' => $request->ip(),
             'has_code' => $request->filled('code'),
-            'code_hint' => $this->maskValue($code),
             'has_state' => $request->filled('state'),
-            'state_hint' => $this->maskValue($state),
             'scope' => is_string($scopeParam) ? Str::limit($scopeParam, 200) : (is_array($scopeParam) ? $scopeParam : null),
         ]);
 
         if ($code === '') {
-            Log::warning('Salla OAuth callback: missing code', [
-                'request_id' => $requestId,
-            ]);
-
-            return response()->json([
-                'success' => false,
-                'message' => 'Missing authorization code.',
-            ], 400);
+            return redirect('/settings/salla')->with('error', __('Missing authorization code.'));
         }
 
         // ملاحظة: `state` يتم إنشاؤه قبل إعادة التوجيه إلى سلة وتخزينه في session تحت المفتاح `salla_oauth_state`.
         // التحقق منه هنا يمنع هجمات CSRF وحقن كود التفويض (Authorization Code Injection).
-        
-        if ($state === '') {
-            Log::warning('Salla OAuth callback: invalid state', [
-                'request_id' => $requestId,
-                'state_hint' => $this->maskValue($state),
-                'expected_state_hint' => $this->maskValue($expectedState),
-                'session_has_state' => $expectedState !== '',
-            ]);
 
-            return response()->json([
-                'success' => false,
-                'message' => 'Invalid state.',
-            ], 419);
+        if ($state === '') {
+            return redirect('/settings/salla')->with('error', __('Invalid or expired session. Please try again.'));
         }
 
         $scopes = $this->normalizeScopes($scopeParam);
 
-        $clientId = config('salla.client_id') ?: config('salla.client_id');
-        $clientSecret = config('salla.client_secret') ?: config('salla.client_secret');
-        $redirectUri = config('salla.redirect') ?: config('salla.callback_url');
+        $clientId = config('salla.client_id');
+        $clientSecret = config('salla.client_secret');
+        $redirectUri = config('salla.redirect');
 
         if (empty($clientId) || empty($clientSecret) || empty($redirectUri)) {
             Log::critical('Salla OAuth callback: missing Salla config', [
-                'request_id' => $requestId,
                 'has_client_id' => ! empty($clientId),
                 'has_client_secret' => ! empty($clientSecret),
                 'has_redirect' => ! empty($redirectUri),
             ]);
 
-            return response()->json([
-                'success' => false,
-                'message' => 'Salla OAuth configuration is missing.',
-            ], 500);
+            return redirect('/settings/salla')->with('error', __('Salla integration is not configured properly.'));
         }
 
         Log::info('Salla OAuth: exchanging code for token', [
-            'request_id' => $requestId,
             'token_url' => 'https://accounts.salla.sa/oauth2/token',
             'client_id_hint' => $this->maskValue((string) $clientId),
             'redirect_uri' => (string) $redirectUri,
@@ -130,28 +99,20 @@ public function callback(Request $request)
                 ]);
         } catch (\Throwable $e) {
             Log::error('Salla OAuth: token request exception', [
-                'request_id' => $requestId,
                 'exception' => get_class($e),
                 'message' => $e->getMessage(),
             ]);
 
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to communicate with Salla token endpoint.',
-            ], 502);
+            return redirect('/settings/salla')->with('error', __('Failed to connect to Salla. Please try again.'));
         }
 
         if (! $tokenResponse->successful()) {
             Log::error('Salla OAuth: token request failed', [
-                'request_id' => $requestId,
                 'status' => $tokenResponse->status(),
                 'body' => $this->safeBody($tokenResponse),
             ]);
 
-            return response()->json([
-                'success' => false,
-                'message' => 'Token exchange failed.',
-            ], 502);
+            return redirect('/settings/salla')->with('error', __('Failed to get access token from Salla.'));
         }
 
         $tokenJson = $tokenResponse->json() ?? [];
@@ -161,35 +122,12 @@ public function callback(Request $request)
         $expiresIn = data_get($tokenJson, 'expires_in') ?? data_get($tokenJson, 'data.expires_in');
 
         if (! is_string($accessToken) || $accessToken === '' || ! is_string($refreshToken) || $refreshToken === '' || ! is_numeric($expiresIn)) {
-            Log::error('Salla OAuth: invalid token response structure', [
-                'request_id' => $requestId,
-                'access_token_present' => is_string($accessToken) && $accessToken !== '',
-                'refresh_token_present' => is_string($refreshToken) && $refreshToken !== '',
-                'expires_in' => $expiresIn,
-                'body' => $this->safeBody($tokenResponse),
-            ]);
 
-            return response()->json([
-                'success' => false,
-                'message' => 'Invalid token response from Salla.',
-            ], 502);
+            return redirect('/settings/salla')->with('error', __('Invalid response from Salla.'));
         }
 
         $expiresIn = (int) $expiresIn;
         $expiresAt = now()->addSeconds(max($expiresIn, 0));
-
-        Log::info('Salla OAuth: token received', [
-            'request_id' => $requestId,
-            'access_token_hint' => $this->maskValue($accessToken),
-            'refresh_token_hint' => $this->maskValue($refreshToken),
-            'expires_in' => $expiresIn,
-            'expires_at' => $expiresAt->toIso8601String(),
-        ]);
-
-        Log::info('Salla OAuth: fetching store info', [
-            'request_id' => $requestId,
-            'store_info_url' => 'https://api.salla.dev/admin/v2/store/info',
-        ]);
 
         try {
             $storeResponse = Http::acceptJson()
@@ -200,53 +138,40 @@ public function callback(Request $request)
                 ->get('https://api.salla.dev/admin/v2/store/info');
         } catch (\Throwable $e) {
             Log::error('Salla OAuth: store info request exception', [
-                'request_id' => $requestId,
                 'exception' => get_class($e),
                 'message' => $e->getMessage(),
             ]);
 
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to communicate with Salla store info endpoint.',
-            ], 502);
+            return redirect('/settings/salla')->with('error', __('Failed to fetch store information from Salla.'));
         }
 
         if (! $storeResponse->successful()) {
             Log::error('Salla OAuth: store info request failed', [
-                'request_id' => $requestId,
                 'status' => $storeResponse->status(),
                 'body' => $this->safeBody($storeResponse),
             ]);
 
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to fetch store info from Salla.',
-            ], 502);
+            return redirect('/settings/salla')->with('error', __('Failed to fetch store information from Salla.'));
         }
 
         $storeJson = $storeResponse->json() ?? [];
 
-        $merchantId = data_get($storeJson, 'id');
+        $merchantId = data_get($storeJson, 'data.id');
 
-        $merchantName = data_get($storeJson, 'name');
+        $merchantName = data_get($storeJson, 'data.name');
 
         $merchantId = is_scalar($merchantId) ? (string) $merchantId : '';
         $merchantName = is_scalar($merchantName) ? (string) $merchantName : null;
 
         if ($merchantId === '') {
             Log::error('Salla OAuth: merchant_id missing in store info response', [
-                'request_id' => $requestId,
                 'body' => $this->safeBody($storeResponse),
             ]);
 
-            return response()->json([
-                'success' => false,
-                'message' => 'Invalid store info response from Salla.',
-            ], 502);
+            return redirect('/settings/salla')->with('error', __('Invalid store information received from Salla.'));
         }
 
         Log::info('Salla OAuth: store info received', [
-            'request_id' => $requestId,
             'merchant_id' => $merchantId,
             'merchant_name' => $merchantName,
             'scopes' => $scopes,
@@ -254,7 +179,10 @@ public function callback(Request $request)
 
         try {
             SallaStore::updateOrCreate(
-                ['merchant_id' => $merchantId],
+                [
+                    'merchant_id' => $merchantId,
+                    'organization_id' => $organizationId
+                ],
                 [
                     'merchant_name' => $merchantName,
                     'access_token' => $accessToken,
@@ -265,27 +193,19 @@ public function callback(Request $request)
             );
         } catch (\Throwable $e) {
             Log::error('Salla OAuth: failed to persist store credentials', [
-                'request_id' => $requestId,
                 'merchant_id' => $merchantId,
                 'exception' => get_class($e),
                 'message' => $e->getMessage(),
             ]);
 
-            return response()->json([
-                'success' => false,
-                'message' => 'Failed to save Salla store credentials.',
-            ], 500);
+            return redirect('/settings/salla')->with('error', __('Failed to save store credentials.'));
         }
 
         Log::info('Salla OAuth: completed successfully', [
-            'request_id' => $requestId,
             'merchant_id' => $merchantId,
         ]);
 
-        return response()->json([
-            'success' => true,
-            'merchant_id' => $merchantId,
-        ]);
+        return redirect('/settings/salla')->with('success', __('Successfully connected to Salla store!'));
     }
 
     private function normalizeScopes(mixed $scope): array
