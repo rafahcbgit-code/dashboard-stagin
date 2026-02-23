@@ -28,9 +28,16 @@ class SallaWebhookController extends Controller
             return Response::json(['status' => 'ignored'], 200);
         }
 
-            Log::info('payload recieved', [
-                'payload' => $payload
-            ]);
+        // Some Salla integrations wrap the actual webhook body inside a `payload` key:
+        // { "payload": { "event": "...", "merchant": "...", "data": {...} } }
+        // Normalize so the stored delivery payload is consistent across events.
+        if (isset($payload['payload']) && is_array($payload['payload'])) {
+            $payload = $payload['payload'];
+        }
+
+        Log::info('payload recieved', [
+            $payload,
+        ]);
 
         $event = $this->extractEvent($payload);
         $merchantId = $this->extractMerchantId($payload);
@@ -95,15 +102,27 @@ class SallaWebhookController extends Controller
 
     private function extractEvent(array $payload): ?string
     {
-        $event = data_get($payload, 'event');
+        $event = data_get($payload, 'event') ?? data_get($payload, 'payload.event');
 
-        return is_scalar($event) ? (string) $event : null;
+        if (!is_scalar($event)) {
+            return null;
+        }
+
+        $event = trim((string) $event);
+
+        return $event !== '' ? $event : null;
     }
 
     private function extractMerchantId(array $payload): ?string
     {
-        $merchantId = data_get($payload, 'merchant');
+        $merchantId = data_get($payload, 'merchant') ?? data_get($payload, 'payload.merchant');
 
-        return is_scalar($merchantId) ? (string) $merchantId : null;
+        if (!is_scalar($merchantId)) {
+            return null;
+        }
+
+        $merchantId = trim((string) $merchantId);
+
+        return $merchantId !== '' ? $merchantId : null;
     }
 }

@@ -2,7 +2,6 @@
 
 namespace App\Services\Salla\Webhooks;
 
-use App\Models\SallaWebhookEventMapping;
 use App\Models\Template;
 use App\Services\PhoneService;
 use App\Services\Salla\Webhooks\Exceptions\SallaWebhookNonRetryableException;
@@ -17,7 +16,7 @@ class TemplateParameterBuilder
     /**
      * Build ChatService-compatible header/body/buttons parameter metadata.
      *
-     * @param  iterable<int, SallaWebhookEventMapping>  $mappings
+     * @param  iterable<int, mixed>  $mappings  Eloquent mapping models (event mappings or status-rule mappings).
      * @return array{0: array|null, 1: array, 2: array}
      */
     public function build(Template $template, iterable $mappings, array $payload): array
@@ -215,8 +214,16 @@ class TemplateParameterBuilder
     }
 
     /**
-     * @param  iterable<int, SallaWebhookEventMapping>  $mappings
-     * @return array<string, SallaWebhookEventMapping>
+     * Index mappings by `template_variable`.
+     *
+     * Supports different mapping models as long as they expose:
+     * - template_variable
+     * - payload_path
+     * - transform (nullable)
+     * - default_value (nullable)
+     *
+     * @param  iterable<int, mixed>  $mappings
+     * @return array<string, mixed>
      */
     private function indexMappings(iterable $mappings): array
     {
@@ -226,23 +233,28 @@ class TemplateParameterBuilder
 
         $indexed = [];
         foreach ($mappings as $mapping) {
-            if ($mapping instanceof SallaWebhookEventMapping) {
-                $indexed[$mapping->template_variable] = $mapping;
+            $key = data_get($mapping, 'template_variable');
+            if (is_string($key) && $key !== '') {
+                $indexed[$key] = $mapping;
             }
         }
 
         return $indexed;
     }
 
-    private function resolveMappedValue(SallaWebhookEventMapping $mapping, array $payload): string
+    private function resolveMappedValue(mixed $mapping, array $payload): string
     {
-        $value = data_get($payload, $mapping->payload_path);
+        $payloadPath = data_get($mapping, 'payload_path');
+        $payloadPath = is_string($payloadPath) ? $payloadPath : null;
+
+        $value = $payloadPath ? data_get($payload, $payloadPath) : null;
 
         if ($value === null || (is_string($value) && trim($value) === '')) {
-            $value = $mapping->default_value;
+            $value = data_get($mapping, 'default_value');
         }
 
-        $transform = $mapping->transform ? strtolower(trim((string) $mapping->transform)) : null;
+        $rawTransform = data_get($mapping, 'transform');
+        $transform = is_scalar($rawTransform) ? strtolower(trim((string) $rawTransform)) : null;
 
         return $this->applyTransform($value, $transform);
     }

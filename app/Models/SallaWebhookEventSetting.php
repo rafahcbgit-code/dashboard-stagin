@@ -29,5 +29,9 @@ class SallaWebhookEventSetting extends Model
     {
         return $this->hasMany(SallaWebhookEventMapping::class, 'salla_webhook_event_setting_id');
     }
-}
 
+    public function statusRules()
+    {
+        return $this->hasMany(SallaWebhookEventStatusRule::class, 'salla_webhook_event_setting_id');
+    }
+}

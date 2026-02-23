@@ -170,6 +170,8 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::get('/settings/salla/automations/template/{templateId}/variables', [App\Http\Controllers\User\SallaAutomationController::class, 'templateVariables'])->whereNumber('templateId');
                 Route::get('/settings/salla/automations/order-created/webhook-fields', [App\Http\Controllers\User\SallaAutomationController::class, 'webhookFields'])->name('salla.automations.order_created.fields');
                 Route::post('/settings/salla/automations/order-created', [App\Http\Controllers\User\SallaAutomationController::class, 'updateOrderCreated'])->name('salla.automations.order_created.update');
+                Route::get('/settings/salla/automations/order-status-updated/webhook-fields', [App\Http\Controllers\User\SallaAutomationController::class, 'webhookFieldsOrderStatusUpdated'])->name('salla.automations.order_status_updated.fields');
+                Route::post('/settings/salla/automations/order-status-updated', [App\Http\Controllers\User\SallaAutomationController::class, 'updateOrderStatusUpdated'])->name('salla.automations.order_status_updated.update');
                 Route::get('/salla-auth', [App\Http\Controllers\Salla\SallaAuthController::class, 'storeAuth']);
                 Route::get('/salla/public/auth/callback', [App\Http\Controllers\Salla\SallaAuthController::class, 'callback']);
 

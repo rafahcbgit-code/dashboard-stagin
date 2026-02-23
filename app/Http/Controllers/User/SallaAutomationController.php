@@ -5,8 +5,10 @@ namespace App\Http\Controllers\User;
 use App\Http\Controllers\Controller as BaseController;
 use App\Models\SallaWebhookDelivery;
 use App\Models\SallaWebhookEventSetting;
+use App\Models\SallaWebhookEventStatusRule;
 use App\Models\Template;
 use App\Services\Salla\Webhooks\Schemas\SallaOrderCreatedFieldSchema;
+use App\Services\Salla\Webhooks\Schemas\SallaOrderStatusUpdatedFieldSchema;
 use App\Services\Salla\Webhooks\WhatsAppTemplateVariableExtractor;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -15,6 +17,7 @@ class SallaAutomationController extends BaseController
 {
     public function index(
         SallaOrderCreatedFieldSchema $schema,
+        SallaOrderStatusUpdatedFieldSchema $statusUpdatedSchema,
         WhatsAppTemplateVariableExtractor $variableExtractor
     ) {
         $organizationId = (int) session()->get('current_organization');
@@ -50,7 +53,8 @@ class SallaAutomationController extends BaseController
 
         $webhookFields = collect($schema->fields())
             ->map(function (array $field) use ($lastDelivery) {
-                $field['sample'] = $lastDelivery ? data_get($lastDelivery->payload ?? [], $field['path']) : null;
+                $payload = $this->normalizeStoredPayload($lastDelivery?->payload ?? []);
+                $field['sample'] = $lastDelivery ? data_get($payload, $field['path']) : null;
                 return $field;
             })
             ->values()
@@ -63,6 +67,46 @@ class SallaAutomationController extends BaseController
             }
         }
 
+        $statusUpdatedSetting = SallaWebhookEventSetting::with(['statusRules.mappings'])
+            ->where('organization_id', $organizationId)
+            ->where('event', 'order.status.updated')
+            ->first();
+
+        $lastStatusUpdatedDelivery = SallaWebhookDelivery::where('organization_id', $organizationId)
+            ->where('event', 'order.status.updated')
+            ->latest('id')
+            ->first();
+
+        $statusUpdatedWebhookFields = collect($statusUpdatedSchema->fields())
+            ->map(function (array $field) use ($lastStatusUpdatedDelivery) {
+                $payload = $this->normalizeStoredPayload($lastStatusUpdatedDelivery?->payload ?? []);
+                $field['sample'] = $lastStatusUpdatedDelivery ? data_get($payload, $field['path']) : null;
+                return $field;
+            })
+            ->values()
+            ->all();
+
+        $statusRules = [];
+        if ($statusUpdatedSetting) {
+            foreach ($statusUpdatedSetting->statusRules as $rule) {
+                $ruleMappings = [];
+                foreach ($rule->mappings as $mapping) {
+                    $ruleMappings[$mapping->template_variable] = $mapping->payload_path;
+                }
+
+                $statusRules[] = [
+                    'id' => $rule->id,
+                    'status_slug' => $rule->status_slug,
+                    'status_name' => $rule->status_name,
+                    'enabled' => (bool) $rule->enabled,
+                    'template_id' => $rule->template_id,
+                    'mappings' => $ruleMappings,
+                ];
+            }
+        }
+
+        $statusOptions = $this->recentStatusOptions($organizationId);
+
         return Inertia::render('User/Settings/SallaAutomations', [
             'title' => __('Salla Automations'),
             'templates' => $templates,
@@ -74,6 +118,14 @@ class SallaAutomationController extends BaseController
             'templateVariables' => $templateVariables,
             'webhookFields' => $webhookFields,
             'mappings' => $mappings,
+
+            'statusSetting' => [
+                'enabled' => (bool) ($statusUpdatedSetting?->enabled ?? false),
+                'recipient_phone_payload_path' => $statusUpdatedSetting?->recipient_phone_payload_path ?? 'data.order.customer.mobile',
+            ],
+            'statusWebhookFields' => $statusUpdatedWebhookFields,
+            'statusRules' => $statusRules,
+            'statusOptions' => $statusOptions,
         ]);
     }
 
@@ -106,7 +158,34 @@ class SallaAutomationController extends BaseController
 
         $fields = collect($schema->fields())
             ->map(function (array $field) use ($lastDelivery) {
-                $field['sample'] = $lastDelivery ? data_get($lastDelivery->payload ?? [], $field['path']) : null;
+                $payload = $this->normalizeStoredPayload($lastDelivery?->payload ?? []);
+                $field['sample'] = $lastDelivery ? data_get($payload, $field['path']) : null;
+                return $field;
+            })
+            ->values()
+            ->all();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'fields' => $fields,
+            ],
+        ]);
+    }
+
+    public function webhookFieldsOrderStatusUpdated(SallaOrderStatusUpdatedFieldSchema $schema)
+    {
+        $organizationId = (int) session()->get('current_organization');
+
+        $lastDelivery = SallaWebhookDelivery::where('organization_id', $organizationId)
+            ->where('event', 'order.status.updated')
+            ->latest('id')
+            ->first();
+
+        $fields = collect($schema->fields())
+            ->map(function (array $field) use ($lastDelivery) {
+                $payload = $this->normalizeStoredPayload($lastDelivery?->payload ?? []);
+                $field['sample'] = $lastDelivery ? data_get($payload, $field['path']) : null;
                 return $field;
             })
             ->values()
@@ -194,5 +273,195 @@ class SallaAutomationController extends BaseController
         return response()->json([
             'success' => true,
         ]);
+    }
+
+    public function updateOrderStatusUpdated(Request $request, WhatsAppTemplateVariableExtractor $extractor)
+    {
+        $organizationId = (int) session()->get('current_organization');
+
+        $validated = $request->validate([
+            'enabled' => ['required', 'boolean'],
+            'recipient_phone_payload_path' => ['nullable', 'string', 'max:512'],
+            'rules' => ['array'],
+            'rules.*.id' => ['nullable', 'integer'],
+            'rules.*.status_slug' => ['required', 'string', 'max:191'],
+            'rules.*.status_name' => ['nullable', 'string', 'max:191'],
+            'rules.*.enabled' => ['required', 'boolean'],
+            'rules.*.template_id' => ['nullable', 'integer'],
+            'rules.*.mappings' => ['array'],
+            'rules.*.mappings.*.template_variable' => ['required', 'string', 'max:191'],
+            'rules.*.mappings.*.payload_path' => ['required', 'string', 'max:512'],
+            'rules.*.mappings.*.transform' => ['nullable', 'string', 'max:64'],
+            'rules.*.mappings.*.default_value' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $rules = $validated['rules'] ?? [];
+
+        // Ensure unique status slugs within the request payload.
+        $slugSet = [];
+        foreach ($rules as $rule) {
+            $slug = strtolower(trim((string) $rule['status_slug']));
+            if ($slug === '') {
+                return response()->json([
+                    'success' => false,
+                    'message' => __('Status slug is required.'),
+                ], 422);
+            }
+            if (isset($slugSet[$slug])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => __('Duplicate status slug: :slug', ['slug' => $slug]),
+                ], 422);
+            }
+            $slugSet[$slug] = true;
+        }
+
+        $setting = SallaWebhookEventSetting::updateOrCreate(
+            [
+                'organization_id' => $organizationId,
+                'event' => 'order.status.updated',
+            ],
+            [
+                'enabled' => (bool) $validated['enabled'],
+                'recipient_phone_payload_path' => $validated['recipient_phone_payload_path'] ?? null,
+                // Template is selected per-status for this event, so we keep this null.
+                'template_id' => null,
+            ]
+        );
+
+        $keepSlugs = [];
+
+        foreach ($rules as $ruleData) {
+            $statusSlug = strtolower(trim((string) $ruleData['status_slug']));
+            if ($statusSlug === '') {
+                return response()->json([
+                    'success' => false,
+                    'message' => __('Status slug is required.'),
+                ], 422);
+            }
+            $statusName = $ruleData['status_name'] ?? null;
+            $statusName = is_string($statusName) ? trim($statusName) : null;
+
+            $templateId = $ruleData['template_id'] ?? null;
+            $templateId = is_numeric($templateId) ? (int) $templateId : null;
+
+            $template = null;
+            if ($templateId) {
+                $template = Template::where('id', $templateId)
+                    ->where('organization_id', $organizationId)
+                    ->where('status', 'APPROVED')
+                    ->whereNull('deleted_at')
+                    ->firstOrFail();
+            }
+
+            $requiredKeys = [];
+            if ($template) {
+                $requiredKeys = array_values(array_unique(array_map(
+                    static fn (array $v) => $v['key'],
+                    $extractor->extract($template)
+                )));
+            }
+
+            $mappings = $ruleData['mappings'] ?? [];
+            $mappingKeySet = [];
+            foreach ($mappings as $mapping) {
+                $mappingKeySet[$mapping['template_variable']] = true;
+            }
+
+            foreach ($requiredKeys as $key) {
+                if (!isset($mappingKeySet[$key])) {
+                    return response()->json([
+                        'success' => false,
+                        'message' => "Missing mapping for {$key} (status: {$statusSlug})",
+                    ], 422);
+                }
+            }
+
+            $ruleModel = SallaWebhookEventStatusRule::updateOrCreate(
+                [
+                    'salla_webhook_event_setting_id' => $setting->id,
+                    'status_slug' => $statusSlug,
+                ],
+                [
+                    'status_name' => $statusName,
+                    'enabled' => (bool) ($ruleData['enabled'] ?? true),
+                    'template_id' => $templateId ?: null,
+                ]
+            );
+
+            $keepSlugs[] = $statusSlug;
+
+            $ruleModel->mappings()->delete();
+
+            foreach ($mappings as $mapping) {
+                $ruleModel->mappings()->create([
+                    'template_variable' => $mapping['template_variable'],
+                    'payload_path' => $mapping['payload_path'],
+                    'transform' => $mapping['transform'] ?? null,
+                    'default_value' => $mapping['default_value'] ?? null,
+                ]);
+            }
+        }
+
+        // Remove any rules not present in the current update payload.
+        $setting->statusRules()
+            ->when(!empty($keepSlugs), fn ($q) => $q->whereNotIn('status_slug', $keepSlugs), fn ($q) => $q)
+            ->delete();
+
+        return response()->json([
+            'success' => true,
+        ]);
+    }
+
+    private function normalizeStoredPayload(array $payload): array
+    {
+        // Backward compatibility: some old stored deliveries may still have the `payload` wrapper.
+        if (isset($payload['payload']) && is_array($payload['payload'])) {
+            return $payload['payload'];
+        }
+
+        return $payload;
+    }
+
+    private function recentStatusOptions(int $organizationId): array
+    {
+        $deliveries = SallaWebhookDelivery::where('organization_id', $organizationId)
+            ->where('event', 'order.status.updated')
+            ->latest('id')
+            ->limit(50)
+            ->get(['payload']);
+
+        $options = [];
+
+        foreach ($deliveries as $delivery) {
+            $payload = $this->normalizeStoredPayload($delivery->payload ?? []);
+
+            $slug = data_get($payload, 'data.customized.slug')
+                ?? data_get($payload, 'data.status.slug')
+                ?? data_get($payload, 'data.order.status.slug');
+
+            $name = data_get($payload, 'data.customized.name')
+                ?? data_get($payload, 'data.status.name')
+                ?? data_get($payload, 'data.status')
+                ?? data_get($payload, 'data.order.status.name');
+
+            if (!is_scalar($slug)) {
+                continue;
+            }
+
+            $slug = strtolower(trim((string) $slug));
+            if ($slug === '') {
+                continue;
+            }
+
+            if (!isset($options[$slug])) {
+                $options[$slug] = [
+                    'slug' => $slug,
+                    'name' => is_scalar($name) ? (string) $name : null,
+                ];
+            }
+        }
+
+        return array_values($options);
     }
 }
