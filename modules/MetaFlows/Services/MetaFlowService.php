@@ -105,8 +105,22 @@ class MetaFlowService
 
         $url = "{$this->baseUrl}/{$this->apiVersion}/{$flow->meta_flow_id}/assets";
 
+        Log::info('MetaFlows: uploading flow asset — request', [
+            'meta_flow_id' => $flow->meta_flow_id,
+            'url'          => $url,
+            'json_length'  => strlen($jsonContent),
+            'json_content' => $jsonContent,
+        ]);
+
         // Meta expects the Flow JSON as a multipart file upload
         $response = $this->makeMultipartRequest($url, $jsonContent, 'flow.json');
+
+        Log::info('MetaFlows: uploading flow asset — response', [
+            'meta_flow_id'      => $flow->meta_flow_id,
+            'success'           => $response->success,
+            'message'           => $response->message ?? null,
+            'data'              => json_decode(json_encode($response->data ?? null), true),
+        ]);
 
         if (!isset($response->success) || !$response->success) {
             $message = $response->message ?? 'Failed to update flow asset on Meta.';
@@ -178,8 +192,21 @@ class MetaFlowService
             return $flow;
         }
 
-        $url      = "{$this->baseUrl}/{$this->apiVersion}/{$flow->meta_flow_id}/publish";
+        $url = "{$this->baseUrl}/{$this->apiVersion}/{$flow->meta_flow_id}/publish";
+
+        Log::info('MetaFlows: publishing flow — request', [
+            'meta_flow_id' => $flow->meta_flow_id,
+            'url'          => $url,
+        ]);
+
         $response = $this->makeRequest('POST', $url);
+
+        Log::info('MetaFlows: publishing flow — response', [
+            'meta_flow_id' => $flow->meta_flow_id,
+            'success'      => $response->success,
+            'message'      => $response->message ?? null,
+            'data'         => json_decode(json_encode($response->data ?? null), true),
+        ]);
 
         if (!$response->success) {
             throw new \RuntimeException($response->message ?? 'Failed to publish flow on Meta.');
@@ -187,7 +214,7 @@ class MetaFlowService
 
         $flow->update(['status' => 'published']);
 
-        Log::info('MetaFlows: flow published', ['meta_flow_id' => $flow->meta_flow_id]);
+        Log::info('MetaFlows: flow published successfully', ['meta_flow_id' => $flow->meta_flow_id]);
 
         return $flow->fresh();
     }
@@ -267,8 +294,24 @@ class MetaFlowService
     public function deleteFlow(MetaFlow $flow): bool
     {
         if ($flow->meta_flow_id) {
-            $url      = "{$this->baseUrl}/{$this->apiVersion}/{$flow->meta_flow_id}";
+            $url = "{$this->baseUrl}/{$this->apiVersion}/{$flow->meta_flow_id}";
+
+            Log::info('MetaFlows: deleting flow — request', [
+                'local_id'     => $flow->id,
+                'meta_flow_id' => $flow->meta_flow_id,
+                'status'       => $flow->status,
+                'url'          => $url,
+            ]);
+
             $response = $this->makeRequest('DELETE', $url);
+
+            Log::info('MetaFlows: deleting flow — response', [
+                'local_id'     => $flow->id,
+                'meta_flow_id' => $flow->meta_flow_id,
+                'success'      => $response->success,
+                'message'      => $response->message ?? null,
+                'data'         => json_decode(json_encode($response->data ?? null), true),
+            ]);
 
             // Only proceed with local deletion if Meta confirmed the delete
             if (!$response->success) {
@@ -278,7 +321,7 @@ class MetaFlowService
 
         $flow->delete();
 
-        Log::info('MetaFlows: flow deleted', ['local_id' => $flow->id]);
+        Log::info('MetaFlows: flow deleted locally', ['local_id' => $flow->id]);
 
         return true;
     }

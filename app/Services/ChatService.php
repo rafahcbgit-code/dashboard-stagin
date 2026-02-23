@@ -619,10 +619,12 @@ class ChatService
         }
 
         $options = [
-            'body'    => $request->body ?? 'Please complete the form.',
-            'cta'     => $request->cta  ?? 'Open',
-            'header'  => $flow->name,
-            'screen'  => 'INTRO',
+            'body'   => $request->body ?? 'Please complete the form.',
+            'cta'    => $request->cta  ?? 'Open',
+            'header' => $flow->name,
+            // 'screen' is intentionally omitted — MetaFlowService::resolveFirstScreenId()
+            // reads the correct first screen ID from the flow's stored asset_content JSON.
+            // Hardcoding a screen name here would break any flow whose first screen is not 'INTRO'.
         ];
 
         $sendResult = \Modules\MetaFlows\Services\MetaFlowService::fromOrganization($this->organizationId)

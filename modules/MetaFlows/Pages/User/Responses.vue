@@ -1,8 +1,10 @@
 <template>
     <AppLayout>
 
+        <div class="bg-white md:bg-inherit pt-0 px-4 md:pt-8 md:p-8 rounded-[5px] text-[#000] overflow-y-scroll">
+
         <!-- ── Page header ─────────────────────────────────────────────────── -->
-        <div class="flex items-center justify-between mb-5 flex-wrap gap-3">
+        <div class="flex items-center justify-between mb-6 mt-8 md:mt-0 flex-wrap gap-3">
             <div class="flex items-center gap-3">
                 <a :href="'/automation/meta-flows/' + flow.uuid"
                    class="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:text-slate-700 hover:border-slate-300 transition-colors">
@@ -167,6 +169,7 @@
             </div>
         </div>
 
+        </div><!-- end page wrapper -->
     </AppLayout>
 </template>
 

@@ -1,48 +1,38 @@
 <template>
     <AppLayout>
-        <div class="md:h-[90vh]">
-            <div class="flex justify-center items-center">
-                <div class="md:w-[60em]">
-                    <div class="bg-white border border-slate-200 rounded-lg py-2 text-sm pb-4 px-4 mb-20">
-                        <div class="w-full py-2 mb-2 mt-2">
-                            <div class="flex w-full mb-4">
-                                <div class="text-md">
-                                    <h4 class="text-[16px]">{{ $t('Meta Flows') }}</h4>
-                                    <span class="flex items-center mt-1 text-slate-500">
-                                        {{ $t('Create and manage WhatsApp Flows powered by Meta') }}
-                                    </span>
-                                </div>
-                                <div class="ml-auto flex items-center gap-2">
-                                    <button
-                                        @click="handlePull"
-                                        :disabled="pulling"
-                                        class="rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-colors"
-                                    >
-                                        {{ pulling ? $t('Pulling...') : $t('Pull from Meta') }}
-                                    </button>
-                                    <button
-                                        @click="isOpenFormModal = true"
-                                        class="rounded-md bg-primary px-3 py-2 text-sm text-white shadow-sm hover:opacity-90 transition-opacity"
-                                    >
-                                        {{ $t('New Flow') }}
-                                    </button>
-                                </div>
-                            </div>
+        <div class="bg-white md:bg-inherit pt-0 px-4 md:pt-8 md:p-8 rounded-[5px] text-[#000] overflow-y-scroll">
 
-                            <p v-if="pullMessage" :class="['text-xs mb-3', pullIsError ? 'text-red-600' : 'text-green-600']">
-                                {{ pullMessage }}
-                            </p>
-
-                            <div class="w-5/5">
-                                <MetaFlowsTable :rows="props.rows" :filters="props.filters" />
-                                <div class="px-4 pb-4">
-                                    <Pagination class="mt-3" :pagination="props.rows.meta" />
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+            <div class="flex justify-between mt-8 md:mt-0">
+                <div>
+                    <h2 class="text-xl mb-1">{{ $t('Meta Flows') }}</h2>
+                    <p class="mb-6 flex items-center text-sm leading-6 text-gray-600">
+                        {{ $t('Create and manage WhatsApp Flows powered by Meta') }}
+                    </p>
+                </div>
+                <div class="space-s-2 flex items-center">
+                    <button
+                        @click="handlePull"
+                        :disabled="pulling"
+                        class="rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-colors"
+                    >
+                        {{ pulling ? $t('Pulling...') : $t('Pull from Meta') }}
+                    </button>
+                    <button
+                        @click="isOpenFormModal = true"
+                        class="rounded-md bg-primary px-3 py-2 text-sm text-white shadow-sm hover:opacity-90 transition-opacity ms-2"
+                    >
+                        {{ $t('New Flow') }}
+                    </button>
                 </div>
             </div>
+
+            <p v-if="pullMessage" :class="['text-xs mb-3', pullIsError ? 'text-red-600' : 'text-green-600']">
+                {{ pullMessage }}
+            </p>
+
+            <MetaFlowsTable :rows="props.rows" :filters="props.filters" />
+            <Pagination class="mt-3" :pagination="props.rows.meta" />
+
         </div>
 
         <!-- ─── New Flow Dialog (wide, 2-panel) ─── -->

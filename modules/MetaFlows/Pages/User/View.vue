@@ -1,8 +1,10 @@
 <template>
     <AppLayout>
 
+        <div class="bg-white md:bg-inherit pt-0 px-4 md:pt-8 md:p-8 rounded-[5px] text-[#000] overflow-y-scroll">
+
         <!-- ── Page header ─────────────────────────────────────────────────── -->
-        <div class="flex items-center justify-between mb-5 flex-wrap gap-3">
+        <div class="flex items-center justify-between mb-6 mt-8 md:mt-0 flex-wrap gap-3">
             <!-- Left: breadcrumb + flow name -->
             <div class="flex items-center gap-3">
                 <a href="/automation/meta-flows"
@@ -189,6 +191,8 @@
             </div>
 
         </div>
+
+        </div><!-- end page wrapper -->
     </AppLayout>
 </template>
 
@@ -239,6 +243,42 @@
     };
 
     // ── Parse assetContent → preview-compatible screens ───────────────────────
+    // WhatsApp Flow JSON wraps inputs/choices/footer inside a Form element.
+    // mapPreviewComp handles individual components; flattenForPreview unwraps Form.
+    const mapPreviewComp = (comp) => {
+        switch (comp.type) {
+            case 'TextHeading':
+            case 'TextSubheading':
+            case 'TextBody':
+                return { type: comp.type, text: comp.text || '' };
+            case 'TextInput':
+                return { type: 'TextInput', label: comp.label || '', name: comp.name || '', required: !!comp.required, inputType: comp['input-type'] || 'text' };
+            case 'TextArea':
+                return { type: 'TextArea', label: comp.label || '', name: comp.name || '', required: !!comp.required };
+            case 'Dropdown':
+            case 'CheckboxGroup':
+            case 'RadioButtonsGroup':
+                return { type: comp.type, label: comp.label || '', name: comp.name || '', required: !!comp.required, options: (comp['data-source'] || []).map(o => ({ id: o.id || '', title: o.title || '' })) };
+            case 'Footer': {
+                const ca = comp['on-click-action'] ?? {};
+                return { type: 'Footer', label: comp.label || 'Continue', action: ca.name || 'complete', nextScreen: ca.next?.screen || ca.next?.name || '' };
+            }
+            default: return null;
+        }
+    };
+
+    const flattenForPreview = (layoutChildren) => {
+        const result = [];
+        for (const child of (layoutChildren || [])) {
+            if (child.type === 'Form') {
+                for (const fc of (child.children || [])) result.push(mapPreviewComp(fc));
+            } else {
+                result.push(mapPreviewComp(child));
+            }
+        }
+        return result.filter(Boolean);
+    };
+
     const parseScreensForPreview = (jsonStr) => {
         try {
             const json = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
@@ -246,27 +286,7 @@
                 id:         screen.id || 'SCREEN',
                 title:      screen.title || '',
                 terminal:   !!screen.terminal,
-                components: (screen.layout?.children || []).map(comp => {
-                    switch (comp.type) {
-                        case 'TextHeading':
-                        case 'TextSubheading':
-                        case 'TextBody':
-                            return { type: comp.type, text: comp.text || '' };
-                        case 'TextInput':
-                            return { type: 'TextInput', label: comp.label || '', name: comp.name || '', required: !!comp.required, inputType: comp['input-type'] || 'text' };
-                        case 'TextArea':
-                            return { type: 'TextArea', label: comp.label || '', name: comp.name || '', required: !!comp.required };
-                        case 'Dropdown':
-                        case 'CheckboxGroup':
-                        case 'RadioButtonsGroup':
-                            return { type: comp.type, label: comp.label || '', name: comp.name || '', required: !!comp.required, options: (comp['data-source'] || []).map(o => ({ id: o.id || '', title: o.title || '' })) };
-                        case 'Footer': {
-                            const ca = comp['on-click-action'] ?? {};
-                            return { type: 'Footer', label: comp.label || 'Continue', action: ca.name || 'complete', nextScreen: ca.next?.name || '' };
-                        }
-                        default: return null;
-                    }
-                }).filter(Boolean),
+                components: flattenForPreview(screen.layout?.children),
             }));
         } catch {
             return [];

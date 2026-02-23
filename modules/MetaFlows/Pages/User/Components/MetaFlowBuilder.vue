@@ -257,22 +257,38 @@
                             <div>
                                 <label class="text-xs text-slate-400 block mb-1">{{ $t('Action') }}</label>
                                 <select
-                                    v-model="comp.action"
+                                    :value="comp.action"
+                                    @change="onFooterActionChange(comp, $event.target.value)"
                                     class="w-full text-sm border border-slate-200 rounded-md px-2.5 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-primary"
                                 >
                                     <option value="complete">{{ $t('Submit / complete') }}</option>
-                                    <option value="navigate">{{ $t('Navigate to screen') }}</option>
+                                    <option value="navigate">{{ $t('Go to next screen') }}</option>
                                 </select>
+                                <!-- Visual reminder of what terminal means -->
+                                <p class="text-[10px] mt-1" :class="comp.action === 'complete' ? 'text-green-600' : 'text-slate-400'">
+                                    {{ comp.action === 'complete' ? $t('Ends the flow (terminal)') : $t('Continues to next screen') }}
+                                </p>
                             </div>
+                            <!-- Target screen dropdown — lists all screens except the current one -->
                             <div v-if="comp.action === 'navigate'">
-                                <label class="text-xs text-slate-400 block mb-1">{{ $t('Target screen ID') }}</label>
-                                <input
+                                <label class="text-xs text-slate-400 block mb-1">{{ $t('Next screen') }}</label>
+                                <select
                                     v-model="comp.nextScreen"
-                                    type="text"
-                                    placeholder="SCREEN_2"
-                                    class="w-full text-sm border border-slate-200 rounded-md px-2.5 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-primary"
-                                    @input="comp.nextScreen = comp.nextScreen.toUpperCase().replace(/\s+/g, '_')"
-                                />
+                                    class="w-full text-sm border border-slate-200 rounded-md px-2.5 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-primary"
+                                >
+                                    <option value="">{{ $t('— select screen —') }}</option>
+                                    <option
+                                        v-for="sc in screens.filter((_, i) => i !== activeScreenIndex)"
+                                        :key="sc.id"
+                                        :value="sc.id"
+                                    >
+                                        {{ sc.id }}{{ sc.title ? ' — ' + sc.title : '' }}
+                                    </option>
+                                </select>
+                                <!-- Warn if no other screens exist yet -->
+                                <p v-if="screens.length < 2" class="text-[10px] text-amber-500 mt-1">
+                                    {{ $t('Add another screen first') }}
+                                </p>
                             </div>
                         </div>
 
@@ -477,23 +493,47 @@
                 };
             case 'Footer': {
                 const ca = comp['on-click-action'] ?? {};
-                return { type: 'Footer', label: comp.label || 'Continue', action: ca.name || 'complete', nextScreen: ca.next?.name || '' };
+                // Meta uses { screen: 'ID' } — also handle legacy { name: 'ID' } from older saves
+                return { type: 'Footer', label: comp.label || 'Continue', action: ca.name || 'complete', nextScreen: ca.next?.screen || ca.next?.name || '' };
             }
             default:
                 return { type: comp.type, _raw: comp };
         }
     };
 
+    // WhatsApp Flow JSON nests inputs/choices/footer inside a Form element.
+    // Flatten Form.children into the screen's component list so the builder
+    // can work with a single flat array, then re-wrap on emit.
+    const flattenLayoutChildren = (layoutChildren) => {
+        const result = [];
+        for (const child of (layoutChildren || [])) {
+            if (child.type === 'Form') {
+                for (const formChild of (child.children || [])) {
+                    result.push(parseComponent(formChild));
+                }
+            } else {
+                result.push(parseComponent(child));
+            }
+        }
+        return result;
+    };
+
     const parseFromJson = (jsonStr) => {
         if (!jsonStr) return [];
         try {
             const json = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
-            return (json.screens || []).map(screen => ({
-                id:         screen.id || '',
-                title:      screen.title || '',
-                terminal:   !!screen.terminal,
-                components: (screen.layout?.children || []).map(parseComponent),
-            }));
+            return (json.screens || []).map(screen => {
+                const components = flattenLayoutChildren(screen.layout?.children);
+                // Auto-correct terminal flag: if a Footer with action=complete exists,
+                // the screen must be terminal regardless of what the JSON says.
+                const hasCompleteFooter = components.some(c => c.type === 'Footer' && c.action === 'complete');
+                return {
+                    id:         screen.id || '',
+                    title:      screen.title || '',
+                    terminal:   hasCompleteFooter ? true : !!screen.terminal,
+                    components,
+                };
+            });
         } catch {
             return [];
         }
@@ -515,7 +555,7 @@
                 return { type: comp.type, label: comp.label, name: comp.name, required: comp.required, 'data-source': comp.options };
             case 'Footer': {
                 const action = comp.action === 'navigate'
-                    ? { name: 'navigate', next: { type: 'screen', name: comp.nextScreen } }
+                    ? { name: 'navigate', next: { screen: comp.nextScreen }, payload: {} }
                     : { name: 'complete', payload: {} };
                 return { type: 'Footer', label: comp.label, 'on-click-action': action };
             }
@@ -524,14 +564,36 @@
         }
     };
 
+    // These component types must be children of a Form element in the Flow JSON spec.
+    const FORM_TYPES = new Set(['TextInput', 'TextArea', 'Dropdown', 'CheckboxGroup', 'RadioButtonsGroup', 'Footer']);
+
     const toFlowJson = (screensArr) => JSON.stringify({
         version: '6.3',
-        screens: screensArr.map(screen => ({
-            id:       screen.id    || 'SCREEN',
-            title:    screen.title || '',
-            terminal: screen.terminal || false,
-            layout:   { type: 'SingleColumnLayout', children: screen.components.map(compToJson).filter(Boolean) },
-        })),
+        screens: screensArr.map(screen => {
+            const jsonComps = screen.components.map(compToJson).filter(Boolean);
+
+            // Split at the first form-capable component:
+            //   • text before it → direct layout children
+            //   • everything from that point → wrapped in a Form element
+            const firstFormIdx = jsonComps.findIndex(c => FORM_TYPES.has(c.type));
+
+            let layoutChildren;
+            if (firstFormIdx === -1) {
+                layoutChildren = jsonComps; // text-only screen
+            } else {
+                const preFormText  = jsonComps.slice(0, firstFormIdx);
+                const formChildren = jsonComps.slice(firstFormIdx);
+                const formName     = (screen.id || 'screen').toLowerCase().replace(/[^a-z0-9]/g, '_') + '_form';
+                layoutChildren = [...preFormText, { type: 'Form', name: formName, children: formChildren }];
+            }
+
+            return {
+                id:       screen.id    || 'SCREEN',
+                title:    screen.title || '',
+                terminal: screen.terminal || false,
+                layout:   { type: 'SingleColumnLayout', children: layoutChildren },
+            };
+        }),
     }, null, 2);
 
     const defaultForType = (type) => {
@@ -578,6 +640,16 @@
 
     const addComponent    = (si, type) => screens.value[si].components.push(defaultForType(type));
     const removeComponent = (si, ci)   => screens.value[si].components.splice(ci, 1);
+
+    // When the Footer action changes, sync the screen's terminal flag automatically.
+    // complete  → terminal: true  (this screen ends the flow)
+    // navigate  → terminal: false (this screen leads to another)
+    const onFooterActionChange = (comp, newAction) => {
+        comp.action = newAction;
+        if (activeScreen.value) {
+            activeScreen.value.terminal = (newAction === 'complete');
+        }
+    };
 
     const moveComponent = (si, ci, dir) => {
         const arr = screens.value[si].components;
