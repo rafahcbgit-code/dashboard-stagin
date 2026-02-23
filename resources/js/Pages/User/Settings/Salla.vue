@@ -25,6 +25,18 @@
                 {{ $page.props.flash.error }}
             </div>
 
+            <!-- Automations -->
+            <div class="bg-white border border-slate-200 rounded-lg p-5 mb-6 flex items-start justify-between gap-4">
+                <div>
+                    <h3 class="text-lg font-medium text-gray-900 mb-1">{{ $t('Automations') }}</h3>
+                    <p class="text-sm text-gray-600">{{ $t('Send automatic messages from Salla webhook events like New Order (order.created).') }}</p>
+                </div>
+                <a href="/settings/salla/automations"
+                    class="inline-flex items-center gap-2 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-sm rounded-lg transition-colors">
+                    {{ $t('Configure') }}
+                </a>
+            </div>
+
             <!-- Connect Button -->
             <div v-if="stores.length === 0" class="bg-white border border-slate-200 rounded-lg p-6 text-center mb-6">
                 <div class="mb-4">

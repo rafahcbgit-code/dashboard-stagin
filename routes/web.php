@@ -16,7 +16,8 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::post('/webhook/{organization}', [App\Http\Controllers\WebhookController::class, 'handlePostRequest']);
+Route::post('/webhook/{organization}', [App\Http\Controllers\WebhookController::class, 'handlePostRequest'])
+    ->whereNumber('organization');
 Route::get('/widget/{organization}', [App\Http\Controllers\WebWidgetController::class, 'showPublicConfig']);
 Route::get('/widget.js', [App\Http\Controllers\WebWidgetController::class, 'script']);
 
@@ -70,6 +71,9 @@ Route::get('/logout', [App\Http\Controllers\AuthController::class, 'logout'])->n
 Route::match(['get', 'post'], '/webhook/whatsapp/{identifier?}', [App\Http\Controllers\WebhookController::class, 'handle']);
 Route::match(['get', 'post'], '/webhook/waba', [App\Http\Controllers\WebhookController::class, 'whatsappWebhook']);
 Route::match(['get', 'post'], '/webhook/waba/new', [App\Http\Controllers\WebhookController::class, 'whatsappWebhook']);
+
+// Salla webhooks (must be defined before /webhook/{processor})
+Route::post('/webhook/salla', [App\Http\Controllers\Salla\SallaWebhookController::class, 'handle']);
 
 Route::match(['get', 'post'], '/webhook/{processor}', [App\Http\Controllers\WebhookController::class, 'processWebhook']);
 Route::match(['get', 'post'], '/payment/{processor}', [App\Http\Controllers\PaymentController::class, 'processPayment']);
@@ -162,6 +166,10 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::get('/settings/salla', [App\Http\Controllers\User\SallaController::class, 'index'])->name('salla.index');
                 Route::post('/settings/salla/{id}/refresh', [App\Http\Controllers\User\SallaController::class, 'refreshToken'])->name('salla.refresh');
                 Route::delete('/settings/salla/{id}', [App\Http\Controllers\User\SallaController::class, 'disconnect'])->name('salla.disconnect');
+                Route::get('/settings/salla/automations', [App\Http\Controllers\User\SallaAutomationController::class, 'index'])->name('salla.automations.index');
+                Route::get('/settings/salla/automations/template/{templateId}/variables', [App\Http\Controllers\User\SallaAutomationController::class, 'templateVariables'])->whereNumber('templateId');
+                Route::get('/settings/salla/automations/order-created/webhook-fields', [App\Http\Controllers\User\SallaAutomationController::class, 'webhookFields'])->name('salla.automations.order_created.fields');
+                Route::post('/settings/salla/automations/order-created', [App\Http\Controllers\User\SallaAutomationController::class, 'updateOrderCreated'])->name('salla.automations.order_created.update');
                 Route::get('/salla-auth', [App\Http\Controllers\Salla\SallaAuthController::class, 'storeAuth']);
                 Route::get('/salla/public/auth/callback', [App\Http\Controllers\Salla\SallaAuthController::class, 'callback']);
 

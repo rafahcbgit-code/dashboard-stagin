@@ -6,5 +6,10 @@ return[
     'token_url' => 'https://accounts.salla.sa/oauth2/token',
     'redirect' => 'http://localhost:8000/salla/public/auth/callback', // تغير وقت النقل ل سيرفر
     'callback_url' => 'http://localhost:8000/salla/public/auth/callback', // للتوافق مع الكود القديم
-    'salla-api-url' => 'https://api.salla.dev/admin/v2'
+    'salla-api-url' => 'https://api.salla.dev/admin/v2',
+
+    // Temporary: process Salla webhooks synchronously (bypass queue)
+    'webhooks' => [
+        'sync' => env('SALLA_WEBHOOK_SYNC', false),
+    ],
 ];
