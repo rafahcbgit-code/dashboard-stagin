@@ -1,51 +1,47 @@
 <script setup>
     import { ref } from 'vue';
     import debounce from 'lodash/debounce';
-    import { router, useForm } from '@inertiajs/vue3';
+    import { router, useForm, Link } from '@inertiajs/vue3';
     import AlertModal from '@/Components/AlertModal.vue';
     import { useAlertModal } from '@/Composables/useAlertModal';
-    import Table from '@/Components/Table.vue';
-    import TableHeader from '@/Components/TableHeader.vue';
-    import TableHeaderRow from '@/Components/TableHeaderRow.vue';
-    import TableHeaderRowItem from '@/Components/TableHeaderRowItem.vue';
-    import TableBody from '@/Components/TableBody.vue';
-    import TableBodyRow from '@/Components/TableBodyRow.vue';
-    import TableBodyRowItem from '@/Components/TableBodyRowItem.vue';
     import Dropdown from '@/Components/Dropdown.vue';
     import DropdownItemGroup from '@/Components/DropdownItemGroup.vue';
     import DropdownItem from '@/Components/DropdownItem.vue';
 
     const props = defineProps({
-        rows: { type: Object, required: true },
+        rows:    { type: Object, required: true },
         filters: { type: Object },
     });
 
     const { isOpenAlert: isOpenDeleteAlert, openAlert: openDeleteAlert, confirmAlert: confirmDeleteAlert } = useAlertModal();
-
     const form = useForm({ _method: null });
 
-    // Map Meta's status values to badge colors
     const statusColor = (status) => {
         const map = {
-            published:  'bg-green-100 text-green-700',
-            draft:      'bg-gray-100 text-gray-600',
-            deprecated: 'bg-orange-100 text-orange-700',
-            blocked:    'bg-red-100 text-red-700',
-            throttled:  'bg-yellow-100 text-yellow-700',
+            published:  'bg-green-100 text-green-700 border-green-200',
+            draft:      'bg-slate-100 text-slate-500 border-slate-200',
+            deprecated: 'bg-orange-100 text-orange-600 border-orange-200',
+            blocked:    'bg-red-100 text-red-600 border-red-200',
+            throttled:  'bg-yellow-100 text-yellow-700 border-yellow-200',
         };
-        return map[status] ?? 'bg-gray-100 text-gray-600';
+        return map[status] ?? 'bg-slate-100 text-slate-500 border-slate-200';
+    };
+
+    const statusDot = (status) => {
+        const map = {
+            published:  'bg-green-500',
+            draft:      'bg-slate-400',
+            deprecated: 'bg-orange-500',
+            blocked:    'bg-red-500',
+            throttled:  'bg-yellow-500',
+        };
+        return map[status] ?? 'bg-slate-400';
     };
 
     const handleDeleteFlow = (uuid) => openDeleteAlert(uuid);
+    const deleteAction     = (uuid) => form.delete('/automation/meta-flows/' + uuid);
 
-    const deleteAction = (uuid) => {
-        form.delete('/automation/meta-flows/' + uuid);
-    };
-
-    const isLastRow = (index) => index === props.rows.data.length - 1;
-
-    // Search params mirrored from the current URL filters
-    const params = ref({ search: props.filters?.search ?? null });
+    const params      = ref({ search: props.filters?.search ?? null });
     const isSearching = ref(false);
 
     const clearSearch = () => {
@@ -53,7 +49,6 @@
         runSearch();
     };
 
-    // Debounce search by 1 second to avoid firing on every keystroke
     const search = debounce(() => {
         isSearching.value = true;
         runSearch();
@@ -62,85 +57,116 @@
     const runSearch = () => {
         router.visit('/automation/meta-flows', {
             method: 'get',
-            data: params.value,
+            data:   params.value,
         });
     };
 </script>
 
 <template>
     <!-- Search bar -->
-    <div class="bg-slate-100 md:bg-slate-50 flex items-center border border-primary md:border-none md:shadow-sm h-10 w-full md:w-80 rounded-[0.5rem] mb-6 text-sm">
-        <span class="pl-3">
-            <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m15 15l6 6m-11-4a7 7 0 1 1 0-14a7 7 0 0 1 0 14Z"/></svg>
+    <div class="flex items-center border border-slate-200 h-10 w-full md:w-80 rounded-lg mb-5 text-sm bg-white shadow-sm">
+        <span class="ps-3 text-slate-400">
+            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
         </span>
-        <input @input="search" v-model="params.search" type="text" class="outline-none px-4 w-full bg-slate-100 md:bg-slate-50" :placeholder="$t('Search by name')">
-        <button v-if="!isSearching && params.search" @click="clearSearch" type="button" class="pr-2">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10s10-4.5 10-10S17.5 2 12 2zm3.7 12.3c.4.4.4 1 0 1.4c-.4.4-1 .4-1.4 0L12 13.4l-2.3 2.3c-.4.4-1 .4-1.4 0c-.4-.4-.4-1 0-1.4l2.3-2.3l-2.3-2.3c-.4-.4-.4-1 0-1.4c.4-.4 1-.4 1.4 0l2.3 2.3l2.3-2.3c.4-.4 1-.4 1.4 0c.4.4.4 1 0 1.4L13.4 12l2.3 2.3z"/></svg>
+        <input
+            @input="search"
+            v-model="params.search"
+            type="text"
+            class="outline-none px-3 w-full bg-transparent text-slate-700 placeholder-slate-400 text-sm"
+            :placeholder="$t('Search flows...')"
+        />
+        <button v-if="!isSearching && params.search" @click="clearSearch" type="button" class="pe-3 text-slate-400 hover:text-slate-600">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10 10-4.5 10-10S17.5 2 12 2zm3.7 12.3c.4.4.4 1 0 1.4-.4.4-1 .4-1.4 0L12 13.4l-2.3 2.3c-.4.4-1 .4-1.4 0-.4-.4-.4-1 0-1.4l2.3-2.3-2.3-2.3c-.4-.4-.4-1 0-1.4.4-.4 1-.4 1.4 0l2.3 2.3 2.3-2.3c.4-.4 1-.4 1.4 0 .4.4.4 1 0 1.4L13.4 12l2.3 2.3z"/></svg>
         </button>
-        <span v-if="isSearching" class="pr-2">
-            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="3.5" r="1.5" fill="currentColor" opacity="0"><animateTransform attributeName="transform" calcMode="discrete" dur="2.4s" repeatCount="indefinite" type="rotate" values="0 12 12;90 12 12;180 12 12;270 12 12"/><animate attributeName="opacity" dur="0.6s" keyTimes="0;0.5;1" repeatCount="indefinite" values="1;1;0"/></circle><circle cx="12" cy="3.5" r="1.5" fill="currentColor" opacity="0"><animateTransform attributeName="transform" begin="0.2s" calcMode="discrete" dur="2.4s" repeatCount="indefinite" type="rotate" values="30 12 12;120 12 12;210 12 12;300 12 12"/><animate attributeName="opacity" begin="0.2s" dur="0.6s" keyTimes="0;0.5;1" repeatCount="indefinite" values="1;1;0"/></circle><circle cx="12" cy="3.5" r="1.5" fill="currentColor" opacity="0"><animateTransform attributeName="transform" begin="0.4s" calcMode="discrete" dur="2.4s" repeatCount="indefinite" type="rotate" values="60 12 12;150 12 12;240 12 12;330 12 12"/><animate attributeName="opacity" begin="0.4s" dur="0.6s" keyTimes="0;0.5;1" repeatCount="indefinite" values="1;1;0"/></circle></svg>
+        <span v-if="isSearching" class="pe-3 text-slate-400">
+            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"><circle cx="12" cy="3.5" r="1.5" fill="currentColor" opacity="0"><animateTransform attributeName="transform" calcMode="discrete" dur="2.4s" repeatCount="indefinite" type="rotate" values="0 12 12;90 12 12;180 12 12;270 12 12"/><animate attributeName="opacity" dur="0.6s" keyTimes="0;0.5;1" repeatCount="indefinite" values="1;1;0"/></circle><circle cx="12" cy="3.5" r="1.5" fill="currentColor" opacity="0"><animateTransform attributeName="transform" begin="0.2s" calcMode="discrete" dur="2.4s" repeatCount="indefinite" type="rotate" values="30 12 12;120 12 12;210 12 12;300 12 12"/><animate attributeName="opacity" begin="0.2s" dur="0.6s" keyTimes="0;0.5;1" repeatCount="indefinite" values="1;1;0"/></circle><circle cx="12" cy="3.5" r="1.5" fill="currentColor" opacity="0"><animateTransform attributeName="transform" begin="0.4s" calcMode="discrete" dur="2.4s" repeatCount="indefinite" type="rotate" values="60 12 12;150 12 12;240 12 12;330 12 12"/><animate attributeName="opacity" begin="0.4s" dur="0.6s" keyTimes="0;0.5;1" repeatCount="indefinite" values="1;1;0"/></circle></svg>
         </span>
     </div>
 
-    <!-- Flows table -->
-    <div class="bg-slate-100 md:bg-slate-50 rounded-[0.5rem]">
-        <table class="w-full">
-            <TableHeader>
-                <TableHeaderRow>
-                    <TableHeaderRowItem :position="'first'">{{ $t('Name') }}</TableHeaderRowItem>
-                    <TableHeaderRowItem>{{ $t('Categories') }}</TableHeaderRowItem>
-                    <TableHeaderRowItem>{{ $t('Status') }}</TableHeaderRowItem>
-                    <TableHeaderRowItem>{{ $t('Responses') }}</TableHeaderRowItem>
-                    <TableHeaderRowItem>{{ $t('Last updated') }}</TableHeaderRowItem>
-                    <TableHeaderRowItem :position="'last'"></TableHeaderRowItem>
-                </TableHeaderRow>
-            </TableHeader>
-            <TableBody>
-                <TableBodyRow
-                    v-for="(item, index) in rows.data"
-                    :key="index"
-                    :class="!isLastRow(index) ? 'border-b' : ''"
+    <!-- Card grid -->
+    <div
+        v-if="rows.data && rows.data.length > 0"
+        class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"
+    >
+        <div
+            v-for="item in rows.data"
+            :key="item.uuid"
+            class="group bg-white border border-slate-200 rounded-xl p-4 hover:shadow-md hover:border-slate-300 transition-all duration-200 flex flex-col gap-3 relative"
+        >
+            <!-- Top row: status + action menu -->
+            <div class="flex items-center justify-between">
+                <span :class="['inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border capitalize', statusColor(item.status)]">
+                    <span :class="['w-1.5 h-1.5 rounded-full shrink-0', statusDot(item.status)]"></span>
+                    {{ item.status }}
+                </span>
+                <Dropdown :align="'right'">
+                    <button class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="currentColor"><path d="M12 8a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0 6a2 2 0 1 0 0-4 2 2 0 0 0 0 4zm0 6a2 2 0 1 0 0-4 2 2 0 0 0 0 4z"/></svg>
+                    </button>
+                    <template #items>
+                        <DropdownItemGroup>
+                            <DropdownItem :href="'/automation/meta-flows/' + item.uuid">
+                                {{ $t('Edit') }}
+                            </DropdownItem>
+                            <DropdownItem as="button" @click="handleDeleteFlow(item.uuid)">
+                                <span class="text-red-500">{{ $t('Delete') }}</span>
+                            </DropdownItem>
+                        </DropdownItemGroup>
+                    </template>
+                </Dropdown>
+            </div>
+
+            <!-- Flow name (clickable → editor) -->
+            <Link
+                :href="'/automation/meta-flows/' + item.uuid"
+                class="block"
+            >
+                <h3 class="text-sm font-semibold text-slate-800 capitalize group-hover:text-primary transition-colors leading-snug line-clamp-2">
+                    {{ item.name }}
+                </h3>
+            </Link>
+
+            <!-- Category chip -->
+            <div v-if="item.categories && item.categories.length" class="flex flex-wrap gap-1">
+                <span
+                    v-for="cat in item.categories"
+                    :key="cat"
+                    class="text-[11px] px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 font-medium"
                 >
-                    <TableBodyRowItem :position="'first'" class="capitalize font-medium">
-                        {{ item.name }}
-                    </TableBodyRowItem>
-                    <TableBodyRowItem class="hidden sm:table-cell text-xs text-slate-500">
-                        {{ (item.categories ?? []).join(', ') }}
-                    </TableBodyRowItem>
-                    <TableBodyRowItem class="hidden sm:table-cell">
-                        <span :class="['inline-block py-0.5 px-2 rounded-full text-xs font-medium capitalize', statusColor(item.status)]">
-                            {{ item.status }}
-                        </span>
-                    </TableBodyRowItem>
-                    <TableBodyRowItem class="hidden sm:table-cell">
-                        <div class="py-1 px-2 bg-gray-50 rounded-[5px] border border-dashed w-[fit-content] text-xs">
-                            {{ item.responses_count }}
-                        </div>
-                    </TableBodyRowItem>
-                    <TableBodyRowItem class="hidden sm:table-cell">{{ item.updated_at }}</TableBodyRowItem>
-                    <TableBodyRowItem :position="'last'">
-                        <Dropdown :align="'right'" class="mt-2">
-                            <button class="inline-flex w-full justify-center rounded-md text-sm font-medium text-black focus:outline-none">
-                                <span class="hover:bg-[#F6F7F9] hover:rounded-full w-[fit-content] p-2">
-                                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24">
-                                        <path fill="currentColor" d="M12 16a2 2 0 0 1 2 2a2 2 0 0 1-2 2a2 2 0 0 1-2-2a2 2 0 0 1 2-2m0-6a2 2 0 0 1 2 2a2 2 0 0 1-2 2a2 2 0 0 1-2-2a2 2 0 0 1 2-2m0-6a2 2 0 0 1 2 2a2 2 0 0 1-2 2a2 2 0 0 1-2-2a2 2 0 0 1 2-2Z"/>
-                                    </svg>
-                                </span>
-                            </button>
-                            <template #items>
-                                <DropdownItemGroup>
-                                    <DropdownItem :href="'/automation/meta-flows/' + item.uuid">{{ $t('Edit') }}</DropdownItem>
-                                    <DropdownItem as="button" @click="handleDeleteFlow(item.uuid)">{{ $t('Delete') }}</DropdownItem>
-                                </DropdownItemGroup>
-                            </template>
-                        </Dropdown>
-                    </TableBodyRowItem>
-                </TableBodyRow>
-            </TableBody>
-        </table>
+                    {{ cat.replace(/_/g, ' ') }}
+                </span>
+            </div>
+
+            <!-- Stats row -->
+            <div class="flex items-center justify-between text-xs text-slate-400 border-t border-slate-100 pt-3 mt-auto">
+                <!-- Responses count (links to the responses page) -->
+                <Link
+                    :href="'/automation/meta-flows/' + item.uuid + '/responses'"
+                    class="flex items-center gap-1.5 hover:text-primary transition-colors"
+                    @click.stop
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    <span>{{ item.responses_count ?? 0 }} {{ $t('responses') }}</span>
+                </Link>
+                <!-- Updated at -->
+                <span class="flex items-center gap-1">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 6v6l4 2"/></svg>
+                    {{ item.updated_at }}
+                </span>
+            </div>
+        </div>
     </div>
 
-    <!-- Confirm before deleting -->
+    <!-- Empty state -->
+    <div v-else class="flex flex-col items-center justify-center py-20 text-center">
+        <div class="w-16 h-16 rounded-2xl bg-slate-100 flex items-center justify-center mb-4">
+            <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/><path d="M7 7h10M7 11h4"/></svg>
+        </div>
+        <p class="text-sm font-medium text-slate-600 mb-1">{{ $t('No flows yet') }}</p>
+        <p class="text-xs text-slate-400">{{ $t('Create your first flow or pull existing ones from Meta.') }}</p>
+    </div>
+
+    <!-- Delete confirmation -->
     <AlertModal
         v-model="isOpenDeleteAlert"
         @confirm="() => confirmDeleteAlert(deleteAction)"

@@ -24,6 +24,7 @@ Route::middleware(['auth:user'])->prefix('/automation/meta-flows')->group(functi
     Route::post('/{uuid}/publish', [MetaFlowController::class, 'publish']);
     Route::post('/{uuid}/deprecate', [MetaFlowController::class, 'deprecate']);
     Route::post('/{uuid}/sync', [MetaFlowController::class, 'sync']);
+    Route::get('/{uuid}/responses', [MetaFlowController::class, 'responses']);
 
     Route::get('/{uuid}', [MetaFlowController::class, 'view']);
     Route::put('/{uuid}', [MetaFlowController::class, 'update']);

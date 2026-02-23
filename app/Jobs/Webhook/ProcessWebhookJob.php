@@ -1636,11 +1636,14 @@ class ProcessWebhookJob implements ShouldQueue
             $service = MetaFlowService::fromOrganization($this->organizationId);
             $service->handleFlowResponse($message, $contactId);
         } catch (\Throwable $e) {
-            // Non-blocking: a Meta Flow response failure must not interrupt message storage
+            // Non-blocking: a Meta Flow response failure must not interrupt message storage.
+            // Log full context so the issue can be diagnosed without a re-deployment.
             Log::channel('webhook')->warning('MetaFlows: nfm_reply handling failed (non-blocking)', [
                 'organization_id' => $this->organizationId,
                 'contact_id'      => $contactId,
+                'exception'       => get_class($e),
                 'error'           => $e->getMessage(),
+                'file'            => $e->getFile() . ':' . $e->getLine(),
             ]);
         }
     }

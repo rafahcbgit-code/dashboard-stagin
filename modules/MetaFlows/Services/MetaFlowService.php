@@ -15,6 +15,9 @@ use App\Models\Organization;
 
 class MetaFlowService
 {
+    /** Flow message version sent to Meta — bump here when the API spec changes */
+    const FLOW_MESSAGE_VERSION = '3';
+
     private string $accessToken;
     private string $apiVersion;
     private string $wabaId;
@@ -306,7 +309,7 @@ class MetaFlowService
                 'action' => [
                     'name'       => 'flow',
                     'parameters' => [
-                        'flow_message_version' => '3',
+                        'flow_message_version' => self::FLOW_MESSAGE_VERSION,
                         'flow_token'           => $flowToken,
                         'flow_id'              => $flow->meta_flow_id,
                         'flow_cta'             => $options['cta'] ?? 'Open',
@@ -365,6 +368,16 @@ class MetaFlowService
             'wam_id'       => $response->data->messages[0]->id ?? null,
         ]);
 
+        // Pre-create a stub response record so the webhook handler can find it
+        // by token when the user submits the flow (response_json filled on webhook)
+        MetaFlowResponse::create([
+            'organization_id' => $this->organizationId,
+            'meta_flow_id'    => $flow->id,
+            'contact_id'      => $contact->id,
+            'flow_token'      => $flowToken,
+            'response_json'   => null,
+        ]);
+
         return [
             'success'    => true,
             'flow_token' => $flowToken,
@@ -372,7 +385,7 @@ class MetaFlowService
         ];
     }
 
-    // Process an nfm_reply webhook and store the contact's flow response
+    // Process an nfm_reply webhook and update the pre-created response record
     public function handleFlowResponse(array $message, int $contactId): ?MetaFlowResponse
     {
         $interactive = $message['interactive'] ?? [];
@@ -381,9 +394,9 @@ class MetaFlowService
             return null;
         }
 
-        $nfmReply    = $interactive['nfm_reply'] ?? [];
+        $nfmReply     = $interactive['nfm_reply'] ?? [];
         $responseJson = $nfmReply['response_json'] ?? null;
-        $flowToken   = null;
+        $flowToken    = null;
 
         // The flow token is embedded in the response JSON
         if ($responseJson) {
@@ -391,49 +404,43 @@ class MetaFlowService
             $flowToken = $parsed['flow_token'] ?? null;
         }
 
-        // Find the local flow record by token if available
-        $localFlow = null;
-        if ($flowToken) {
-            $response = MetaFlowResponse::where('flow_token', $flowToken)
-                ->where('organization_id', $this->organizationId)
-                ->first();
-
-            if ($response && $response->metaFlow) {
-                $localFlow = $response->metaFlow;
-            }
-        }
-
-        // Fall back to finding by organization if no token match
-        if (!$localFlow) {
-            $localFlow = MetaFlow::where('organization_id', $this->organizationId)
-                ->where('status', 'published')
-                ->first();
-        }
-
-        if (!$localFlow) {
-            Log::warning('MetaFlows: could not match nfm_reply to a local flow', [
+        if (!$flowToken) {
+            Log::warning('MetaFlows: nfm_reply received without a flow_token — cannot store response', [
                 'organization_id' => $this->organizationId,
-                'flow_token'      => $flowToken,
+                'contact_id'      => $contactId,
             ]);
 
             return null;
         }
 
-        $flowResponse = MetaFlowResponse::create([
-            'organization_id' => $this->organizationId,
-            'meta_flow_id'    => $localFlow->id,
-            'contact_id'      => $contactId,
-            'flow_token'      => $flowToken,
-            'response_json'   => $responseJson,
+        // Find the stub record created when the flow was sent (response_json is null there)
+        $flowResponse = MetaFlowResponse::where('flow_token', $flowToken)
+            ->where('organization_id', $this->organizationId)
+            ->first();
+
+        if (!$flowResponse) {
+            Log::warning('MetaFlows: nfm_reply arrived with unknown token — no pre-created record found', [
+                'organization_id' => $this->organizationId,
+                'flow_token'      => $flowToken,
+                'contact_id'      => $contactId,
+            ]);
+
+            return null;
+        }
+
+        // Fill in the submitted data on the existing stub record
+        $flowResponse->update([
+            'contact_id'    => $contactId,
+            'response_json' => $responseJson,
         ]);
 
         Log::info('MetaFlows: nfm_reply response stored', [
             'response_id'  => $flowResponse->id,
-            'meta_flow_id' => $localFlow->meta_flow_id,
+            'meta_flow_id' => $flowResponse->meta_flow_id,
             'contact_id'   => $contactId,
         ]);
 
-        return $flowResponse;
+        return $flowResponse->fresh();
     }
 
     // Determine the first screen ID to navigate to when sending a flow.
@@ -469,39 +476,67 @@ class MetaFlowService
         return 'INTRO';
     }
 
-    // Send a JSON or standard HTTP request to the Meta Graph API
+    // Send a JSON or standard HTTP request to the Meta Graph API.
+    // ConnectException (network timeout / unreachable) is retried up to 3 times
+    // with linear back-off (1 s, 2 s) before the error is propagated.
     private function makeRequest(string $method, string $url, array $data = []): \stdClass
     {
-        $client = new Client();
-        $responseObject = new \stdClass();
+        $client      = new Client();
+        $maxAttempts = 3;
+        $lastConnectException = null;
 
-        try {
-            $options = [
-                'headers' => [
-                    'Authorization' => 'Bearer ' . $this->accessToken,
-                    'Content-Type'  => 'application/json',
-                ],
-            ];
+        $options = [
+            'headers' => [
+                'Authorization' => 'Bearer ' . $this->accessToken,
+                'Content-Type'  => 'application/json',
+            ],
+        ];
 
-            if (in_array($method, ['POST', 'PUT', 'DELETE']) && !empty($data)) {
-                $options['json'] = $data;
-            }
-
-            $response = $client->request($method, $url, $options);
-            $responseObject->success = true;
-            $responseObject->data    = json_decode($response->getBody()->getContents());
-        } catch (ConnectException $e) {
-            $responseObject->success          = false;
-            $responseObject->data             = new \stdClass();
-            $responseObject->data->error      = new \stdClass();
-            $responseObject->data->error->message = $e->getMessage();
-            $responseObject->message          = $e->getMessage();
-        } catch (GuzzleException $e) {
-            $body = $e->getResponse()?->getBody()?->getContents();
-            $responseObject->success = false;
-            $responseObject->data    = json_decode($body ?? '{}');
-            $responseObject->message = $responseObject->data->error->message ?? $e->getMessage();
+        if (in_array($method, ['POST', 'PUT', 'DELETE']) && !empty($data)) {
+            $options['json'] = $data;
         }
+
+        for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+            try {
+                $response = $client->request($method, $url, $options);
+
+                $responseObject          = new \stdClass();
+                $responseObject->success = true;
+                $responseObject->data    = json_decode($response->getBody()->getContents());
+
+                return $responseObject;
+            } catch (ConnectException $e) {
+                $lastConnectException = $e;
+
+                Log::warning('MetaFlows: ConnectException on attempt ' . $attempt, [
+                    'url'     => $url,
+                    'attempt' => $attempt,
+                    'error'   => $e->getMessage(),
+                ]);
+
+                if ($attempt < $maxAttempts) {
+                    sleep($attempt); // 1 s after attempt 1, 2 s after attempt 2
+                    continue;
+                }
+            } catch (GuzzleException $e) {
+                $body = $e->getResponse()?->getBody()?->getContents();
+
+                $responseObject          = new \stdClass();
+                $responseObject->success = false;
+                $responseObject->data    = json_decode($body ?? '{}');
+                $responseObject->message = $responseObject->data->error->message ?? $e->getMessage();
+
+                return $responseObject;
+            }
+        }
+
+        // All ConnectException retries exhausted
+        $responseObject                       = new \stdClass();
+        $responseObject->success              = false;
+        $responseObject->data                 = new \stdClass();
+        $responseObject->data->error          = new \stdClass();
+        $responseObject->data->error->message = $lastConnectException->getMessage();
+        $responseObject->message              = $lastConnectException->getMessage();
 
         return $responseObject;
     }

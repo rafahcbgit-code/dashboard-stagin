@@ -1,164 +1,210 @@
 <template>
     <AppLayout>
-        <!-- Page header -->
-        <div class="flex items-center justify-between mb-6">
+
+        <!-- ── Page header ─────────────────────────────────────────────────── -->
+        <div class="flex items-center justify-between mb-5 flex-wrap gap-3">
+            <!-- Left: breadcrumb + flow name -->
             <div class="flex items-center gap-3">
-                <a href="/automation/meta-flows" class="text-slate-400 hover:text-slate-600">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m15 18l-6-6l6-6"/></svg>
+                <a href="/automation/meta-flows"
+                   class="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:text-slate-700 hover:border-slate-300 transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
                 </a>
                 <div>
-                    <h4 class="text-[16px] font-medium">{{ flow.name }}</h4>
-                    <span
-                        :class="['inline-block mt-1 py-0.5 px-2 rounded-full text-xs font-medium capitalize', statusColor(currentStatus)]"
-                    >
-                        {{ currentStatus }}
-                    </span>
+                    <div class="flex items-center gap-2">
+                        <h4 class="text-[15px] font-semibold text-slate-800">{{ flow.name }}</h4>
+                        <span :class="['inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full capitalize', statusColor(currentStatus)]">
+                            <span :class="['w-1.5 h-1.5 rounded-full', statusDot(currentStatus)]"></span>
+                            {{ currentStatus }}
+                        </span>
+                    </div>
+                    <p class="text-xs text-slate-400 mt-0.5">{{ $t('Meta Flow ID') }}: {{ flow.meta_flow_id ?? '—' }}</p>
                 </div>
             </div>
 
-            <!-- Action buttons -->
-            <div class="flex items-center gap-2">
-                <!-- Sync pulls the latest state from Meta -->
+            <!-- Right: action buttons -->
+            <div class="flex items-center gap-2 flex-wrap">
                 <button
                     @click="handleSync"
                     :disabled="syncing"
-                    class="rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50"
+                    class="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-colors flex items-center gap-1.5"
                 >
-                    {{ syncing ? $t('Syncing...') : $t('Sync from Meta') }}
+                    <svg v-if="syncing" class="animate-spin" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2A10 10 0 1 0 22 12A10 10 0 0 0 12 2Zm0 18a8 8 0 1 1 8-8A8 8 0 0 1 12 20Z" opacity=".4"/><path fill="currentColor" d="M20 12h2A10 10 0 0 0 12 2V4A8 8 0 0 1 20 12Z"><animateTransform attributeName="transform" dur="1s" from="0 12 12" repeatCount="indefinite" to="360 12 12" type="rotate"/></path></svg>
+                    <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+                    {{ syncing ? $t('Syncing...') : $t('Sync') }}
                 </button>
 
-                <!-- Deprecate is only available for published flows -->
+                <a
+                    v-if="flow.preview_url"
+                    :href="flow.preview_url"
+                    target="_blank"
+                    class="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 transition-colors flex items-center gap-1.5"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                    {{ $t('Preview') }}
+                </a>
+
+                <a
+                    :href="'/automation/meta-flows/' + flow.uuid + '/responses'"
+                    class="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 transition-colors flex items-center gap-1.5"
+                >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                    {{ flow.responses_count ?? 0 }} {{ $t('Responses') }}
+                </a>
+
                 <button
                     v-if="currentStatus === 'published'"
                     @click="handleDeprecate"
                     :disabled="acting"
-                    class="rounded-md border border-orange-200 px-3 py-2 text-sm text-orange-600 hover:bg-orange-50 disabled:opacity-50"
+                    class="rounded-lg border border-orange-200 px-3 py-1.5 text-sm text-orange-600 hover:bg-orange-50 disabled:opacity-50 transition-colors"
                 >
                     {{ $t('Deprecate') }}
                 </button>
 
-                <!-- Publish is available for draft flows -->
                 <button
                     v-if="currentStatus === 'draft'"
                     @click="handlePublish"
                     :disabled="acting"
-                    class="rounded-md bg-primary px-3 py-2 text-sm text-white shadow-sm hover:bg-indigo-500 disabled:opacity-50"
+                    class="rounded-lg border border-green-200 bg-green-50 px-3 py-1.5 text-sm text-green-700 hover:bg-green-100 disabled:opacity-50 transition-colors flex items-center gap-1.5"
                 >
+                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m9 12 2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>
                     {{ acting ? $t('Publishing...') : $t('Publish') }}
                 </button>
 
-                <!-- Save uploads the flow JSON to Meta -->
                 <button
                     @click="handleSave"
                     :disabled="saving"
-                    class="rounded-md bg-primary px-3 py-2 text-sm text-white shadow-sm hover:bg-indigo-500 disabled:opacity-50"
+                    class="rounded-lg bg-primary px-4 py-1.5 text-sm text-white shadow-sm hover:opacity-90 disabled:opacity-50 transition-opacity flex items-center gap-1.5"
                 >
+                    <svg v-if="saving" class="animate-spin" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2A10 10 0 1 0 22 12A10 10 0 0 0 12 2Zm0 18a8 8 0 1 1 8-8A8 8 0 0 1 12 20Z" opacity=".4"/><path fill="currentColor" d="M20 12h2A10 10 0 0 0 12 2V4A8 8 0 0 1 20 12Z"><animateTransform attributeName="transform" dur="1s" from="0 12 12" repeatCount="indefinite" to="360 12 12" type="rotate"/></path></svg>
+                    <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17,21 17,13 7,13 7,21"/><polyline points="7,3 7,8 15,8"/></svg>
                     {{ saving ? $t('Saving...') : $t('Save') }}
                 </button>
             </div>
         </div>
 
-        <!-- Inline feedback message -->
-        <p v-if="feedbackMessage" :class="['mb-4 text-sm', feedbackIsError ? 'text-red-600' : 'text-green-600']">
+        <!-- Feedback banner -->
+        <div
+            v-if="feedbackMessage"
+            :class="['mb-4 flex items-center gap-2 text-sm px-4 py-2.5 rounded-lg border', feedbackIsError ? 'bg-red-50 text-red-700 border-red-200' : 'bg-green-50 text-green-700 border-green-200']"
+        >
+            <svg v-if="feedbackIsError" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <svg v-else xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 12 2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>
             {{ feedbackMessage }}
-        </p>
+            <button @click="feedbackMessage = null" class="ms-auto text-current opacity-60 hover:opacity-100">×</button>
+        </div>
 
-        <!-- Two-column layout: details panel on the left, editor on the right -->
-        <div class="flex gap-6">
-            <!-- Left panel: flow metadata -->
-            <div class="w-64 shrink-0">
-                <div class="bg-white border border-slate-200 rounded-lg p-4 text-sm space-y-4">
-                    <div>
-                        <p class="text-slate-400 text-xs uppercase tracking-wide mb-1">{{ $t('Meta Flow ID') }}</p>
-                        <p class="font-mono text-xs break-all text-slate-700">{{ flow.meta_flow_id ?? '—' }}</p>
+        <!-- ── Three-column layout ──────────────────────────────────────────── -->
+        <div class="flex gap-5 items-start">
+
+            <!-- Left sidebar: metadata + tips -->
+            <div class="w-52 shrink-0 space-y-4 sticky top-4">
+                <div class="bg-white border border-slate-200 rounded-xl p-4 text-sm space-y-4">
+                    <div v-if="flow.categories?.length">
+                        <p class="text-slate-400 text-[11px] uppercase tracking-wide font-medium mb-1">{{ $t('Categories') }}</p>
+                        <div class="flex flex-wrap gap-1">
+                            <span v-for="cat in flow.categories" :key="cat"
+                                  class="text-xs px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 font-medium">
+                                {{ cat.replace(/_/g, ' ') }}
+                            </span>
+                        </div>
                     </div>
                     <div>
-                        <p class="text-slate-400 text-xs uppercase tracking-wide mb-1">{{ $t('Categories') }}</p>
-                        <p class="text-slate-700">{{ (flow.categories ?? []).join(', ') || '—' }}</p>
-                    </div>
-                    <div v-if="flow.preview_url">
-                        <p class="text-slate-400 text-xs uppercase tracking-wide mb-1">{{ $t('Preview') }}</p>
-                        <a :href="flow.preview_url" target="_blank" class="text-primary hover:underline text-xs">
-                            {{ $t('Open preview') }}
-                        </a>
+                        <p class="text-slate-400 text-[11px] uppercase tracking-wide font-medium mb-1">{{ $t('Responses') }}</p>
+                        <p class="text-2xl font-bold text-slate-800">{{ flow.responses_count ?? 0 }}</p>
                     </div>
                     <div>
-                        <p class="text-slate-400 text-xs uppercase tracking-wide mb-1">{{ $t('Responses') }}</p>
-                        <p class="text-slate-700">{{ flow.responses_count ?? 0 }}</p>
-                    </div>
-                    <div>
-                        <p class="text-slate-400 text-xs uppercase tracking-wide mb-1">{{ $t('Last updated') }}</p>
-                        <p class="text-slate-700">{{ flow.updated_at }}</p>
+                        <p class="text-slate-400 text-[11px] uppercase tracking-wide font-medium mb-1">{{ $t('Last updated') }}</p>
+                        <p class="text-slate-600 text-xs">{{ flow.updated_at }}</p>
                     </div>
                 </div>
 
-                <!-- How-to helper for new users -->
-                <div class="bg-slate-50 border border-slate-200 rounded-lg p-4 text-xs text-slate-500 mt-4 space-y-2">
-                    <p class="font-medium text-slate-600">{{ $t('How to use') }}</p>
-                    <ol class="list-decimal list-inside space-y-1">
-                        <li>{{ $t('Add screens and components using the editor') }}</li>
-                        <li>{{ $t('Click Save to upload to Meta') }}</li>
-                        <li>{{ $t('Click Publish when ready to send') }}</li>
-                    </ol>
+                <!-- How-to -->
+                <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs text-slate-500 space-y-1.5">
+                    <p class="font-semibold text-slate-600 mb-2">{{ $t('How to use') }}</p>
+                    <div class="flex gap-2">
+                        <span class="w-4 h-4 rounded-full bg-primary text-white text-[9px] flex items-center justify-center shrink-0 mt-0.5">1</span>
+                        <span>{{ $t('Add screens and components') }}</span>
+                    </div>
+                    <div class="flex gap-2">
+                        <span class="w-4 h-4 rounded-full bg-primary text-white text-[9px] flex items-center justify-center shrink-0 mt-0.5">2</span>
+                        <span>{{ $t('Click Save to upload to Meta') }}</span>
+                    </div>
+                    <div class="flex gap-2">
+                        <span class="w-4 h-4 rounded-full bg-primary text-white text-[9px] flex items-center justify-center shrink-0 mt-0.5">3</span>
+                        <span>{{ $t('Click Publish when ready') }}</span>
+                    </div>
                 </div>
 
-                <!-- Deletion rules note -->
-                <div class="bg-amber-50 border border-amber-200 rounded-lg p-4 text-xs text-amber-700 mt-4 space-y-1">
-                    <p class="font-medium text-amber-800">{{ $t('Deleting a flow') }}</p>
+                <!-- Deletion note -->
+                <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-700 space-y-1">
+                    <p class="font-semibold text-amber-800">{{ $t('Deleting a flow') }}</p>
                     <p>{{ $t('Meta only allows deleting flows in Draft or Deprecated status.') }}</p>
-                    <p>{{ $t('To delete a Published flow: Deprecate it first, then delete.') }}</p>
                 </div>
             </div>
 
-            <!-- Right panel: visual screen builder -->
-            <div class="flex-1 min-w-0">
-                <MetaFlowBuilder v-model="assetContent" />
+            <!-- Center: builder + JSON panel -->
+            <div class="flex-1 min-w-0 space-y-4">
+                <div class="bg-white border border-slate-200 rounded-xl p-5">
+                    <MetaFlowBuilder
+                        v-model="assetContent"
+                        @screenChange="activeScreenIndex = $event"
+                    />
+                </div>
 
-                <!-- Collapsible raw JSON section (hidden by default) -->
-                <div class="mt-4 border border-slate-200 rounded-lg overflow-hidden">
+                <!-- Collapsible raw JSON -->
+                <div class="border border-slate-200 rounded-xl overflow-hidden">
                     <button
                         @click="showJson = !showJson"
-                        class="w-full flex items-center justify-between px-4 py-2 bg-slate-50 border-b border-slate-100 text-xs text-slate-500 hover:bg-slate-100"
+                        class="w-full flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-100 text-xs text-slate-500 hover:bg-slate-100 transition-colors"
                     >
-                        <span class="font-mono">flow.json</span>
-                        <span>{{ showJson ? '▲ Hide JSON' : '▶ Show raw JSON' }}</span>
-                    </button>
-
-                    <div v-if="showJson">
-                        <div class="flex justify-end px-4 py-1 border-b border-slate-100 bg-slate-50">
-                            <button @click="formatJson" class="text-xs text-slate-400 hover:text-slate-600">
-                                {{ $t('Format') }}
-                            </button>
+                        <span class="font-mono font-medium">flow.json</span>
+                        <div class="flex items-center gap-2">
+                            <span v-if="showJson" class="text-primary text-[11px]" @click.stop="formatJson">{{ $t('Format') }}</span>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" :class="showJson ? 'rotate-180' : ''" class="transition-transform"><path d="m6 9 6 6 6-6"/></svg>
                         </div>
+                    </button>
+                    <div v-if="showJson">
                         <textarea
                             v-model="assetContent"
-                            class="w-full font-mono text-sm p-4 outline-none resize-none bg-white text-slate-800"
-                            style="min-height: 400px;"
+                            class="w-full font-mono text-xs p-4 outline-none resize-none bg-white text-slate-700 leading-relaxed"
+                            style="min-height: 320px;"
                             spellcheck="false"
                             :placeholder="$t('Flow JSON will appear here...')"
                         ></textarea>
                     </div>
                 </div>
             </div>
+
+            <!-- Right: live phone preview (hidden on small screens) -->
+            <div class="hidden xl:block w-72 shrink-0 sticky top-4">
+                <div class="bg-white border border-slate-200 rounded-xl p-4">
+                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-widest text-center mb-4">{{ $t('Live Preview') }}</p>
+                    <div class="flex justify-center">
+                        <FlowPhonePreview
+                            :screens="previewScreens"
+                            :active-index="activeScreenIndex"
+                        />
+                    </div>
+                </div>
+            </div>
+
         </div>
     </AppLayout>
 </template>
 
 <script setup>
-    import AppLayout from '@/Pages/User/Layout/App.vue';
-    import { ref } from 'vue';
-    import axios from 'axios';
+    import AppLayout       from '@/Pages/User/Layout/App.vue';
+    import { ref, computed } from 'vue';
+    import axios           from 'axios';
     import MetaFlowBuilder from '@modules/MetaFlows/Pages/User/Components/MetaFlowBuilder.vue';
+    import FlowPhonePreview from '@modules/MetaFlows/Pages/User/Components/FlowPhonePreview.vue';
 
     const props = defineProps(['flow']);
 
-    // Local reactive copy of the flow status so buttons update without a full page reload
-    const currentStatus = ref(props.flow.status);
+    const currentStatus     = ref(props.flow.status);
+    const showJson          = ref(false);
+    const activeScreenIndex = ref(0);
 
-    // Whether the raw JSON section is expanded
-    const showJson = ref(false);
-
-    // Start with the stored asset content or a minimal blank flow template
     const assetContent = ref(
         props.flow.asset_content
             ? tryPrettyPrint(props.flow.asset_content)
@@ -172,28 +218,69 @@
     const feedbackMessage = ref(null);
     const feedbackIsError = ref(false);
 
-    // Map Meta status values to Tailwind badge colors
+    // ── Status badge helpers ──────────────────────────────────────────────────
     const statusColor = (status) => {
         const map = {
             published:  'bg-green-100 text-green-700',
-            draft:      'bg-gray-100 text-gray-600',
-            deprecated: 'bg-orange-100 text-orange-700',
-            blocked:    'bg-red-100 text-red-700',
+            draft:      'bg-slate-100 text-slate-500',
+            deprecated: 'bg-orange-100 text-orange-600',
+            blocked:    'bg-red-100 text-red-600',
             throttled:  'bg-yellow-100 text-yellow-700',
         };
-        return map[status] ?? 'bg-gray-100 text-gray-600';
+        return map[status] ?? 'bg-slate-100 text-slate-500';
     };
 
-    // Try to pretty-print stored JSON without losing it if the input is already formatted or invalid
-    function tryPrettyPrint(content) {
+    const statusDot = (status) => {
+        const map = {
+            published: 'bg-green-500', draft: 'bg-slate-400',
+            deprecated: 'bg-orange-500', blocked: 'bg-red-500', throttled: 'bg-yellow-500',
+        };
+        return map[status] ?? 'bg-slate-400';
+    };
+
+    // ── Parse assetContent → preview-compatible screens ───────────────────────
+    const parseScreensForPreview = (jsonStr) => {
         try {
-            return JSON.stringify(JSON.parse(content), null, 2);
+            const json = typeof jsonStr === 'string' ? JSON.parse(jsonStr) : jsonStr;
+            return (json.screens || []).map(screen => ({
+                id:         screen.id || 'SCREEN',
+                title:      screen.title || '',
+                terminal:   !!screen.terminal,
+                components: (screen.layout?.children || []).map(comp => {
+                    switch (comp.type) {
+                        case 'TextHeading':
+                        case 'TextSubheading':
+                        case 'TextBody':
+                            return { type: comp.type, text: comp.text || '' };
+                        case 'TextInput':
+                            return { type: 'TextInput', label: comp.label || '', name: comp.name || '', required: !!comp.required, inputType: comp['input-type'] || 'text' };
+                        case 'TextArea':
+                            return { type: 'TextArea', label: comp.label || '', name: comp.name || '', required: !!comp.required };
+                        case 'Dropdown':
+                        case 'CheckboxGroup':
+                        case 'RadioButtonsGroup':
+                            return { type: comp.type, label: comp.label || '', name: comp.name || '', required: !!comp.required, options: (comp['data-source'] || []).map(o => ({ id: o.id || '', title: o.title || '' })) };
+                        case 'Footer': {
+                            const ca = comp['on-click-action'] ?? {};
+                            return { type: 'Footer', label: comp.label || 'Continue', action: ca.name || 'complete', nextScreen: ca.next?.name || '' };
+                        }
+                        default: return null;
+                    }
+                }).filter(Boolean),
+            }));
         } catch {
-            return content;
+            return [];
         }
+    };
+
+    const previewScreens = computed(() => parseScreensForPreview(assetContent.value));
+
+    // ── Helpers ───────────────────────────────────────────────────────────────
+    function tryPrettyPrint(content) {
+        try { return JSON.stringify(JSON.parse(content), null, 2); }
+        catch { return content; }
     }
 
-    // Re-format the JSON in the collapsible editor textarea
     const formatJson = () => {
         try {
             assetContent.value = JSON.stringify(JSON.parse(assetContent.value), null, 2);
@@ -203,89 +290,66 @@
         }
     };
 
-    // Upload the current flow JSON to Meta via the update endpoint
+    // ── API actions ───────────────────────────────────────────────────────────
     const handleSave = async () => {
         saving.value = true;
         clearFeedback();
-
         try {
-            await axios.put(`/automation/meta-flows/${props.flow.uuid}`, {
-                asset_content: assetContent.value,
-            });
+            await axios.put(`/automation/meta-flows/${props.flow.uuid}`, { asset_content: assetContent.value });
             showFeedback('Flow saved successfully.', false);
         } catch (err) {
-            const msg = err.response?.data?.message ?? 'Failed to save flow.';
-            showFeedback(msg, true);
+            showFeedback(err.response?.data?.message ?? 'Failed to save flow.', true);
         } finally {
             saving.value = false;
         }
     };
 
-    // Publish the flow on Meta — once published it can be sent to contacts
     const handlePublish = async () => {
         acting.value = true;
         clearFeedback();
-
         try {
             const res = await axios.post(`/automation/meta-flows/${props.flow.uuid}/publish`);
             currentStatus.value = res.data.status ?? 'published';
             showFeedback('Flow published successfully!', false);
         } catch (err) {
-            const msg = err.response?.data?.message ?? 'Failed to publish flow.';
-            showFeedback(msg, true);
+            showFeedback(err.response?.data?.message ?? 'Failed to publish flow.', true);
         } finally {
             acting.value = false;
         }
     };
 
-    // Deprecate the flow so it can no longer be sent to new contacts
     const handleDeprecate = async () => {
         acting.value = true;
         clearFeedback();
-
         try {
             const res = await axios.post(`/automation/meta-flows/${props.flow.uuid}/deprecate`);
             currentStatus.value = res.data.status ?? 'deprecated';
             showFeedback('Flow deprecated.', false);
         } catch (err) {
-            const msg = err.response?.data?.message ?? 'Failed to deprecate flow.';
-            showFeedback(msg, true);
+            showFeedback(err.response?.data?.message ?? 'Failed to deprecate flow.', true);
         } finally {
             acting.value = false;
         }
     };
 
-    // Pull the latest state and content from Meta, then refresh the builder
     const handleSync = async () => {
         syncing.value = true;
         clearFeedback();
-
         try {
             const res     = await axios.post(`/automation/meta-flows/${props.flow.uuid}/sync`);
             const updated = res.data.flow;
-
             currentStatus.value = updated.status ?? currentStatus.value;
-
             if (updated.asset_content) {
                 assetContent.value = tryPrettyPrint(updated.asset_content);
             }
-
             showFeedback('Synced from Meta.', false);
         } catch (err) {
-            const msg = err.response?.data?.message ?? 'Failed to sync from Meta.';
-            showFeedback(msg, true);
+            showFeedback(err.response?.data?.message ?? 'Failed to sync from Meta.', true);
         } finally {
             syncing.value = false;
         }
     };
 
-    const showFeedback = (message, isError) => {
-        feedbackMessage.value = message;
-        feedbackIsError.value = isError;
-    };
-
-    const clearFeedback = () => {
-        feedbackMessage.value = null;
-        feedbackIsError.value = false;
-    };
+    const showFeedback  = (msg, isErr) => { feedbackMessage.value = msg; feedbackIsError.value = isErr; };
+    const clearFeedback = () => { feedbackMessage.value = null; feedbackIsError.value = false; };
 </script>

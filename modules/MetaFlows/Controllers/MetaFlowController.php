@@ -8,6 +8,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redirect;
 use Inertia\Inertia;
 use Modules\MetaFlows\Models\MetaFlow;
+use Modules\MetaFlows\Models\MetaFlowResponse;
 use Modules\MetaFlows\Requests\StoreMetaFlowRequest;
 use Modules\MetaFlows\Services\MetaFlowService;
 
@@ -182,6 +183,31 @@ class MetaFlowController extends BaseController
         } catch (\Throwable $e) {
             return response()->json(['message' => $e->getMessage()], 422);
         }
+    }
+
+    // List paginated responses for a specific flow
+    public function responses(Request $request, string $uuid)
+    {
+        if (!CustomHelper::isModuleEnabled('Meta Flows')) {
+            abort(404);
+        }
+
+        $orgId = session()->get('current_organization');
+
+        $flow = MetaFlow::where('uuid', $uuid)
+            ->where('organization_id', $orgId)
+            ->firstOrFail();
+
+        $responses = MetaFlowResponse::where('meta_flow_id', $flow->id)
+            ->where('organization_id', $orgId)
+            ->orderByDesc('created_at')
+            ->paginate(20)
+            ->withQueryString();
+
+        return Inertia::render('MetaFlows::User/Responses', [
+            'flow'      => $flow,
+            'responses' => $responses,
+        ]);
     }
 
     // Delete the flow from Meta and soft-delete the local record

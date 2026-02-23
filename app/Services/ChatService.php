@@ -636,8 +636,10 @@ class ChatService
 
         // Build the metadata the chat bubble will render
         $chatMetadata = [
-            'type'      => 'interactive',
-            'flow_name' => $flow->name,
+            'type'       => 'interactive',
+            'flow_name'  => $flow->name,
+            'flow_uuid'  => $flow->uuid,
+            'flow_token' => $sendResult['flow_token'],
             'interactive' => [
                 'type' => 'flow',
                 'body' => ['text' => $options['body']],
