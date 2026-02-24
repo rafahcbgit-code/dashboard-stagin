@@ -7,6 +7,8 @@ use App\Models\SallaWebhookDelivery;
 use App\Models\SallaWebhookEventSetting;
 use App\Models\SallaWebhookEventStatusRule;
 use App\Models\Template;
+use App\Services\Salla\Webhooks\Schemas\SallaAbandonedCartFieldSchema;
+use App\Services\Salla\Webhooks\Schemas\SallaCustomerLoginFieldSchema;
 use App\Services\Salla\Webhooks\Schemas\SallaOrderCreatedFieldSchema;
 use App\Services\Salla\Webhooks\Schemas\SallaOrderStatusUpdatedFieldSchema;
 use App\Services\Salla\Webhooks\WhatsAppTemplateVariableExtractor;
@@ -18,6 +20,8 @@ class SallaAutomationController extends BaseController
     public function index(
         SallaOrderCreatedFieldSchema $schema,
         SallaOrderStatusUpdatedFieldSchema $statusUpdatedSchema,
+        SallaAbandonedCartFieldSchema $abandonedCartSchema,
+        SallaCustomerLoginFieldSchema $customerLoginSchema,
         WhatsAppTemplateVariableExtractor $variableExtractor
     ) {
         $organizationId = (int) session()->get('current_organization');
@@ -25,6 +29,11 @@ class SallaAutomationController extends BaseController
         $setting = SallaWebhookEventSetting::with('mappings')
             ->where('organization_id', $organizationId)
             ->where('event', 'order.created')
+            ->first();
+
+        $codSetting = SallaWebhookEventSetting::with('mappings')
+            ->where('organization_id', $organizationId)
+            ->where('event', 'order.created.cod')
             ->first();
 
         $selectedTemplate = null;
@@ -46,6 +55,17 @@ class SallaAutomationController extends BaseController
 
         $templateVariables = $selectedTemplate ? $variableExtractor->extract($selectedTemplate) : [];
 
+        $codSelectedTemplate = null;
+        if ($codSetting?->template_id) {
+            $codSelectedTemplate = Template::where('id', $codSetting->template_id)
+                ->where('organization_id', $organizationId)
+                ->where('status', 'APPROVED')
+                ->whereNull('deleted_at')
+                ->first();
+        }
+
+        $codTemplateVariables = $codSelectedTemplate ? $variableExtractor->extract($codSelectedTemplate) : [];
+
         $lastDelivery = SallaWebhookDelivery::where('organization_id', $organizationId)
             ->where('event', 'order.created')
             ->latest('id')
@@ -64,6 +84,13 @@ class SallaAutomationController extends BaseController
         if ($setting) {
             foreach ($setting->mappings as $mapping) {
                 $mappings[$mapping->template_variable] = $mapping->payload_path;
+            }
+        }
+
+        $codMappings = [];
+        if ($codSetting) {
+            foreach ($codSetting->mappings as $mapping) {
+                $codMappings[$mapping->template_variable] = $mapping->payload_path;
             }
         }
 
@@ -107,6 +134,80 @@ class SallaAutomationController extends BaseController
 
         $statusOptions = $this->recentStatusOptions($organizationId);
 
+        $abandonedSetting = SallaWebhookEventSetting::with('mappings')
+            ->where('organization_id', $organizationId)
+            ->where('event', 'abandoned.cart')
+            ->first();
+
+        $abandonedSelectedTemplate = null;
+        if ($abandonedSetting?->template_id) {
+            $abandonedSelectedTemplate = Template::where('id', $abandonedSetting->template_id)
+                ->where('organization_id', $organizationId)
+                ->where('status', 'APPROVED')
+                ->whereNull('deleted_at')
+                ->first();
+        }
+
+        $abandonedTemplateVariables = $abandonedSelectedTemplate ? $variableExtractor->extract($abandonedSelectedTemplate) : [];
+
+        $lastAbandonedDelivery = SallaWebhookDelivery::where('organization_id', $organizationId)
+            ->where('event', 'abandoned.cart')
+            ->latest('id')
+            ->first();
+
+        $abandonedWebhookFields = collect($abandonedCartSchema->fields())
+            ->map(function (array $field) use ($lastAbandonedDelivery) {
+                $payload = $this->normalizeStoredPayload($lastAbandonedDelivery?->payload ?? []);
+                $field['sample'] = $lastAbandonedDelivery ? data_get($payload, $field['path']) : null;
+                return $field;
+            })
+            ->values()
+            ->all();
+
+        $abandonedMappings = [];
+        if ($abandonedSetting) {
+            foreach ($abandonedSetting->mappings as $mapping) {
+                $abandonedMappings[$mapping->template_variable] = $mapping->payload_path;
+            }
+        }
+
+        $customerLoginSetting = SallaWebhookEventSetting::with('mappings')
+            ->where('organization_id', $organizationId)
+            ->where('event', 'customer.login')
+            ->first();
+
+        $customerLoginSelectedTemplate = null;
+        if ($customerLoginSetting?->template_id) {
+            $customerLoginSelectedTemplate = Template::where('id', $customerLoginSetting->template_id)
+                ->where('organization_id', $organizationId)
+                ->where('status', 'APPROVED')
+                ->whereNull('deleted_at')
+                ->first();
+        }
+
+        $customerLoginTemplateVariables = $customerLoginSelectedTemplate ? $variableExtractor->extract($customerLoginSelectedTemplate) : [];
+
+        $lastCustomerLoginDelivery = SallaWebhookDelivery::where('organization_id', $organizationId)
+            ->where('event', 'customer.login')
+            ->latest('id')
+            ->first();
+
+        $customerLoginWebhookFields = collect($customerLoginSchema->fields())
+            ->map(function (array $field) use ($lastCustomerLoginDelivery) {
+                $payload = $this->normalizeStoredPayload($lastCustomerLoginDelivery?->payload ?? []);
+                $field['sample'] = $lastCustomerLoginDelivery ? data_get($payload, $field['path']) : null;
+                return $field;
+            })
+            ->values()
+            ->all();
+
+        $customerLoginMappings = [];
+        if ($customerLoginSetting) {
+            foreach ($customerLoginSetting->mappings as $mapping) {
+                $customerLoginMappings[$mapping->template_variable] = $mapping->payload_path;
+            }
+        }
+
         return Inertia::render('User/Settings/SallaAutomations', [
             'title' => __('Salla Automations'),
             'templates' => $templates,
@@ -119,6 +220,14 @@ class SallaAutomationController extends BaseController
             'webhookFields' => $webhookFields,
             'mappings' => $mappings,
 
+            'codSetting' => [
+                'enabled' => (bool) ($codSetting?->enabled ?? false),
+                'template_id' => $codSetting?->template_id,
+                'recipient_phone_payload_path' => $codSetting?->recipient_phone_payload_path ?? 'data.customer.mobile_code+data.customer.mobile',
+            ],
+            'codTemplateVariables' => $codTemplateVariables,
+            'codMappings' => $codMappings,
+
             'statusSetting' => [
                 'enabled' => (bool) ($statusUpdatedSetting?->enabled ?? false),
                 'recipient_phone_payload_path' => $statusUpdatedSetting?->recipient_phone_payload_path ?? 'data.order.customer.mobile',
@@ -126,6 +235,25 @@ class SallaAutomationController extends BaseController
             'statusWebhookFields' => $statusUpdatedWebhookFields,
             'statusRules' => $statusRules,
             'statusOptions' => $statusOptions,
+
+            'abandonedSetting' => [
+                'enabled' => (bool) ($abandonedSetting?->enabled ?? false),
+                'template_id' => $abandonedSetting?->template_id,
+                'recipient_phone_payload_path' => $abandonedSetting?->recipient_phone_payload_path ?? 'data.customer.mobile',
+                'send_delay_hours' => $abandonedSetting?->send_delay_hours,
+            ],
+            'abandonedTemplateVariables' => $abandonedTemplateVariables,
+            'abandonedWebhookFields' => $abandonedWebhookFields,
+            'abandonedMappings' => $abandonedMappings,
+
+            'customerLoginSetting' => [
+                'enabled' => (bool) ($customerLoginSetting?->enabled ?? false),
+                'template_id' => $customerLoginSetting?->template_id,
+                'recipient_phone_payload_path' => $customerLoginSetting?->recipient_phone_payload_path ?? 'data.mobile_code+data.mobile',
+            ],
+            'customerLoginTemplateVariables' => $customerLoginTemplateVariables,
+            'customerLoginWebhookFields' => $customerLoginWebhookFields,
+            'customerLoginMappings' => $customerLoginMappings,
         ]);
     }
 
@@ -199,6 +327,58 @@ class SallaAutomationController extends BaseController
         ]);
     }
 
+    public function webhookFieldsAbandonedCart(SallaAbandonedCartFieldSchema $schema)
+    {
+        $organizationId = (int) session()->get('current_organization');
+
+        $lastDelivery = SallaWebhookDelivery::where('organization_id', $organizationId)
+            ->where('event', 'abandoned.cart')
+            ->latest('id')
+            ->first();
+
+        $fields = collect($schema->fields())
+            ->map(function (array $field) use ($lastDelivery) {
+                $payload = $this->normalizeStoredPayload($lastDelivery?->payload ?? []);
+                $field['sample'] = $lastDelivery ? data_get($payload, $field['path']) : null;
+                return $field;
+            })
+            ->values()
+            ->all();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'fields' => $fields,
+            ],
+        ]);
+    }
+
+    public function webhookFieldsCustomerLogin(SallaCustomerLoginFieldSchema $schema)
+    {
+        $organizationId = (int) session()->get('current_organization');
+
+        $lastDelivery = SallaWebhookDelivery::where('organization_id', $organizationId)
+            ->where('event', 'customer.login')
+            ->latest('id')
+            ->first();
+
+        $fields = collect($schema->fields())
+            ->map(function (array $field) use ($lastDelivery) {
+                $payload = $this->normalizeStoredPayload($lastDelivery?->payload ?? []);
+                $field['sample'] = $lastDelivery ? data_get($payload, $field['path']) : null;
+                return $field;
+            })
+            ->values()
+            ->all();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'fields' => $fields,
+            ],
+        ]);
+    }
+
     public function updateOrderCreated(Request $request, WhatsAppTemplateVariableExtractor $extractor)
     {
         $organizationId = (int) session()->get('current_organization');
@@ -251,6 +431,82 @@ class SallaAutomationController extends BaseController
             [
                 'organization_id' => $organizationId,
                 'event' => 'order.created',
+            ],
+            [
+                'enabled' => (bool) $validated['enabled'],
+                'template_id' => $templateId,
+                'recipient_phone_payload_path' => $validated['recipient_phone_payload_path'] ?? null,
+            ]
+        );
+
+        $setting->mappings()->delete();
+
+        foreach ($mappings as $mapping) {
+            $setting->mappings()->create([
+                'template_variable' => $mapping['template_variable'],
+                'payload_path' => $mapping['payload_path'],
+                'transform' => $mapping['transform'] ?? null,
+                'default_value' => $mapping['default_value'] ?? null,
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+        ]);
+    }
+
+    public function updateOrderCreatedCod(Request $request, WhatsAppTemplateVariableExtractor $extractor)
+    {
+        $organizationId = (int) session()->get('current_organization');
+
+        $validated = $request->validate([
+            'enabled' => ['required', 'boolean'],
+            'template_id' => ['nullable', 'integer'],
+            'recipient_phone_payload_path' => ['nullable', 'string', 'max:512'],
+            'mappings' => ['array'],
+            'mappings.*.template_variable' => ['required', 'string', 'max:191'],
+            'mappings.*.payload_path' => ['required', 'string', 'max:512'],
+            'mappings.*.transform' => ['nullable', 'string', 'max:64'],
+            'mappings.*.default_value' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $templateId = $validated['template_id'] ?? null;
+        $template = null;
+        if ($templateId) {
+            $template = Template::where('id', $templateId)
+                ->where('organization_id', $organizationId)
+                ->where('status', 'APPROVED')
+                ->whereNull('deleted_at')
+                ->firstOrFail();
+        }
+
+        $requiredKeys = [];
+        if ($template) {
+            $requiredKeys = array_values(array_unique(array_map(
+                static fn (array $v) => $v['key'],
+                $extractor->extract($template)
+            )));
+        }
+
+        $mappings = $validated['mappings'] ?? [];
+        $mappingKeySet = [];
+        foreach ($mappings as $mapping) {
+            $mappingKeySet[$mapping['template_variable']] = true;
+        }
+
+        foreach ($requiredKeys as $key) {
+            if (!isset($mappingKeySet[$key])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => __('Missing mapping for :key', ['key' => $key]),
+                ], 422);
+            }
+        }
+
+        $setting = SallaWebhookEventSetting::updateOrCreate(
+            [
+                'organization_id' => $organizationId,
+                'event' => 'order.created.cod',
             ],
             [
                 'enabled' => (bool) $validated['enabled'],
@@ -407,6 +663,160 @@ class SallaAutomationController extends BaseController
         $setting->statusRules()
             ->when(!empty($keepSlugs), fn ($q) => $q->whereNotIn('status_slug', $keepSlugs), fn ($q) => $q)
             ->delete();
+
+        return response()->json([
+            'success' => true,
+        ]);
+    }
+
+    public function updateAbandonedCart(Request $request, WhatsAppTemplateVariableExtractor $extractor)
+    {
+        $organizationId = (int) session()->get('current_organization');
+
+        $validated = $request->validate([
+            'enabled' => ['required', 'boolean'],
+            'template_id' => ['nullable', 'integer'],
+            'recipient_phone_payload_path' => ['nullable', 'string', 'max:512'],
+            'send_delay_hours' => ['nullable', 'integer', 'min:0', 'max:720'],
+            'mappings' => ['array'],
+            'mappings.*.template_variable' => ['required', 'string', 'max:191'],
+            'mappings.*.payload_path' => ['required', 'string', 'max:512'],
+            'mappings.*.transform' => ['nullable', 'string', 'max:64'],
+            'mappings.*.default_value' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $templateId = $validated['template_id'] ?? null;
+        $template = null;
+        if ($templateId) {
+            $template = Template::where('id', $templateId)
+                ->where('organization_id', $organizationId)
+                ->where('status', 'APPROVED')
+                ->whereNull('deleted_at')
+                ->firstOrFail();
+        }
+
+        $requiredKeys = [];
+        if ($template) {
+            $requiredKeys = array_values(array_unique(array_map(
+                static fn (array $v) => $v['key'],
+                $extractor->extract($template)
+            )));
+        }
+
+        $mappings = $validated['mappings'] ?? [];
+        $mappingKeySet = [];
+        foreach ($mappings as $mapping) {
+            $mappingKeySet[$mapping['template_variable']] = true;
+        }
+
+        foreach ($requiredKeys as $key) {
+            if (!isset($mappingKeySet[$key])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => __('Missing mapping for :key', ['key' => $key]),
+                ], 422);
+            }
+        }
+
+        $setting = SallaWebhookEventSetting::updateOrCreate(
+            [
+                'organization_id' => $organizationId,
+                'event' => 'abandoned.cart',
+            ],
+            [
+                'enabled' => (bool) $validated['enabled'],
+                'template_id' => $templateId,
+                'recipient_phone_payload_path' => $validated['recipient_phone_payload_path'] ?? null,
+                'send_delay_hours' => $validated['send_delay_hours'] ?? null,
+            ]
+        );
+
+        $setting->mappings()->delete();
+
+        foreach ($mappings as $mapping) {
+            $setting->mappings()->create([
+                'template_variable' => $mapping['template_variable'],
+                'payload_path' => $mapping['payload_path'],
+                'transform' => $mapping['transform'] ?? null,
+                'default_value' => $mapping['default_value'] ?? null,
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+        ]);
+    }
+
+    public function updateCustomerLogin(Request $request, WhatsAppTemplateVariableExtractor $extractor)
+    {
+        $organizationId = (int) session()->get('current_organization');
+
+        $validated = $request->validate([
+            'enabled' => ['required', 'boolean'],
+            'template_id' => ['nullable', 'integer'],
+            'recipient_phone_payload_path' => ['nullable', 'string', 'max:512'],
+            'mappings' => ['array'],
+            'mappings.*.template_variable' => ['required', 'string', 'max:191'],
+            'mappings.*.payload_path' => ['required', 'string', 'max:512'],
+            'mappings.*.transform' => ['nullable', 'string', 'max:64'],
+            'mappings.*.default_value' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $templateId = $validated['template_id'] ?? null;
+        $template = null;
+        if ($templateId) {
+            $template = Template::where('id', $templateId)
+                ->where('organization_id', $organizationId)
+                ->where('status', 'APPROVED')
+                ->whereNull('deleted_at')
+                ->firstOrFail();
+        }
+
+        $requiredKeys = [];
+        if ($template) {
+            $requiredKeys = array_values(array_unique(array_map(
+                static fn (array $v) => $v['key'],
+                $extractor->extract($template)
+            )));
+        }
+
+        $mappings = $validated['mappings'] ?? [];
+        $mappingKeySet = [];
+        foreach ($mappings as $mapping) {
+            $mappingKeySet[$mapping['template_variable']] = true;
+        }
+
+        foreach ($requiredKeys as $key) {
+            if (!isset($mappingKeySet[$key])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => __('Missing mapping for :key', ['key' => $key]),
+                ], 422);
+            }
+        }
+
+        $setting = SallaWebhookEventSetting::updateOrCreate(
+            [
+                'organization_id' => $organizationId,
+                'event' => 'customer.login',
+            ],
+            [
+                'enabled' => (bool) $validated['enabled'],
+                'template_id' => $templateId,
+                'recipient_phone_payload_path' => $validated['recipient_phone_payload_path'] ?? null,
+            ]
+        );
+
+        $setting->mappings()->delete();
+
+        foreach ($mappings as $mapping) {
+            $setting->mappings()->create([
+                'template_variable' => $mapping['template_variable'],
+                'payload_path' => $mapping['payload_path'],
+                'transform' => $mapping['transform'] ?? null,
+                'default_value' => $mapping['default_value'] ?? null,
+            ]);
+        }
 
         return response()->json([
             'success' => true,

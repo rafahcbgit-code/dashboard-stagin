@@ -27,13 +27,7 @@ class SallaWebhookController extends Controller
 
             return Response::json(['status' => 'ignored'], 200);
         }
-
-        // Some Salla integrations wrap the actual webhook body inside a `payload` key:
-        // { "payload": { "event": "...", "merchant": "...", "data": {...} } }
-        // Normalize so the stored delivery payload is consistent across events.
-        if (isset($payload['payload']) && is_array($payload['payload'])) {
-            $payload = $payload['payload'];
-        }
+        
 
         Log::info('payload recieved', [
             $payload,

@@ -17,6 +17,7 @@ class SallaWebhookDelivery extends Model
         'payload' => 'array',
         'headers' => 'array',
         'processed_at' => 'datetime',
+        'scheduled_for' => 'datetime',
     ];
 
     public function organization()
@@ -29,4 +30,3 @@ class SallaWebhookDelivery extends Model
         return $this->belongsTo(SallaStore::class, 'salla_store_id');
     }
 }
-

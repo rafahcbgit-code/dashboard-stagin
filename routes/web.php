@@ -170,8 +170,13 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::get('/settings/salla/automations/template/{templateId}/variables', [App\Http\Controllers\User\SallaAutomationController::class, 'templateVariables'])->whereNumber('templateId');
                 Route::get('/settings/salla/automations/order-created/webhook-fields', [App\Http\Controllers\User\SallaAutomationController::class, 'webhookFields'])->name('salla.automations.order_created.fields');
                 Route::post('/settings/salla/automations/order-created', [App\Http\Controllers\User\SallaAutomationController::class, 'updateOrderCreated'])->name('salla.automations.order_created.update');
+                Route::post('/settings/salla/automations/order-created-cod', [App\Http\Controllers\User\SallaAutomationController::class, 'updateOrderCreatedCod'])->name('salla.automations.order_created_cod.update');
                 Route::get('/settings/salla/automations/order-status-updated/webhook-fields', [App\Http\Controllers\User\SallaAutomationController::class, 'webhookFieldsOrderStatusUpdated'])->name('salla.automations.order_status_updated.fields');
                 Route::post('/settings/salla/automations/order-status-updated', [App\Http\Controllers\User\SallaAutomationController::class, 'updateOrderStatusUpdated'])->name('salla.automations.order_status_updated.update');
+                Route::get('/settings/salla/automations/abandoned-cart/webhook-fields', [App\Http\Controllers\User\SallaAutomationController::class, 'webhookFieldsAbandonedCart'])->name('salla.automations.abandoned_cart.fields');
+                Route::post('/settings/salla/automations/abandoned-cart', [App\Http\Controllers\User\SallaAutomationController::class, 'updateAbandonedCart'])->name('salla.automations.abandoned_cart.update');
+                Route::get('/settings/salla/automations/customer-login/webhook-fields', [App\Http\Controllers\User\SallaAutomationController::class, 'webhookFieldsCustomerLogin'])->name('salla.automations.customer_login.fields');
+                Route::post('/settings/salla/automations/customer-login', [App\Http\Controllers\User\SallaAutomationController::class, 'updateCustomerLogin'])->name('salla.automations.customer_login.update');
                 Route::get('/salla-auth', [App\Http\Controllers\Salla\SallaAuthController::class, 'storeAuth']);
                 Route::get('/salla/public/auth/callback', [App\Http\Controllers\Salla\SallaAuthController::class, 'callback']);
 

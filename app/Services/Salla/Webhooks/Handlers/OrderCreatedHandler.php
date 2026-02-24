@@ -45,33 +45,57 @@ class OrderCreatedHandler implements SallaWebhookEventHandlerInterface
             return;
         }
 
-        // 2) Load automation settings + mappings for this org and event.
-        $setting = SallaWebhookEventSetting::with('mappings')
-            ->where('organization_id', $delivery->organization_id)
-            ->where('event', 'order.created')
-            ->first();
+        $payload = $delivery->payload ?? [];
 
-        // 3) If the event is disabled, skip silently (no message).
+        // 2) Resolve which "order created" automation to apply.
+        //    - Default: `order.created` (New Order)
+        //    - Special case: `order.created.cod` (Cash on Delivery)
+        //
+        // COD rule (requested):
+        // - accepted_payment_methods contains "cod"
+        // - is_pending_payment == true
+        $automation = 'order.created';
+        $setting = null;
+
+        if ($this->matchesCodConditions($payload)) {
+            $codSetting = SallaWebhookEventSetting::with('mappings')
+                ->where('organization_id', $delivery->organization_id)
+                ->where('event', 'order.created.cod')
+                ->first();
+
+            if ($codSetting && $codSetting->enabled) {
+                $automation = 'order.created.cod';
+                $setting = $codSetting;
+            }
+        }
+
+        if (!$setting) {
+            // 3) Load default automation settings + mappings for this org.
+            $setting = SallaWebhookEventSetting::with('mappings')
+                ->where('organization_id', $delivery->organization_id)
+                ->where('event', 'order.created')
+                ->first();
+        }
+
+        // 4) If the event is disabled, skip silently (no message).
         if (!$setting || !$setting->enabled) {
             $delivery->update([
                 'status' => 'skipped',
                 'processed_at' => now(),
-                'error' => 'event_disabled',
+                'error' => 'event_disabled:' . $automation,
             ]);
             return;
         }
 
-        // 4) A template must be selected to send anything.
+        // 5) A template must be selected to send anything.
         if (!$setting->template_id) {
             $delivery->update([
                 'status' => 'skipped',
                 'processed_at' => now(),
-                'error' => 'template_not_selected',
+                'error' => 'template_not_selected:' . $automation,
             ]);
             return;
         }
-
-        $payload = $delivery->payload ?? [];
 
         // 5) Resolve recipient phone.
         //    We support two formats:
@@ -156,6 +180,7 @@ class OrderCreatedHandler implements SallaWebhookEventHandlerInterface
             'contact_id' => $contact->id,
             'template_id' => $template->id,
             'sent_chat_id' => $delivery->sent_chat_id,
+            'automation' => $automation,
         ]);
     }
 
@@ -226,5 +251,28 @@ class OrderCreatedHandler implements SallaWebhookEventHandlerInterface
 
         $out = trim($out);
         return $out === '' ? null : $out;
+    }
+
+    private function matchesCodConditions(array $payload): bool
+    {
+        $methods = data_get($payload, 'data.accepted_payment_methods');
+        $normalized = [];
+
+        if (is_array($methods)) {
+            foreach ($methods as $m) {
+                if (is_scalar($m)) {
+                    $normalized[] = mb_strtolower(trim((string) $m));
+                }
+            }
+        } elseif (is_scalar($methods)) {
+            $normalized[] = mb_strtolower(trim((string) $methods));
+        }
+
+        $hasCod = in_array('cod', $normalized, true);
+
+        $pending = data_get($payload, 'data.is_pending_payment');
+        $isPending = filter_var($pending, FILTER_VALIDATE_BOOL, FILTER_NULL_ON_FAILURE);
+
+        return $hasCod && $isPending === true;
     }
 }

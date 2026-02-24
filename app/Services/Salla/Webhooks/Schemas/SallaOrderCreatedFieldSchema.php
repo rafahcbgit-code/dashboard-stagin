@@ -21,6 +21,8 @@ class SallaOrderCreatedFieldSchema
             ['path' => 'data.payment_method', 'label' => 'Payment Method'],
             ['path' => 'data.shipping_status', 'label' => 'Shipping Status'],
             ['path' => 'data.is_pending_payment', 'label' => 'Is Pending Payment'],
+            ['path' => 'data.accepted_payment_methods', 'label' => 'Accepted Payment Methods (All)'],
+            ['path' => 'data.accepted_payment_methods.0', 'label' => 'Accepted Payment Method (First)'],
 
             ['path' => 'data.status.name', 'label' => 'Order Status (Name)'],
             ['path' => 'data.status.slug', 'label' => 'Order Status (Slug)'],
@@ -47,6 +49,9 @@ class SallaOrderCreatedFieldSchema
             ['path' => 'data.shipping.address.city', 'label' => 'Shipping City'],
             ['path' => 'data.shipping.address.shipping_address', 'label' => 'Shipping Address'],
 
+            // Tracking
+            ['path' => 'data.shipping.shipment.tracking_link', 'label' => 'Tracking Link (Shipping Shipment)'],
+        
             ['path' => 'data.items.0.name', 'label' => 'First Item Name'],
             ['path' => 'data.items.0.quantity', 'label' => 'First Item Quantity'],
             ['path' => 'data.items.0.amounts.total.amount', 'label' => 'First Item Total Amount'],
@@ -57,4 +62,3 @@ class SallaOrderCreatedFieldSchema
         ];
     }
 }
-

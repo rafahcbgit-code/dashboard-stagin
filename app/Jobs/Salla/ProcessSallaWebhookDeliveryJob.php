@@ -10,6 +10,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Support\Facades\Log;
 use Throwable;
 
@@ -41,6 +42,22 @@ class ProcessSallaWebhookDeliveryJob implements ShouldQueue
     {
     }
 
+    /**
+     * Prevent multiple workers from processing the same delivery concurrently.
+     *
+     * Why this matters:
+     * - Providers can retry webhooks quickly.
+     * - A delivery can be (re)dispatched for reliability.
+     * - Without this lock, two jobs may race and send the same WhatsApp template twice.
+     */
+    public function middleware(): array
+    {
+        return [
+            (new WithoutOverlapping('salla_webhook_delivery_' . $this->deliveryId))
+                ->expireAfter(300),
+        ];
+    }
+
     public function handle(SallaWebhookEventRouter $router): void
     {
         // Step 1: Load the stored delivery record (contains: event, payload, merchant_id, organization_id, etc.)
@@ -54,6 +71,13 @@ class ProcessSallaWebhookDeliveryJob implements ShouldQueue
 
         // Step 2: Idempotency guard (do not re-process terminal states)
         if (in_array($delivery->status, ['processed', 'ignored', 'skipped'], true)) {
+            return;
+        }
+
+        // If another job already started processing this delivery, avoid sending twice.
+        // The WithoutOverlapping middleware should already prevent this, but this guard
+        // adds an extra layer of safety when running synchronously.
+        if ($delivery->status === 'processing') {
             return;
         }
 

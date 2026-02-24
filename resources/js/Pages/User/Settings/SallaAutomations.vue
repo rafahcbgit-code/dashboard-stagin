@@ -115,6 +115,101 @@
             <div class="bg-white border border-slate-200 rounded-lg p-6 mt-6">
                 <div class="flex items-start justify-between gap-6">
                     <div class="flex-1">
+                        <h2 class="text-lg font-medium">{{ $t('Cash on Delivery') }}</h2>
+                        <p class="text-sm text-gray-600">
+                            {{ $t('Send a message only for COD orders (accepted_payment_methods contains cod and is_pending_payment is true).') }}
+                        </p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="text-sm text-gray-700">{{ codForm.enabled ? $t('Enabled') : $t('Disabled') }}</span>
+                        <FormToggleSwitch v-model="codForm.enabled" />
+                    </div>
+                </div>
+
+                <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm leading-6 text-gray-900 mb-2">{{ $t('Template') }}</label>
+                        <BaseListbox v-model="codForm.template_id" :options="templates" :placeholder="$t('Select template')" />
+                        <div v-if="codErrors.template_id" class="form-error text-[#b91c1c] text-xs mt-1">{{ codErrors.template_id }}</div>
+                    </div>
+
+                    <div>
+                        <FormInput
+                            v-model="codForm.recipient_phone_payload_path"
+                            :name="$t('Recipient phone payload path')"
+                            :placeholder="'data.customer.mobile_code+data.customer.mobile'"
+                            :error="codErrors.recipient_phone_payload_path"
+                            :type="'text'"
+                        />
+                        <p class="text-xs text-gray-500 mt-1">{{ $t('Example: data.customer.mobile_code+data.customer.mobile') }}</p>
+                    </div>
+                </div>
+
+                <div class="mt-6 flex items-center justify-between">
+                    <h3 class="text-sm font-medium text-gray-900">{{ $t('Variable Mapping') }}</h3>
+                    <button type="button"
+                        class="inline-flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-sm rounded-md"
+                        :disabled="loadingFields"
+                        @click="refreshWebhookFields">
+                        <span v-if="loadingFields">{{ $t('Refreshing...') }}</span>
+                        <span v-else>{{ $t('Refresh webhook fields') }}</span>
+                    </button>
+                </div>
+
+                <div v-if="codTemplateVariablesLocal.length === 0" class="mt-4 text-sm text-gray-600">
+                    {{ $t('Select a template to configure variable mapping.') }}
+                </div>
+
+                <div v-else class="mt-4 overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                        <thead>
+                            <tr class="text-left text-gray-600">
+                                <th class="py-2 pr-4">{{ $t('Template variable') }}</th>
+                                <th class="py-2 pr-4">{{ $t('Webhook field') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="variable in codTemplateVariablesLocal" :key="variable.key" class="border-t">
+                                <td class="py-3 pr-4">
+                                    <div class="font-medium text-gray-900">{{ variable.key }}</div>
+                                    <div class="text-xs text-gray-500">{{ variable.placeholder }}</div>
+                                </td>
+                                <td class="py-3 pr-4">
+                                    <select v-model="codMappingsLocal[variable.key]"
+                                        class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                        <option value="">{{ $t('Select field') }}</option>
+                                        <option v-for="field in webhookFieldsLocal" :key="field.path" :value="field.path">
+                                            {{ fieldLabel(field) }}
+                                        </option>
+                                    </select>
+                                    <div v-if="codErrors[`mappings.${variable.key}`]" class="form-error text-[#b91c1c] text-xs mt-1">
+                                        {{ codErrors[`mappings.${variable.key}`] }}
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div v-if="webhookFieldsLocal.length === 0" class="mt-3 text-xs text-gray-500">
+                        {{ $t('No webhook payload received yet. Trigger an order.created webhook to see available fields.') }}
+                    </div>
+                </div>
+
+                <div class="mt-6 flex items-center gap-3">
+                    <button type="button"
+                        class="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm rounded-md hover:shadow-md disabled:opacity-50"
+                        :disabled="codSaving"
+                        @click="saveCod">
+                        <span v-if="codSaving">{{ $t('Saving...') }}</span>
+                        <span v-else>{{ $t('Save') }}</span>
+                    </button>
+                    <div v-if="codSuccessMessage" class="text-sm text-green-700">{{ codSuccessMessage }}</div>
+                    <div v-if="codErrorMessage" class="text-sm text-red-700">{{ codErrorMessage }}</div>
+                </div>
+            </div>
+
+            <div class="bg-white border border-slate-200 rounded-lg p-6 mt-6">
+                <div class="flex items-start justify-between gap-6">
+                    <div class="flex-1">
                         <h2 class="text-lg font-medium">{{ $t('Order Status Updated') }}</h2>
                         <p class="text-sm text-gray-600">
                             {{ $t('Send a message automatically when an order status changes in Salla (order.status.updated).') }}
@@ -260,6 +355,211 @@
                     <div v-if="statusErrorMessage" class="text-sm text-red-700">{{ statusErrorMessage }}</div>
                 </div>
             </div>
+
+            <div class="bg-white border border-slate-200 rounded-lg p-6 mt-6">
+                <div class="flex items-start justify-between gap-6">
+                    <div class="flex-1">
+                        <h2 class="text-lg font-medium">{{ $t('Abandoned Cart') }}</h2>
+                        <p class="text-sm text-gray-600">
+                            {{ $t('Send a message automatically when a cart is abandoned in Salla (abandoned.cart).') }}
+                        </p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="text-sm text-gray-700">{{ abandonedForm.enabled ? $t('Enabled') : $t('Disabled') }}</span>
+                        <FormToggleSwitch v-model="abandonedForm.enabled" />
+                    </div>
+                </div>
+
+                <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm leading-6 text-gray-900 mb-2">{{ $t('Template') }}</label>
+                        <BaseListbox v-model="abandonedForm.template_id" :options="templates" :placeholder="$t('Select template')" />
+                        <div v-if="abandonedErrors.template_id" class="form-error text-[#b91c1c] text-xs mt-1">{{ abandonedErrors.template_id }}</div>
+                    </div>
+
+                    <div>
+                        <FormInput
+                            v-model="abandonedForm.recipient_phone_payload_path"
+                            :name="$t('Recipient phone payload path')"
+                            :placeholder="'data.customer.mobile'"
+                            :error="abandonedErrors.recipient_phone_payload_path"
+                            :type="'text'"
+                        />
+                        <p class="text-xs text-gray-500 mt-1">{{ $t('Example: data.customer.mobile') }}</p>
+                    </div>
+                </div>
+
+                <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <FormInput
+                            v-model="abandonedForm.send_delay_hours"
+                            :name="$t('Send after (hours)')"
+                            :placeholder="'0'"
+                            :type="'number'"
+                            :error="abandonedErrors.send_delay_hours"
+                        />
+                        <p class="text-xs text-gray-500 mt-1">
+                            {{ $t('0 = send immediately. Otherwise, the message will be scheduled after N hours from cart creation time.') }}
+                        </p>
+                    </div>
+                </div>
+
+                <div class="mt-6 flex items-center justify-between">
+                    <h3 class="text-sm font-medium text-gray-900">{{ $t('Variable Mapping') }}</h3>
+                    <button type="button"
+                        class="inline-flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-sm rounded-md"
+                        :disabled="abandonedLoadingFields"
+                        @click="refreshAbandonedWebhookFields">
+                        <span v-if="abandonedLoadingFields">{{ $t('Refreshing...') }}</span>
+                        <span v-else>{{ $t('Refresh webhook fields') }}</span>
+                    </button>
+                </div>
+
+                <div v-if="abandonedTemplateVariablesLocal.length === 0" class="mt-4 text-sm text-gray-600">
+                    {{ $t('Select a template to configure variable mapping.') }}
+                </div>
+
+                <div v-else class="mt-4 overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                        <thead>
+                            <tr class="text-left text-gray-600">
+                                <th class="py-2 pr-4">{{ $t('Template variable') }}</th>
+                                <th class="py-2 pr-4">{{ $t('Webhook field') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="variable in abandonedTemplateVariablesLocal" :key="variable.key" class="border-t">
+                                <td class="py-3 pr-4">
+                                    <div class="font-medium text-gray-900">{{ variable.key }}</div>
+                                    <div class="text-xs text-gray-500">{{ variable.placeholder }}</div>
+                                </td>
+                                <td class="py-3 pr-4">
+                                    <select v-model="abandonedMappingsLocal[variable.key]"
+                                        class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                        <option value="">{{ $t('Select field') }}</option>
+                                        <option v-for="field in abandonedWebhookFieldsLocal" :key="field.path" :value="field.path">
+                                            {{ fieldLabel(field) }}
+                                        </option>
+                                    </select>
+                                    <div v-if="abandonedErrors[`mappings.${variable.key}`]" class="form-error text-[#b91c1c] text-xs mt-1">
+                                        {{ abandonedErrors[`mappings.${variable.key}`] }}
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div v-if="abandonedWebhookFieldsLocal.length === 0" class="mt-3 text-xs text-gray-500">
+                        {{ $t('No webhook payload received yet. Trigger an abandoned.cart webhook to see available fields.') }}
+                    </div>
+                </div>
+
+                <div class="mt-6 flex items-center gap-3">
+                    <button type="button"
+                        class="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm rounded-md hover:shadow-md disabled:opacity-50"
+                        :disabled="abandonedSaving"
+                        @click="saveAbandonedCart">
+                        <span v-if="abandonedSaving">{{ $t('Saving...') }}</span>
+                        <span v-else>{{ $t('Save') }}</span>
+                    </button>
+                    <div v-if="abandonedSuccessMessage" class="text-sm text-green-700">{{ abandonedSuccessMessage }}</div>
+                    <div v-if="abandonedErrorMessage" class="text-sm text-red-700">{{ abandonedErrorMessage }}</div>
+                </div>
+            </div>
+
+            <div class="bg-white border border-slate-200 rounded-lg p-6 mt-6">
+                <div class="flex items-start justify-between gap-6">
+                    <div class="flex-1">
+                        <h2 class="text-lg font-medium">{{ $t('Customer Login') }}</h2>
+                        <p class="text-sm text-gray-600">
+                            {{ $t('Send a message automatically when a customer logs in to Salla (customer.login).') }}
+                        </p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="text-sm text-gray-700">{{ customerLoginForm.enabled ? $t('Enabled') : $t('Disabled') }}</span>
+                        <FormToggleSwitch v-model="customerLoginForm.enabled" />
+                    </div>
+                </div>
+
+                <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm leading-6 text-gray-900 mb-2">{{ $t('Template') }}</label>
+                        <BaseListbox v-model="customerLoginForm.template_id" :options="templates" :placeholder="$t('Select template')" />
+                        <div v-if="customerLoginErrors.template_id" class="form-error text-[#b91c1c] text-xs mt-1">{{ customerLoginErrors.template_id }}</div>
+                    </div>
+
+                    <div>
+                        <FormInput
+                            v-model="customerLoginForm.recipient_phone_payload_path"
+                            :name="$t('Recipient phone payload path')"
+                            :placeholder="'data.mobile_code+data.mobile'"
+                            :error="customerLoginErrors.recipient_phone_payload_path"
+                            :type="'text'"
+                        />
+                        <p class="text-xs text-gray-500 mt-1">{{ $t('Example: data.mobile_code+data.mobile') }}</p>
+                    </div>
+                </div>
+
+                <div class="mt-6 flex items-center justify-between">
+                    <h3 class="text-sm font-medium text-gray-900">{{ $t('Variable Mapping') }}</h3>
+                    <button type="button"
+                        class="inline-flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-sm rounded-md"
+                        :disabled="customerLoginLoadingFields"
+                        @click="refreshCustomerLoginWebhookFields">
+                        <span v-if="customerLoginLoadingFields">{{ $t('Refreshing...') }}</span>
+                        <span v-else>{{ $t('Refresh webhook fields') }}</span>
+                    </button>
+                </div>
+
+                <div v-if="customerLoginTemplateVariablesLocal.length === 0" class="mt-4 text-sm text-gray-600">
+                    {{ $t('Select a template to configure variable mapping.') }}
+                </div>
+
+                <div v-else class="mt-4 overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                        <thead>
+                            <tr class="text-left text-gray-600">
+                                <th class="py-2 pr-4">{{ $t('Template variable') }}</th>
+                                <th class="py-2 pr-4">{{ $t('Webhook field') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="variable in customerLoginTemplateVariablesLocal" :key="variable.key" class="border-t">
+                                <td class="py-3 pr-4">
+                                    <div class="font-medium text-gray-900">{{ variable.key }}</div>
+                                    <div class="text-xs text-gray-500">{{ variable.placeholder }}</div>
+                                </td>
+                                <td class="py-3 pr-4">
+                                    <select v-model="customerLoginMappingsLocal[variable.key]"
+                                        class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                        <option value="">{{ $t('Select field') }}</option>
+                                        <option v-for="field in customerLoginWebhookFieldsLocal" :key="field.path" :value="field.path">
+                                            {{ fieldLabel(field) }}
+                                        </option>
+                                    </select>
+                                    <div v-if="customerLoginErrors[`mappings.${variable.key}`]" class="form-error text-[#b91c1c] text-xs mt-1">
+                                        {{ customerLoginErrors[`mappings.${variable.key}`] }}
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div v-if="customerLoginWebhookFieldsLocal.length === 0" class="mt-3 text-xs text-gray-500">
+                        {{ $t('No webhook payload received yet. Trigger a customer.login webhook to see available fields.') }}
+                    </div>
+                </div>
+
+                <div class="mt-6 flex items-center gap-3">
+                    <button type="button"
+                        class="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm rounded-md hover:shadow-md disabled:opacity-50"
+                        :disabled="customerLoginSaving"
+                        @click="saveCustomerLogin">
+                        <span v-if="customerLoginSaving">{{ $t('Saving...') }}</span>
+                        <span v-else>{{ $t('Save') }}</span>
+                    </button>
+                    <div v-if="customerLoginSuccessMessage" class="text-sm text-green-700">{{ customerLoginSuccessMessage }}</div>
+                    <div v-if="customerLoginErrorMessage" class="text-sm text-red-700">{{ customerLoginErrorMessage }}</div>
+                </div>
+            </div>
         </div>
     </AppLayout>
 </template>
@@ -294,6 +594,18 @@ const props = defineProps({
         type: Object,
         default: () => ({})
     },
+    codSetting: {
+        type: Object,
+        default: () => ({ enabled: false, template_id: null, recipient_phone_payload_path: 'data.customer.mobile_code+data.customer.mobile' })
+    },
+    codTemplateVariables: {
+        type: Array,
+        default: () => []
+    },
+    codMappings: {
+        type: Object,
+        default: () => ({})
+    },
     statusSetting: {
         type: Object,
         default: () => ({ enabled: false, recipient_phone_payload_path: 'data.order.customer.mobile' })
@@ -309,6 +621,38 @@ const props = defineProps({
     statusOptions: {
         type: Array,
         default: () => []
+    },
+    abandonedSetting: {
+        type: Object,
+        default: () => ({ enabled: false, template_id: null, recipient_phone_payload_path: 'data.customer.mobile', send_delay_hours: 0 })
+    },
+    abandonedTemplateVariables: {
+        type: Array,
+        default: () => []
+    },
+    abandonedWebhookFields: {
+        type: Array,
+        default: () => []
+    },
+    abandonedMappings: {
+        type: Object,
+        default: () => ({})
+    },
+    customerLoginSetting: {
+        type: Object,
+        default: () => ({ enabled: false, template_id: null, recipient_phone_payload_path: 'data.mobile_code+data.mobile' })
+    },
+    customerLoginTemplateVariables: {
+        type: Array,
+        default: () => []
+    },
+    customerLoginWebhookFields: {
+        type: Array,
+        default: () => []
+    },
+    customerLoginMappings: {
+        type: Object,
+        default: () => ({})
     }
 });
 
@@ -321,6 +665,20 @@ const form = reactive({
 const templateVariablesLocal = ref(props.templateVariables ?? []);
 const webhookFieldsLocal = ref(props.webhookFields ?? []);
 const mappingsLocal = reactive({ ...(props.mappings ?? {}) });
+
+const codForm = reactive({
+    enabled: !!props.codSetting.enabled,
+    template_id: props.codSetting.template_id ?? null,
+    recipient_phone_payload_path: props.codSetting.recipient_phone_payload_path ?? 'data.customer.mobile_code+data.customer.mobile',
+});
+
+const codTemplateVariablesLocal = ref(props.codTemplateVariables ?? []);
+const codMappingsLocal = reactive({ ...(props.codMappings ?? {}) });
+for (const variable of codTemplateVariablesLocal.value ?? []) {
+    if (!(variable.key in codMappingsLocal)) {
+        codMappingsLocal[variable.key] = '';
+    }
+}
 
 const statusForm = reactive({
     enabled: !!props.statusSetting.enabled,
@@ -339,11 +697,49 @@ const statusRulesLocal = ref((props.statusRules ?? []).map((rule, idx) => ({
     mappings: { ...(rule?.mappings ?? {}) },
 })));
 
+const abandonedForm = reactive({
+    enabled: !!props.abandonedSetting.enabled,
+    template_id: props.abandonedSetting.template_id ?? null,
+    recipient_phone_payload_path: props.abandonedSetting.recipient_phone_payload_path ?? 'data.customer.mobile',
+    send_delay_hours: props.abandonedSetting.send_delay_hours ?? 0,
+});
+
+const abandonedTemplateVariablesLocal = ref(props.abandonedTemplateVariables ?? []);
+const abandonedWebhookFieldsLocal = ref(props.abandonedWebhookFields ?? []);
+const abandonedMappingsLocal = reactive({ ...(props.abandonedMappings ?? {}) });
+
+const customerLoginForm = reactive({
+    enabled: !!props.customerLoginSetting.enabled,
+    template_id: props.customerLoginSetting.template_id ?? null,
+    recipient_phone_payload_path: props.customerLoginSetting.recipient_phone_payload_path ?? 'data.mobile_code+data.mobile',
+});
+
+const customerLoginTemplateVariablesLocal = ref(props.customerLoginTemplateVariables ?? []);
+const customerLoginWebhookFieldsLocal = ref(props.customerLoginWebhookFields ?? []);
+const customerLoginMappingsLocal = reactive({ ...(props.customerLoginMappings ?? {}) });
+
 const saving = ref(false);
 const loadingFields = ref(false);
 const errors = reactive({});
 const successMessage = ref('');
 const errorMessage = ref('');
+
+const codSaving = ref(false);
+const codErrors = reactive({});
+const codSuccessMessage = ref('');
+const codErrorMessage = ref('');
+
+const abandonedSaving = ref(false);
+const abandonedLoadingFields = ref(false);
+const abandonedErrors = reactive({});
+const abandonedSuccessMessage = ref('');
+const abandonedErrorMessage = ref('');
+
+const customerLoginSaving = ref(false);
+const customerLoginLoadingFields = ref(false);
+const customerLoginErrors = reactive({});
+const customerLoginSuccessMessage = ref('');
+const customerLoginErrorMessage = ref('');
 
 const statusSaving = ref(false);
 const statusLoadingFields = ref(false);
@@ -391,6 +787,26 @@ const refreshWebhookFields = async () => {
     }
 };
 
+const refreshAbandonedWebhookFields = async () => {
+    abandonedLoadingFields.value = true;
+    try {
+        const res = await axios.get('/settings/salla/automations/abandoned-cart/webhook-fields');
+        abandonedWebhookFieldsLocal.value = res?.data?.data?.fields ?? [];
+    } finally {
+        abandonedLoadingFields.value = false;
+    }
+};
+
+const refreshCustomerLoginWebhookFields = async () => {
+    customerLoginLoadingFields.value = true;
+    try {
+        const res = await axios.get('/settings/salla/automations/customer-login/webhook-fields');
+        customerLoginWebhookFieldsLocal.value = res?.data?.data?.fields ?? [];
+    } finally {
+        customerLoginLoadingFields.value = false;
+    }
+};
+
 const fetchTemplateVariables = async (templateId) => {
     if (!templateId) {
         return [];
@@ -422,8 +838,65 @@ const loadTemplateVariables = async (templateId) => {
     }
 };
 
+const loadCodTemplateVariables = async (templateId) => {
+    if (!templateId) {
+        codTemplateVariablesLocal.value = [];
+        return;
+    }
+
+    codTemplateVariablesLocal.value = await fetchTemplateVariables(templateId);
+
+    for (const variable of codTemplateVariablesLocal.value) {
+        if (!(variable.key in codMappingsLocal)) {
+            codMappingsLocal[variable.key] = '';
+        }
+    }
+};
+
 watch(() => form.template_id, async (newId) => {
     await loadTemplateVariables(newId);
+});
+
+watch(() => codForm.template_id, async (newId) => {
+    await loadCodTemplateVariables(newId);
+});
+
+const loadAbandonedTemplateVariables = async (templateId) => {
+    if (!templateId) {
+        abandonedTemplateVariablesLocal.value = [];
+        return;
+    }
+
+    abandonedTemplateVariablesLocal.value = await fetchTemplateVariables(templateId);
+
+    for (const variable of abandonedTemplateVariablesLocal.value) {
+        if (!(variable.key in abandonedMappingsLocal)) {
+            abandonedMappingsLocal[variable.key] = '';
+        }
+    }
+};
+
+watch(() => abandonedForm.template_id, async (newId) => {
+    await loadAbandonedTemplateVariables(newId);
+});
+
+const loadCustomerLoginTemplateVariables = async (templateId) => {
+    if (!templateId) {
+        customerLoginTemplateVariablesLocal.value = [];
+        return;
+    }
+
+    customerLoginTemplateVariablesLocal.value = await fetchTemplateVariables(templateId);
+
+    for (const variable of customerLoginTemplateVariablesLocal.value) {
+        if (!(variable.key in customerLoginMappingsLocal)) {
+            customerLoginMappingsLocal[variable.key] = '';
+        }
+    }
+};
+
+watch(() => customerLoginForm.template_id, async (newId) => {
+    await loadCustomerLoginTemplateVariables(newId);
 });
 
 watch(statusRulesLocal, async (rules) => {
@@ -524,6 +997,151 @@ const save = async () => {
         }
     } finally {
         saving.value = false;
+    }
+};
+
+const saveCod = async () => {
+    codSaving.value = true;
+    codSuccessMessage.value = '';
+    codErrorMessage.value = '';
+    Object.keys(codErrors).forEach((k) => delete codErrors[k]);
+
+    const mappingsArray = (codTemplateVariablesLocal.value ?? []).map(v => ({
+        template_variable: v.key,
+        payload_path: codMappingsLocal[v.key] ?? '',
+    }));
+
+    try {
+        await axios.post('/settings/salla/automations/order-created-cod', {
+            enabled: codForm.enabled,
+            template_id: codForm.template_id,
+            recipient_phone_payload_path: codForm.recipient_phone_payload_path,
+            mappings: mappingsArray,
+        });
+
+        codSuccessMessage.value = 'Saved';
+    } catch (e) {
+        codErrorMessage.value = e?.response?.data?.message ?? 'Failed to save';
+
+        const serverErrors = e?.response?.data?.errors ?? null;
+        if (serverErrors && typeof serverErrors === 'object') {
+            for (const [key, value] of Object.entries(serverErrors)) {
+                const match = String(key).match(/^mappings\.(\d+)\.(payload_path|template_variable)$/);
+                if (match) {
+                    const idx = parseInt(match[1], 10);
+                    const varKey = mappingsArray[idx]?.template_variable;
+                    if (varKey) {
+                        codErrors[`mappings.${varKey}`] = Array.isArray(value) ? value[0] : value;
+                        continue;
+                    }
+                }
+
+                codErrors[key] = Array.isArray(value) ? value[0] : value;
+            }
+        }
+
+        if (e?.response?.status === 422 && e?.response?.data?.message?.startsWith('Missing mapping for')) {
+            codErrorMessage.value = e.response.data.message;
+        }
+    } finally {
+        codSaving.value = false;
+    }
+};
+
+const saveAbandonedCart = async () => {
+    abandonedSaving.value = true;
+    abandonedSuccessMessage.value = '';
+    abandonedErrorMessage.value = '';
+    Object.keys(abandonedErrors).forEach((k) => delete abandonedErrors[k]);
+
+    const mappingsArray = (abandonedTemplateVariablesLocal.value ?? []).map(v => ({
+        template_variable: v.key,
+        payload_path: abandonedMappingsLocal[v.key] ?? '',
+    }));
+
+    try {
+        await axios.post('/settings/salla/automations/abandoned-cart', {
+            enabled: abandonedForm.enabled,
+            template_id: abandonedForm.template_id,
+            recipient_phone_payload_path: abandonedForm.recipient_phone_payload_path,
+            send_delay_hours: abandonedForm.send_delay_hours,
+            mappings: mappingsArray,
+        });
+
+        abandonedSuccessMessage.value = 'Saved';
+    } catch (e) {
+        abandonedErrorMessage.value = e?.response?.data?.message ?? 'Failed to save';
+
+        const serverErrors = e?.response?.data?.errors ?? null;
+        if (serverErrors && typeof serverErrors === 'object') {
+            for (const [key, value] of Object.entries(serverErrors)) {
+                const match = String(key).match(/^mappings\.(\d+)\.(payload_path|template_variable)$/);
+                if (match) {
+                    const idx = parseInt(match[1], 10);
+                    const varKey = mappingsArray[idx]?.template_variable;
+                    if (varKey) {
+                        abandonedErrors[`mappings.${varKey}`] = Array.isArray(value) ? value[0] : value;
+                        continue;
+                    }
+                }
+
+                abandonedErrors[key] = Array.isArray(value) ? value[0] : value;
+            }
+        }
+
+        if (e?.response?.status === 422 && e?.response?.data?.message?.startsWith('Missing mapping for')) {
+            abandonedErrorMessage.value = e.response.data.message;
+        }
+    } finally {
+        abandonedSaving.value = false;
+    }
+};
+
+const saveCustomerLogin = async () => {
+    customerLoginSaving.value = true;
+    customerLoginSuccessMessage.value = '';
+    customerLoginErrorMessage.value = '';
+    Object.keys(customerLoginErrors).forEach((k) => delete customerLoginErrors[k]);
+
+    const mappingsArray = (customerLoginTemplateVariablesLocal.value ?? []).map(v => ({
+        template_variable: v.key,
+        payload_path: customerLoginMappingsLocal[v.key] ?? '',
+    }));
+
+    try {
+        await axios.post('/settings/salla/automations/customer-login', {
+            enabled: customerLoginForm.enabled,
+            template_id: customerLoginForm.template_id,
+            recipient_phone_payload_path: customerLoginForm.recipient_phone_payload_path,
+            mappings: mappingsArray,
+        });
+
+        customerLoginSuccessMessage.value = 'Saved';
+    } catch (e) {
+        customerLoginErrorMessage.value = e?.response?.data?.message ?? 'Failed to save';
+
+        const serverErrors = e?.response?.data?.errors ?? null;
+        if (serverErrors && typeof serverErrors === 'object') {
+            for (const [key, value] of Object.entries(serverErrors)) {
+                const match = String(key).match(/^mappings\.(\d+)\.(payload_path|template_variable)$/);
+                if (match) {
+                    const idx = parseInt(match[1], 10);
+                    const varKey = mappingsArray[idx]?.template_variable;
+                    if (varKey) {
+                        customerLoginErrors[`mappings.${varKey}`] = Array.isArray(value) ? value[0] : value;
+                        continue;
+                    }
+                }
+
+                customerLoginErrors[key] = Array.isArray(value) ? value[0] : value;
+            }
+        }
+
+        if (e?.response?.status === 422 && e?.response?.data?.message?.startsWith('Missing mapping for')) {
+            customerLoginErrorMessage.value = e.response.data.message;
+        }
+    } finally {
+        customerLoginSaving.value = false;
     }
 };
 
