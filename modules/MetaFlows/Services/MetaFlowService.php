@@ -2,6 +2,8 @@
 
 namespace Modules\MetaFlows\Services;
 
+use App\Jobs\PopulateGoogleSheetJob;
+use App\Models\Organization;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\GuzzleException;
@@ -11,7 +13,6 @@ use Illuminate\Support\Str;
 use Modules\MetaFlows\Models\MetaFlow;
 use Modules\MetaFlows\Models\MetaFlowResponse;
 use Modules\MetaFlows\Resources\MetaFlowResource;
-use App\Models\Organization;
 
 class MetaFlowService
 {
@@ -482,6 +483,21 @@ class MetaFlowService
             'meta_flow_id' => $flowResponse->meta_flow_id,
             'contact_id'   => $contactId,
         ]);
+
+        // Dispatch Google Sheets population job if the flow has it enabled.
+        // Wrapped in try/catch so a misconfiguration never blocks the webhook response.
+        try {
+            $flow = MetaFlow::find($flowResponse->meta_flow_id);
+
+            if ($flow && $flow->google_sheet_enabled && $flow->google_sheet_url) {
+                PopulateGoogleSheetJob::dispatch($flowResponse->id, $this->organizationId);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('MetaFlows: failed to dispatch PopulateGoogleSheetJob', [
+                'response_id' => $flowResponse->id,
+                'error'       => $e->getMessage(),
+            ]);
+        }
 
         return $flowResponse->fresh();
     }

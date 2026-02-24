@@ -4,12 +4,15 @@ namespace Modules\MetaFlows\Controllers;
 
 use App\Http\Controllers\Controller as BaseController;
 use App\Helpers\CustomHelper;
+use App\Models\Organization;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redirect;
 use Inertia\Inertia;
 use Modules\MetaFlows\Models\MetaFlow;
 use Modules\MetaFlows\Models\MetaFlowResponse;
 use Modules\MetaFlows\Requests\StoreMetaFlowRequest;
+use Modules\MetaFlows\Services\GoogleSheetsService;
 use Modules\MetaFlows\Services\MetaFlowService;
 
 class MetaFlowController extends BaseController
@@ -208,6 +211,106 @@ class MetaFlowController extends BaseController
             'flow'      => $flow,
             'responses' => $responses,
         ]);
+    }
+
+    // Return the Google OAuth connection status for the current organization
+    public function googleStatus(): JsonResponse
+    {
+        $orgId        = session()->get('current_organization');
+        $organization = Organization::findOrFail($orgId);
+        $metadata     = json_decode($organization->metadata, true) ?? [];
+        $google       = $metadata['google_oauth'] ?? [];
+
+        return response()->json([
+            'connected'    => !empty($google['access_token']),
+            'google_email' => $google['google_email'] ?? null,
+        ]);
+    }
+
+    // Return the flow's parsed field definitions plus the built-in metadata fields
+    public function getFlowFields(string $uuid): JsonResponse
+    {
+        $flow = MetaFlow::where('uuid', $uuid)
+            ->where('organization_id', session()->get('current_organization'))
+            ->firstOrFail();
+
+        $metadataFields = [
+            ['name' => '__timestamp',     'label' => 'Timestamp',     'type' => 'metadata'],
+            ['name' => '__contact_phone', 'label' => 'Contact Phone', 'type' => 'metadata'],
+            ['name' => '__contact_name',  'label' => 'Contact Name',  'type' => 'metadata'],
+            ['name' => '__flow_token',    'label' => 'Flow Token',    'type' => 'metadata'],
+        ];
+
+        return response()->json([
+            'fields'          => $flow->extractFlowFields(),
+            'metadata_fields' => $metadataFields,
+        ]);
+    }
+
+    // Fetch the column headers from the linked Google Sheet.
+    // Saves the URL and tab name on the flow before fetching so they are persisted.
+    public function getSheetHeaders(Request $request, string $uuid): JsonResponse
+    {
+        $orgId = session()->get('current_organization');
+
+        $flow = MetaFlow::where('uuid', $uuid)
+            ->where('organization_id', $orgId)
+            ->firstOrFail();
+
+        $url = $request->query('google_sheet_url', $flow->google_sheet_url);
+        $tab = $request->query('google_sheet_tab', $flow->google_sheet_tab ?? 'Sheet1');
+
+        // Persist URL and tab so subsequent saves don't lose them
+        $flow->update([
+            'google_sheet_url' => $url,
+            'google_sheet_tab' => $tab,
+        ]);
+
+        $spreadsheetId = GoogleSheetsService::extractSpreadsheetId($url ?? '');
+
+        if (!$spreadsheetId) {
+            return response()->json(['message' => 'Invalid Google Sheets URL.'], 422);
+        }
+
+        try {
+            $service = GoogleSheetsService::fromOrganization($orgId);
+            $headers = $service->getSheetHeaders($spreadsheetId, $tab);
+        } catch (\Throwable $e) {
+            return response()->json(['message' => 'Failed to fetch sheet headers: ' . $e->getMessage()], 422);
+        }
+
+        $organization = \App\Models\Organization::findOrFail($orgId);
+        $meta         = json_decode($organization->metadata, true) ?? [];
+        $googleEmail  = $meta['google_oauth']['google_email'] ?? null;
+
+        return response()->json([
+            'headers'      => $headers,
+            'google_email' => $googleEmail,
+        ]);
+    }
+
+    // Save the Google Sheets configuration for a flow
+    public function saveSheetConfig(Request $request, string $uuid): JsonResponse
+    {
+        $request->validate([
+            'google_sheet_url'     => 'nullable|string|url',
+            'google_sheet_tab'     => 'nullable|string|max:255',
+            'google_sheet_mapping' => 'nullable|array',
+            'google_sheet_enabled' => 'boolean',
+        ]);
+
+        $flow = MetaFlow::where('uuid', $uuid)
+            ->where('organization_id', session()->get('current_organization'))
+            ->firstOrFail();
+
+        $flow->update([
+            'google_sheet_url'     => $request->google_sheet_url,
+            'google_sheet_tab'     => $request->google_sheet_tab,
+            'google_sheet_mapping' => $request->google_sheet_mapping,
+            'google_sheet_enabled' => $request->boolean('google_sheet_enabled'),
+        ]);
+
+        return response()->json(['message' => 'Google Sheets configuration saved.']);
     }
 
     // Delete the flow from Meta and soft-delete the local record

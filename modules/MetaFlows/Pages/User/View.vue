@@ -142,6 +142,129 @@
                     <p class="font-semibold text-amber-800">{{ $t('Deleting a flow') }}</p>
                     <p>{{ $t('Meta only allows deleting flows in Draft or Deprecated status.') }}</p>
                 </div>
+
+                <!-- Google Sheets Integration -->
+                <div class="border border-slate-200 rounded-xl overflow-hidden">
+                    <button
+                        @click="openSheetSection"
+                        class="w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-slate-50 text-xs text-slate-600 transition-colors"
+                    >
+                        <div class="flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>
+                            <span class="font-medium text-slate-700">{{ $t('Google Sheets') }}</span>
+                            <span v-if="sheetEnabled" class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                        </div>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" :class="showSheetSection ? 'rotate-180' : ''" class="transition-transform"><path d="m6 9 6 6 6-6"/></svg>
+                    </button>
+
+                    <div v-if="showSheetSection" class="border-t border-slate-100 p-4 space-y-4 text-xs">
+
+                        <!-- Connection Status -->
+                        <div>
+                            <p class="text-slate-400 text-[11px] uppercase tracking-wide font-medium mb-2">{{ $t('Google Account') }}</p>
+                            <div v-if="!googleStatus.connected">
+                                <a
+                                    :href="`/automation/meta-flows/google/connect?flow_uuid=${flow.uuid}`"
+                                    class="inline-flex items-center gap-1.5 text-primary text-xs font-medium hover:underline"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/><polyline points="10,17 15,12 10,7"/><line x1="15" y1="12" x2="3" y2="12"/></svg>
+                                    {{ $t('Connect Google Account') }}
+                                </a>
+                            </div>
+                            <div v-else class="flex items-center justify-between">
+                                <div class="flex items-center gap-1.5 text-green-700">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m9 12 2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>
+                                    <span class="truncate max-w-[110px]">{{ googleStatus.google_email }}</span>
+                                </div>
+                                <button
+                                    @click="disconnectGoogle"
+                                    class="text-red-500 hover:text-red-700 text-[11px]"
+                                >{{ $t('Disconnect') }}</button>
+                            </div>
+                        </div>
+
+                        <template v-if="googleStatus.connected">
+                            <!-- Sheet URL -->
+                            <div>
+                                <label class="text-slate-400 text-[11px] uppercase tracking-wide font-medium block mb-1">{{ $t('Sheet URL') }}</label>
+                                <input
+                                    v-model="sheetUrl"
+                                    type="url"
+                                    @blur="onUrlBlur"
+                                    placeholder="https://docs.google.com/spreadsheets/d/..."
+                                    class="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-primary"
+                                />
+                            </div>
+
+                            <!-- Tab Name -->
+                            <div>
+                                <label class="text-slate-400 text-[11px] uppercase tracking-wide font-medium block mb-1">{{ $t('Tab Name') }}</label>
+                                <input
+                                    v-model="sheetTab"
+                                    type="text"
+                                    @blur="fetchHeaders"
+                                    placeholder="Sheet1"
+                                    class="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-primary"
+                                />
+                            </div>
+
+                            <!-- Fetch Headers Button -->
+                            <button
+                                v-if="sheetUrl && sheetTab && !sheetHeaders.length"
+                                @click="fetchHeaders"
+                                :disabled="loadingHeaders"
+                                class="w-full text-center py-1.5 rounded-lg border border-primary text-primary text-xs hover:bg-primary hover:text-white disabled:opacity-50 transition-colors"
+                            >
+                                {{ loadingHeaders ? $t('Fetching...') : $t('Fetch Sheet Columns') }}
+                            </button>
+
+                            <!-- Field Mapping Table -->
+                            <div v-if="allFlowFields.length && sheetHeaders.length">
+                                <p class="text-slate-400 text-[11px] uppercase tracking-wide font-medium mb-2">{{ $t('Field Mapping') }}</p>
+                                <div class="space-y-1.5">
+                                    <div
+                                        v-for="field in allFlowFields"
+                                        :key="field.name"
+                                        class="flex items-center gap-2"
+                                    >
+                                        <span class="shrink-0 px-2 py-0.5 bg-slate-100 rounded text-slate-600 text-[11px] font-medium w-24 truncate" :title="field.label">
+                                            {{ field.label }}
+                                        </span>
+                                        <select
+                                            v-model="mappingFor[field.name]"
+                                            class="flex-1 border border-slate-200 rounded px-1.5 py-1 text-[11px] outline-none focus:border-primary bg-white"
+                                        >
+                                            <option value="">— skip —</option>
+                                            <option v-for="header in sheetHeaders" :key="header" :value="header">{{ header }}</option>
+                                        </select>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <!-- Enable Toggle + Save -->
+                            <div class="flex items-center justify-between pt-1">
+                                <label class="flex items-center gap-2 cursor-pointer">
+                                    <div
+                                        @click="sheetEnabled = !sheetEnabled"
+                                        :class="['w-8 h-4 rounded-full transition-colors relative', sheetEnabled ? 'bg-green-500' : 'bg-slate-300']"
+                                    >
+                                        <div :class="['absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform', sheetEnabled ? 'translate-x-4' : 'translate-x-0.5']"></div>
+                                    </div>
+                                    <span class="text-slate-600">{{ sheetEnabled ? $t('Enabled') : $t('Disabled') }}</span>
+                                </label>
+
+                                <button
+                                    @click="saveSheetConfig"
+                                    :disabled="savingSheet"
+                                    class="px-3 py-1.5 rounded-lg bg-primary text-white text-xs hover:opacity-90 disabled:opacity-50 transition-opacity"
+                                >
+                                    {{ savingSheet ? $t('Saving...') : $t('Save') }}
+                                </button>
+                            </div>
+                        </template>
+
+                    </div>
+                </div>
             </div>
 
             <!-- Center: builder + JSON panel -->
@@ -198,7 +321,7 @@
 
 <script setup>
     import AppLayout       from '@/Pages/User/Layout/App.vue';
-    import { ref, computed } from 'vue';
+    import { ref, computed, onMounted } from 'vue';
     import axios           from 'axios';
     import MetaFlowBuilder from '@modules/MetaFlows/Pages/User/Components/MetaFlowBuilder.vue';
     import FlowPhonePreview from '@modules/MetaFlows/Pages/User/Components/FlowPhonePreview.vue';
@@ -208,6 +331,31 @@
     const currentStatus     = ref(props.flow.status);
     const showJson          = ref(false);
     const activeScreenIndex = ref(0);
+
+    // ── Google Sheets state ───────────────────────────────────────────────────
+    const googleStatus     = ref({ connected: false, google_email: null });
+    const sheetUrl         = ref(props.flow.google_sheet_url ?? '');
+    const sheetTab         = ref(props.flow.google_sheet_tab ?? 'Sheet1');
+    const sheetMapping     = ref(props.flow.google_sheet_mapping ?? []);
+    const sheetEnabled     = ref(props.flow.google_sheet_enabled ?? false);
+    const sheetHeaders     = ref([]);
+    const flowFields       = ref([]);
+    const showSheetSection = ref(false);
+    const savingSheet      = ref(false);
+    const loadingHeaders   = ref(false);
+    // Keyed by field name, value = chosen sheet column (or '' to skip)
+    const mappingFor       = ref({});
+
+    // All fields: metadata fields first, then flow form fields
+    const allFlowFields = computed(() => {
+        const meta = [
+            { name: '__timestamp',     label: 'Timestamp',     type: 'metadata' },
+            { name: '__contact_phone', label: 'Contact Phone', type: 'metadata' },
+            { name: '__contact_name',  label: 'Contact Name',  type: 'metadata' },
+            { name: '__flow_token',    label: 'Flow Token',    type: 'metadata' },
+        ];
+        return [...meta, ...flowFields.value];
+    });
 
     const assetContent = ref(
         props.flow.asset_content
@@ -372,4 +520,114 @@
 
     const showFeedback  = (msg, isErr) => { feedbackMessage.value = msg; feedbackIsError.value = isErr; };
     const clearFeedback = () => { feedbackMessage.value = null; feedbackIsError.value = false; };
+
+    // ── Google Sheets methods ─────────────────────────────────────────────────
+
+    // Load Google connection status on mount
+    onMounted(async () => {
+        try {
+            const res = await axios.get('/automation/meta-flows/google/status');
+            googleStatus.value = res.data;
+        } catch {
+            // Non-critical — ignore errors
+        }
+
+        // Restore mapping from saved config
+        if (sheetMapping.value?.length) {
+            sheetMapping.value.forEach(m => {
+                if (m.flow_field) mappingFor.value[m.flow_field] = m.sheet_column ?? '';
+            });
+        }
+    });
+
+    // Open the Google Sheets panel and load flow fields once
+    const openSheetSection = async () => {
+        showSheetSection.value = !showSheetSection.value;
+
+        if (showSheetSection.value && !flowFields.value.length) {
+            try {
+                const res = await axios.get(`/automation/meta-flows/${props.flow.uuid}/flow-fields`);
+                flowFields.value = res.data.fields ?? [];
+                // Auto-initialize mappingFor for any new fields
+                allFlowFields.value.forEach(f => {
+                    if (!(f.name in mappingFor.value)) mappingFor.value[f.name] = '';
+                });
+            } catch {
+                // Ignore
+            }
+        }
+    };
+
+    // Save URL on blur, then try to fetch headers if tab is also filled
+    const onUrlBlur = () => {
+        if (sheetUrl.value && sheetTab.value) fetchHeaders();
+    };
+
+    // Fetch column headers from the linked Google Sheet tab
+    const fetchHeaders = async () => {
+        if (!sheetUrl.value || !sheetTab.value) return;
+
+        loadingHeaders.value = true;
+        try {
+            const res = await axios.get(`/automation/meta-flows/${props.flow.uuid}/sheet-headers`, {
+                params: {
+                    google_sheet_url: sheetUrl.value,
+                    google_sheet_tab: sheetTab.value,
+                },
+            });
+            sheetHeaders.value = res.data.headers ?? [];
+
+            // Auto-map fields where label matches a column header (case-insensitive)
+            allFlowFields.value.forEach(field => {
+                if (!mappingFor.value[field.name]) {
+                    const match = sheetHeaders.value.find(
+                        h => h.toLowerCase() === field.label.toLowerCase()
+                    );
+                    if (match) mappingFor.value[field.name] = match;
+                }
+            });
+        } catch (err) {
+            showFeedback(err.response?.data?.message ?? 'Failed to fetch sheet headers.', true);
+        } finally {
+            loadingHeaders.value = false;
+        }
+    };
+
+    // Disconnect the linked Google account
+    const disconnectGoogle = async () => {
+        try {
+            await axios.delete('/automation/meta-flows/google/disconnect');
+            googleStatus.value = { connected: false, google_email: null };
+            sheetHeaders.value = [];
+        } catch (err) {
+            showFeedback(err.response?.data?.message ?? 'Failed to disconnect.', true);
+        }
+    };
+
+    // Build the mapping array and save the sheet configuration
+    const saveSheetConfig = async () => {
+        savingSheet.value = true;
+
+        const mapping = allFlowFields.value
+            .filter(f => mappingFor.value[f.name])
+            .map(f => ({
+                flow_field:   f.name,
+                sheet_column: mappingFor.value[f.name],
+            }));
+
+        try {
+            await axios.put(`/automation/meta-flows/${props.flow.uuid}/sheet-config`, {
+                google_sheet_url:     sheetUrl.value,
+                google_sheet_tab:     sheetTab.value,
+                google_sheet_mapping: mapping,
+                google_sheet_enabled: sheetEnabled.value,
+            });
+            sheetMapping.value = mapping;
+            showFeedback('Google Sheets configuration saved.', false);
+        } catch (err) {
+            showFeedback(err.response?.data?.message ?? 'Failed to save sheet config.', true);
+        } finally {
+            savingSheet.value = false;
+        }
+    };
 </script>
