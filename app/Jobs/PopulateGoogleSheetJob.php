@@ -65,9 +65,9 @@ class PopulateGoogleSheetJob implements ShouldQueue
         // 5. Parse the submitted form JSON
         $parsedJson = json_decode($response->response_json, true) ?? [];
 
-        // 6. Build the ordered row using the configured field mapping
-        $mapping = $flow->google_sheet_mapping ?? [];
-        $row     = [];
+        // 6. Build a column-name → value dictionary from the mapping
+        $mapping      = $flow->google_sheet_mapping ?? [];
+        $columnValues = [];
 
         foreach ($mapping as $map) {
             $field       = $map['flow_field']   ?? '';
@@ -77,7 +77,7 @@ class PopulateGoogleSheetJob implements ShouldQueue
                 continue;
             }
 
-            $row[] = match ($field) {
+            $columnValues[$sheetColumn] = match ($field) {
                 '__timestamp'     => now()->toIso8601String(),
                 '__contact_phone' => $contact?->phone ?? '',
                 '__contact_name'  => trim(($contact?->first_name ?? '') . ' ' . ($contact?->last_name ?? '')),
@@ -86,11 +86,15 @@ class PopulateGoogleSheetJob implements ShouldQueue
             };
         }
 
-        // 7. Append the row to the sheet
-        $tab = $flow->google_sheet_tab ?: 'Sheet1';
+        // 7. Fetch actual column order from the sheet header row, then build the
+        //    row array in that order so values land in the correct columns.
+        $tab     = $flow->google_sheet_tab ?: 'Sheet1';
+        $service = GoogleSheetsService::fromOrganization($this->organizationId);
+        $headers = $service->getSheetHeaders($spreadsheetId, $tab);
 
-        GoogleSheetsService::fromOrganization($this->organizationId)
-            ->appendRow($spreadsheetId, $tab, $row);
+        $row = array_map(fn($header) => $columnValues[$header] ?? '', $headers);
+
+        $service->appendRow($spreadsheetId, $tab, $row);
 
         Log::info('PopulateGoogleSheetJob: row appended', [
             'response_id'    => $this->metaFlowResponseId,
