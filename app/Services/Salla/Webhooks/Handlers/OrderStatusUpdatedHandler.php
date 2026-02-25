@@ -11,6 +11,7 @@ use App\Services\Salla\Webhooks\TemplateParameterBuilder;
 use App\Services\Salla\Webhooks\SallaWebhookEventHandlerInterface;
 use App\Services\Salla\Webhooks\SallaWebhookMessageSenderInterface;
 use App\Services\Salla\Webhooks\Exceptions\SallaWebhookNonRetryableException;
+use App\Services\Outbound\OutboundMessageLogger;
 use Illuminate\Support\Facades\Log;
 
 class OrderStatusUpdatedHandler implements SallaWebhookEventHandlerInterface
@@ -24,7 +25,8 @@ class OrderStatusUpdatedHandler implements SallaWebhookEventHandlerInterface
      */
     public function __construct(
         private readonly TemplateParameterBuilder $parameterBuilder,
-        private readonly SallaWebhookMessageSenderInterface $messageSender
+        private readonly SallaWebhookMessageSenderInterface $messageSender,
+        private readonly OutboundMessageLogger $outboundLogger
     ) {
     }
 
@@ -118,24 +120,53 @@ class OrderStatusUpdatedHandler implements SallaWebhookEventHandlerInterface
 
         [$headerMeta, $bodyMeta, $buttonsMeta] = $this->parameterBuilder->build($template, $rule->mappings, $payload);
 
-        $response = $this->messageSender->sendTemplateMessage(
-            (int) $delivery->organization_id,
+        $requestPayload = [
+            'to' => $contact->phone ?? null,
+            'template' => $template->uuid ?? null,
+            'header' => $headerMeta,
+            'body' => $bodyMeta,
+            'buttons' => $buttonsMeta,
+        ];
+
+        [$outboundMessage, $attemptNo] = $this->outboundLogger->beginSallaTemplateSend(
+            $delivery,
+            'order.status.updated:' . $statusSlug,
             $contact,
             $template,
-            $headerMeta,
-            $bodyMeta,
-            $buttonsMeta
+            ['status_slug' => $statusSlug, 'rule_id' => $rule->id]
         );
+
+        try {
+            $response = $this->messageSender->sendTemplateMessage(
+                (int) $delivery->organization_id,
+                $contact,
+                $template,
+                $headerMeta,
+                $bodyMeta,
+                $buttonsMeta
+            );
+        } catch (\Throwable $e) {
+            $this->outboundLogger->logFailure($outboundMessage, $attemptNo, $requestPayload, null, $e->getMessage());
+            throw $e;
+        }
 
         if (!data_get($response, 'success')) {
             $message = (string) (data_get($response, 'message')
                 ?? data_get($response, 'data.error.message')
                 ?? 'send_failed');
 
+            $this->outboundLogger->logFailure($outboundMessage, $attemptNo, $requestPayload, $response, $message);
             throw new \RuntimeException($message);
         }
 
         $sentChatId = data_get($response, 'data.chat.id');
+        $this->outboundLogger->logSuccess(
+            $outboundMessage,
+            $attemptNo,
+            $requestPayload,
+            $response,
+            is_numeric($sentChatId) ? (int) $sentChatId : null
+        );
 
         $delivery->update([
             'status' => 'processed',
@@ -229,4 +260,3 @@ class OrderStatusUpdatedHandler implements SallaWebhookEventHandlerInterface
         return $out === '' ? null : $out;
     }
 }
-

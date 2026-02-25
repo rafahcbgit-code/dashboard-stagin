@@ -6,6 +6,7 @@ use App\Services\Salla\Webhooks\Handlers\OrderCreatedHandler;
 use App\Services\Salla\Webhooks\Handlers\OrderStatusUpdatedHandler;
 use App\Services\Salla\Webhooks\Handlers\AbandonedCartHandler;
 use App\Services\Salla\Webhooks\Handlers\CustomerLoginHandler;
+use App\Services\Salla\Webhooks\Handlers\AppInstalledHandler;
 
 class SallaWebhookEventRouter
 {
@@ -27,6 +28,7 @@ class SallaWebhookEventRouter
         'order.status.updated' => OrderStatusUpdatedHandler::class,
         'abandoned.cart' => AbandonedCartHandler::class,
         'customer.login' => CustomerLoginHandler::class,
+        'app.installed' => AppInstalledHandler::class,
     ];
 
     public function resolve(?string $event): ?SallaWebhookEventHandlerInterface

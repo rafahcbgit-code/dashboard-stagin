@@ -10,6 +10,7 @@ use App\Services\Salla\Webhooks\TemplateParameterBuilder;
 use App\Services\Salla\Webhooks\SallaWebhookEventHandlerInterface;
 use App\Services\Salla\Webhooks\SallaWebhookMessageSenderInterface;
 use App\Services\Salla\Webhooks\Exceptions\SallaWebhookNonRetryableException;
+use App\Services\Outbound\OutboundMessageLogger;
 use Illuminate\Support\Facades\Log;
 
 class OrderCreatedHandler implements SallaWebhookEventHandlerInterface
@@ -28,7 +29,8 @@ class OrderCreatedHandler implements SallaWebhookEventHandlerInterface
      */
     public function __construct(
         private readonly TemplateParameterBuilder $parameterBuilder,
-        private readonly SallaWebhookMessageSenderInterface $messageSender
+        private readonly SallaWebhookMessageSenderInterface $messageSender,
+        private readonly OutboundMessageLogger $outboundLogger
     ) {
     }
 
@@ -146,15 +148,35 @@ class OrderCreatedHandler implements SallaWebhookEventHandlerInterface
         //       (otherwise Meta returns 131008: missing button param).
         [$headerMeta, $bodyMeta, $buttonsMeta] = $this->parameterBuilder->build($template, $setting->mappings, $payload);
 
-        // 11) Send via message sender abstraction (currently uses ChatService).
-        $response = $this->messageSender->sendTemplateMessage(
-            (int) $delivery->organization_id,
+        $requestPayload = [
+            'to' => $contact->phone ?? null,
+            'template' => $template->uuid ?? null,
+            'header' => $headerMeta,
+            'body' => $bodyMeta,
+            'buttons' => $buttonsMeta,
+        ];
+
+        [$outboundMessage, $attemptNo] = $this->outboundLogger->beginSallaTemplateSend(
+            $delivery,
+            $automation,
             $contact,
-            $template,
-            $headerMeta,
-            $bodyMeta,
-            $buttonsMeta
+            $template
         );
+
+        // 11) Send via message sender abstraction (currently uses ChatService).
+        try {
+            $response = $this->messageSender->sendTemplateMessage(
+                (int) $delivery->organization_id,
+                $contact,
+                $template,
+                $headerMeta,
+                $bodyMeta,
+                $buttonsMeta
+            );
+        } catch (\Throwable $e) {
+            $this->outboundLogger->logFailure($outboundMessage, $attemptNo, $requestPayload, null, $e->getMessage());
+            throw $e;
+        }
 
         if (!data_get($response, 'success')) {
             // WhatsApp API failures can be transient; we throw a RuntimeException so the job may retry.
@@ -162,10 +184,18 @@ class OrderCreatedHandler implements SallaWebhookEventHandlerInterface
                 ?? data_get($response, 'data.error.message')
                 ?? 'send_failed');
 
+            $this->outboundLogger->logFailure($outboundMessage, $attemptNo, $requestPayload, $response, $message);
             throw new \RuntimeException($message);
         }
 
         $sentChatId = data_get($response, 'data.chat.id');
+        $this->outboundLogger->logSuccess(
+            $outboundMessage,
+            $attemptNo,
+            $requestPayload,
+            $response,
+            is_numeric($sentChatId) ? (int) $sentChatId : null
+        );
 
         // 12) Mark delivery as processed and store chat id for traceability.
         $delivery->update([

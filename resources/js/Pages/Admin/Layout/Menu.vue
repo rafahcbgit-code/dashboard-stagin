@@ -105,10 +105,20 @@
                         <span>{{ $t('Reviews') }}</span>
                     </Link>
                 </li>
-                <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate">
+                <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate" :class="$page.url.startsWith('/admin/settings') ? 'bg-slate-50 text-black' : ''">
                     <Link rel="noopener noreferrer" href="/admin/settings/general" class="flex items-center p-2 space-x-3 rounded-md">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 16 16"><path fill="currentColor" fill-rule="evenodd" d="M3.5 2h-1v5h1zm6.1 5H6.4L6 6.45v-1L6.4 5h3.2l.4.5v1zm-5 3H1.4L1 9.5v-1l.4-.5h3.2l.4.5v1zm3.9-8h-1v2h1zm-1 6h1v6h-1zm-4 3h-1v3h1zm7.9 0h3.19l.4-.5v-.95l-.4-.5H11.4l-.4.5v.95zm2.1-9h-1v6h1zm-1 10h1v2h-1z" clip-rule="evenodd"/></svg>
                         <span>{{ $t('Settings') }}</span>
+                    </Link>
+                </li>
+                <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate" :class="$page.url.startsWith('/admin/salla/app-installations') ? 'bg-slate-50 text-black' : ''">
+                    <Link rel="noopener noreferrer" href="/admin/salla/app-installations" class="flex items-center p-2 space-x-3 rounded-md">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+                            <path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 2L4 6v12l8 4 8-4V6z"/>
+                            <path fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="2" d="M12 22V12"/>
+                            <path fill="none" stroke="currentColor" stroke-linecap="round" stroke-width="2" d="M4 6h16"/>
+                        </svg>
+                        <span>Salla App Installations</span>
                     </Link>
                 </li>
             </ul>
