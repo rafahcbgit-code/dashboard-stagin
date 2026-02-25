@@ -18,7 +18,15 @@ class SallaAppInstallationController extends BaseController
 
         $query = SallaAppInstallation::query()
             ->with('organization:id,name')
-            ->orderByDesc('installation_date')
+                ->select('salla_app_installations.*')
+                ->selectSub(function ($q) {
+                    $q->from('salla_webhook_deliveries')
+                        ->selectRaw('count(*)')
+                        ->whereColumn('merchant_id', 'salla_app_installations.merchant_id')
+                        ->where('event', 'app.uninstalled')
+                        ->where('status', 'pending');
+                }, 'pending_uninstall_count')
+                ->orderByDesc('installation_date')
             ->orderByDesc('id');
 
         if ($request->filled('merchant_id')) {
@@ -49,10 +57,18 @@ class SallaAppInstallationController extends BaseController
 
         $rows = $query->paginate($perPage)->withQueryString();
 
+        // Global stats: number of installations and uninstalls
+        $installedCount = SallaAppInstallation::where('uninstalled', false)->count();
+        $uninstalledCount = SallaAppInstallation::where('uninstalled', true)->count();
+
         return Inertia::render('Admin/Salla/AppInstallations', [
             'title' => 'Salla App Installations',
             'rows' => SallaAppInstallationResource::collection($rows),
             'filters' => $request->only(['merchant_id', 'organization_id', 'app_name', 'per_page', 'installed_from', 'installed_to']),
+            'stats' => [
+                'installed' => $installedCount,
+                'uninstalled' => $uninstalledCount,
+            ],
         ]);
     }
 }

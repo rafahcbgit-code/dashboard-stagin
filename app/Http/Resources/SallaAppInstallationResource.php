@@ -27,9 +27,12 @@ class SallaAppInstallationResource extends JsonResource
             'store_type' => $this->store_type,
             'scopes_count' => $this->scopes_count,
             'installation_date' => optional($this->installation_date)->toDateTimeString(),
+            'uninstallation_date' => optional($this->uninstallation_date)->toDateTimeString(),
+            'uninstalled' => (bool) ($this->uninstalled ?? false),
             'webhook_created_at' => optional($this->webhook_created_at)->toDateTimeString(),
             'last_seen_at' => optional($this->last_seen_at)->toDateTimeString(),
             'created_at' => optional($this->created_at)->toDateTimeString(),
+            'pending_uninstall_count' => (int) ($this->pending_uninstall_count ?? 0),
         ];
     }
 }

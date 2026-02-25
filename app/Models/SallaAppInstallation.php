@@ -22,6 +22,8 @@ class SallaAppInstallation extends Model
         'app_scopes',
         'scopes_count',
         'installation_date',
+        'uninstallation_date',
+        'uninstalled',
         'webhook_created_at',
         'last_seen_at',
         'payload',
@@ -31,6 +33,8 @@ class SallaAppInstallation extends Model
         'app_scopes' => 'array',
         'payload' => 'array',
         'installation_date' => 'datetime',
+        'uninstallation_date' => 'datetime',
+        'uninstalled' => 'boolean',
         'webhook_created_at' => 'datetime',
         'last_seen_at' => 'datetime',
     ];

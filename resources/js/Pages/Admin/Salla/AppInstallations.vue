@@ -15,6 +15,17 @@
                 </div>
             </div>
 
+            <div class="grid grid-cols-2 gap-3 mb-4">
+                <div class="p-4 bg-white border rounded-md">
+                    <div class="text-xs text-gray-500">Installed</div>
+                    <div class="text-2xl font-bold">{{ props.stats?.installed ?? 0 }}</div>
+                </div>
+                <div class="p-4 bg-white border rounded-md">
+                    <div class="text-xs text-gray-500">Uninstalled</div>
+                    <div class="text-2xl font-bold text-red-600">{{ props.stats?.uninstalled ?? 0 }}</div>
+                </div>
+            </div>
+
             <div class="bg-white border rounded-md p-4 mb-4">
                 <div class="grid grid-cols-1 md:grid-cols-4 gap-3">
                     <div>
@@ -67,6 +78,7 @@
                                 <th class="text-left px-4 py-3">Store Type</th>
                                 <th class="text-left px-4 py-3">Scopes</th>
                                 <th class="text-left px-4 py-3">Installed At</th>
+                                <th class="text-left px-4 py-3">Uninstalled At</th>
 
                             </tr>
                         </thead>
@@ -90,6 +102,8 @@
                                 <td class="px-4 py-3">{{ row.store_type ?? '—' }}</td>
                                 <td class="px-4 py-3">{{ row.scopes_count ?? 0 }}</td>
                                 <td class="px-4 py-3">{{ row.installation_date ?? row.webhook_created_at ?? '—' }}</td>
+                                <td class="px-4 py-3">{{ row.uninstallation_date ?? '—' }}
+                                </td>
 
                             </tr>
                         </tbody>
@@ -111,6 +125,7 @@ const props = defineProps({
     title: String,
     rows: Object,
     filters: Object,
+    stats: Object,
 });
 
 const form = useForm({

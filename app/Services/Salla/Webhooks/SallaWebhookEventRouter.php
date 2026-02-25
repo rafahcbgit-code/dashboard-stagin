@@ -29,6 +29,7 @@ class SallaWebhookEventRouter
         'abandoned.cart' => AbandonedCartHandler::class,
         'customer.login' => CustomerLoginHandler::class,
         'app.installed' => AppInstalledHandler::class,
+        'app.uninstalled' => \App\Services\Salla\Webhooks\Handlers\AppUninstalledHandler::class,
     ];
 
     public function resolve(?string $event): ?SallaWebhookEventHandlerInterface
