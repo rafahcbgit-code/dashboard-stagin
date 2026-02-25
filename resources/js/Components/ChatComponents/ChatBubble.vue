@@ -306,6 +306,19 @@ const viewContactDetails = async (data) => {
                 <p v-if="JSON.parse(content.metadata).interactive.type == 'list_reply'"
                     class="normal-case whitespace-pre-wrap">{{
                         JSON.parse(content.metadata).interactive?.list_reply?.description }}</p>
+
+                <!-- Meta Flow message sent from chat -->
+                <div v-if="JSON.parse(content.metadata).interactive?.type === 'flow'" class="min-w-[200px]">
+                    <p v-if="JSON.parse(content.metadata).flow_name" class="text-xs font-semibold text-slate-600 mb-1">
+                        {{ JSON.parse(content.metadata).flow_name }}
+                    </p>
+                    <p class="text-sm normal-case whitespace-pre-wrap">
+                        {{ JSON.parse(content.metadata).interactive?.body?.text }}
+                    </p>
+                    <div class="mt-2 pt-2 border-t border-black/10 text-center text-sm text-[#00a5f4]">
+                        {{ JSON.parse(content.metadata).interactive?.action?.parameters?.flow_cta ?? 'Open' }}
+                    </div>
+                </div>
             </div>
 
             <!--Image formatting-->

@@ -45,13 +45,13 @@ class CustomHelper {
             ->first();
 
         if($addon){
-            if($subscription->status === 'trial' && $subscription->valid_until > now()){
-                return true; //Allow user to test features during trial period
+            // Guard against organizations that have no subscription record at all
+            if (!$subscription || !$subscription->plan) {
+                return false;
             }
 
-            // Ensure a subscription and its plan exist
-            if (!$subscription || !$subscription->plan) {
-                return false; // Subscription or plan not found
+            if($subscription->status === 'trial' && $subscription->valid_until > now()){
+                return true; //Allow user to test features during trial period
             }
 
             $plan = SubscriptionPlan::where('id', $subscription->plan->id)->first();

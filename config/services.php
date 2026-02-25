@@ -63,6 +63,19 @@ return [
     'pabbly subscriptions' => [
         'class' => Modules\Pabbly\Controllers\ProcessPayment::class,
     ],
+
+    'google_sheets' => [
+        'client_id'     => env('GOOGLE_SHEETS_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_SHEETS_CLIENT_SECRET'),
+        'redirect'      => env('GOOGLE_SHEETS_REDIRECT_URI', '/automation/meta-flows/google/callback'),
+    ],
+
+    // Socialite Google driver — used by GoogleOAuthController for OAuth 2.0
+    'google' => [
+        'client_id'     => env('GOOGLE_SHEETS_CLIENT_ID'),
+        'client_secret' => env('GOOGLE_SHEETS_CLIENT_SECRET'),
+        'redirect'      => env('GOOGLE_SHEETS_REDIRECT_URI', '/automation/meta-flows/google/callback'),
+    ],
 ];
 
 
