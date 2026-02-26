@@ -1239,6 +1239,13 @@ class WhatsappService
                                 'type' => $button['type'],
                                 'example' => $button['example'],
                             ];
+                        } elseif ($button['type'] === 'FLOW') {
+                            $requestData['components'][count($requestData['components']) - 1]['buttons'][] = [
+                                'type'            => 'FLOW',
+                                'text'            => $button['text'],
+                                'flow_id'         => $button['flow_id'],
+                                'navigate_screen' => $button['navigate_screen'],
+                            ];
                         }
                     }
                 }
@@ -1648,6 +1655,13 @@ class WhatsappService
                             $requestData['components'][count($requestData['components']) - 1]['buttons'][] = [
                                 'type' => $button['type'],
                                 'example' => $button['example'],
+                            ];
+                        } elseif ($button['type'] === 'FLOW') {
+                            $requestData['components'][count($requestData['components']) - 1]['buttons'][] = [
+                                'type'            => 'FLOW',
+                                'text'            => $button['text'],
+                                'flow_id'         => $button['flow_id'],
+                                'navigate_screen' => $button['navigate_screen'],
                             ];
                         }
                     }

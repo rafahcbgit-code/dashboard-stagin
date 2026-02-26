@@ -163,7 +163,23 @@ class MetaFlowController extends BaseController
             ->where('status', 'published')
             ->whereNotNull('meta_flow_id')
             ->orderBy('name')
-            ->get(['uuid', 'name', 'categories', 'status']);
+            ->get(['uuid', 'name', 'categories', 'status', 'meta_flow_id', 'asset_content'])
+            ->map(function ($flow) {
+                $firstScreen = null;
+                if ($flow->asset_content) {
+                    $json = json_decode($flow->asset_content, true);
+                    $firstScreen = $json['screens'][0]['id'] ?? null;
+                }
+
+                return [
+                    'uuid'         => $flow->uuid,
+                    'name'         => $flow->name,
+                    'categories'   => $flow->categories,
+                    'status'       => $flow->status,
+                    'meta_flow_id' => $flow->meta_flow_id,
+                    'first_screen' => $firstScreen,
+                ];
+            });
 
         return response()->json($flows);
     }
