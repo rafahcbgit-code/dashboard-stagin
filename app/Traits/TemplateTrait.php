@@ -34,7 +34,7 @@ trait TemplateTrait
             $template['components'][] = $headerComponent;
         }
 
-        if ($metadata->body && property_exists($metadata->body, 'parameters')) {
+        if ($metadata->body && property_exists($metadata->body, 'parameters') && !empty($metadata->body->parameters)) {
             $bodyComponent = $this->buildBodyComponent($metadata, $contact);
             $template['components'][] = $bodyComponent;
         }
@@ -135,7 +135,26 @@ trait TemplateTrait
         $buttonIndex = 0;
 
         foreach ($buttons as $key => $button) {
-            if (!empty($button->parameters) || $button->type === 'QUICK_REPLY') {
+            if ($button->type === 'FLOW') {
+                // FLOW buttons require an action parameter with a unique flow_token.
+                // The flow_id / navigate_screen are baked into the template at creation time,
+                // so only flow_token (and optional flow_action_data) are sent at send time.
+                $buttonComponent[] = [
+                    'type'       => 'button',
+                    'sub_type'   => 'flow',
+                    'index'      => (string) $key,
+                    'parameters' => [
+                        [
+                            'type'   => 'action',
+                            'action' => [
+                                'flow_token'       => 'flow-' . uniqid(),
+                                'flow_action_data' => new \stdClass(),
+                            ],
+                        ],
+                    ],
+                ];
+                $buttonIndex++;
+            } elseif (!empty($button->parameters) || $button->type === 'QUICK_REPLY') {
                 $buttonComponent[] = [
                     'type' => 'button',
                     'sub_type' => strtolower($button->type),
@@ -295,6 +314,11 @@ trait TemplateTrait
             if ($type === 'button') {
                 if (($component['sub_type'] ?? '') === 'quick_reply' && empty($component['parameters'])) {
                     // Quick reply can be empty if handled by sender
+                    continue;
+                }
+
+                if (($component['sub_type'] ?? '') === 'flow') {
+                    // FLOW buttons use action-type parameters — skip standard value validation
                     continue;
                 }
                 foreach (($component['parameters'] ?? []) as $index => $param) {
