@@ -211,6 +211,12 @@
                                     <span>{{ $t('Custom button (6)') }}</span>
                                 </button>
                             </div>
+                            <div v-if="metaFlows.length > 0" class="grid grid-cols-1 mt-3 mb-2">
+                                <button @click="addButton('flow')" class="flex items-center justify-center gap-2 text-slate-700 text-sm bg-slate-100 hover:bg-slate-200 hover:shadow-sm rounded-lg p-2 px-4">
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>
+                                    <span>{{ $t('Open Flow (1)') }}</span>
+                                </button>
+                            </div>
                             <div v-if="form.buttons.length > 0" class="mt-3 mb-8">
                                 <div v-for="(button, index) in form.buttons" :key="index" class="bg-[#f9f9fa] p-3 rounded-lg mb-3">
                                     <div class="flex items-center justify-between pb-1">
@@ -220,11 +226,24 @@
                                         </button>
                                     </div>
                                     <div class="flex space-s-1 border-t pt-2">
-                                        <FormInput v-model="button.text" :name="$t('Button text')" :type="'text'" :class="button.type === 'QUICK_REPLY' ? 'w-full' :'sm:col-span-2'" :labelClass="'mb-0'"/>
+                                        <FormInput v-if="button.type !== 'copy_code'" v-model="button.text" :name="$t('Button text')" :type="'text'" :class="button.type === 'QUICK_REPLY' || button.type === 'FLOW' ? 'w-full' :'sm:col-span-2'" :labelClass="'mb-0'"/>
                                         <FormInput v-model="button.url" v-if="button.type === 'URL'" :name="$t('Website url')" :type="'url'" :class="'w-full'" :labelClass="'mb-0'"/>
                                         <FormInput v-model="button.country" v-if="button.type === 'PHONE_NUMBER'" :name="$t('Country')" :type="'text'" :class="'sm:col-span-2'" :labelClass="'mb-0'"/>
                                         <FormInput v-model="button.phone_number" v-if="button.type === 'PHONE_NUMBER'" :name="$t('Phone number')" :type="'text'" :class="'sm:col-span-2'" :labelClass="'mb-0'"/>
                                         <FormInput v-model="button.example" v-if="button.type === 'copy_code'" :name="$t('Sample code')" :type="'text'" :class="'w-full'" :labelClass="'mb-0'"/>
+                                        <div v-if="button.type === 'FLOW'" class="w-full mt-2">
+                                            <label class="text-xs text-slate-500 block mb-1">{{ $t('Select Flow') }}</label>
+                                            <select
+                                                v-model="button.flow_id"
+                                                @change="button.navigate_screen = metaFlows.find(f => f.meta_flow_id === button.flow_id)?.first_screen ?? null"
+                                                class="w-full border border-slate-200 rounded-lg px-2.5 py-2 text-sm outline-none focus:border-indigo-400 bg-white"
+                                            >
+                                                <option :value="null">{{ $t('— Select a published flow —') }}</option>
+                                                <option v-for="flow in metaFlows" :key="flow.uuid" :value="flow.meta_flow_id">
+                                                    {{ flow.name }}
+                                                </option>
+                                            </select>
+                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -391,6 +410,7 @@
                             <span>
                                 <svg v-if="item.type === 'copy_code'" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"><path fill="currentColor" d="M19 21H8V7h11m0-2H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2m-3-4H4a2 2 0 0 0-2 2v14h2V3h12V1Z"/></svg>
                                 <svg v-else-if="item.type === 'PHONE_NUMBER'" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"><g fill="none"><path fill="currentColor" d="M20 16v4c-2.758 0-5.07-.495-7-1.325c-3.841-1.652-6.176-4.63-7.5-7.675C4.4 8.472 4 5.898 4 4h4l1 4l-3.5 3c1.324 3.045 3.659 6.023 7.5 7.675L16 15l4 1z"/><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 18.675c1.93.83 4.242 1.325 7 1.325v-4l-4-1l-3 3.675zm0 0C9.159 17.023 6.824 14.045 5.5 11m0 0C4.4 8.472 4 5.898 4 4h4l1 4l-3.5 3z"/></g></svg>
+                                <svg v-else-if="item.type === 'FLOW'" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>
                                 <img v-else-if="item.type === 'URL'" :src="'/images/icons/link.png'" class="h-4">
                                 <img v-else :src="'/images/icons/reply.png'" class="h-4">
                             </span>
@@ -473,7 +493,7 @@
     import HeaderTextArea from '@/Components/Template/HeaderTextArea.vue';
     import CarouselForm from '@/Components/Template/CarouselForm.vue';
     import CarouselPreview from '@/Components/Template/CarouselPreview.vue';
-    import { ref, computed, watch } from 'vue';
+    import { ref, computed, watch, onMounted } from 'vue';
     import { Link } from "@inertiajs/vue3";
     import Modal from '@/Components/Modal.vue';
     import { toast } from 'vue3-toastify';
@@ -493,6 +513,17 @@
     const error = ref(null);
     const bodyExamples = ref([]);
     const templateType = ref('standard');
+    const metaFlows = ref([]);
+
+    onMounted(async () => {
+        try {
+            const res = await axios.get('/automation/meta-flows/list');
+            metaFlows.value = res.data ?? [];
+        } catch {
+            // MetaFlows module may not be enabled — silently ignore
+        }
+    });
+
     const form = ref({
         'name' : null,
         'category' : 'UTILITY',
@@ -688,6 +719,17 @@
                     'example' : null,
                 });
             }
+        } else if($type === 'flow'){
+            const flowButtonsCount = form.value.buttons.filter(button => button.type === 'FLOW').length;
+
+            if(flowButtonsCount < 1){
+                form.value.buttons.push({
+                    'type'            : 'FLOW',
+                    'text'            : null,
+                    'flow_id'         : null,
+                    'navigate_screen' : null,
+                });
+            }
         }
     }
 
@@ -730,6 +772,11 @@
                 );
             })
         ) {
+            return false;
+        }
+
+        // FLOW buttons require both text and a selected flow
+        if (form.value.buttons.some(btn => btn.type === 'FLOW' && (!btn.flow_id || !btn.text))) {
             return false;
         } 
         
