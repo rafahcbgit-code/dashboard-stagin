@@ -2,11 +2,13 @@
 
 namespace App\Services\Salla\Webhooks;
 
+use App\Services\Salla\Webhooks\Handlers\AbandonedCartHandler;
+use App\Services\Salla\Webhooks\Handlers\AppInstalledHandler;
+use App\Services\Salla\Webhooks\Handlers\AppStoreAuthorizeHandler;
+use App\Services\Salla\Webhooks\Handlers\AppUninstalledHandler;
+use App\Services\Salla\Webhooks\Handlers\CustomerLoginHandler;
 use App\Services\Salla\Webhooks\Handlers\OrderCreatedHandler;
 use App\Services\Salla\Webhooks\Handlers\OrderStatusUpdatedHandler;
-use App\Services\Salla\Webhooks\Handlers\AbandonedCartHandler;
-use App\Services\Salla\Webhooks\Handlers\CustomerLoginHandler;
-use App\Services\Salla\Webhooks\Handlers\AppInstalledHandler;
 
 class SallaWebhookEventRouter
 {
@@ -29,7 +31,8 @@ class SallaWebhookEventRouter
         'abandoned.cart' => AbandonedCartHandler::class,
         'customer.login' => CustomerLoginHandler::class,
         'app.installed' => AppInstalledHandler::class,
-        'app.uninstalled' => \App\Services\Salla\Webhooks\Handlers\AppUninstalledHandler::class,
+        'app.store.authorize' => AppStoreAuthorizeHandler::class,
+        'app.uninstalled' => AppUninstalledHandler::class,
     ];
 
     public function resolve(?string $event): ?SallaWebhookEventHandlerInterface

@@ -2,6 +2,11 @@
 
 namespace App\Models;
 
+use App\Models\Contact;
+use App\Models\Organization;
+use App\Models\OutboundMessageAttempt;
+use App\Models\SallaWebhookDelivery;
+use App\Models\Template;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 
@@ -36,7 +41,7 @@ class OutboundMessage extends Model
         return $this->belongsTo(Template::class);
     }
 
-    public function attempts()
+    public function attemptLogs()
     {
         return $this->hasMany(OutboundMessageAttempt::class);
     }

@@ -79,6 +79,10 @@ class AppInstalledHandler implements SallaWebhookEventHandlerInterface
             ]
         );
 
+        $storeName = data_get($data, 'app_name') ?? null;
+        $this->ensureStoreRecord($merchantId, $organizationId, $storeName);
+        $this->syncDeliveries($merchantId);
+
         Log::info('Salla app.installed stored', [
             'delivery_id' => $delivery->id,
             'merchant_id' => $merchantId,
@@ -99,5 +103,32 @@ class AppInstalledHandler implements SallaWebhookEventHandlerInterface
         } catch (\Throwable) {
             return null;
         }
+    }
+
+    private function ensureStoreRecord(string $merchantId, ?int $organizationId, ?string $storeName): void
+    {
+        $store = SallaStore::firstOrNew(['merchant_id' => $merchantId]);
+        $store->organization_id = $organizationId ?? $store->organization_id;
+        if ($storeName !== null) {
+            $store->merchant_name = $storeName;
+        }
+        $store->save();
+    }
+
+    private function syncDeliveries(string $merchantId): void
+    {
+        $store = SallaStore::where('merchant_id', $merchantId)->first();
+        if (!$store) {
+            return;
+        }
+
+        SallaWebhookDelivery::where('merchant_id', $merchantId)
+            ->where(function ($query) {
+                $query->whereNull('salla_store_id')->orWhereNull('organization_id');
+            })
+            ->update([
+                'salla_store_id' => $store->id,
+                'organization_id' => $store->organization_id,
+            ]);
     }
 }

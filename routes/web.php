@@ -5,7 +5,7 @@ use App\Models\Language;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Route;
-
+use Illuminate\Support\Facades\Http;
 /*
 |--------------------------------------------------------------------------
 | Web Routes
@@ -16,6 +16,40 @@ use Illuminate\Support\Facades\Route;
 | be assigned to the "web" middleware group. Make something great!
 |
 */
+
+
+Route::get('/test-salla-user', function () {
+
+    $accessToken = 'ory_at_F3TkpeegfGP0nbOYZ8jMi30s7engJ9GajDc7sRHfn7Q.e7k8DzxWgk_v_kp8fC47SsqXoWrTUsqRXeND66u3s0c';
+
+    try {
+        $response = Http::acceptJson()
+            ->withToken($accessToken)
+            ->timeout(20)
+            ->connectTimeout(10)
+            ->retry(2, 250, null, false)
+            ->get('https://accounts.salla.sa/oauth2/user/info');
+
+        if ($response->successful()) {
+            return response()->json([
+                'success' => true,
+                'data' => $response->json(),
+            ]);
+        }
+
+        return response()->json([
+            'success' => false,
+            'status' => $response->status(),
+            'body' => $response->body(),
+        ], $response->status());
+
+    } catch (\Throwable $exception) {
+        return response()->json([
+            'error' => $exception->getMessage(),
+        ], 500);
+    }
+});
+
 
 Route::post('/webhook/{organization}', [App\Http\Controllers\WebhookController::class, 'handlePostRequest'])
     ->whereNumber('organization');
@@ -179,6 +213,7 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::get('/settings/salla/automations/customer-login/webhook-fields', [App\Http\Controllers\User\SallaAutomationController::class, 'webhookFieldsCustomerLogin'])->name('salla.automations.customer_login.fields');
                 Route::post('/settings/salla/automations/customer-login', [App\Http\Controllers\User\SallaAutomationController::class, 'updateCustomerLogin'])->name('salla.automations.customer_login.update');
                 Route::get('/settings/salla/message-logs', [App\Http\Controllers\User\SallaMessageLogController::class, 'index'])->name('salla.logs.index');
+                Route::get('/settings/salla/message-logs/export', [App\Http\Controllers\User\SallaMessageLogController::class, 'export'])->name('salla.logs.export');
                 Route::get('/salla-auth', [App\Http\Controllers\Salla\SallaAuthController::class, 'storeAuth']);
                 Route::get('/salla/public/auth/callback', [App\Http\Controllers\Salla\SallaAuthController::class, 'callback']);
 

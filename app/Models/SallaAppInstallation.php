@@ -54,4 +54,3 @@ class SallaAppInstallation extends Model
         return $this->belongsTo(SallaWebhookDelivery::class, 'source_delivery_id');
     }
 }
-

@@ -15,9 +15,9 @@ return new class extends Migration
             $table->id();
             $table->string('merchant_id');
             $table->string('merchant_name')->nullable();
-            $table->text('access_token');
-            $table->text('refresh_token');
-            $table->timestamp('expires_at');
+            $table->text('access_token')->nullable();
+            $table->text('refresh_token')->nullable();
+            $table->timestamp('expires_at')->nullable();
             $table->json('scopes')->nullable();
             $table->unsignedBigInteger('organization_id')->nullable();
             $table->foreign('organization_id')->references('id')->on('organizations')->onDelete('cascade');
