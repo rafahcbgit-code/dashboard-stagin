@@ -56,6 +56,37 @@ trait TemplateTrait
             throw new \RuntimeException($error);
         }
 
+        // Collect FLOW button stubs so the caller can pre-create MetaFlowResponse
+        // records after a successful send. Keyed as '_flow_stubs' — this is stripped
+        // by WhatsappService::sendTemplateMessage() before the request is sent to Meta.
+        if ($metadata->buttons) {
+            $flowStubs = [];
+            foreach ($metadata->buttons as $key => $button) {
+                if (($button->type ?? '') === 'FLOW') {
+                    foreach ($template['components'] as $component) {
+                        if (
+                            ($component['type'] ?? '') === 'button' &&
+                            ($component['sub_type'] ?? '') === 'flow' &&
+                            (string) ($component['index'] ?? '') === (string) $key
+                        ) {
+                            $flowStubs[] = [
+                                'meta_flow_id' => $button->flow_id ?? null,
+                                'flow_token'   => $component['parameters'][0]['action']['flow_token'] ?? null,
+                            ];
+                            break;
+                        }
+                    }
+                }
+            }
+            if (!empty($flowStubs)) {
+                $template['_flow_stubs'] = $flowStubs;
+                Log::info('MetaFlows: FLOW stubs collected for template send', [
+                    'template_name' => $templateName,
+                    'stubs'         => $flowStubs,
+                ]);
+            }
+        }
+
         //\Log::info($template);
         return $template;
     }
