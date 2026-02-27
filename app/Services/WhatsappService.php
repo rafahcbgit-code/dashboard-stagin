@@ -173,6 +173,10 @@ class WhatsappService
         
         $headers = $this->setHeaders();
 
+        // Strip internal FLOW stubs before building the Meta API payload
+        $flowStubs = $templateContent['_flow_stubs'] ?? [];
+        unset($templateContent['_flow_stubs']);
+
         $requestData['messaging_product'] = 'whatsapp';
         $requestData['recipient_type'] = 'individual';
         $requestData['to'] = $contact->phone;
@@ -251,6 +255,52 @@ class WhatsappService
             ]);
 
             event(new NewChatEvent($chatArray, $contact->organization_id));
+
+            // Pre-create MetaFlowResponse stubs for any FLOW buttons in the template.
+            // This mirrors what MetaFlowService::sendFlowToContact() does, ensuring that
+            // when the contact submits the flow, handleFlowResponse() can match the
+            // incoming flow_token to the correct flow and contact.
+            if (!empty($flowStubs)) {
+                \Log::info('MetaFlows: processing FLOW stubs after template send', [
+                    'stubs'          => $flowStubs,
+                    'organization_id' => $contact->organization_id,
+                    'contact_id'     => $contact->id,
+                ]);
+            }
+
+            foreach ($flowStubs as $stub) {
+                if (empty($stub['flow_token']) || empty($stub['meta_flow_id'])) {
+                    \Log::warning('MetaFlows: skipping stub — missing flow_token or meta_flow_id', [
+                        'stub' => $stub,
+                    ]);
+                    continue;
+                }
+                $metaFlow = \Modules\MetaFlows\Models\MetaFlow::where('meta_flow_id', $stub['meta_flow_id'])
+                    ->where('organization_id', $contact->organization_id)
+                    ->first();
+                if ($metaFlow) {
+                    \Modules\MetaFlows\Models\MetaFlowResponse::create([
+                        'organization_id' => $contact->organization_id,
+                        'meta_flow_id'    => $metaFlow->id,
+                        'contact_id'      => $contact->id,
+                        'flow_token'      => $stub['flow_token'],
+                        'response_json'   => null,
+                    ]);
+                    \Log::info('MetaFlows: MetaFlowResponse stub created for template FLOW button', [
+                        'meta_flow_response_created' => true,
+                        'meta_flow_id'               => $metaFlow->id,
+                        'meta_flow_name'             => $metaFlow->name ?? null,
+                        'flow_token'                 => $stub['flow_token'],
+                        'contact_id'                 => $contact->id,
+                        'organization_id'            => $contact->organization_id,
+                    ]);
+                } else {
+                    \Log::warning('MetaFlows: no MetaFlow found for stub — stub NOT created', [
+                        'meta_flow_id_searched' => $stub['meta_flow_id'],
+                        'organization_id'       => $contact->organization_id,
+                    ]);
+                }
+            }
         }
 
         // Trigger webhook

@@ -258,6 +258,8 @@ const loadTemplate = async () => {
             text: item.text,
             value: item[item.type.toLowerCase()] ?? null,
             parameters: parameters,
+            flow_id: item.flow_id ?? null,
+            navigate_screen: item.navigate_screen ?? null,
           };
         });
       } else {
