@@ -7,6 +7,7 @@ use App\Services\Salla\Webhooks\Handlers\AppInstalledHandler;
 use App\Services\Salla\Webhooks\Handlers\AppStoreAuthorizeHandler;
 use App\Services\Salla\Webhooks\Handlers\AppUninstalledHandler;
 use App\Services\Salla\Webhooks\Handlers\CustomerLoginHandler;
+use App\Services\Salla\Webhooks\Handlers\CustomerOtpRequestHandler;
 use App\Services\Salla\Webhooks\Handlers\OrderCreatedHandler;
 use App\Services\Salla\Webhooks\Handlers\OrderStatusUpdatedHandler;
 
@@ -33,6 +34,7 @@ class SallaWebhookEventRouter
         'app.installed' => AppInstalledHandler::class,
         'app.store.authorize' => AppStoreAuthorizeHandler::class,
         'app.uninstalled' => AppUninstalledHandler::class,
+        'customer.otp.request' => CustomerOtpRequestHandler::class,
     ];
 
     public function resolve(?string $event): ?SallaWebhookEventHandlerInterface

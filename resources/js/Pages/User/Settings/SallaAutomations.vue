@@ -563,6 +563,100 @@
                     <div v-if="customerLoginErrorMessage" class="text-sm text-red-700">{{ customerLoginErrorMessage }}</div>
                 </div>
             </div>
+            <div class="bg-white border border-slate-200 rounded-lg p-6 mt-6">
+                <div class="flex items-start justify-between gap-6">
+                    <div class="flex-1">
+                        <h2 class="text-lg font-medium">{{ $t('OTP Request') }}</h2>
+                        <p class="text-sm text-gray-600">
+                            {{ $t('Send a message automatically when Salla emits a verification code (customer.otp.request).') }}
+                        </p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="text-sm text-gray-700">{{ customerOtpForm.enabled ? $t('Enabled') : $t('Disabled') }}</span>
+                        <FormToggleSwitch v-model="customerOtpForm.enabled" />
+                    </div>
+                </div>
+
+                <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm leading-6 text-gray-900 mb-2">{{ $t('Template') }}</label>
+                        <BaseListbox v-model="customerOtpForm.template_id" :options="templates" :placeholder="$t('Select template')" />
+                        <div v-if="customerOtpErrors.template_id" class="form-error text-[#b91c1c] text-xs mt-1">{{ customerOtpErrors.template_id }}</div>
+                    </div>
+
+                    <div>
+                        <FormInput
+                            v-model="customerOtpForm.recipient_phone_payload_path"
+                            :name="$t('Recipient phone payload path')"
+                            :placeholder="'data.contact'"
+                            :error="customerOtpErrors.recipient_phone_payload_path"
+                            :type="'text'"
+                        />
+                        <p class="text-xs text-gray-500 mt-1">{{ $t('Example: data.contact') }}</p>
+                    </div>
+                </div>
+
+                <div class="mt-6 flex items-center justify-between">
+                    <h3 class="text-sm font-medium text-gray-900">{{ $t('Variable Mapping') }}</h3>
+                    <button type="button"
+                        class="inline-flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-sm rounded-md"
+                        :disabled="customerOtpLoadingFields"
+                        @click="refreshCustomerOtpWebhookFields">
+                        <span v-if="customerOtpLoadingFields">{{ $t('Refreshing...') }}</span>
+                        <span v-else>{{ $t('Refresh webhook fields') }}</span>
+                    </button>
+                </div>
+
+                <div v-if="customerOtpTemplateVariablesLocal.length === 0" class="mt-4 text-sm text-gray-600">
+                    {{ $t('Select a template to configure variable mapping.') }}
+                </div>
+
+                <div v-else class="mt-4 overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                        <thead>
+                            <tr class="text-left text-gray-600">
+                                <th class="py-2 pr-4">{{ $t('Template variable') }}</th>
+                                <th class="py-2 pr-4">{{ $t('Webhook field') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="variable in customerOtpTemplateVariablesLocal" :key="variable.key" class="border-t">
+                                <td class="py-3 pr-4">
+                                    <div class="font-medium text-gray-900">{{ variable.key }}</div>
+                                    <div class="text-xs text-gray-500">{{ variable.placeholder }}</div>
+                                </td>
+                                <td class="py-3 pr-4">
+                                    <select v-model="customerOtpMappingsLocal[variable.key]"
+                                        class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                        <option value="">{{ $t('Select field') }}</option>
+                                        <option v-for="field in customerOtpWebhookFieldsLocal" :key="field.path" :value="field.path">
+                                            {{ fieldLabel(field) }}
+                                        </option>
+                                    </select>
+                                    <div v-if="customerOtpErrors[`mappings.${variable.key}`]" class="form-error text-[#b91c1c] text-xs mt-1">
+                                        {{ customerOtpErrors[`mappings.${variable.key}`] }}
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div v-if="customerOtpWebhookFieldsLocal.length === 0" class="mt-3 text-xs text-gray-500">
+                        {{ $t('No webhook payload received yet. Trigger a customer.otp.request webhook to see available fields.') }}
+                    </div>
+                </div>
+
+                <div class="mt-6 flex items-center gap-3">
+                    <button type="button"
+                        class="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm rounded-md hover:shadow-md disabled:opacity-50"
+                        :disabled="customerOtpSaving"
+                        @click="saveCustomerOtp">
+                        <span v-if="customerOtpSaving">{{ $t('Saving...') }}</span>
+                        <span v-else>{{ $t('Save') }}</span>
+                    </button>
+                    <div v-if="customerOtpSuccessMessage" class="text-sm text-green-700">{{ customerOtpSuccessMessage }}</div>
+                    <div v-if="customerOtpErrorMessage" class="text-sm text-red-700">{{ customerOtpErrorMessage }}</div>
+                </div>
+            </div>
         </div>
     </AppLayout>
 </template>
@@ -656,6 +750,22 @@ const props = defineProps({
     customerLoginMappings: {
         type: Object,
         default: () => ({})
+    },
+    customerOtpSetting: {
+        type: Object,
+        default: () => ({ enabled: false, template_id: null, recipient_phone_payload_path: 'data.contact' })
+    },
+    customerOtpTemplateVariables: {
+        type: Array,
+        default: () => []
+    },
+    customerOtpWebhookFields: {
+        type: Array,
+        default: () => []
+    },
+    customerOtpMappings: {
+        type: Object,
+        default: () => ({})
     }
 });
 
@@ -720,6 +830,27 @@ const customerLoginForm = reactive({
 const customerLoginTemplateVariablesLocal = ref(props.customerLoginTemplateVariables ?? []);
 const customerLoginWebhookFieldsLocal = ref(props.customerLoginWebhookFields ?? []);
 const customerLoginMappingsLocal = reactive({ ...(props.customerLoginMappings ?? {}) });
+
+const customerOtpForm = reactive({
+    enabled: !!props.customerOtpSetting.enabled,
+    template_id: props.customerOtpSetting.template_id ?? null,
+    recipient_phone_payload_path: props.customerOtpSetting.recipient_phone_payload_path ?? 'data.contact',
+});
+
+const customerOtpTemplateVariablesLocal = ref(props.customerOtpTemplateVariables ?? []);
+const customerOtpWebhookFieldsLocal = ref(props.customerOtpWebhookFields ?? []);
+const customerOtpMappingsLocal = reactive({ ...(props.customerOtpMappings ?? {}) });
+for (const variable of customerOtpTemplateVariablesLocal.value ?? []) {
+    if (!(variable.key in customerOtpMappingsLocal)) {
+        customerOtpMappingsLocal[variable.key] = '';
+    }
+}
+
+const customerOtpLoadingFields = ref(false);
+const customerOtpSaving = ref(false);
+const customerOtpErrors = reactive({});
+const customerOtpSuccessMessage = ref('');
+const customerOtpErrorMessage = ref('');
 
 const saving = ref(false);
 const loadingFields = ref(false);
@@ -807,6 +938,16 @@ const refreshCustomerLoginWebhookFields = async () => {
         customerLoginWebhookFieldsLocal.value = res?.data?.data?.fields ?? [];
     } finally {
         customerLoginLoadingFields.value = false;
+    }
+};
+
+const refreshCustomerOtpWebhookFields = async () => {
+    customerOtpLoadingFields.value = true;
+    try {
+        const res = await axios.get('/settings/salla/automations/customer-otp/webhook-fields');
+        customerOtpWebhookFieldsLocal.value = res?.data?.data?.fields ?? [];
+    } finally {
+        customerOtpLoadingFields.value = false;
     }
 };
 
@@ -900,6 +1041,25 @@ const loadCustomerLoginTemplateVariables = async (templateId) => {
 
 watch(() => customerLoginForm.template_id, async (newId) => {
     await loadCustomerLoginTemplateVariables(newId);
+});
+
+const loadCustomerOtpTemplateVariables = async (templateId) => {
+    if (!templateId) {
+        customerOtpTemplateVariablesLocal.value = [];
+        return;
+    }
+
+    customerOtpTemplateVariablesLocal.value = await fetchTemplateVariables(templateId);
+
+    for (const variable of customerOtpTemplateVariablesLocal.value) {
+        if (!(variable.key in customerOtpMappingsLocal)) {
+            customerOtpMappingsLocal[variable.key] = '';
+        }
+    }
+};
+
+watch(() => customerOtpForm.template_id, async (newId) => {
+    await loadCustomerOtpTemplateVariables(newId);
 });
 
 watch(statusRulesLocal, async (rules) => {
@@ -1145,6 +1305,54 @@ const saveCustomerLogin = async () => {
         }
     } finally {
         customerLoginSaving.value = false;
+    }
+};
+
+const saveCustomerOtp = async () => {
+    customerOtpSaving.value = true;
+    customerOtpSuccessMessage.value = '';
+    customerOtpErrorMessage.value = '';
+    Object.keys(customerOtpErrors).forEach((k) => delete customerOtpErrors[k]);
+
+    const mappingsArray = (customerOtpTemplateVariablesLocal.value ?? []).map(v => ({
+        template_variable: v.key,
+        payload_path: customerOtpMappingsLocal[v.key] ?? '',
+    }));
+
+    try {
+        await axios.post('/settings/salla/automations/customer-otp', {
+            enabled: customerOtpForm.enabled,
+            template_id: customerOtpForm.template_id,
+            recipient_phone_payload_path: customerOtpForm.recipient_phone_payload_path,
+            mappings: mappingsArray,
+        });
+
+        customerOtpSuccessMessage.value = 'Saved';
+    } catch (e) {
+        customerOtpErrorMessage.value = e?.response?.data?.message ?? 'Failed to save';
+
+        const serverErrors = e?.response?.data?.errors ?? null;
+        if (serverErrors && typeof serverErrors === 'object') {
+            for (const [key, value] of Object.entries(serverErrors)) {
+                const match = String(key).match(/^mappings\.(\d+)\.(payload_path|template_variable)$/);
+                if (match) {
+                    const idx = parseInt(match[1], 10);
+                    const varKey = mappingsArray[idx]?.template_variable;
+                    if (varKey) {
+                        customerOtpErrors[`mappings.${varKey}`] = Array.isArray(value) ? value[0] : value;
+                        continue;
+                    }
+                }
+
+                customerOtpErrors[key] = Array.isArray(value) ? value[0] : value;
+            }
+        }
+
+        if (e?.response?.status === 422 && e?.response?.data?.message?.startsWith('Missing mapping for')) {
+            customerOtpErrorMessage.value = e.response.data.message;
+        }
+    } finally {
+        customerOtpSaving.value = false;
     }
 };
 
