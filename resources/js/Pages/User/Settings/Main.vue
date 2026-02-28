@@ -51,24 +51,6 @@
                 </div>
             </Link>
 
-            <Link href="/settings/salla" class="flex justify-between border-b py-3 mb-2">
-                <div class="flex items-center gap-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
-                        fill="currentColor">
-                        <path
-                            d="M21.9 8.89l-1.05-4.37c-.22-.9-1-1.52-1.91-1.52H5.05c-.9 0-1.69.63-1.9 1.52L2.1 8.89c-.24 1.02-.02 2.06.62 2.88.08.11.19.19.28.29V19c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2v-6.94c.09-.09.2-.18.28-.28.64-.82.87-1.87.62-2.89zm-2.99-3.9l1.05 4.37c.1.42.01.84-.25 1.17-.14.18-.44.47-.94.47-.61 0-1.14-.49-1.21-1.14L16.98 5l1.93-.01zM13 5h1.96l.54 4.52c.05.39-.07.78-.33 1.07-.22.26-.54.41-.95.41-.67 0-1.22-.59-1.22-1.31V5zM8.49 5h1.96v4.69c0 .72-.55 1.31-1.22 1.31-.41 0-.73-.15-.95-.41-.26-.29-.38-.68-.33-1.07L8.49 5h.02.02zm-4.45 0h1.93l-.58 4.86c-.07.65-.6 1.14-1.21 1.14-.49 0-.8-.29-.93-.47-.27-.32-.36-.75-.26-1.17l1.05-4.36zM5 19v-6.03c.08.01.15.03.23.03.87 0 1.66-.36 2.24-.95.6.6 1.4.95 2.31.95.87 0 1.65-.36 2.23-.93.59.57 1.39.93 2.29.93.84 0 1.64-.35 2.24-.95.58.59 1.37.95 2.24.95.08 0 .15-.02.23-.03V19H5z" />
-                    </svg>
-                    <span>{{ $t('Salla Integration') }}</span>
-                </div>
-                <div>
-                    <svg class="float-right" xmlns="http://www.w3.org/2000/svg" width="1.5em" height="1.5em"
-                        viewBox="0 0 256 256">
-                        <path fill="currentColor"
-                            d="m180.24 132.24l-80 80a6 6 0 0 1-8.48-8.48L167.51 128L91.76 52.24a6 6 0 0 1 8.48-8.48l80 80a6 6 0 0 1 0 8.48" />
-                    </svg>
-                </div>
-            </Link>
-
             <Link href="/web-widget" class="flex justify-between border-b py-3 mb-2">
                 <div class="flex items-center gap-3">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
@@ -92,7 +74,7 @@
                 </div>
             </Link>
 
-            
+
             <Link href="/settings/contacts" class="flex justify-between border-b py-3 mb-2">
                 <div class="flex items-center gap-3">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
@@ -110,7 +92,7 @@
                     </svg>
                 </div>
             </Link>
-            <Link href="/settings/tickets" class="flex justify-between border-b py-3">
+            <Link href="/settings/tickets" class="flex justify-between border-b py-3 mb-2">
                 <div class="flex items-center gap-3">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
                         <path fill="currentColor"
@@ -126,7 +108,6 @@
                     </svg>
                 </div>
             </Link>
-            
         </div>
     </AppLayout>
 </template>

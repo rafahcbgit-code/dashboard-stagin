@@ -42,7 +42,6 @@ Route::get('/test-salla-user', function () {
             'status' => $response->status(),
             'body' => $response->body(),
         ], $response->status());
-
     } catch (\Throwable $exception) {
         return response()->json([
             'error' => $exception->getMessage(),
@@ -215,11 +214,12 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::get('/settings/salla/automations/customer-otp/webhook-fields', [App\Http\Controllers\User\SallaAutomationController::class, 'webhookFieldsCustomerOtp'])->name('salla.automations.customer_otp.fields');
                 Route::post('/settings/salla/automations/customer-otp', [App\Http\Controllers\User\SallaAutomationController::class, 'updateCustomerOtp'])->name('salla.automations.customer_otp.update');
                 Route::get('/settings/salla/message-logs', [App\Http\Controllers\User\SallaMessageLogController::class, 'index'])->name('salla.logs.index');
+               
+                Route::post('/settings/salla/customer-sync', [App\Http\Controllers\Salla\CustomerSyncController::class, 'sync'])->name('salla.customer.sync');
+             
                 Route::get('/settings/salla/message-logs/export', [App\Http\Controllers\User\SallaMessageLogController::class, 'export'])->name('salla.logs.export');
                 Route::get('/salla-auth', [App\Http\Controllers\Salla\SallaAuthController::class, 'storeAuth']);
                 Route::get('/salla/public/auth/callback', [App\Http\Controllers\Salla\SallaAuthController::class, 'callback']);
-
-
                 Route::get('/reports/agent', [App\Http\Controllers\User\ReportController::class, 'agentReports'])->name('reports.agent');
                 Route::get('/reports/general', [App\Http\Controllers\User\ReportController::class, 'index'])->name('reports.general');
                 Route::get('/reports/label-count', [App\Http\Controllers\User\ReportController::class, 'countContactsByLabel']);
@@ -400,19 +400,19 @@ Route::prefix('admin')->middleware(['auth:admin'])->group(function () {
     Route::delete('/settings/page/{id}', [App\Http\Controllers\Admin\PagesController::class, 'delete']);
     Route::match(['get', 'post'], '/settings/billing', [App\Http\Controllers\Admin\SettingController::class, 'billing']);
     Route::get('/settings/storage', [App\Http\Controllers\Admin\SettingController::class, 'storage']);
-        Route::get('/settings/socials', [App\Http\Controllers\Admin\SettingController::class, 'socials']);
-        Route::get('/settings/subscription', [App\Http\Controllers\Admin\SettingController::class, 'subscription']);
+    Route::get('/settings/socials', [App\Http\Controllers\Admin\SettingController::class, 'socials']);
+    Route::get('/settings/subscription', [App\Http\Controllers\Admin\SettingController::class, 'subscription']);
 
-        Route::get('/updates', [App\Http\Controllers\Admin\UpdateController::class, 'index']);
-        Route::get('/updates/check', [App\Http\Controllers\Admin\UpdateController::class, 'checkUpdate']);
-        Route::post('/update', [App\Http\Controllers\Admin\UpdateController::class, 'update']);
+    Route::get('/updates', [App\Http\Controllers\Admin\UpdateController::class, 'index']);
+    Route::get('/updates/check', [App\Http\Controllers\Admin\UpdateController::class, 'checkUpdate']);
+    Route::post('/update', [App\Http\Controllers\Admin\UpdateController::class, 'update']);
 
-        Route::get('/user-logs/notifications', [App\Http\Controllers\Admin\NotificationController::class, 'index']);
-        Route::get('/user-logs/emails', [App\Http\Controllers\Admin\EmailLogController::class, 'index']);
-        Route::get('/salla/app-installations', [SallaAppInstallationController::class, 'index']);
+    Route::get('/user-logs/notifications', [App\Http\Controllers\Admin\NotificationController::class, 'index']);
+    Route::get('/user-logs/emails', [App\Http\Controllers\Admin\EmailLogController::class, 'index']);
+    Route::get('/salla/app-installations', [SallaAppInstallationController::class, 'index']);
 
-        // Webhook Failures - AC-1.5.4 & AC-1.5.5
-        Route::get('/webhook-failures', [App\Http\Controllers\Admin\WebhookFailureController::class, 'index']);
+    // Webhook Failures - AC-1.5.4 & AC-1.5.5
+    Route::get('/webhook-failures', [App\Http\Controllers\Admin\WebhookFailureController::class, 'index']);
     Route::get('/webhook-failures/{id}', [App\Http\Controllers\Admin\WebhookFailureController::class, 'show']);
     Route::post('/webhook-failures/{id}/retry', [App\Http\Controllers\Admin\WebhookFailureController::class, 'retry']);
     Route::delete('/webhook-failures/{id}', [App\Http\Controllers\Admin\WebhookFailureController::class, 'destroy']);

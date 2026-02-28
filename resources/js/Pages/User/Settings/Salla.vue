@@ -37,6 +37,19 @@
                 </a>
             </div>
 
+            <!-- Customer Sync Button -->
+            <div class="bg-white border border-slate-200 rounded-lg p-5 mb-6 flex items-center justify-between">
+                <div>
+                    <h3 class="text-lg font-medium text-gray-900 mb-1">{{ $t('Customer Sync') }}</h3>
+                    <p class="text-sm text-gray-600">{{ $t('Sync customers by date range and tag.') }}</p>
+                </div>
+                <button
+                    @click="openCustomerSync"
+                    class="inline-flex items-center gap-2 px-4 py-2 bg-[#5C3A76] hover:bg-[#4a2f5f] text-white text-sm rounded-lg transition-colors">
+                    {{ $t('Customer Sync') }}
+                </button>
+            </div>
+
             <!-- Connect Button -->
             <div v-if="stores.length === 0" class="bg-white border border-slate-200 rounded-lg p-6 text-center mb-6">
                 <div class="mb-4">
@@ -180,6 +193,55 @@
                 </div>
             </div>
         </div>
+
+        <!-- Customer Sync Modal -->
+        <div v-if="showCustomerSync"
+            class="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4">
+            <div class="bg-white w-full max-w-md rounded-lg shadow-lg p-6">
+                <div class="flex items-center justify-between mb-4">
+                    <h3 class="text-lg font-medium text-gray-900">{{ $t('Customer Sync') }}</h3>
+                    <button @click="closeCustomerSync" class="text-gray-500 hover:text-gray-700">
+                        ✕
+                    </button>
+                </div>
+
+                <div class="space-y-4">
+                    <div>
+                        <label class="block text-sm text-gray-700 mb-1">{{ $t('Date From') }}</label>
+                        <input v-model="customerSyncForm.date_from" type="date"
+                            class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-700 mb-1">{{ $t('Date To') }}</label>
+                        <input v-model="customerSyncForm.date_to" type="date"
+                            class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm" />
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-700 mb-1">{{ $t('Tag Name') }}</label>
+                        <input v-model="customerSyncForm.tag_name" type="text"
+                            class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                            placeholder="VIP" />
+                    </div>
+                    <div>
+                        <label class="block text-sm text-gray-700 mb-1">{{ $t('Group Name') }}</label>
+                        <input v-model="customerSyncForm.group_name" type="text"
+                            class="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm"
+                            :placeholder="$t('Group Name')" />
+                    </div>
+                </div>
+
+                <div class="mt-6 flex items-center justify-end gap-2">
+                    <button @click="closeCustomerSync"
+                        class="px-4 py-2 text-sm rounded-lg bg-slate-100 hover:bg-slate-200">
+                        {{ $t('Cancel') }}
+                    </button>
+                    <button @click="submitCustomerSync" :disabled="customerSyncLoading"
+                        class="px-4 py-2 text-sm rounded-lg text-white bg-[#5C3A76] hover:bg-[#4a2f5f] disabled:opacity-50">
+                        {{ customerSyncLoading ? $t('Saving...') : $t('Save') }}
+                    </button>
+                </div>
+            </div>
+        </div>
     </AppLayout>
 </template>
 
@@ -197,6 +259,15 @@ const props = defineProps({
 });
 
 const refreshing = ref({});
+
+const showCustomerSync = ref(false);
+const customerSyncLoading = ref(false);
+const customerSyncForm = ref({
+    date_from: '',
+    date_to: '',
+    tag_name: '',
+    group_name: ''
+});
 
 const formatDate = (date) => {
     return new Date(date).toLocaleString();
@@ -222,5 +293,29 @@ const confirmDisconnect = (storeId) => {
             preserveScroll: true
         });
     }
+};
+
+const openCustomerSync = () => {
+    showCustomerSync.value = true;
+};
+
+const closeCustomerSync = () => {
+    showCustomerSync.value = false;
+};
+
+const submitCustomerSync = () => {
+    customerSyncLoading.value = true;
+    router.post('/settings/salla/customer-sync', {
+        date_from: customerSyncForm.value.date_from,
+        date_to: customerSyncForm.value.date_to,
+        tag_name: customerSyncForm.value.tag_name,
+        group_name: customerSyncForm.value.group_name
+    }, {
+        preserveScroll: true,
+        onFinish: () => {
+            customerSyncLoading.value = false;
+            showCustomerSync.value = false;
+        }
+    });
 };
 </script>
