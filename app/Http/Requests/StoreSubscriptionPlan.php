@@ -30,6 +30,7 @@ class StoreSubscriptionPlan extends FormRequest
             'contacts_limit' => 'required|numeric|gte:-1',
             'canned_replies_limit' => 'required|numeric|gte:-1',
             'status' => 'required',
+            'salla_integration_enabled' => 'sometimes|boolean',
         ];
 
         return $rules;

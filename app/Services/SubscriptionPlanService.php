@@ -43,6 +43,10 @@ class SubscriptionPlanService
      */
     public function store(Object $request)
     {
+        $sallaIntegrationEnabled = $request->has('salla_integration_enabled')
+            ? (bool) $request->input('salla_integration_enabled')
+            : false;
+
         $newSubscriptionPlan = SubscriptionPlan::create([
             'name' => $request->input('name'),
             'price' => $request->input('price'),
@@ -57,7 +61,8 @@ class SubscriptionPlanService
                 'receive_messages_after_expiration' => $request->input('receive_messages_after_expiration') == true ? 1 : 0,
                 'ai_text_response_limit' => $request->input('ai_text_response_limit'),
                 'ai_audio_response_limit' => $request->input('ai_audio_response_limit'),
-                'addons' => $request->input('addons', [])
+                'addons' => $request->input('addons', []),
+                'salla_integration_enabled' => $sallaIntegrationEnabled
             ]),
         ]);
 
@@ -94,6 +99,9 @@ class SubscriptionPlanService
         $metadata['ai_text_response_limit'] = $request->input('ai_text_response_limit');
         $metadata['ai_audio_response_limit'] = $request->input('ai_audio_response_limit');
         $metadata['addons'] = $request->input('addons', []);
+        $metadata['salla_integration_enabled'] = $request->has('salla_integration_enabled')
+            ? (bool) $request->input('salla_integration_enabled')
+            : ($metadata['salla_integration_enabled'] ?? false);
 
         $plan->name = $request->input('name');
         $plan->price = $request->input('price');

@@ -79,6 +79,17 @@
                         </div>
                     </div>
                 </div>
+                <div class="sm:flex py-5 border-b">
+                    <div class="hidden sm:block w-[40%] mb-1">
+                        <h1 class="text-sm text-gray-500 tracking-[0px]">{{ $t('Salla Integration') }}</h1>
+                        <p class="text-xs text-slate-700">{{ $t('Only plans with this enabled can connect to Salla.') }}</p>
+                    </div>
+                    <div class="sm:w-[60%]">
+                        <div class="sm:w-[80%]">
+                            <FormToggleSwitch v-model="form.salla_integration_enabled"/>
+                        </div>
+                    </div>
+                </div>
                 <div v-if="props.enable_ai_billing == 1 && form.addons['AI Assistant']" class="sm:flex py-5 border-b">
                     <div class="hidden sm:block w-[40%] mb-1">
                         <h1 class="text-sm text-gray-500 tracking-[0px]">{{ $t('AI Assistant Usage Limit') }}</h1>
@@ -164,7 +175,10 @@
         ai_text_response_limit: getDetail(props.plan?.metadata, 'ai_text_response_limit') ?? '-1',
         ai_audio_response_limit: getDetail(props.plan?.metadata, 'ai_audio_response_limit') ?? '-1',
         receive_messages_after_expiration: getDetail(props.plan?.metadata, 'receive_messages_after_expiration') == 1 || getDetail(props.plan?.metadata, 'receive_messages_after_expiration') == null ? true : false,
-        addons: getAddons(props.plan?.metadata, 'addons')
+        addons: getAddons(props.plan?.metadata, 'addons'),
+        salla_integration_enabled: props.plan
+            ? (getDetail(props.plan?.metadata, 'salla_integration_enabled') ?? true)
+            : false,
     })
 
     const statusOptions = ref([

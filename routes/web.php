@@ -1,10 +1,11 @@
 <?php
 
+use App\Http\Controllers\Admin\SallaAppInstallationController;
 use App\Models\Language;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Route;
-
+use Illuminate\Support\Facades\Http;
 /*
 |--------------------------------------------------------------------------
 | Web Routes
@@ -16,7 +17,41 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::post('/webhook/{organization}', [App\Http\Controllers\WebhookController::class, 'handlePostRequest']);
+
+Route::get('/test-salla-user', function () {
+
+    $accessToken = 'ory_at_F3TkpeegfGP0nbOYZ8jMi30s7engJ9GajDc7sRHfn7Q.e7k8DzxWgk_v_kp8fC47SsqXoWrTUsqRXeND66u3s0c';
+
+    try {
+        $response = Http::acceptJson()
+            ->withToken($accessToken)
+            ->timeout(20)
+            ->connectTimeout(10)
+            ->retry(2, 250, null, false)
+            ->get('https://accounts.salla.sa/oauth2/user/info');
+
+        if ($response->successful()) {
+            return response()->json([
+                'success' => true,
+                'data' => $response->json(),
+            ]);
+        }
+
+        return response()->json([
+            'success' => false,
+            'status' => $response->status(),
+            'body' => $response->body(),
+        ], $response->status());
+    } catch (\Throwable $exception) {
+        return response()->json([
+            'error' => $exception->getMessage(),
+        ], 500);
+    }
+});
+
+
+Route::post('/webhook/{organization}', [App\Http\Controllers\WebhookController::class, 'handlePostRequest'])
+    ->whereNumber('organization');
 Route::get('/widget/{organization}', [App\Http\Controllers\WebWidgetController::class, 'showPublicConfig']);
 Route::get('/widget.js', [App\Http\Controllers\WebWidgetController::class, 'script']);
 
@@ -70,6 +105,9 @@ Route::get('/logout', [App\Http\Controllers\AuthController::class, 'logout'])->n
 Route::match(['get', 'post'], '/webhook/whatsapp/{identifier?}', [App\Http\Controllers\WebhookController::class, 'handle']);
 Route::match(['get', 'post'], '/webhook/waba', [App\Http\Controllers\WebhookController::class, 'whatsappWebhook']);
 Route::match(['get', 'post'], '/webhook/waba/new', [App\Http\Controllers\WebhookController::class, 'whatsappWebhook']);
+
+// Salla webhooks (must be defined before /webhook/{processor})
+Route::post('/webhook/salla', [App\Http\Controllers\Salla\SallaWebhookController::class, 'handle']);
 
 Route::match(['get', 'post'], '/webhook/{processor}', [App\Http\Controllers\WebhookController::class, 'processWebhook']);
 Route::match(['get', 'post'], '/payment/{processor}', [App\Http\Controllers\PaymentController::class, 'processPayment']);
@@ -159,10 +197,34 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::get('/chats/team-members/filter-data', [App\Http\Controllers\User\ChatController::class, 'getTeamMembersForFilter']);
                 Route::post('/chats/mark-all-read', [App\Http\Controllers\User\ChatController::class, 'markAllAsRead']);
 
+                // Salla Integration Routes
+                Route::get('/settings/salla', [App\Http\Controllers\User\SallaController::class, 'index'])->name('salla.index');
+                Route::post('/settings/salla/{id}/refresh', [App\Http\Controllers\User\SallaController::class, 'refreshToken'])->name('salla.refresh');
+                Route::delete('/settings/salla/{id}', [App\Http\Controllers\User\SallaController::class, 'disconnect'])->name('salla.disconnect');
+                Route::get('/settings/salla/automations', [App\Http\Controllers\User\SallaAutomationController::class, 'index'])->name('salla.automations.index');
+                Route::get('/settings/salla/automations/template/{templateId}/variables', [App\Http\Controllers\User\SallaAutomationController::class, 'templateVariables'])->whereNumber('templateId');
+                Route::get('/settings/salla/automations/order-created/webhook-fields', [App\Http\Controllers\User\SallaAutomationController::class, 'webhookFields'])->name('salla.automations.order_created.fields');
+                Route::post('/settings/salla/automations/order-created', [App\Http\Controllers\User\SallaAutomationController::class, 'updateOrderCreated'])->name('salla.automations.order_created.update');
+                Route::post('/settings/salla/automations/order-created-cod', [App\Http\Controllers\User\SallaAutomationController::class, 'updateOrderCreatedCod'])->name('salla.automations.order_created_cod.update');
+                Route::get('/settings/salla/automations/order-status-updated/webhook-fields', [App\Http\Controllers\User\SallaAutomationController::class, 'webhookFieldsOrderStatusUpdated'])->name('salla.automations.order_status_updated.fields');
+                Route::post('/settings/salla/automations/order-status-updated', [App\Http\Controllers\User\SallaAutomationController::class, 'updateOrderStatusUpdated'])->name('salla.automations.order_status_updated.update');
+                Route::get('/settings/salla/automations/abandoned-cart/webhook-fields', [App\Http\Controllers\User\SallaAutomationController::class, 'webhookFieldsAbandonedCart'])->name('salla.automations.abandoned_cart.fields');
+                Route::post('/settings/salla/automations/abandoned-cart', [App\Http\Controllers\User\SallaAutomationController::class, 'updateAbandonedCart'])->name('salla.automations.abandoned_cart.update');
+                Route::get('/settings/salla/automations/customer-login/webhook-fields', [App\Http\Controllers\User\SallaAutomationController::class, 'webhookFieldsCustomerLogin'])->name('salla.automations.customer_login.fields');
+                Route::post('/settings/salla/automations/customer-login', [App\Http\Controllers\User\SallaAutomationController::class, 'updateCustomerLogin'])->name('salla.automations.customer_login.update');
+                Route::get('/settings/salla/automations/customer-otp/webhook-fields', [App\Http\Controllers\User\SallaAutomationController::class, 'webhookFieldsCustomerOtp'])->name('salla.automations.customer_otp.fields');
+                Route::post('/settings/salla/automations/customer-otp', [App\Http\Controllers\User\SallaAutomationController::class, 'updateCustomerOtp'])->name('salla.automations.customer_otp.update');
+                Route::get('/settings/salla/message-logs', [App\Http\Controllers\User\SallaMessageLogController::class, 'index'])->name('salla.logs.index');
+               
+                Route::post('/settings/salla/customer-sync', [App\Http\Controllers\Salla\CustomerSyncController::class, 'sync'])->name('salla.customer.sync');
+             
+                Route::get('/settings/salla/message-logs/export', [App\Http\Controllers\User\SallaMessageLogController::class, 'export'])->name('salla.logs.export');
+                Route::get('/salla-auth', [App\Http\Controllers\Salla\SallaAuthController::class, 'storeAuth']);
+                Route::get('/salla/public/auth/callback', [App\Http\Controllers\Salla\SallaAuthController::class, 'callback']);
                 Route::get('/reports/agent', [App\Http\Controllers\User\ReportController::class, 'agentReports'])->name('reports.agent');
                 Route::get('/reports/general', [App\Http\Controllers\User\ReportController::class, 'index'])->name('reports.general');
                 Route::get('/reports/label-count', [App\Http\Controllers\User\ReportController::class, 'countContactsByLabel']);
-                   
+
                 Route::get('/tickets/{status}', [App\Http\Controllers\User\ChatTicketController::class, 'index']);
                 Route::put('/tickets/{uuid}/update', [App\Http\Controllers\User\ChatTicketController::class, 'update']);
                 Route::put('/tickets/{uuid}/assign', [App\Http\Controllers\User\ChatTicketController::class, 'assign']);
@@ -249,6 +311,7 @@ Route::middleware(['auth:user'])->group(function () {
                     Route::put('/settings/labels/{label}', [App\Http\Controllers\User\SettingController::class, 'updateLabel'])->name('settings.labels.update');
                     Route::delete('/settings/labels/{label}', [App\Http\Controllers\User\SettingController::class, 'deleteLabel'])->name('settings.labels.delete');
 
+
                     Route::get('/settings/global-reply', [App\Http\Controllers\User\SettingController::class, 'viewGlobalReplySettings']);
                     Route::post('/settings/global-reply', [App\Http\Controllers\User\SettingController::class, 'updateGlobalReply']);
 
@@ -265,7 +328,7 @@ Route::middleware(['auth:user'])->group(function () {
                     Route::delete('/team/{uuid}', [App\Http\Controllers\User\TeamController::class, 'delete'])->name('team.destroy');
 
                     Route::get('/developer-tools/access-tokens', [App\Http\Controllers\User\DeveloperController::class, 'index']);
-                     Route::post('/developer-tools/access-tokens', [App\Http\Controllers\User\DeveloperController::class, 'store']);
+                    Route::post('/developer-tools/access-tokens', [App\Http\Controllers\User\DeveloperController::class, 'store']);
                     Route::delete('/developer-tools/access-tokens/{uuid}', [App\Http\Controllers\User\DeveloperController::class, 'delete']);
                 });
 
@@ -347,6 +410,7 @@ Route::prefix('admin')->middleware(['auth:admin'])->group(function () {
 
     Route::get('/user-logs/notifications', [App\Http\Controllers\Admin\NotificationController::class, 'index']);
     Route::get('/user-logs/emails', [App\Http\Controllers\Admin\EmailLogController::class, 'index']);
+    Route::get('/salla/app-installations', [SallaAppInstallationController::class, 'index']);
 
     // Webhook Failures - AC-1.5.4 & AC-1.5.5
     Route::get('/webhook-failures', [App\Http\Controllers\Admin\WebhookFailureController::class, 'index']);
