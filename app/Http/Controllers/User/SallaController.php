@@ -5,6 +5,7 @@ namespace App\Http\Controllers\User;
 use Inertia\Inertia;
 use Illuminate\Http\Request;
 use App\Models\SallaStore;
+use App\Models\Subscription;
 use App\Services\SallaTokenService;
 use App\Http\Controllers\Controller as BaseController;
 use Illuminate\Support\Facades\Http;
@@ -21,6 +22,21 @@ class SallaController extends BaseController
         
         $data['title'] = __('Salla Integration');
         $data['stores'] = SallaStore::where('organization_id', $organizationId)->get();
+
+        $subscription = Subscription::with('plan')->where('organization_id', $organizationId)->first();
+        $plan = $subscription?->plan;
+        $currentPlanName = $plan?->name ?? null;
+        $sallaAccessAllowed = true;
+
+        if ($plan && $plan->metadata) {
+            $planMetadata = json_decode($plan->metadata, true) ?? [];
+            if (array_key_exists('salla_integration_enabled', $planMetadata)) {
+                $sallaAccessAllowed = (bool) $planMetadata['salla_integration_enabled'];
+            }
+        }
+
+        $data['sallaAccessAllowed'] = $sallaAccessAllowed;
+        $data['currentPlanName'] = $currentPlanName;
        
         return Inertia::render('User/Settings/Salla', $data);
     }
