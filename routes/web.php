@@ -17,39 +17,6 @@ use Illuminate\Support\Facades\Http;
 |
 */
 
-
-Route::get('/test-salla-user', function () {
-
-    $accessToken = 'ory_at_F3TkpeegfGP0nbOYZ8jMi30s7engJ9GajDc7sRHfn7Q.e7k8DzxWgk_v_kp8fC47SsqXoWrTUsqRXeND66u3s0c';
-
-    try {
-        $response = Http::acceptJson()
-            ->withToken($accessToken)
-            ->timeout(20)
-            ->connectTimeout(10)
-            ->retry(2, 250, null, false)
-            ->get('https://accounts.salla.sa/oauth2/user/info');
-
-        if ($response->successful()) {
-            return response()->json([
-                'success' => true,
-                'data' => $response->json(),
-            ]);
-        }
-
-        return response()->json([
-            'success' => false,
-            'status' => $response->status(),
-            'body' => $response->body(),
-        ], $response->status());
-    } catch (\Throwable $exception) {
-        return response()->json([
-            'error' => $exception->getMessage(),
-        ], 500);
-    }
-});
-
-
 Route::post('/webhook/{organization}', [App\Http\Controllers\WebhookController::class, 'handlePostRequest'])
     ->whereNumber('organization');
 Route::get('/widget/{organization}', [App\Http\Controllers\WebWidgetController::class, 'showPublicConfig']);
@@ -106,7 +73,7 @@ Route::match(['get', 'post'], '/webhook/whatsapp/{identifier?}', [App\Http\Contr
 Route::match(['get', 'post'], '/webhook/waba', [App\Http\Controllers\WebhookController::class, 'whatsappWebhook']);
 Route::match(['get', 'post'], '/webhook/waba/new', [App\Http\Controllers\WebhookController::class, 'whatsappWebhook']);
 
-// Salla webhooks (must be defined before /webhook/{processor})
+// Salla webhooks
 Route::post('/webhook/salla', [App\Http\Controllers\Salla\SallaWebhookController::class, 'handle']);
 
 Route::match(['get', 'post'], '/webhook/{processor}', [App\Http\Controllers\WebhookController::class, 'processWebhook']);
