@@ -189,11 +189,7 @@ class AppStoreAuthorizeHandler implements SallaWebhookEventHandlerInterface
         if ($existingOrganizationId) {
             $organization = Organization::find($existingOrganizationId);
             if ($organization) {
-                $organization->update([
-                    'name' => $storeName,
-                    'metadata' => null,
-                ]);
-
+                
                 return $organization;
             }
         }
