@@ -1,0 +1,358 @@
+<?php
+
+namespace Modules\MetaFlows\Controllers;
+
+use App\Http\Controllers\Controller as BaseController;
+use App\Helpers\CustomHelper;
+use App\Models\Organization;
+use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Redirect;
+use Inertia\Inertia;
+use Modules\MetaFlows\Models\MetaFlow;
+use Modules\MetaFlows\Models\MetaFlowResponse;
+use Modules\MetaFlows\Requests\StoreMetaFlowRequest;
+use Modules\MetaFlows\Services\GoogleSheetsService;
+use Modules\MetaFlows\Services\MetaFlowService;
+
+class MetaFlowController extends BaseController
+{
+    // Build a service instance using the current session's organization credentials
+    private function service(): MetaFlowService
+    {
+        $organizationId = session()->get('current_organization');
+
+        return MetaFlowService::fromOrganization($organizationId);
+    }
+
+    // List all Meta Flows for the current organization
+    public function index(Request $request)
+    {
+        if (!CustomHelper::isModuleEnabled('Meta Flows')) {
+            abort(404);
+        }
+
+        $data['title']   = __('Meta Flows');
+        $data['rows']    = $this->service()->getRows($request);
+        $data['filters'] = $request->all();
+
+        return Inertia::render('MetaFlows::User/Index', $data);
+    }
+
+    // Show the editor for a single Meta Flow
+    public function view(Request $request, string $uuid)
+    {
+        if (!CustomHelper::isModuleEnabled('Meta Flows')) {
+            abort(404);
+        }
+
+        $flow = MetaFlow::where('uuid', $uuid)
+            ->where('organization_id', session()->get('current_organization'))
+            ->firstOrFail();
+
+        $data['flow'] = $flow;
+
+        return Inertia::render('MetaFlows::User/View', $data);
+    }
+
+    // Create a new Meta Flow on Meta's platform and redirect to the editor
+    public function store(StoreMetaFlowRequest $request)
+    {
+        $flow = $this->service()->createFlow($request->validated());
+
+        return redirect('/automation/meta-flows/' . $flow->uuid)->with(
+            'status', [
+                'type'    => 'success',
+                'message' => __('Meta Flow created successfully!'),
+            ]
+        );
+    }
+
+    // Save updated Flow JSON to Meta and to the local database
+    public function update(Request $request, string $uuid)
+    {
+        $request->validate([
+            'asset_content' => 'required|string',
+        ]);
+
+        $flow = MetaFlow::where('uuid', $uuid)
+            ->where('organization_id', session()->get('current_organization'))
+            ->firstOrFail();
+
+        $result = $this->service()->updateFlowAsset($flow, $request->asset_content);
+
+        if (!$result['success']) {
+            return response()->json(['message' => $result['message']], 422);
+        }
+
+        if ($request->expectsJson()) {
+            return response()->json(['message' => __('Flow JSON saved successfully.')]);
+        }
+
+        return Redirect::back()->with(
+            'status', [
+                'type'    => 'success',
+                'message' => __('Flow JSON saved successfully!'),
+            ]
+        );
+    }
+
+    // Publish the flow on Meta so it can be sent to users
+    public function publish(string $uuid)
+    {
+        $flow = MetaFlow::where('uuid', $uuid)
+            ->where('organization_id', session()->get('current_organization'))
+            ->firstOrFail();
+
+        try {
+            $flow = $this->service()->publishFlow($flow);
+        } catch (\Throwable $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'message' => __('Flow published successfully!'),
+            'status'  => $flow->status,
+        ]);
+    }
+
+    // Deprecate the flow so it can no longer be sent to new users
+    public function deprecate(string $uuid)
+    {
+        $flow = MetaFlow::where('uuid', $uuid)
+            ->where('organization_id', session()->get('current_organization'))
+            ->firstOrFail();
+
+        try {
+            $flow = $this->service()->deprecateFlow($flow);
+        } catch (\Throwable $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+
+        return response()->json([
+            'message' => __('Flow deprecated successfully.'),
+            'status'  => $flow->status,
+        ]);
+    }
+
+    // Pull the latest state from Meta and refresh the local record
+    public function sync(string $uuid)
+    {
+        $flow = MetaFlow::where('uuid', $uuid)
+            ->where('organization_id', session()->get('current_organization'))
+            ->firstOrFail();
+
+        $flow = $this->service()->syncFlowFromMeta($flow);
+
+        return response()->json([
+            'message' => __('Flow synced from Meta.'),
+            'flow'    => $flow,
+        ]);
+    }
+
+    // Return a flat list of published flows for this organization — used by the chat flow picker
+    public function list()
+    {
+        if (!CustomHelper::isModuleEnabled('Meta Flows')) {
+            abort(404);
+        }
+
+        $orgId = session()->get('current_organization');
+
+        $flows = MetaFlow::where('organization_id', $orgId)
+            ->where('status', 'published')
+            ->whereNotNull('meta_flow_id')
+            ->orderBy('name')
+            ->get(['uuid', 'name', 'categories', 'status', 'meta_flow_id', 'asset_content'])
+            ->map(function ($flow) {
+                $firstScreen = null;
+                if ($flow->asset_content) {
+                    $json = json_decode($flow->asset_content, true);
+                    $firstScreen = $json['screens'][0]['id'] ?? null;
+                }
+
+                return [
+                    'uuid'         => $flow->uuid,
+                    'name'         => $flow->name,
+                    'categories'   => $flow->categories,
+                    'status'       => $flow->status,
+                    'meta_flow_id' => $flow->meta_flow_id,
+                    'first_screen' => $firstScreen,
+                ];
+            });
+
+        return response()->json($flows);
+    }
+
+    // Pull all flows from Meta and import/update local records
+    public function pull()
+    {
+        if (!CustomHelper::isModuleEnabled('Meta Flows')) {
+            abort(404);
+        }
+
+        try {
+            $result = $this->service()->pullFlowsFromMeta();
+
+            return response()->json([
+                'message'  => __("Pulled :imported new flow(s), updated :updated existing.", $result),
+                'imported' => $result['imported'],
+                'updated'  => $result['updated'],
+            ]);
+        } catch (\Throwable $e) {
+            return response()->json(['message' => $e->getMessage()], 422);
+        }
+    }
+
+    // List paginated responses for a specific flow
+    public function responses(Request $request, string $uuid)
+    {
+        if (!CustomHelper::isModuleEnabled('Meta Flows')) {
+            abort(404);
+        }
+
+        $orgId = session()->get('current_organization');
+
+        $flow = MetaFlow::where('uuid', $uuid)
+            ->where('organization_id', $orgId)
+            ->firstOrFail();
+
+        $responses = MetaFlowResponse::where('meta_flow_id', $flow->id)
+            ->where('organization_id', $orgId)
+            ->orderByDesc('created_at')
+            ->paginate(20)
+            ->withQueryString();
+
+        return Inertia::render('MetaFlows::User/Responses', [
+            'flow'      => $flow,
+            'responses' => $responses,
+        ]);
+    }
+
+    // Return the Google OAuth connection status for the current organization
+    public function googleStatus(): JsonResponse
+    {
+        $orgId        = session()->get('current_organization');
+        $organization = Organization::findOrFail($orgId);
+        $metadata     = json_decode($organization->metadata, true) ?? [];
+        $google       = $metadata['google_oauth'] ?? [];
+
+        return response()->json([
+            'connected'    => !empty($google['access_token']),
+            'google_email' => $google['google_email'] ?? null,
+        ]);
+    }
+
+    // Return the flow's parsed field definitions plus the built-in metadata fields
+    public function getFlowFields(string $uuid): JsonResponse
+    {
+        $flow = MetaFlow::where('uuid', $uuid)
+            ->where('organization_id', session()->get('current_organization'))
+            ->firstOrFail();
+
+        $metadataFields = [
+            ['name' => '__timestamp',     'label' => 'Timestamp',     'type' => 'metadata'],
+            ['name' => '__contact_phone', 'label' => 'Contact Phone', 'type' => 'metadata'],
+            ['name' => '__contact_name',  'label' => 'Contact Name',  'type' => 'metadata'],
+            ['name' => '__flow_token',    'label' => 'Flow Token',    'type' => 'metadata'],
+        ];
+
+        return response()->json([
+            'fields'          => $flow->extractFlowFields(),
+            'metadata_fields' => $metadataFields,
+        ]);
+    }
+
+    // Fetch the column headers from the linked Google Sheet.
+    // Saves the URL and tab name on the flow before fetching so they are persisted.
+    public function getSheetHeaders(Request $request, string $uuid): JsonResponse
+    {
+        $orgId = session()->get('current_organization');
+
+        $flow = MetaFlow::where('uuid', $uuid)
+            ->where('organization_id', $orgId)
+            ->firstOrFail();
+
+        $url = $request->query('google_sheet_url', $flow->google_sheet_url);
+        $tab = $request->query('google_sheet_tab', $flow->google_sheet_tab ?? 'Sheet1');
+
+        // Persist URL and tab so subsequent saves don't lose them
+        $flow->update([
+            'google_sheet_url' => $url,
+            'google_sheet_tab' => $tab,
+        ]);
+
+        $spreadsheetId = GoogleSheetsService::extractSpreadsheetId($url ?? '');
+
+        if (!$spreadsheetId) {
+            return response()->json(['message' => 'Invalid Google Sheets URL.'], 422);
+        }
+
+        try {
+            $service = GoogleSheetsService::fromOrganization($orgId);
+            $headers = $service->getSheetHeaders($spreadsheetId, $tab);
+        } catch (\Throwable $e) {
+            return response()->json(['message' => 'Failed to fetch sheet headers: ' . $e->getMessage()], 422);
+        }
+
+        $organization = \App\Models\Organization::findOrFail($orgId);
+        $meta         = json_decode($organization->metadata, true) ?? [];
+        $googleEmail  = $meta['google_oauth']['google_email'] ?? null;
+
+        return response()->json([
+            'headers'      => $headers,
+            'google_email' => $googleEmail,
+        ]);
+    }
+
+    // Save the Google Sheets configuration for a flow
+    public function saveSheetConfig(Request $request, string $uuid): JsonResponse
+    {
+        $request->validate([
+            'google_sheet_url'     => 'nullable|string|url',
+            'google_sheet_tab'     => 'nullable|string|max:255',
+            'google_sheet_mapping' => 'nullable|array',
+            'google_sheet_enabled' => 'boolean',
+        ]);
+
+        $flow = MetaFlow::where('uuid', $uuid)
+            ->where('organization_id', session()->get('current_organization'))
+            ->firstOrFail();
+
+        $flow->update([
+            'google_sheet_url'     => $request->google_sheet_url,
+            'google_sheet_tab'     => $request->google_sheet_tab,
+            'google_sheet_mapping' => $request->google_sheet_mapping,
+            'google_sheet_enabled' => $request->boolean('google_sheet_enabled'),
+        ]);
+
+        return response()->json(['message' => 'Google Sheets configuration saved.']);
+    }
+
+    // Delete the flow from Meta and soft-delete the local record
+    public function destroy(string $uuid)
+    {
+        $flow = MetaFlow::where('uuid', $uuid)
+            ->where('organization_id', session()->get('current_organization'))
+            ->firstOrFail();
+
+        try {
+            $this->service()->deleteFlow($flow);
+        } catch (\Throwable $e) {
+            // Meta rejected the deletion — keep the local record intact and tell the user why
+            return Redirect::back()->with(
+                'status', [
+                    'type'    => 'error',
+                    'message' => $e->getMessage(),
+                ]
+            );
+        }
+
+        return Redirect::back()->with(
+            'status', [
+                'type'    => 'success',
+                'message' => __('Meta Flow deleted successfully!'),
+            ]
+        );
+    }
+}

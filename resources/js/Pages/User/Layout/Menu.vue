@@ -169,6 +169,16 @@
                         <span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Automation') }}</span>
                     </Link>
                 </li>
+
+                <!-- Meta Flows - only visible when the module is enabled for this organization -->
+                <li v-if="!isAgent && metaFlowsModule" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
+                    :class="$page.url.startsWith('/automation/meta-flows') ? 'bg-slate-50 text-black' : ''">
+                    <Link rel="noopener noreferrer" href="/automation/meta-flows"
+                        class="flex items-center p-2 space-s-3 rounded-md">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 3H5a2 2 0 0 0-2 2v4m6-6h10a2 2 0 0 1 2 2v4M9 3v18m0 0h10a2 2 0 0 0 2-2V9M9 21H5a2 2 0 0 1-2-2V9m0 0h18"/></svg>
+                        <span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Meta Flows') }}</span>
+                    </Link>
+                </li>
             </ul>
 
             <div class="px-4">
@@ -360,6 +370,9 @@ const isAgent = computed(() => {
     const val = (p.value && (p.value.isAgent ?? p.value.is_agent)) ?? (props.user && (props.user.is_agent ?? (props.user.teams && props.user.teams[0] && props.user.teams[0].role === 'agent')));
     return Boolean(val);
 });
+
+// Meta Flows module flag - shared from HandleInertiaRequests so all pages have it automatically
+const metaFlowsModule = computed(() => usePage().props.meta_flows_module ?? false);
 const isOpen = ref(false);
 const isLocationSwitchModalOpen = ref(false);
 const showDropdown1 = ref(false);

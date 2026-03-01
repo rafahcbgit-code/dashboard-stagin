@@ -45,6 +45,10 @@ if (is_dir(base_path('modules/FlowBuilder')) && class_exists(\Modules\FlowBuilde
     $providers[] = \Modules\FlowBuilder\Providers\FlowBuilderServiceProvider::class;
 }
 
+if (is_dir(base_path('modules/MetaFlows')) && class_exists(\Modules\MetaFlows\Providers\MetaFlowsServiceProvider::class)) {
+    $providers[] = \Modules\MetaFlows\Providers\MetaFlowsServiceProvider::class;
+}
+
 if (is_dir(base_path('modules/SocketIo')) && class_exists(\Modules\SocketIo\Providers\SocketIoServiceProvider::class)) {
     $providers[] = \Modules\SocketIo\Providers\SocketIoServiceProvider::class;
 }
