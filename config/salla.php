@@ -6,8 +6,8 @@ return [
     'client_secret' => env('SALLA_CLIENT_ID', '79ddb0c8ee3da7ea0215d496a2633e1e76ac3fcae0b8de1167e2346866a4f91c'),  //live app
     'auth_url' => 'https://accounts.salla.sa/oauth2/auth',
     'token_url' => 'https://accounts.salla.sa/oauth2/token',
-    'redirect' => 'http://localhost:8000/salla/public/auth/callback',
-    'callback_url' => 'http://localhost:8000/salla/public/auth/callback',
+    'redirect' => 'https://dashboard.chatberry.net/salla/public/auth/callback',
+    'callback_url' => 'https://dashboard.chatberry.net/salla/public/auth/callback',
     'salla-api-url' => 'https://api.salla.dev/admin/v2',
 
     // Temporary: process Salla webhooks synchronously (bypass queue)
