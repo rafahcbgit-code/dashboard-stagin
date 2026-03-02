@@ -14,18 +14,18 @@ $providers = [
     App\Providers\AuthServiceProvider::class,
     // App\Providers\BroadcastServiceProvider::class,
     App\Providers\EventServiceProvider::class,
-        App\Providers\HorizonServiceProvider::class,
+    App\Providers\HorizonServiceProvider::class,
     App\Providers\BroadcastConfigServiceProvider::class,
     App\Providers\MailConfigServiceProvider::class,
     App\Providers\RouteServiceProvider::class,
-        App\Providers\TelescopeServiceProvider::class,
+    App\Providers\TelescopeServiceProvider::class,
     App\Providers\RecaptchaServiceProvider::class,
     App\Providers\SallaServiceProvider::class,
     Mews\Purifier\PurifierServiceProvider::class,
 ];
 
 // Conditionally add EmbeddedSignupServiceProvider if it exists
-if (is_dir(base_path('modules/EmbeddedSignup')) && class_exists(\Modules\EmbeddedSignup\Providers\EmbeddedSignupServiceProvider::class)){
+if (is_dir(base_path('modules/EmbeddedSignup')) && class_exists(\Modules\EmbeddedSignup\Providers\EmbeddedSignupServiceProvider::class)) {
     $providers[] = \Modules\EmbeddedSignup\Providers\EmbeddedSignupServiceProvider::class;
 }
 

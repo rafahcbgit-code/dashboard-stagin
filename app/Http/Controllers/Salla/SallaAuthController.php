@@ -56,9 +56,6 @@ class SallaAuthController extends Controller
             return redirect('/settings/salla')->with('error', __('Missing authorization code.'));
         }
 
-        // ملاحظة: `state` يتم إنشاؤه قبل إعادة التوجيه إلى سلة وتخزينه في session تحت المفتاح `salla_oauth_state`.
-        // التحقق منه هنا يمنع هجمات CSRF وحقن كود التفويض (Authorization Code Injection).
-
         if ($state === '') {
             return redirect('/settings/salla')->with('error', __('Invalid or expired session. Please try again.'));
         }
