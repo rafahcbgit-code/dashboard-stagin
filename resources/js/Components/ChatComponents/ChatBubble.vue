@@ -307,6 +307,14 @@ const viewContactDetails = async (data) => {
                     class="normal-case whitespace-pre-wrap">{{
                         JSON.parse(content.metadata).interactive?.list_reply?.description }}</p>
 
+                <!-- Flow submission received from contact (nfm_reply) -->
+                <div v-if="JSON.parse(content.metadata).interactive?.type === 'nfm_reply'" class="min-w-[160px]">
+                    <div class="flex items-center gap-1.5 text-sm text-slate-600">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-green-500 flex-shrink-0"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+                        <span class="font-medium">Flow submitted</span>
+                    </div>
+                </div>
+
                 <!-- Meta Flow message sent from chat -->
                 <div v-if="JSON.parse(content.metadata).interactive?.type === 'flow'" class="min-w-[200px]">
                     <p v-if="JSON.parse(content.metadata).flow_name" class="text-xs font-semibold text-slate-600 mb-1">
