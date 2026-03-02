@@ -112,40 +112,9 @@
                                         <div class="flex-1 overflow-y-auto px-5 py-4">
                                             <p class="text-xs font-semibold text-slate-700 mb-3">{{ $t('Templates') }}</p>
 
-                                            <!-- Without endpoint group -->
-                                            <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2">
-                                                {{ $t('Without endpoint') }}
-                                            </p>
-                                            <div class="space-y-0.5 mb-4">
-                                                <label
-                                                    v-for="t in noEndpointTemplates"
-                                                    :key="t.value"
-                                                    class="flex items-center gap-2.5 px-3 py-2 rounded-lg cursor-pointer transition-colors"
-                                                    :class="selectedTemplate === t.value
-                                                        ? 'bg-primary/10 text-primary'
-                                                        : 'hover:bg-slate-50 text-slate-700'"
-                                                >
-                                                    <input
-                                                        type="radio"
-                                                        :value="t.value"
-                                                        v-model="selectedTemplate"
-                                                        class="accent-primary shrink-0"
-                                                        @change="onTemplateChange(t)"
-                                                    />
-                                                    <span class="text-sm">{{ $t(t.label) }}</span>
-                                                </label>
-                                            </div>
-
-                                            <!-- With endpoint group -->
-                                            <p class="text-[11px] font-semibold text-slate-500 uppercase tracking-wide mb-2 flex items-center gap-1">
-                                                {{ $t('With endpoint') }}
-                                                <span title="Requires an endpoint URL to fetch dynamic data" class="text-slate-400 cursor-help">
-                                                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4M12 8h.01"/></svg>
-                                                </span>
-                                            </p>
                                             <div class="space-y-0.5">
                                                 <label
-                                                    v-for="t in withEndpointTemplates"
+                                                    v-for="t in META_FLOW_TEMPLATES"
                                                     :key="t.value"
                                                     class="flex items-center gap-2.5 px-3 py-2 rounded-lg cursor-pointer transition-colors"
                                                     :class="selectedTemplate === t.value
@@ -218,6 +187,7 @@
     import MetaFlowsTable    from '@modules/MetaFlows/Pages/User/Components/MetaFlowsTable.vue';
     import FlowPhonePreview  from '@modules/MetaFlows/Pages/User/Components/FlowPhonePreview.vue';
     import Pagination        from '@/Components/Pagination.vue';
+    import { META_FLOW_TEMPLATES, getPreviewScreens } from '@/Data/metaFlowTemplates.js';
 
     const props = defineProps(['rows', 'filters']);
 
@@ -237,313 +207,13 @@
         { value: 'OTHER',               label: 'Other' },
     ];
 
-    // ── Template definitions ─────────────────────────────────────────────────
-    const TEMPLATES = [
-        // ── Without endpoint ──────────────────────────────────────────────────
-        {
-            value: 'default', label: 'Default', group: 'no_endpoint',
-            suggestedCategory: 'OTHER',
-            screens: [
-                {
-                    id: 'WELCOME', title: 'Welcome', terminal: true,
-                    components: [
-                        { type: 'TextHeading', text: 'Hello World' },
-                        { type: 'TextBody',    text: "Let's start building things!" },
-                        { type: 'Footer', label: 'Complete', action: 'complete' },
-                    ],
-                },
-            ],
-        },
-        {
-            value: 'register_event', label: 'Register for an event', group: 'no_endpoint',
-            suggestedCategory: 'OTHER',
-            screens: [
-                {
-                    id: 'CONTACT', title: 'Your Details', terminal: false,
-                    components: [
-                        { type: 'TextHeading', text: 'Event Registration' },
-                        { type: 'TextInput', label: 'Full Name',      name: 'full_name', required: true, inputType: 'text' },
-                        { type: 'TextInput', label: 'Email Address',  name: 'email',     required: true, inputType: 'email' },
-                        { type: 'Footer', label: 'Next', action: 'navigate', nextScreen: 'EVENT' },
-                    ],
-                },
-                {
-                    id: 'EVENT', title: 'Event Choice', terminal: true,
-                    components: [
-                        { type: 'TextHeading', text: 'Choose Your Session' },
-                        { type: 'Dropdown', label: 'Select Event', name: 'event_choice', required: true, options: [
-                            { id: 'morning',   title: 'Morning Session (9am)' },
-                            { id: 'afternoon', title: 'Afternoon Session (2pm)' },
-                            { id: 'evening',   title: 'Evening Session (6pm)' },
-                        ]},
-                        { type: 'TextArea', label: 'Dietary Requirements', name: 'dietary', required: false },
-                        { type: 'Footer', label: 'Register', action: 'complete' },
-                    ],
-                },
-            ],
-        },
-        {
-            value: 'get_feedback', label: 'Get feedback', group: 'no_endpoint',
-            suggestedCategory: 'SURVEY',
-            screens: [
-                {
-                    id: 'RATING', title: 'Rate Us', terminal: false,
-                    components: [
-                        { type: 'TextHeading', text: 'How was your experience?' },
-                        { type: 'RadioButtonsGroup', label: 'Rating', name: 'rating', required: true, options: [
-                            { id: '5', title: '⭐⭐⭐⭐⭐  Excellent' },
-                            { id: '4', title: '⭐⭐⭐⭐  Good' },
-                            { id: '3', title: '⭐⭐⭐  Average' },
-                            { id: '2', title: '⭐⭐  Poor' },
-                            { id: '1', title: '⭐  Very Poor' },
-                        ]},
-                        { type: 'Footer', label: 'Next', action: 'navigate', nextScreen: 'COMMENTS' },
-                    ],
-                },
-                {
-                    id: 'COMMENTS', title: 'Comments', terminal: true,
-                    components: [
-                        { type: 'TextHeading', text: 'Additional Comments' },
-                        { type: 'TextArea', label: 'Your comments', name: 'comments', required: false },
-                        { type: 'Footer', label: 'Submit', action: 'complete' },
-                    ],
-                },
-            ],
-        },
-        {
-            value: 'complete_signup', label: 'Complete sign up', group: 'no_endpoint',
-            suggestedCategory: 'SIGN_UP',
-            screens: [
-                {
-                    id: 'PERSONAL', title: 'Personal Info', terminal: false,
-                    components: [
-                        { type: 'TextHeading', text: 'Create Your Account' },
-                        { type: 'TextInput', label: 'First Name', name: 'first_name', required: true,  inputType: 'text' },
-                        { type: 'TextInput', label: 'Last Name',  name: 'last_name',  required: true,  inputType: 'text' },
-                        { type: 'TextInput', label: 'Email',      name: 'email',      required: true,  inputType: 'email' },
-                        { type: 'Footer', label: 'Next', action: 'navigate', nextScreen: 'PREFERENCES' },
-                    ],
-                },
-                {
-                    id: 'PREFERENCES', title: 'Preferences', terminal: true,
-                    components: [
-                        { type: 'TextHeading', text: 'Your Preferences' },
-                        { type: 'CheckboxGroup', label: 'Interested in', name: 'interests', required: false, options: [
-                            { id: 'news',   title: 'News & Updates' },
-                            { id: 'offers', title: 'Special Offers' },
-                            { id: 'events', title: 'Events' },
-                        ]},
-                        { type: 'Footer', label: 'Sign Up', action: 'complete' },
-                    ],
-                },
-            ],
-        },
-        {
-            value: 'complete_quiz', label: 'Complete our quiz', group: 'no_endpoint',
-            suggestedCategory: 'SURVEY',
-            screens: [
-                {
-                    id: 'Q1', title: 'Question 1', terminal: false,
-                    components: [
-                        { type: 'TextHeading',    text: 'Quick Quiz' },
-                        { type: 'TextSubheading', text: 'Question 1 of 2' },
-                        { type: 'RadioButtonsGroup', label: 'Which best describes you?', name: 'q1', required: true, options: [
-                            { id: 'student',      title: 'Student' },
-                            { id: 'professional', title: 'Working Professional' },
-                            { id: 'business',     title: 'Business Owner' },
-                            { id: 'other',        title: 'Other' },
-                        ]},
-                        { type: 'Footer', label: 'Next', action: 'navigate', nextScreen: 'Q2' },
-                    ],
-                },
-                {
-                    id: 'Q2', title: 'Question 2', terminal: true,
-                    components: [
-                        { type: 'TextSubheading', text: 'Question 2 of 2' },
-                        { type: 'Dropdown', label: 'How did you hear about us?', name: 'q2', required: true, options: [
-                            { id: 'social',  title: 'Social Media' },
-                            { id: 'friend',  title: 'Friend / Family' },
-                            { id: 'search',  title: 'Search Engine' },
-                            { id: 'ad',      title: 'Advertisement' },
-                        ]},
-                        { type: 'Footer', label: 'Submit', action: 'complete' },
-                    ],
-                },
-            ],
-        },
-        {
-            value: 'get_support', label: 'Get support', group: 'no_endpoint',
-            suggestedCategory: 'CUSTOMER_SUPPORT',
-            screens: [
-                {
-                    id: 'ISSUE', title: 'Support Request', terminal: false,
-                    components: [
-                        { type: 'TextHeading', text: 'How can we help?' },
-                        { type: 'Dropdown', label: 'Issue Category', name: 'category', required: true, options: [
-                            { id: 'technical', title: 'Technical Issue' },
-                            { id: 'billing',   title: 'Billing Question' },
-                            { id: 'feature',   title: 'Feature Request' },
-                            { id: 'other',     title: 'Other' },
-                        ]},
-                        { type: 'TextArea', label: 'Describe your issue', name: 'description', required: true },
-                        { type: 'Footer', label: 'Next', action: 'navigate', nextScreen: 'CONTACT' },
-                    ],
-                },
-                {
-                    id: 'CONTACT', title: 'Contact Info', terminal: true,
-                    components: [
-                        { type: 'TextHeading', text: 'Contact Details' },
-                        { type: 'TextInput', label: 'Your Email', name: 'email', required: true, inputType: 'email' },
-                        { type: 'Dropdown', label: 'Urgency', name: 'urgency', required: true, options: [
-                            { id: 'low',    title: 'Low — Can wait a few days' },
-                            { id: 'medium', title: 'Medium — Need help soon' },
-                            { id: 'high',   title: 'High — Urgent' },
-                        ]},
-                        { type: 'Footer', label: 'Submit', action: 'complete' },
-                    ],
-                },
-            ],
-        },
-        {
-            value: 'update_preferences', label: 'Update preferences', group: 'no_endpoint',
-            suggestedCategory: 'OTHER',
-            screens: [
-                {
-                    id: 'PREFERENCES', title: 'Preferences', terminal: true,
-                    components: [
-                        { type: 'TextHeading', text: 'Update Your Preferences' },
-                        { type: 'CheckboxGroup', label: 'Communication Preferences', name: 'prefs', required: false, options: [
-                            { id: 'email',       title: 'Email Updates' },
-                            { id: 'sms',         title: 'SMS Notifications' },
-                            { id: 'whatsapp',    title: 'WhatsApp Messages' },
-                            { id: 'promotions',  title: 'Promotional Offers' },
-                        ]},
-                        { type: 'Dropdown', label: 'Preferred Language', name: 'language', required: true, options: [
-                            { id: 'en', title: 'English' },
-                            { id: 'ar', title: 'Arabic' },
-                            { id: 'fr', title: 'French' },
-                        ]},
-                        { type: 'Footer', label: 'Save Preferences', action: 'complete' },
-                    ],
-                },
-            ],
-        },
-
-        // ── With endpoint ─────────────────────────────────────────────────────
-        {
-            value: 'sign_in', label: 'Sign in', group: 'with_endpoint',
-            suggestedCategory: 'SIGN_IN',
-            screens: [
-                {
-                    id: 'LOGIN', title: 'Sign In', terminal: true,
-                    components: [
-                        { type: 'TextHeading', text: 'Welcome Back' },
-                        { type: 'TextBody',    text: 'Sign in to continue to your account.' },
-                        { type: 'TextInput', label: 'Email or Phone', name: 'identifier', required: true, inputType: 'text' },
-                        { type: 'TextInput', label: 'Password',       name: 'password',   required: true, inputType: 'password' },
-                        { type: 'Footer', label: 'Sign In', action: 'complete' },
-                    ],
-                },
-            ],
-        },
-        {
-            value: 'register_account', label: 'Register for an account', group: 'with_endpoint',
-            suggestedCategory: 'SIGN_UP',
-            screens: [
-                {
-                    id: 'REGISTER', title: 'Create Account', terminal: false,
-                    components: [
-                        { type: 'TextHeading', text: 'Create Account' },
-                        { type: 'TextInput', label: 'Full Name', name: 'name',     required: true, inputType: 'text' },
-                        { type: 'TextInput', label: 'Email',     name: 'email',    required: true, inputType: 'email' },
-                        { type: 'TextInput', label: 'Password',  name: 'password', required: true, inputType: 'password' },
-                        { type: 'Footer', label: 'Register', action: 'navigate', nextScreen: 'TERMS' },
-                    ],
-                },
-                {
-                    id: 'TERMS', title: 'Terms and Conditions', terminal: true,
-                    components: [
-                        { type: 'TextHeading', text: 'Our Terms' },
-                        { type: 'TextBody',    text: 'By registering, you agree to our Terms of Service and Privacy Policy. Please read them carefully before proceeding.' },
-                        { type: 'Footer', label: 'Accept & Continue', action: 'complete' },
-                    ],
-                },
-            ],
-        },
-        {
-            value: 'book_appointment', label: 'Book an appointment', group: 'with_endpoint',
-            suggestedCategory: 'APPOINTMENT_BOOKING',
-            screens: [
-                {
-                    id: 'DETAILS', title: 'Your Details', terminal: false,
-                    components: [
-                        { type: 'TextHeading', text: 'Book an Appointment' },
-                        { type: 'TextInput', label: 'Full Name',    name: 'name',  required: true, inputType: 'text' },
-                        { type: 'TextInput', label: 'Phone Number', name: 'phone', required: true, inputType: 'phone' },
-                        { type: 'Footer', label: 'Next', action: 'navigate', nextScreen: 'SLOT' },
-                    ],
-                },
-                {
-                    id: 'SLOT', title: 'Choose Time', terminal: true,
-                    components: [
-                        { type: 'TextHeading', text: 'Choose a Slot' },
-                        { type: 'Dropdown', label: 'Preferred Day', name: 'day', required: true, options: [
-                            { id: 'mon', title: 'Monday' },
-                            { id: 'tue', title: 'Tuesday' },
-                            { id: 'wed', title: 'Wednesday' },
-                            { id: 'thu', title: 'Thursday' },
-                        ]},
-                        { type: 'Dropdown', label: 'Preferred Time', name: 'time', required: true, options: [
-                            { id: '9am',  title: '9:00 AM' },
-                            { id: '11am', title: '11:00 AM' },
-                            { id: '2pm',  title: '2:00 PM' },
-                            { id: '4pm',  title: '4:00 PM' },
-                        ]},
-                        { type: 'Footer', label: 'Book Appointment', action: 'complete' },
-                    ],
-                },
-            ],
-        },
-        {
-            value: 'get_quote', label: 'Get a quote', group: 'with_endpoint',
-            suggestedCategory: 'LEAD_GENERATION',
-            screens: [
-                {
-                    id: 'REQUIREMENTS', title: 'Your Requirements', terminal: false,
-                    components: [
-                        { type: 'TextHeading', text: 'Request a Quote' },
-                        { type: 'TextInput', label: 'Company Name', name: 'company', required: true, inputType: 'text' },
-                        { type: 'Dropdown', label: 'Service Type', name: 'service', required: true, options: [
-                            { id: 'basic',    title: 'Basic Package' },
-                            { id: 'standard', title: 'Standard Package' },
-                            { id: 'premium',  title: 'Premium Package' },
-                            { id: 'custom',   title: 'Custom Solution' },
-                        ]},
-                        { type: 'Footer', label: 'Next', action: 'navigate', nextScreen: 'CONTACT' },
-                    ],
-                },
-                {
-                    id: 'CONTACT', title: 'Contact Details', terminal: true,
-                    components: [
-                        { type: 'TextHeading', text: 'Contact Information' },
-                        { type: 'TextInput', label: 'Your Email',     name: 'email',        required: true,  inputType: 'email' },
-                        { type: 'TextInput', label: 'Phone Number',   name: 'phone',        required: false, inputType: 'phone' },
-                        { type: 'TextArea',  label: 'Additional Info', name: 'requirements', required: false },
-                        { type: 'Footer', label: 'Request Quote', action: 'complete' },
-                    ],
-                },
-            ],
-        },
-    ];
-
-    const noEndpointTemplates   = TEMPLATES.filter(t => t.group === 'no_endpoint');
-    const withEndpointTemplates = TEMPLATES.filter(t => t.group === 'with_endpoint');
+    // ── Template definitions — imported from @/Data/metaFlowTemplates.js ────
 
     const selectedTemplate = ref('default');
 
     const currentPreviewScreens = computed(() => {
-        const tpl = TEMPLATES.find(t => t.value === selectedTemplate.value);
-        return tpl?.screens ?? [];
+        const tpl = META_FLOW_TEMPLATES.find(t => t.value === selectedTemplate.value);
+        return tpl ? getPreviewScreens(tpl) : [];
     });
 
     const onTemplateChange = (template) => {
@@ -563,9 +233,11 @@
     });
 
     const submitForm = () => {
+        const tpl = META_FLOW_TEMPLATES.find(t => t.value === selectedTemplate.value);
         form.transform(data => ({
             ...data,
-            categories: data.categories ? [data.categories] : ['OTHER'],
+            categories:    data.categories ? [data.categories] : ['OTHER'],
+            template_json: tpl?.flowJson ? JSON.stringify(tpl.flowJson) : null,
         })).post('/automation/meta-flows', {
             preserveScroll: true,
             onSuccess: () => {

@@ -94,6 +94,19 @@ class MetaFlowService
             'meta_flow_id' => $flow->meta_flow_id,
         ]);
 
+        // Upload the template Flow JSON immediately after creation so the flow
+        // is ready to edit (asset_content is populated on the local record).
+        if (!empty($data['template_json']) && $flow->meta_flow_id) {
+            $result = $this->updateFlowAsset($flow, $data['template_json']);
+            if (!($result['success'] ?? false)) {
+                Log::warning('MetaFlows: template asset upload failed on creation', [
+                    'local_id'     => $flow->id,
+                    'meta_flow_id' => $flow->meta_flow_id,
+                    'message'      => $result['message'] ?? 'unknown',
+                ]);
+            }
+        }
+
         return $flow;
     }
 
