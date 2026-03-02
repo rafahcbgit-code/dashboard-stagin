@@ -2,6 +2,7 @@
 
 namespace App\Services\Salla\Webhooks\Handlers;
 
+use App\Mail\StoreOwnerCredentialsMail;
 use App\Models\Organization;
 use App\Models\SallaStore;
 use App\Models\SallaWebhookDelivery;
@@ -14,6 +15,7 @@ use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 
 class AppStoreAuthorizeHandler implements SallaWebhookEventHandlerInterface
@@ -38,11 +40,11 @@ class AppStoreAuthorizeHandler implements SallaWebhookEventHandlerInterface
             return;
         }
 
-        $accessToken = data_get($data, 'access_token');
+        $accessToken  = data_get($data, 'access_token');
         $refreshToken = data_get($data, 'refresh_token');
-        $expiresAt = $this->createCarbonFromTimestamp(data_get($data, 'expires'));
-        $scopeValue = data_get($data, 'scope');
-        $scopes = $this->normalizeScopes($scopeValue);
+        $expiresAt    = $this->createCarbonFromTimestamp(data_get($data, 'expires'));
+        $scopeValue   = data_get($data, 'scope');
+        $scopes       = $this->normalizeScopes($scopeValue);
 
         if (!is_string($accessToken) || $accessToken === '' || !is_string($refreshToken) || $refreshToken === '') {
             Log::warning('Salla app.store.authorize: missing tokens', [
@@ -52,13 +54,15 @@ class AppStoreAuthorizeHandler implements SallaWebhookEventHandlerInterface
             return;
         }
 
-        $storeInfo = $this->fetchUserInfo($accessToken);
-        $storeName = data_get($storeInfo, 'data.merchant.name') ?? data_get($payload, 'data.app_name') ?? 'Salla Store ' . $merchantId;
-        $ownerEmail = $this->extractOwnerEmail($storeInfo, $merchantId);
-        $ownerMobile = $this->extractOwnerMobile($storeInfo, $merchantId);
+        $storeInfo     = $this->fetchUserInfo($accessToken);
+        $storeName     = data_get($storeInfo, 'data.merchant.name') ?? data_get($payload, 'data.app_name') ?? 'Salla Store ' . $merchantId;
+        $ownerEmail    = $this->extractOwnerEmail($storeInfo, $merchantId);
+        $ownerMobile   = $this->extractOwnerMobile($storeInfo);
         $ownerFullName = $this->extractOwnerName($storeInfo, $storeName);
 
         [$firstName, $lastName] = $this->splitFullName($ownerFullName);
+
+        $plainPassword = Str::random(16);
 
         DB::transaction(function () use (
             $merchantId,
@@ -71,12 +75,16 @@ class AppStoreAuthorizeHandler implements SallaWebhookEventHandlerInterface
             $firstName,
             $lastName,
             $ownerMobile,
+            $plainPassword,
             $delivery
         ) {
-            $existingStore = SallaStore::where('merchant_id', $merchantId)->first();
+            $existingStore  = SallaStore::where('merchant_id', $merchantId)->first();
             $organizationId = $existingStore?->organization_id;
 
-            $user = $this->ensureOwner($ownerEmail, $firstName, $lastName, $ownerMobile);
+            $isNewUser         = ! User::where('email', $ownerEmail)->exists();
+            $isNewOrganization = ! ($organizationId && Organization::find($organizationId));
+
+            $user         = $this->ensureOwner($ownerEmail, $firstName, $lastName, $ownerMobile, $plainPassword);
             $organization = $this->ensureOrganization($user, $storeName, $merchantId, $organizationId);
             $this->ensureTeam($user, $organization);
             $this->ensureSubscription($organization);
@@ -90,12 +98,45 @@ class AppStoreAuthorizeHandler implements SallaWebhookEventHandlerInterface
                 $scopes
             );
             $this->syncExistingDeliveries($merchantId, $store);
+
+            if ($isNewUser) {
+                try {
+                    Mail::to($ownerEmail)
+                        ->queue(new StoreOwnerCredentialsMail(
+                            fullName: "{$firstName} {$lastName}",
+                            email: $ownerEmail,
+                            plainPassword: $plainPassword,
+                            storeName: $storeName,
+                        ));
+
+                    Log::info('Salla app.store.authorize: credentials email queued successfully', [
+                        'delivery_id'     => $delivery->id,
+                        'merchant_id'     => $merchantId,
+                        'store_name'      => $storeName,
+                        'recipient_email' => $ownerEmail,
+                    ]);
+                } catch (\Throwable $e) {
+                    Log::error('Salla app.store.authorize: failed to queue credentials email', [
+                        'delivery_id'     => $delivery->id,
+                        'merchant_id'     => $merchantId,
+                        'recipient_email' => $ownerEmail,
+                        'error'           => $e->getMessage(),
+                    ]);
+                }
+            } else {
+                Log::info('Salla app.store.authorize: skipped credentials email (existing user or organization)', [
+                    'delivery_id'       => $delivery->id,
+                    'merchant_id'       => $merchantId,
+                    'is_new_user'       => $isNewUser,
+                    'is_new_organization' => $isNewOrganization,
+                ]);
+            }
         });
 
         Log::info('Salla app.store.authorize: created organization for merchant', [
             'delivery_id' => $delivery->id,
             'merchant_id' => $merchantId,
-            'store_name' => $storeName,
+            'store_name'  => $storeName,
         ]);
     }
 
@@ -118,7 +159,7 @@ class AppStoreAuthorizeHandler implements SallaWebhookEventHandlerInterface
         if (! $response->successful()) {
             Log::warning('Salla app.store.authorize: store info request failed', [
                 'status' => $response->status(),
-                'body' => $response->body(),
+                'body'   => $response->body(),
             ]);
             return null;
         }
@@ -126,7 +167,7 @@ class AppStoreAuthorizeHandler implements SallaWebhookEventHandlerInterface
         return $response->json();
     }
 
-    private function fetchUserInfo(string $accessToken)
+    private function fetchUserInfo(string $accessToken): ?array
     {
         try {
             $response = Http::acceptJson()
@@ -145,7 +186,7 @@ class AppStoreAuthorizeHandler implements SallaWebhookEventHandlerInterface
             } else {
                 Log::warning('Salla user info request failed', [
                     'status' => $response->status(),
-                    'body' => $response->body(),
+                    'body'   => $response->body(),
                 ]);
             }
         } catch (\Throwable $exception) {
@@ -153,31 +194,34 @@ class AppStoreAuthorizeHandler implements SallaWebhookEventHandlerInterface
                 'error' => $exception->getMessage(),
             ]);
         }
+
+        return null;
     }
 
-    private function ensureOwner(string $email, string $firstName, string $lastName, string $ownerMobile): User
-    {
+    private function ensureOwner(
+        string $email,
+        string $firstName,
+        string $lastName,
+        string $ownerMobile,
+        string $plainPassword
+    ): User {
         $user = User::where('email', $email)->first();
 
-        $plainPassword = Str::random(16);
-
         if (! $user) {
-            $user = User::create([
-                'first_name' => $firstName,
-                'last_name' => $lastName,
-                'email' => $email,
-                'role' => 'user',
-                'phone' => $ownerMobile,
+            return User::create([
+                'first_name'    => $firstName,
+                'last_name'     => $lastName,
+                'email'         => $email,
+                'role'          => 'user',
+                'phone'         => $ownerMobile,
                 'code_verified' => 1,
-                'password' => bcrypt($plainPassword),
+                'password'      => bcrypt($plainPassword),
             ]);
-
-            return $user;
         }
 
         $user->update([
-            'first_name' => $firstName,
-            'last_name' => $lastName,
+            'first_name'    => $firstName,
+            'last_name'     => $lastName,
             'code_verified' => 1,
         ]);
 
@@ -189,18 +233,19 @@ class AppStoreAuthorizeHandler implements SallaWebhookEventHandlerInterface
         if ($existingOrganizationId) {
             $organization = Organization::find($existingOrganizationId);
             if ($organization) {
-                
+                $organization->update([
+                    'name' => $storeName,
+                    'created_by' => $user->id,
+                ]);
                 return $organization;
             }
         }
 
-        $identifier = null;
-
         return Organization::create([
-            'identifier' => $identifier,
-            'name' => $storeName,
+            'identifier' => null,
+            'name'       => $storeName,
             'created_by' => $user->id,
-            'metadata' => null,
+            'metadata'   => null,
         ]);
     }
 
@@ -208,12 +253,12 @@ class AppStoreAuthorizeHandler implements SallaWebhookEventHandlerInterface
     {
         Team::updateOrCreate(
             [
-                'organization_id' => $organization->id,
-                'user_id' => $user->id,
+                'organization_id' => $organization->id
             ],
             [
-                'role' => 'owner',
-                'status' => 'active',
+                'role'       => 'owner',
+                'user_id' => $user->id,
+                'status'     => 'active',
                 'created_by' => $user->id,
             ]
         );
@@ -226,15 +271,15 @@ class AppStoreAuthorizeHandler implements SallaWebhookEventHandlerInterface
         }
 
         $trialPeriod = (int) Setting::where('key', 'trial_period')->value('value');
-        $status = $trialPeriod > 0 ? 'trial' : 'active';
-        $validUntil = $trialPeriod > 0 ? now()->addDays($trialPeriod) : now();
+        $status      = $trialPeriod > 0 ? 'trial' : 'active';
+        $validUntil  = $trialPeriod > 0 ? now()->addDays($trialPeriod) : now();
 
         Subscription::create([
             'organization_id' => $organization->id,
-            'status' => $status,
-            'plan_id' => null,
-            'start_date' => now(),
-            'valid_until' => $validUntil,
+            'status'          => $status,
+            'plan_id'         => null,
+            'start_date'      => now(),
+            'valid_until'     => $validUntil,
         ]);
     }
 
@@ -250,27 +295,28 @@ class AppStoreAuthorizeHandler implements SallaWebhookEventHandlerInterface
         SallaStore::updateOrCreate(
             ['merchant_id' => $merchantId],
             [
-                'organization_id' => $organizationId,
-                'merchant_name' => $storeName,
-                'access_token' => $accessToken,
-                'refresh_token' => $refreshToken,
-                'expires_at' => $expiresAt,
+                'organization_id'          => $organizationId,
+                'merchant_name'            => $storeName,
+                'access_token'             => $accessToken,
+                'refresh_token'            => $refreshToken,
+                'expires_at'               => $expiresAt,
                 'refresh_token_expires_at' => now()->addDays(30),
-                'refresh_token_used_at' => null,
-                'last_refresh_at' => now(),
-                'scopes' => $scopes,
-                'token_version' => DB::raw('COALESCE(token_version, 0) + 1'),
-                'is_revoked' => false,
-                'revoked_at' => null,
-                'revocation_reason' => null,
+                'refresh_token_used_at'    => null,
+                'last_refresh_at'          => now(),
+                'scopes'                   => $scopes,
+                'token_version'            => DB::raw('COALESCE(token_version, 0) + 1'),
+                'is_revoked'               => false,
+                'revoked_at'               => null,
+                'revocation_reason'        => null,
             ]
         );
+
         return SallaStore::where('merchant_id', $merchantId)->firstOrFail();
     }
 
     private function syncExistingDeliveries(string $merchantId, SallaStore $store): void
     {
-        if (!$store->id) {
+        if (! $store->id) {
             return;
         }
 
@@ -279,7 +325,7 @@ class AppStoreAuthorizeHandler implements SallaWebhookEventHandlerInterface
                 $query->whereNull('salla_store_id')->orWhereNull('organization_id');
             })
             ->update([
-                'salla_store_id' => $store->id,
+                'salla_store_id'  => $store->id,
                 'organization_id' => $store->organization_id,
             ]);
     }
@@ -298,7 +344,7 @@ class AppStoreAuthorizeHandler implements SallaWebhookEventHandlerInterface
         if (is_array($value)) {
             $items = $value;
         } elseif (is_string($value)) {
-            $items = preg_split('/[\\s,]+/', trim($value));
+            $items = preg_split('/[\s,]+/', trim($value));
         } else {
             $items = [];
         }
@@ -324,14 +370,14 @@ class AppStoreAuthorizeHandler implements SallaWebhookEventHandlerInterface
         return "salla-merchant-{$merchantId}@chatberry.salla";
     }
 
-    private function extractOwnerMobile(?array $storeInfo, string $merchantId): string
+    private function extractOwnerMobile(?array $storeInfo): string
     {
         $mobile = data_get($storeInfo, 'data.mobile');
         if (is_string($mobile) && $mobile !== '') {
             return $mobile;
         }
 
-        return "+966560000000";
+        return '+966560000000';
     }
 
     private function extractOwnerName(?array $storeInfo, string $fallbackName): string
@@ -352,14 +398,14 @@ class AppStoreAuthorizeHandler implements SallaWebhookEventHandlerInterface
             return ['Salla', 'Merchant'];
         }
 
-        $parts = preg_split('/\\s+/', $fullName);
+        $parts = preg_split('/\s+/', $fullName);
 
         if (empty($parts)) {
             return ['Salla', 'Merchant'];
         }
 
         $first = array_shift($parts);
-        $last = empty($parts) ? 'Merchant' : implode(' ', $parts);
+        $last  = empty($parts) ? 'Merchant' : implode(' ', $parts);
 
         return [$first, $last];
     }

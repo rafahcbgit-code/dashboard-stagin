@@ -31,9 +31,9 @@ class SallaWebhookEventRouter
         'order.status.updated' => OrderStatusUpdatedHandler::class,
         'abandoned.cart' => AbandonedCartHandler::class,
         'customer.login' => CustomerLoginHandler::class,
-        //'app.installed' => AppInstalledHandler::class,
+        'app.installed' => AppInstalledHandler::class,
         'app.store.authorize' => AppStoreAuthorizeHandler::class,
-       // 'app.uninstalled' => AppUninstalledHandler::class,
+        'app.uninstalled' => AppUninstalledHandler::class,
         'customer.otp.request' => CustomerOtpRequestHandler::class,
     ];
 
