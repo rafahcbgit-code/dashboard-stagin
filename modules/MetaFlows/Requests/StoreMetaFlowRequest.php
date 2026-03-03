@@ -18,6 +18,7 @@ class StoreMetaFlowRequest extends FormRequest
             'categories'   => 'required|array|min:1',
             'categories.*' => 'string|in:SIGN_UP,SIGN_IN,APPOINTMENT_BOOKING,LEAD_GENERATION,CONTACT_US,CUSTOMER_SUPPORT,SURVEY,OTHER',
             'endpoint_uri' => 'nullable|url|max:2048',
+            'template_json' => 'nullable|string',
         ];
     }
 }

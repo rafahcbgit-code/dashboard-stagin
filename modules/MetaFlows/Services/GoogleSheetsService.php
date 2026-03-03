@@ -19,18 +19,33 @@ class GoogleSheetsService
         $this->organizationId = $organizationId;
     }
 
-    // Build a service instance from the organization's stored Google OAuth tokens
+    // Build a service instance from the organization's stored Google OAuth tokens.
+    // Proactively refreshes the access token if it has expired or expires within
+    // the next 5 minutes — prevents the first API call from failing when the token
+    // has gone stale (Google tokens last 1 hour).
     public static function fromOrganization(int $orgId): self
     {
         $organization = Organization::findOrFail($orgId);
         $metadata     = json_decode($organization->metadata, true) ?? [];
         $google       = $metadata['google_oauth'] ?? [];
 
-        return new self(
+        $instance = new self(
             $google['access_token']  ?? '',
             $google['refresh_token'] ?? '',
             $orgId
         );
+
+        $expiresAt = $google['token_expires_at'] ?? null;
+
+        if ($expiresAt && \Carbon\Carbon::parse($expiresAt)->subMinutes(5)->isPast()) {
+            Log::info('GoogleSheetsService: token expired or expiring soon — proactive refresh', [
+                'organization_id' => $orgId,
+                'token_expires_at' => $expiresAt,
+            ]);
+            $instance->refreshAccessToken();
+        }
+
+        return $instance;
     }
 
     // Extract the spreadsheet ID from a Google Sheets URL
@@ -118,13 +133,31 @@ class GoogleSheetsService
         Log::info('GoogleSheetsService: access token refreshed', ['organization_id' => $this->organizationId]);
     }
 
-    // Perform an authenticated GET request to the Sheets API
+    // Perform an authenticated GET request to the Sheets API.
+    // On a 401 response the access token is refreshed and the request is retried once,
+    // mirroring the same pattern used in appendRow().
     private function apiGet(string $url): array
     {
-        $client   = new Client();
-        $response = $client->get($url, [
-            'headers' => ['Authorization' => 'Bearer ' . $this->accessToken],
-        ]);
+        $client = new Client();
+
+        try {
+            $response = $client->get($url, [
+                'headers' => ['Authorization' => 'Bearer ' . $this->accessToken],
+            ]);
+        } catch (\RuntimeException $e) {
+            if (str_contains($e->getMessage(), '401')) {
+                Log::info('GoogleSheetsService: 401 on GET — refreshing token and retrying', [
+                    'organization_id' => $this->organizationId,
+                    'url'             => $url,
+                ]);
+                $this->refreshAccessToken();
+                $response = $client->get($url, [
+                    'headers' => ['Authorization' => 'Bearer ' . $this->accessToken],
+                ]);
+            } else {
+                throw $e;
+            }
+        }
 
         return json_decode($response->getBody()->getContents(), true) ?? [];
     }
