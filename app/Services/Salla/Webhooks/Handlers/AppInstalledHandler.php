@@ -36,7 +36,7 @@ class AppInstalledHandler implements SallaWebhookEventHandlerInterface
         }
 
         // Try to backfill store/org in case the delivery was stored without them.
-        $storeName = data_get($data, 'app_name') ?? null;
+        $storeName = data_get($data, 'data.merchant.name') ?? null;
         $organization = $this->ensureOrganizationForMerchant($merchantId, $delivery->organization_id, $storeName);
         $organizationId = $organization->id;
 
@@ -130,41 +130,21 @@ class AppInstalledHandler implements SallaWebhookEventHandlerInterface
             }
         }
 
-        $creator = $this->resolveOrganizationCreator();
         $name = $storeName ?? "Salla Store {$merchantId}";
-        $identifier = 'salla-' . $merchantId . '-' . Str::random(6);
 
         $organization = Organization::create([
-            'identifier' => $identifier,
+            'identifier' => null,
             'name' => $name,
-            'created_by' => $creator->id,
-            'metadata' => json_encode(['merchant_id' => $merchantId, 'source' => 'salla.app_installed']),
+            'metadata' => null,
         ]);
 
         Team::create([
             'organization_id' => $organization->id,
-            'user_id' => $creator->id,
             'role' => 'owner',
             'status' => 'active',
-            'created_by' => $creator->id,
         ]);
 
         return $organization;
-    }
-
-    private function resolveOrganizationCreator(): User
-    {
-        $admin = User::where('role', 'admin')->orderBy('id')->first();
-        if ($admin) {
-            return $admin;
-        }
-
-        $user = User::orderBy('id')->first();
-        if ($user) {
-            return $user;
-        }
-
-        throw new \RuntimeException('No user available to assign as organization creator.');
     }
 
     private function ensureStoreRecord(string $merchantId, int $organizationId, ?string $storeName): SallaStore

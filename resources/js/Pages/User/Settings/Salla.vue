@@ -78,7 +78,7 @@
 
             <!-- Connected Stores List -->
             <div v-else>
-                <div class="flex justify-between items-center mb-4">
+                <!-- <div class="flex justify-between items-center mb-4">
                     <h2 class="text-lg font-medium">{{ $t('Connected Stores') }}</h2>
                     <a href="/salla-auth"
                         class="inline-flex items-center gap-2 px-4 py-2 bg-[#5C3A76] hover:bg-[#4a2f5f] text-white text-sm rounded-lg transition-colors">
@@ -88,7 +88,7 @@
                         </svg>
                         {{ $t('Add Another Store') }}
                     </a>
-                </div>
+                </div> -->
 
                 <div class="space-y-4">
                     <div v-for="store in stores" :key="store.id"
@@ -174,25 +174,7 @@
                 </div>
             </div>
 
-            <!-- Information Section -->
-            <div class="mt-8 bg-blue-50 border border-blue-200 rounded-lg p-4">
-                <div class="flex gap-3">
-                    <svg class="h-5 w-5 text-blue-600 mt-0.5" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24"
-                        fill="currentColor">
-                        <path
-                            d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-2h2v2zm0-4h-2V7h2v6z" />
-                    </svg>
-                    <div>
-                        <h4 class="text-sm font-medium text-blue-900 mb-1">{{ $t('How to setup') }}</h4>
-                        <ul class="text-sm text-blue-800 space-y-1 list-disc ltr:ml-5 rtl:mr-5">
-                            <li>{{ $t('Click the "Connect with Salla" button above') }}</li>
-                            <li>{{ $t('Login to your Salla account and authorize the connection') }}</li>
-                            <li>{{ $t('Your store will be connected and ready to use') }}</li>
-                            <li>{{ $t('You can connect multiple stores if needed') }}</li>
-                        </ul>
-                    </div>
-                </div>
-            </div>
+            
         </div>
 
         <!-- Customer Sync Modal -->

@@ -31,10 +31,10 @@ class SallaWebhookEventRouter
         'order.status.updated' => OrderStatusUpdatedHandler::class,
         'abandoned.cart' => AbandonedCartHandler::class,
         'customer.login' => CustomerLoginHandler::class,
-        //'app.installed' => AppInstalledHandler::class,
+        'app.installed' => AppInstalledHandler::class,
         'app.store.authorize' => AppStoreAuthorizeHandler::class,
-       // 'app.uninstalled' => AppUninstalledHandler::class,
-        'customer.otp.request' => CustomerOtpRequestHandler::class,
+        'app.uninstalled' => AppUninstalledHandler::class,
+        //'auth.otp.verification' => CustomerOtpRequestHandler::class,
     ];
 
     public function resolve(?string $event): ?SallaWebhookEventHandlerInterface
