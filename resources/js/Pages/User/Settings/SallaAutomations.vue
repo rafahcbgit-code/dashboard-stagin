@@ -26,7 +26,7 @@
                 <div class="flex items-start justify-between gap-6">
                     <div class="flex-1">
                         <h2 class="text-lg font-medium">{{ $t('New Order') }}</h2>
-                        <p class="text-sm text-gray-600">{{ $t('Send a message automatically when a new order is created in Salla (order.created).') }}</p>
+                        <p class="text-sm text-gray-600">{{ $t('Send a message automatically when a new order is created in Salla') }}</p>
                     </div>
                     <div class="flex items-center gap-3">
                         <span class="text-sm text-gray-700">{{ form.enabled ? $t('Enabled') : $t('Disabled') }}</span>
@@ -41,7 +41,7 @@
                         <div v-if="errors.template_id" class="form-error text-[#b91c1c] text-xs mt-1">{{ errors.template_id }}</div>
                     </div>
 
-                    <div>
+                    <!-- <div>
                         <FormInput
                             v-model="form.recipient_phone_payload_path"
                             :name="$t('Recipient phone payload path')"
@@ -50,7 +50,7 @@
                             :type="'text'"
                         />
                         <p class="text-xs text-gray-500 mt-1">{{ $t('Example: data.customer.mobile_code+data.customer.mobile') }}</p>
-                    </div>
+                    </div> -->
                 </div>
 
                 <div class="mt-6 flex items-center justify-between">
@@ -120,7 +120,7 @@
                     <div class="flex-1">
                         <h2 class="text-lg font-medium">{{ $t('Cash on Delivery') }}</h2>
                         <p class="text-sm text-gray-600">
-                            {{ $t('Send a message only for COD orders (accepted_payment_methods contains cod and is_pending_payment is true).') }}
+                            {{ $t('The message will be sent only for orders that are not paid yet and have Cash on Delivery (COD) as the selected payment method.') }}
                         </p>
                     </div>
                     <div class="flex items-center gap-3">
@@ -136,7 +136,7 @@
                         <div v-if="codErrors.template_id" class="form-error text-[#b91c1c] text-xs mt-1">{{ codErrors.template_id }}</div>
                     </div>
 
-                    <div>
+                    <!-- <div>
                         <FormInput
                             v-model="codForm.recipient_phone_payload_path"
                             :name="$t('Recipient phone payload path')"
@@ -145,7 +145,7 @@
                             :type="'text'"
                         />
                         <p class="text-xs text-gray-500 mt-1">{{ $t('Example: data.customer.mobile_code+data.customer.mobile') }}</p>
-                    </div>
+                    </div> -->
                 </div>
 
                 <div class="mt-6 flex items-center justify-between">
@@ -215,7 +215,7 @@
                     <div class="flex-1">
                         <h2 class="text-lg font-medium">{{ $t('Order Status Updated') }}</h2>
                         <p class="text-sm text-gray-600">
-                            {{ $t('Send a message automatically when an order status changes in Salla (order.status.updated).') }}
+                            {{ $t('Send a message automatically when an order status changes in Salla') }}
                         </p>
                     </div>
                     <div class="flex items-center gap-3">
@@ -224,7 +224,7 @@
                     </div>
                 </div>
 
-                <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                <!-- <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                         <FormInput
                             v-model="statusForm.recipient_phone_payload_path"
@@ -235,7 +235,7 @@
                         />
                         <p class="text-xs text-gray-500 mt-1">{{ $t('Example: data.order.customer.mobile') }}</p>
                     </div>
-                </div>
+                </div> -->
 
                 <div class="mt-6 flex items-center justify-between">
                     <h3 class="text-sm font-medium text-gray-900">{{ $t('Status Rules') }}</h3>
@@ -278,7 +278,7 @@
                                             </option>
                                         </select>
                                     </div>
-                                    <p class="text-xs text-gray-500 mt-1">{{ $t('Use the status slug sent by Salla (example: under_review).') }}</p>
+                                    <!-- <p class="text-xs text-gray-500 mt-1">{{ $t('Use the status slug sent by Salla (example: under_review).') }}</p> -->
 
                                     <label class="block text-sm leading-6 text-gray-900 mb-2 mt-3">{{ $t('Status name (optional)') }}</label>
                                     <input v-model="rule.status_name"
@@ -364,7 +364,7 @@
                     <div class="flex-1">
                         <h2 class="text-lg font-medium">{{ $t('Abandoned Cart') }}</h2>
                         <p class="text-sm text-gray-600">
-                            {{ $t('Send a message automatically when a cart is abandoned in Salla (abandoned.cart).') }}
+                            {{ $t('Send a message automatically when a cart is abandoned in Salla') }}
                         </p>
                     </div>
                     <div class="flex items-center gap-3">
@@ -380,7 +380,7 @@
                         <div v-if="abandonedErrors.template_id" class="form-error text-[#b91c1c] text-xs mt-1">{{ abandonedErrors.template_id }}</div>
                     </div>
 
-                    <div>
+                    <!-- <div>
                         <FormInput
                             v-model="abandonedForm.recipient_phone_payload_path"
                             :name="$t('Recipient phone payload path')"
@@ -389,7 +389,7 @@
                             :type="'text'"
                         />
                         <p class="text-xs text-gray-500 mt-1">{{ $t('Example: data.customer.mobile') }}</p>
-                    </div>
+                    </div> -->
                 </div>
 
                 <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -474,7 +474,7 @@
                     <div class="flex-1">
                         <h2 class="text-lg font-medium">{{ $t('Customer Login') }}</h2>
                         <p class="text-sm text-gray-600">
-                            {{ $t('Send a message automatically when a customer logs in to Salla (customer.login).') }}
+                            {{ $t('Send a message automatically when a customer logs in to Salla') }}
                         </p>
                     </div>
                     <div class="flex items-center gap-3">
@@ -490,7 +490,7 @@
                         <div v-if="customerLoginErrors.template_id" class="form-error text-[#b91c1c] text-xs mt-1">{{ customerLoginErrors.template_id }}</div>
                     </div>
 
-                    <div>
+                    <!-- <div>
                         <FormInput
                             v-model="customerLoginForm.recipient_phone_payload_path"
                             :name="$t('Recipient phone payload path')"
@@ -499,7 +499,7 @@
                             :type="'text'"
                         />
                         <p class="text-xs text-gray-500 mt-1">{{ $t('Example: data.mobile_code+data.mobile') }}</p>
-                    </div>
+                    </div> -->
                 </div>
 
                 <div class="mt-6 flex items-center justify-between">
@@ -563,12 +563,12 @@
                     <div v-if="customerLoginErrorMessage" class="text-sm text-red-700">{{ customerLoginErrorMessage }}</div>
                 </div>
             </div>
-            <div class="bg-white border border-slate-200 rounded-lg p-6 mt-6">
+           <!-- <div class="bg-white border border-slate-200 rounded-lg p-6 mt-6">
                 <div class="flex items-start justify-between gap-6">
                     <div class="flex-1">
                         <h2 class="text-lg font-medium">{{ $t('OTP Request') }}</h2>
                         <p class="text-sm text-gray-600">
-                            {{ $t('Send a message automatically when Salla emits a verification code (customer.otp.request).') }}
+                            {{ $t('Send a message automatically when Salla emits a verification code') }}
                         </p>
                     </div>
                     <div class="flex items-center gap-3">
@@ -584,7 +584,7 @@
                         <div v-if="customerOtpErrors.template_id" class="form-error text-[#b91c1c] text-xs mt-1">{{ customerOtpErrors.template_id }}</div>
                     </div>
 
-                    <div>
+                     <div>
                         <FormInput
                             v-model="customerOtpForm.recipient_phone_payload_path"
                             :name="$t('Recipient phone payload path')"
@@ -593,7 +593,7 @@
                             :type="'text'"
                         />
                         <p class="text-xs text-gray-500 mt-1">{{ $t('Example: data.contact') }}</p>
-                    </div>
+                    </div> 
                 </div>
 
                 <div class="mt-6 flex items-center justify-between">
@@ -656,7 +656,7 @@
                     <div v-if="customerOtpSuccessMessage" class="text-sm text-green-700">{{ customerOtpSuccessMessage }}</div>
                     <div v-if="customerOtpErrorMessage" class="text-sm text-red-700">{{ customerOtpErrorMessage }}</div>
                 </div>
-            </div>
+            </div>-->
         </div>
     </AppLayout>
 </template>
@@ -907,7 +907,7 @@ const fieldLabel = (field) => {
     const sample = field?.sample ?? null;
     const sampleText = stringifySample(sample);
 
-    const base = label ? `${label} (${path})` : path;
+    const base = label;
     return sampleText ? `${base} — ${sampleText}` : base;
 };
 

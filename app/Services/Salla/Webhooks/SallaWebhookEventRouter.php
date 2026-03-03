@@ -34,7 +34,7 @@ class SallaWebhookEventRouter
         'app.installed' => AppInstalledHandler::class,
         'app.store.authorize' => AppStoreAuthorizeHandler::class,
         'app.uninstalled' => AppUninstalledHandler::class,
-        'customer.otp.request' => CustomerOtpRequestHandler::class,
+        //'auth.otp.verification' => CustomerOtpRequestHandler::class,
     ];
 
     public function resolve(?string $event): ?SallaWebhookEventHandlerInterface

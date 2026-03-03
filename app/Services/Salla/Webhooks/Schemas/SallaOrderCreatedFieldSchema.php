@@ -25,7 +25,7 @@ class SallaOrderCreatedFieldSchema
             ['path' => 'data.accepted_payment_methods.0', 'label' => 'Accepted Payment Method (First)'],
 
             ['path' => 'data.status.name', 'label' => 'Order Status (Name)'],
-            ['path' => 'data.status.slug', 'label' => 'Order Status (Slug)'],
+            //['path' => 'data.status.slug', 'label' => 'Order Status (Slug)'],
 
             ['path' => 'data.currency', 'label' => 'Currency'],
             ['path' => 'data.amounts.sub_total.amount', 'label' => 'Subtotal Amount'],
@@ -37,7 +37,7 @@ class SallaOrderCreatedFieldSchema
             ['path' => 'data.urls.admin', 'label' => 'Admin Order URL'],
             ['path' => 'data.payment_actions.remaining_action.checkout_url', 'label' => 'Checkout URL'],
 
-            ['path' => 'data.customer.id', 'label' => 'Customer ID'],
+            //['path' => 'data.customer.id', 'label' => 'Customer ID'],
             ['path' => 'data.customer.full_name', 'label' => 'Customer Full Name'],
             ['path' => 'data.customer.first_name', 'label' => 'Customer First Name'],
             ['path' => 'data.customer.last_name', 'label' => 'Customer Last Name'],
@@ -56,9 +56,9 @@ class SallaOrderCreatedFieldSchema
             ['path' => 'data.items.0.quantity', 'label' => 'First Item Quantity'],
             ['path' => 'data.items.0.amounts.total.amount', 'label' => 'First Item Total Amount'],
 
-            ['path' => 'data.store.id', 'label' => 'Store ID'],
+            //['path' => 'data.store.id', 'label' => 'Store ID'],
             ['path' => 'data.store.username', 'label' => 'Store Username'],
-            ['path' => 'data.store.name.ar', 'label' => 'Store Name (AR)'],
+            //['path' => 'data.store.name.ar', 'label' => 'Store Name (AR)'],
         ];
     }
 }
