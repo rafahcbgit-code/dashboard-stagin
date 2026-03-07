@@ -102,7 +102,7 @@
                                                     class="block w-full rounded-md border border-slate-200 px-3 py-2 text-sm text-slate-800 bg-white focus:outline-none focus:ring-1 focus:ring-primary transition-shadow"
                                                 >
                                                     <option v-for="opt in categoryOptions" :key="opt.value" :value="opt.value">
-                                                        {{ opt.label }}
+                                                          {{ $t(opt.label) }}
                                                     </option>
                                                 </select>
                                             </div>
