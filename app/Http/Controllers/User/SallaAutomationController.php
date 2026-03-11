@@ -8,6 +8,7 @@ use App\Models\SallaWebhookEventSetting;
 use App\Models\SallaWebhookEventStatusRule;
 use App\Models\Template;
 use App\Services\Salla\Webhooks\Schemas\SallaAbandonedCartFieldSchema;
+use App\Services\Salla\Webhooks\Schemas\SallaCommunicationWhatsappSendFieldSchema;
 use App\Services\Salla\Webhooks\Schemas\SallaCustomerLoginFieldSchema;
 use App\Services\Salla\Webhooks\Schemas\SallaCustomerOtpFieldSchema;
 use App\Services\Salla\Webhooks\Schemas\SallaOrderCreatedFieldSchema;
@@ -19,11 +20,12 @@ use Inertia\Inertia;
 class SallaAutomationController extends BaseController
 {
     public function index(
-        SallaOrderCreatedFieldSchema $schema,
-        SallaOrderStatusUpdatedFieldSchema $statusUpdatedSchema,
-        SallaAbandonedCartFieldSchema $abandonedCartSchema,
-        SallaCustomerLoginFieldSchema $customerLoginSchema,
-        SallaCustomerOtpFieldSchema $customerOtpSchema,
+    SallaOrderCreatedFieldSchema $schema,
+    SallaOrderStatusUpdatedFieldSchema $statusUpdatedSchema,
+    SallaAbandonedCartFieldSchema $abandonedCartSchema,
+    SallaCustomerLoginFieldSchema $customerLoginSchema,
+    SallaCustomerOtpFieldSchema $customerOtpSchema,
+    SallaCommunicationWhatsappSendFieldSchema $communicationSchema,
         WhatsAppTemplateVariableExtractor $variableExtractor
     ) {
         $organizationId = (int) session()->get('current_organization');
@@ -247,6 +249,43 @@ class SallaAutomationController extends BaseController
             }
         }
 
+        $communicationSetting = SallaWebhookEventSetting::with('mappings')
+            ->where('organization_id', $organizationId)
+            ->where('event', 'communication.whatsapp.send')
+            ->first();
+
+        $communicationSelectedTemplate = null;
+        if ($communicationSetting?->template_id) {
+            $communicationSelectedTemplate = Template::where('id', $communicationSetting->template_id)
+                ->where('organization_id', $organizationId)
+                ->where('status', 'APPROVED')
+                ->whereNull('deleted_at')
+                ->first();
+        }
+
+        $communicationTemplateVariables = $communicationSelectedTemplate ? $variableExtractor->extract($communicationSelectedTemplate) : [];
+
+        $lastCommunicationDelivery = SallaWebhookDelivery::where('organization_id', $organizationId)
+            ->where('event', 'communication.whatsapp.send')
+            ->latest('id')
+            ->first();
+
+        $communicationWebhookFields = collect($communicationSchema->fields())
+            ->map(function (array $field) use ($lastCommunicationDelivery) {
+                $payload = $this->normalizeStoredPayload($lastCommunicationDelivery?->payload ?? []);
+                $field['sample'] = $lastCommunicationDelivery ? data_get($payload, $field['path']) : null;
+                return $field;
+            })
+            ->values()
+            ->all();
+
+        $communicationMappings = [];
+        if ($communicationSetting) {
+            foreach ($communicationSetting->mappings as $mapping) {
+                $communicationMappings[$mapping->template_variable] = $mapping->payload_path;
+            }
+        }
+
         return Inertia::render('User/Settings/SallaAutomations', [
             'title' => __('Salla Automations'),
             'templates' => $templates,
@@ -301,6 +340,14 @@ class SallaAutomationController extends BaseController
             'customerOtpTemplateVariables' => $customerOtpTemplateVariables,
             'customerOtpWebhookFields' => $customerOtpWebhookFields,
             'customerOtpMappings' => $customerOtpMappings,
+            'communicationSetting' => [
+                'enabled' => (bool) ($communicationSetting?->enabled ?? false),
+                'template_id' => $communicationSetting?->template_id,
+                'recipient_phone_payload_path' => $communicationSetting?->recipient_phone_payload_path ?? 'data.notifiable.0',
+            ],
+            'communicationTemplateVariables' => $communicationTemplateVariables,
+            'communicationWebhookFields' => $communicationWebhookFields,
+            'communicationMappings' => $communicationMappings,
         ]);
     }
 
@@ -449,6 +496,108 @@ class SallaAutomationController extends BaseController
             'data' => [
                 'fields' => $fields,
             ],
+        ]);
+    }
+
+    public function webhookFieldsCommunicationWhatsappSend(SallaCommunicationWhatsappSendFieldSchema $schema)
+    {
+        $organizationId = (int) session()->get('current_organization');
+
+        $lastDelivery = SallaWebhookDelivery::where('organization_id', $organizationId)
+            ->where('event', 'communication.whatsapp.send')
+            ->latest('id')
+            ->first();
+
+        $fields = collect($schema->fields())
+            ->map(function (array $field) use ($lastDelivery) {
+                $payload = $this->normalizeStoredPayload($lastDelivery?->payload ?? []);
+                $field['sample'] = $lastDelivery ? data_get($payload, $field['path']) : null;
+                return $field;
+            })
+            ->values()
+            ->all();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'fields' => $fields,
+            ],
+        ]);
+    }
+
+    public function updateCommunicationWhatsappSend(Request $request, WhatsAppTemplateVariableExtractor $extractor)
+    {
+        $organizationId = (int) session()->get('current_organization');
+
+        $validated = $request->validate([
+            'enabled' => ['required', 'boolean'],
+            'template_id' => ['nullable', 'integer'],
+            'recipient_phone_payload_path' => ['nullable', 'string', 'max:512'],
+            'mappings' => ['array'],
+            'mappings.*.template_variable' => ['required', 'string', 'max:191'],
+            'mappings.*.payload_path' => ['required', 'string', 'max:512'],
+            'mappings.*.transform' => ['nullable', 'string', 'max:64'],
+            'mappings.*.default_value' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $templateId = $validated['template_id'] ?? null;
+        $template = null;
+        if ($templateId) {
+            $template = Template::where('id', $templateId)
+                ->where('organization_id', $organizationId)
+                ->where('status', 'APPROVED')
+                ->whereNull('deleted_at')
+                ->firstOrFail();
+        }
+
+        $requiredKeys = [];
+        if ($template) {
+            $requiredKeys = array_values(array_unique(array_map(
+                static fn (array $v) => $v['key'],
+                $extractor->extract($template)
+            )));
+        }
+
+        $mappings = $validated['mappings'] ?? [];
+        $mappingKeySet = [];
+        foreach ($mappings as $mapping) {
+            $mappingKeySet[$mapping['template_variable']] = true;
+        }
+
+        foreach ($requiredKeys as $key) {
+            if (!isset($mappingKeySet[$key])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => __('Missing mapping for :key', ['key' => $key]),
+                ], 422);
+            }
+        }
+
+        $setting = SallaWebhookEventSetting::updateOrCreate(
+            [
+                'organization_id' => $organizationId,
+                'event' => 'communication.whatsapp.send',
+            ],
+            [
+                'enabled' => (bool) $validated['enabled'],
+                'template_id' => $templateId,
+                'recipient_phone_payload_path' => $validated['recipient_phone_payload_path'] ?? null,
+            ]
+        );
+
+        $setting->mappings()->delete();
+
+        foreach ($mappings as $mapping) {
+            $setting->mappings()->create([
+                'template_variable' => $mapping['template_variable'],
+                'payload_path' => $mapping['payload_path'],
+                'transform' => $mapping['transform'] ?? null,
+                'default_value' => $mapping['default_value'] ?? null,
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
         ]);
     }
 

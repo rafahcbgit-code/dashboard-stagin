@@ -268,17 +268,27 @@ class TemplateParameterBuilder
         $string = $value === null ? '' : (string) $value;
 
         if (!$transform) {
-            return $string;
+            return $this->ensureSingleLine($string);
         }
 
-        return match ($transform) {
+        $transformed = match ($transform) {
             'trim' => trim($string),
             'lower' => mb_strtolower($string),
             'upper' => mb_strtoupper($string),
             'number' => is_numeric($string) ? (string) (0 + $string) : $string,
             'money' => is_numeric($string) ? number_format((float) $string, 2, '.', '') : $string,
             'phone_e164' => PhoneService::getE164Format($string) ?? $string,
+            'single_line' => $this->ensureSingleLine($string),
             default => $string,
         };
+
+        return $this->ensureSingleLine($transformed);
+    }
+
+    private function ensureSingleLine(string $value): string
+    {
+        $singleLine = preg_replace('/[\r\n\t]+/', ' ', $value);
+        $singleLine = preg_replace('/ {2,}/', ' ', $singleLine);
+        return trim($singleLine);
     }
 }

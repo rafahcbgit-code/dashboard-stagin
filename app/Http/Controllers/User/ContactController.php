@@ -111,6 +111,7 @@ class ContactController extends BaseController
                 'First name',
                 'Last name',
                 'Phone',
+                'Subscription',
                 'Email',
                 'Group name',
                 'Street',
@@ -141,6 +142,7 @@ class ContactController extends BaseController
                         'email',
                         'address',
                         'metadata',
+                        'is_subscribed'
                     ])
                     ->orderBy('id')
                     ->chunkById(1000, function ($contacts) use ($handle, $fieldNames) {
@@ -151,6 +153,7 @@ class ContactController extends BaseController
                                 $contact->first_name,
                                 $contact->last_name,
                                 $contact->formatted_phone_number,
+                                 ((int) $contact->is_subscribed === 1) ? 'Subscribed' : 'Not subscribed',
                                 $contact->email,
                                 $contact->contactGroups->pluck('name')->implode('|'),
                                 $address['street'] ?? null,

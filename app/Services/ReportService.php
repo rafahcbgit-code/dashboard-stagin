@@ -10,6 +10,7 @@ use Illuminate\Support\Facades\Log;
 class ReportService
 {
     private $organizationId;
+    private array $conversationStartCache = [];
 
     public function __construct(int $organizationId)
     {
@@ -452,10 +453,16 @@ class ReportService
             $allWaitingTimes = [];
 
             foreach ($tickets as $ticket) {
+                $conversationStart = $this->resolveConversationStart($ticket->contact_id, $ticket->created_at);
+
                 $msgQuery = DB::table('chats')
                     ->where('contact_id', $ticket->contact_id)
-                    ->where('created_at', '>=', Carbon::parse($ticket->created_at)->subMinutes(5)->toDateTimeString())
                     ->orderBy('created_at', 'asc');
+
+                if ($conversationStart) {
+                    $windowStart = $conversationStart->copy()->subMinutes(5);
+                    $msgQuery->where('created_at', '>=', $windowStart->toDateTimeString());
+                }
 
                 $messages = $msgQuery->get();
 
@@ -484,22 +491,22 @@ class ReportService
                 }
 
                 // Dedicated First Response calculation for the ticket
-                $firstInbound = $messages->where('type', 'inbound')->first();
-                if ($firstInbound) {
-                    $firstOutbound = $messages->where('type', 'outbound')->where('user_id', '>', 0)
-                        ->where('created_at', '>', $firstInbound->created_at)
-                        ->first();
-                    if ($firstOutbound) {
-                        $diff = $this->calculateEffectiveSeconds($firstInbound->created_at, $firstOutbound->created_at, $config);
-                        if ($diff >= 0) {
-                            $firstResponseTimes[] = $diff;
-                        }
+            $firstInbound = $messages->where('type', 'inbound')->first();
+            if ($firstInbound) {
+                $firstOutbound = $messages->where('type', 'outbound')->where('user_id', '>', 0)
+                    ->where('created_at', '>', $firstInbound->created_at)
+                    ->first();
+                if ($firstOutbound) {
+                    $diff = $this->calculateEffectiveSeconds($firstInbound->created_at, $firstOutbound->created_at, $config);
+                    if ($diff >= 0) {
+                        $firstResponseTimes[] = $diff;
                     }
                 }
             }
+        }
 
-            $avgFirstResponseSeconds = count($firstResponseTimes) > 0 ? (array_sum($firstResponseTimes) / count($firstResponseTimes)) : 0;
-            $avgWaitingSeconds = count($allWaitingTimes) > 0 ? (array_sum($allWaitingTimes) / count($allWaitingTimes)) : 0;
+        $avgFirstResponseSeconds = count($firstResponseTimes) > 0 ? (array_sum($firstResponseTimes) / count($firstResponseTimes)) : 0;
+        $avgWaitingSeconds = count($allWaitingTimes) > 0 ? (array_sum($allWaitingTimes) / count($allWaitingTimes)) : 0;
 
             $data[] = [
                 'agent_name' => $userName,
@@ -520,6 +527,27 @@ class ReportService
             return json_decode($org->metadata, true);
         }
         return null;
+    }
+
+    private function resolveConversationStart(int $contactId, ?string $ticketCreatedAt): ?Carbon
+    {
+        if ($ticketCreatedAt) {
+            try {
+                return Carbon::parse($ticketCreatedAt);
+            } catch (\Exception $e) {
+                // fall back to cached conversations when parse fails
+            }
+        }
+
+        if (!array_key_exists($contactId, $this->conversationStartCache)) {
+            $this->conversationStartCache[$contactId] = DB::table('chats')
+                ->where('contact_id', $contactId)
+                ->orderBy('created_at', 'asc')
+                ->value('created_at');
+        }
+
+        $value = $this->conversationStartCache[$contactId];
+        return $value ? Carbon::parse($value) : null;
     }
 
     private function calculateEffectiveSeconds($from, $to, $config)

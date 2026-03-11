@@ -97,7 +97,7 @@
             <div class="flex items-center justify-between">
                 <span :class="['inline-flex items-center gap-1.5 text-xs font-medium px-2.5 py-1 rounded-full border capitalize', statusColor(item.status)]">
                     <span :class="['w-1.5 h-1.5 rounded-full shrink-0', statusDot(item.status)]"></span>
-                    {{ item.status }}
+                     {{ $t(item.status) }}
                 </span>
                 <Dropdown :align="'right'">
                     <button class="p-1.5 rounded-lg text-slate-400 hover:text-slate-700 hover:bg-slate-100 transition-colors">

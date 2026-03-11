@@ -6,6 +6,7 @@ use App\Services\Salla\Webhooks\Handlers\AbandonedCartHandler;
 use App\Services\Salla\Webhooks\Handlers\AppInstalledHandler;
 use App\Services\Salla\Webhooks\Handlers\AppStoreAuthorizeHandler;
 use App\Services\Salla\Webhooks\Handlers\AppUninstalledHandler;
+use App\Services\Salla\Webhooks\Handlers\CommunicationWhatsappSendHandler;
 use App\Services\Salla\Webhooks\Handlers\CustomerLoginHandler;
 use App\Services\Salla\Webhooks\Handlers\CustomerOtpRequestHandler;
 use App\Services\Salla\Webhooks\Handlers\OrderCreatedHandler;
@@ -27,6 +28,7 @@ class SallaWebhookEventRouter
      * @var array<string, class-string<SallaWebhookEventHandlerInterface>>
      */
     private array $map = [
+        'communication.whatsapp.send' => CommunicationWhatsappSendHandler::class,
         'order.created' => OrderCreatedHandler::class,
         'order.status.updated' => OrderStatusUpdatedHandler::class,
         'abandoned.cart' => AbandonedCartHandler::class,
