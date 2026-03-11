@@ -363,10 +363,10 @@ class ChatService
         $ticket->contact_id = $contactId;
         $ticket->status = 'open';
         $ticket->updated_at = now();
-
-        $this->assignAgentToTicket($ticket, $organizationId, $autoassignment);
+        $ticket->created_at = now();
         $ticket->save();
 
+        $this->assignAgentToTicket($ticket, $organizationId, $autoassignment);
         $this->sendTicketAssignmentNotification(
             $contactId,
             $ticket->assigned_to,
@@ -481,6 +481,8 @@ class ChatService
             $ticket = new ChatTicket();
             $ticket->contact_id = $contactId;
             $ticket->created_at = now();
+            $ticket->updated_at = now();
+
             $isNewTicket = true;
         } else {
             // Check if ticket was closed
