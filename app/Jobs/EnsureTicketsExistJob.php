@@ -71,9 +71,15 @@ class EnsureTicketsExistJob implements ShouldQueue
                 [
                     'assigned_to' => null,
                     'status' => 'open',
+                    'created_at' => now(),
                     'updated_at' => now(),
                 ]
             );
+
+            if (!$ticket->created_at) {
+                $ticket->created_at = now();
+                $ticket->save();
+            }
 
             if ($ticket->wasRecentlyCreated) {
                 $ticketsCreated++;
