@@ -181,6 +181,8 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::post('/settings/salla/automations/customer-login', [App\Http\Controllers\User\SallaAutomationController::class, 'updateCustomerLogin'])->name('salla.automations.customer_login.update');
                 Route::get('/settings/salla/automations/customer-otp/webhook-fields', [App\Http\Controllers\User\SallaAutomationController::class, 'webhookFieldsCustomerOtp'])->name('salla.automations.customer_otp.fields');
                 Route::post('/settings/salla/automations/customer-otp', [App\Http\Controllers\User\SallaAutomationController::class, 'updateCustomerOtp'])->name('salla.automations.customer_otp.update');
+                Route::get('/settings/salla/automations/communication-whatsapp-send/webhook-fields', [App\Http\Controllers\User\SallaAutomationController::class, 'webhookFieldsCommunicationWhatsappSend'])->name('salla.automations.communication_whatsapp_send.fields');
+                Route::post('/settings/salla/automations/communication-whatsapp-send', [App\Http\Controllers\User\SallaAutomationController::class, 'updateCommunicationWhatsappSend'])->name('salla.automations.communication_whatsapp_send.update');
                 Route::get('/settings/salla/message-logs', [App\Http\Controllers\User\SallaMessageLogController::class, 'index'])->name('salla.logs.index');
                
                 Route::post('/settings/salla/customer-sync', [App\Http\Controllers\Salla\CustomerSyncController::class, 'sync'])->name('salla.customer.sync');

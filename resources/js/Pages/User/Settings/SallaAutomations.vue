@@ -657,6 +657,99 @@
                     <div v-if="customerOtpErrorMessage" class="text-sm text-red-700">{{ customerOtpErrorMessage }}</div>
                 </div>
             </div>-->
+            <div class="bg-white border border-slate-200 rounded-lg p-6 mt-6">
+                <div class="flex items-start justify-between gap-6">
+                    <div class="flex-1">
+                        <h2 class="text-lg font-medium">{{ $t('Communication WhatsApp Send') }}</h2>
+                        <p class="text-sm text-gray-600">
+                            {{ $t('Send a template message whenever Salla fires the communication.whatsapp.send webhook') }}
+                        </p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="text-sm text-gray-700">{{ communicationForm.enabled ? $t('Enabled') : $t('Disabled') }}</span>
+                        <FormToggleSwitch v-model="communicationForm.enabled" />
+                    </div>
+                </div>
+
+                <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">
+                    <div>
+                        <label class="block text-sm leading-6 text-gray-900 mb-2">{{ $t('Template') }}</label>
+                        <BaseListbox v-model="communicationForm.template_id" :options="templates" :placeholder="$t('Select template')" />
+                        <div v-if="communicationErrors.template_id" class="form-error text-[#b91c1c] text-xs mt-1">{{ communicationErrors.template_id }}</div>
+                    </div>
+                    <div>
+                        <FormInput
+                            v-model="communicationForm.recipient_phone_payload_path"
+                            :name="$t('Recipient phone payload path')"
+                            :placeholder="'data.notifiable.0'"
+                            :error="communicationErrors.recipient_phone_payload_path"
+                            :type="'text'"
+                        />
+                        <p class="text-xs text-gray-500 mt-1">{{ $t('Example: data.notifiable.0') }}</p>
+                    </div>
+                </div>
+
+                <div class="mt-6 flex items-center justify-between">
+                    <h3 class="text-sm font-medium text-gray-900">{{ $t('Variable Mapping') }}</h3>
+                    <button type="button"
+                        class="inline-flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-sm rounded-md"
+                        :disabled="communicationLoadingFields"
+                        @click="refreshCommunicationWebhookFields">
+                        <span v-if="communicationLoadingFields">{{ $t('Refreshing...') }}</span>
+                        <span v-else>{{ $t('Refresh webhook fields') }}</span>
+                    </button>
+                </div>
+
+                <div v-if="communicationTemplateVariablesLocal.length === 0" class="mt-4 text-sm text-gray-600">
+                    {{ $t('Select a template to configure variable mapping.') }}
+                </div>
+
+                <div v-else class="mt-4 overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                        <thead>
+                            <tr class="text-left text-gray-600">
+                                <th class="py-2 pr-4">{{ $t('Template variable') }}</th>
+                                <th class="py-2 pr-4">{{ $t('Webhook field') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="variable in communicationTemplateVariablesLocal" :key="variable.key" class="border-t">
+                                <td class="py-3 pr-4">
+                                    <div class="font-medium text-gray-900">{{ variable.key }}</div>
+                                    <div class="text-xs text-gray-500">{{ variable.placeholder }}</div>
+                                </td>
+                                <td class="py-3 pr-4">
+                                    <select v-model="communicationMappingsLocal[variable.key]"
+                                        class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                        <option value="">{{ $t('Select field') }}</option>
+                                        <option v-for="field in communicationWebhookFieldsLocal" :key="field.path" :value="field.path">
+                                            {{ fieldLabel(field) }}
+                                        </option>
+                                    </select>
+                                    <div v-if="communicationErrors[`mappings.${variable.key}`]" class="form-error text-[#b91c1c] text-xs mt-1">
+                                        {{ communicationErrors[`mappings.${variable.key}`] }}
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div v-if="communicationWebhookFieldsLocal.length === 0" class="mt-3 text-xs text-gray-500">
+                        {{ $t('No webhook payload received yet. Trigger a communication.whatsapp.send webhook to see available fields.') }}
+                    </div>
+                </div>
+
+                <div class="mt-6 flex items-center gap-3">
+                    <button type="button"
+                        class="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm rounded-md hover:shadow-md disabled:opacity-50"
+                        :disabled="communicationSaving"
+                        @click="saveCommunicationWhatsappSend">
+                        <span v-if="communicationSaving">{{ $t('Saving...') }}</span>
+                        <span v-else>{{ $t('Save') }}</span>
+                    </button>
+                    <div v-if="communicationSuccessMessage" class="text-sm text-green-700">{{ communicationSuccessMessage }}</div>
+                    <div v-if="communicationErrorMessage" class="text-sm text-red-700">{{ communicationErrorMessage }}</div>
+                </div>
+            </div>
         </div>
     </AppLayout>
 </template>
@@ -766,6 +859,22 @@ const props = defineProps({
     customerOtpMappings: {
         type: Object,
         default: () => ({})
+    },
+    communicationSetting: {
+        type: Object,
+        default: () => ({ enabled: false, template_id: null, recipient_phone_payload_path: 'data.notifiable.0' })
+    },
+    communicationTemplateVariables: {
+        type: Array,
+        default: () => []
+    },
+    communicationWebhookFields: {
+        type: Array,
+        default: () => []
+    },
+    communicationMappings: {
+        type: Object,
+        default: () => ({})
     }
 });
 
@@ -846,11 +955,32 @@ for (const variable of customerOtpTemplateVariablesLocal.value ?? []) {
     }
 }
 
+const communicationForm = reactive({
+    enabled: !!props.communicationSetting.enabled,
+    template_id: props.communicationSetting.template_id ?? null,
+    recipient_phone_payload_path: props.communicationSetting.recipient_phone_payload_path ?? 'data.notifiable.0',
+});
+
+const communicationTemplateVariablesLocal = ref(props.communicationTemplateVariables ?? []);
+const communicationWebhookFieldsLocal = ref(props.communicationWebhookFields ?? []);
+const communicationMappingsLocal = reactive({ ...(props.communicationMappings ?? {}) });
+for (const variable of communicationTemplateVariablesLocal.value ?? []) {
+    if (!(variable.key in communicationMappingsLocal)) {
+        communicationMappingsLocal[variable.key] = '';
+    }
+}
+
 const customerOtpLoadingFields = ref(false);
 const customerOtpSaving = ref(false);
 const customerOtpErrors = reactive({});
 const customerOtpSuccessMessage = ref('');
 const customerOtpErrorMessage = ref('');
+
+const communicationLoadingFields = ref(false);
+const communicationSaving = ref(false);
+const communicationErrors = reactive({});
+const communicationSuccessMessage = ref('');
+const communicationErrorMessage = ref('');
 
 const saving = ref(false);
 const loadingFields = ref(false);
@@ -948,6 +1078,16 @@ const refreshCustomerOtpWebhookFields = async () => {
         customerOtpWebhookFieldsLocal.value = res?.data?.data?.fields ?? [];
     } finally {
         customerOtpLoadingFields.value = false;
+    }
+};
+
+const refreshCommunicationWebhookFields = async () => {
+    communicationLoadingFields.value = true;
+    try {
+        const res = await axios.get('/settings/salla/automations/communication-whatsapp-send/webhook-fields');
+        communicationWebhookFieldsLocal.value = res?.data?.data?.fields ?? [];
+    } finally {
+        communicationLoadingFields.value = false;
     }
 };
 
@@ -1060,6 +1200,25 @@ const loadCustomerOtpTemplateVariables = async (templateId) => {
 
 watch(() => customerOtpForm.template_id, async (newId) => {
     await loadCustomerOtpTemplateVariables(newId);
+});
+
+const loadCommunicationTemplateVariables = async (templateId) => {
+    if (!templateId) {
+        communicationTemplateVariablesLocal.value = [];
+        return;
+    }
+
+    communicationTemplateVariablesLocal.value = await fetchTemplateVariables(templateId);
+
+    for (const variable of communicationTemplateVariablesLocal.value) {
+        if (!(variable.key in communicationMappingsLocal)) {
+            communicationMappingsLocal[variable.key] = '';
+        }
+    }
+};
+
+watch(() => communicationForm.template_id, async (newId) => {
+    await loadCommunicationTemplateVariables(newId);
 });
 
 watch(statusRulesLocal, async (rules) => {
@@ -1353,6 +1512,54 @@ const saveCustomerOtp = async () => {
         }
     } finally {
         customerOtpSaving.value = false;
+    }
+};
+
+const saveCommunicationWhatsappSend = async () => {
+    communicationSaving.value = true;
+    communicationSuccessMessage.value = '';
+    communicationErrorMessage.value = '';
+    Object.keys(communicationErrors).forEach((k) => delete communicationErrors[k]);
+
+    const mappingsArray = (communicationTemplateVariablesLocal.value ?? []).map(v => ({
+        template_variable: v.key,
+        payload_path: communicationMappingsLocal[v.key] ?? '',
+    }));
+
+    try {
+        await axios.post('/settings/salla/automations/communication-whatsapp-send', {
+            enabled: communicationForm.enabled,
+            template_id: communicationForm.template_id,
+            recipient_phone_payload_path: communicationForm.recipient_phone_payload_path,
+            mappings: mappingsArray,
+        });
+
+        communicationSuccessMessage.value = 'Saved';
+    } catch (e) {
+        communicationErrorMessage.value = e?.response?.data?.message ?? 'Failed to save';
+
+        const serverErrors = e?.response?.data?.errors ?? null;
+        if (serverErrors && typeof serverErrors === 'object') {
+            for (const [key, value] of Object.entries(serverErrors)) {
+                const match = String(key).match(/^mappings\.(\d+)\.(payload_path|template_variable)$/);
+                if (match) {
+                    const idx = parseInt(match[1], 10);
+                    const varKey = mappingsArray[idx]?.template_variable;
+                    if (varKey) {
+                        communicationErrors[`mappings.${varKey}`] = Array.isArray(value) ? value[0] : value;
+                        continue;
+                    }
+                }
+
+                communicationErrors[key] = Array.isArray(value) ? value[0] : value;
+            }
+        }
+
+        if (e?.response?.status === 422 && e?.response?.data?.message?.startsWith('Missing mapping for')) {
+            communicationErrorMessage.value = e.response.data.message;
+        }
+    } finally {
+        communicationSaving.value = false;
     }
 };
 
