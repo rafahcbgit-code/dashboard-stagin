@@ -53,6 +53,23 @@
                         <div class="sm:w-[80%] grid gap-x-6 gap-y-4 sm:grid-cols-6">
                             <FormInput v-model="form.name" :name="$t('Name')" :error="form.errors.name" :type="'text'" :class="'sm:col-span-6'"/>
                             <FormSelect v-model="form.plan" :name="$t('Subscription plan')" :error="form.errors.plan" :options="roleOptions()" :type="'text'" :class="'sm:col-span-6'"/>
+                            <FormInput
+                                v-model="form.valid_until"
+                                :name="$t('Subscription expiration')"
+                                :error="form.errors.valid_until"
+                                :type="'datetime-local'"
+                                :min="minValidUntil"
+                                :class="'sm:col-span-6'"
+                            />
+                            <p class="text-xs text-gray-500 sm:col-span-6">{{ $t('Set this to a future date to extend or shorten the subscription expiry as needed.') }}</p>
+                            <FormSelect
+                                v-model="form.subscription_status"
+                                :name="$t('Subscription status')"
+                                :error="form.errors.subscription_status"
+                                :options="subscriptionStatusOptions()"
+                                :class="'sm:col-span-6'"
+                                :type="'text'"
+                            />
                         </div>
                     </div>
                 </div>
@@ -159,6 +176,7 @@
     });
 
     const tab = ref('organization');
+    const initialPlanValue = props.organization?.subscription?.plan?.uuid ?? 'trial';
 
     const getAddressDetail = (value, key) => {
         if(value){
@@ -169,9 +187,27 @@
         }
     };
 
+    const formatDatetimeForInput = (value) => {
+        if (!value) {
+            return null;
+        }
+
+        return value.replace(' ', 'T');
+    };
+
+    const getLocalDatetimeLocalValue = () => {
+        const now = new Date();
+        const timezoneOffsetMs = now.getTimezoneOffset() * 60000;
+        return new Date(now - timezoneOffsetMs).toISOString().slice(0, 16);
+    };
+
+    const minValidUntil = getLocalDatetimeLocalValue();
+
     const form = useForm({
         name: props.organization?.name,
-        plan: props.organization?.subscription?.plan?.uuid,
+        plan: initialPlanValue,
+        subscription_status: props.organization?.subscription?.status ?? 'trial',
+        valid_until: formatDatetimeForInput(props.organization?.subscription?.valid_until),
         create_user: 1,
         first_name: null,
         last_name: null,
@@ -206,11 +242,22 @@
     })
 
     const roleOptions = () => {
-        return props.plans.map((option) => ({
+        const basePlans = (props.plans ?? []).map((option) => ({
             value: option.uuid,
             label: option.name,
         }));
+
+        return [
+            { value: 'trial', label: trans('Trial') },
+            ...basePlans,
+        ];
     };
+
+    const subscriptionStatusOptions = () => ([
+        { value: 'trial', label: trans('Trial') },
+        { value: 'active', label: trans('Active') },
+        { value: 'suspended', label: trans('Suspended') },
+    ]);
 
     const isOpenFormModal = ref(false);
     

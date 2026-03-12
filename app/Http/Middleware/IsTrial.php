@@ -33,12 +33,11 @@ class IsTrial
         'calendly_url' => $calendly_url
     ]);
 
-    if ($subscription && $subscription->status === 'trial' && $user->code_verified == 1) {
-        $request->merge(['is_trial' => 1]);
-        return $next($request);
-    }
+    if ($subscription) {
+        if ($subscription->status === 'trial') {
+            $request->merge(['is_trial' => 1]);
+        }
 
-    if ($subscription && $subscription->status === 'active' && $user->code_verified == 1) {
         return $next($request);
     }
 
