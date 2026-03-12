@@ -9,8 +9,7 @@
                             <div class="w-[70%]">
                                 <h2 class="text-[17px]">{{ $t('Setup Whatsapp Account') }}</h2>
                                 <span class="flex items-center mt-1">
-                                    {{ $t('Setup your integration to be able to receive and send messages via
-                                    Whatsapp.') }}
+                                    {{ $t('Setup your integration to be able to receive and send messages via Whatsapp.') }}
                                 </span>
                             </div>
                             <div class="ml-auto">
@@ -304,8 +303,7 @@
                             <div class="w-[60%]">
                                 <h2 class="text-[17px]">{{ $t('Remove Whatsapp account') }}</h2>
                                 <span class="flex items-center mt-1">
-                                    {{ $t('This will completely delete your whatsapp integration. Your contacts &
-                                    messages will be unaffected.') }}
+                                    {{ $t('This will completely delete your whatsapp integration. Your contacts & messages will be unaffected.') }}
                                 </span>
                             </div>
                             <div class="w-[40%] ml-auto">
