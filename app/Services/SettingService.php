@@ -87,9 +87,12 @@ class SettingService
                             ],[
                                 'value' => json_encode($trial_limits),
                             ]);
+
+                        // cleanup legacy separate setting if it exists
+                        DB::table('settings')->where('key', 'campaign_messages_limit')->delete();
                     } catch (\Exception $e) {
                         //dd($e->getMessage());
-                        Log::error($e->getMessage());
+                        Log::error($e->message());
                     }
                 } else if($key == 'aws'){
                     Artisan::call('config:clear');

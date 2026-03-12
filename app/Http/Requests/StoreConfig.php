@@ -66,6 +66,7 @@ class StoreConfig extends FormRequest
             $rules['trial_limits.campaigns'] = 'required|numeric|gte:-1';
             $rules['trial_limits.contacts'] = 'required|numeric|gte:-1';
             $rules['trial_limits.automated_replies'] = 'required|numeric|gte:-1';
+            $rules['trial_limits.campaign_messages'] = 'required|numeric|gte:-1';
         }
 
         if ($this->type == 'email') {
@@ -116,6 +117,7 @@ class StoreConfig extends FormRequest
             'trial_limits.campaigns.gte' => __('This field must be greater than or equal to -1.'),
             'trial_limits.contacts.gte' => __('This field must be greater than or equal to -1.'),
             'trial_limits.automated_replies.gte' => __('This field must be greater than or equal to -1.'),
+            'trial_limits.campaign_messages.gte' => __('This field must be greater than or equal to -1.'),
         ];
     }
 }

@@ -35,12 +35,13 @@
                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11v5m0 5a9 9 0 1 1 0-18a9 9 0 0 1 0 18Zm.05-13v.1h-.1V8h.1Z"/></svg>
                         <p class="text-sm leading-6">{{ $t('For unlimited usage, set -1 as the value') }}</p>
                     </div>
-                    <div class="grid gap-3 grid-cols-2 pb-6 border-b md:w-2/3">
+                    <div class="grid gap-3 grid-cols-1 sm:grid-cols-2 md:grid-cols-3 pb-6 border-b w-full">
                         <FormInput v-model="form.trial_limits.messages" :name="$t('Message limit')" :error="form.errors?.['trial_limits.messages']" :type="'number'" :class="'col-span-1'"/>
                         <FormInput v-model="form.trial_limits.campaigns" :name="$t('Campaign limit')" :error="form.errors?.['trial_limits.campaigns']" :type="'number'" :class="'col-span-1'"/>
                         <FormInput v-model="form.trial_limits.contacts" :name="$t('Contacts limit')" :error="form.errors?.['trial_limits.contacts']" :type="'number'" :class="'col-span-1'"/>
                         <FormInput v-model="form.trial_limits.automated_replies" :name="$t('Automated Replies limit')" :error="form.errors?.['trial_limits.automated_replies']" :type="'number'" :class="'col-span-1'"/>
                         <FormInput v-model="form.trial_limits.users" :name="$t('User limit')" :error="form.errors?.['trial_limits.users']" :type="'number'" :class="'col-span-1'"/>
+                        <FormInput v-model="form.trial_limits.campaign_messages" :name="$t('Campaign messages limit')" :error="form.errors?.['trial_limits.campaign_messages']" :type="'number'" :class="'col-span-1'"/>
                     </div>
 
                     <div class="mt-6 flex items-center justify-end gap-x-6 md:w-2/3">
@@ -78,6 +79,11 @@
     };
 
     const limits = getValueByKey('trial_limits') ? JSON.parse(getValueByKey('trial_limits')) : {};
+    // if legacy campaign_messages_limit exists as its own setting, prefer it for initial value
+    const legacyCampaignMessages = getValueByKey('campaign_messages_limit');
+    if (limits.campaign_messages === undefined && legacyCampaignMessages !== '') {
+        limits.campaign_messages = legacyCampaignMessages;
+    }
 
     const isLoading = ref(false);
     const form = useForm({
@@ -88,7 +94,9 @@
             messages: limits?.messages ?? '-1',
             contacts: limits?.contacts ?? '-1',
             campaigns: limits?.campaigns ?? '-1',
-            automated_replies: limits?.automated_replies ?? '-1'
+            automated_replies: limits?.automated_replies ?? '-1',
+            // new field stored alongside other trial limits
+            campaign_messages: limits?.campaign_messages ?? '250'
         }
     })
 
