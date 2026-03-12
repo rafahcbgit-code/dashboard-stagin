@@ -20,6 +20,9 @@ class IsTrial
         }
 
         $user = auth()->user();
+        if ($user->code_verified != 1) {
+            return Inertia::location(route('VerifyAccount'));
+        }
         $subscription = Subscription::where('organization_id', $organizationId)->first();
 
         $phone = OtpConfig::value('contact_phone') ?? "+966542922948";
