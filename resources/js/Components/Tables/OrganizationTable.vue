@@ -92,6 +92,7 @@
                     <span>{{ $t('Seats') }}</span>
                 </TableHeaderRowItem>
                 <TableHeaderRowItem class="hidden sm:table-cell">{{ $t('Plan') }}</TableHeaderRowItem>
+                <TableHeaderRowItem class="hidden sm:table-cell">{{ $t('Is Connected') }}</TableHeaderRowItem>
                 <TableHeaderRowItem class="hidden sm:table-cell">{{ $t('Start Date') }}</TableHeaderRowItem>
                 <TableHeaderRowItem class="hidden sm:table-cell">{{ $t('Valid Until') }}</TableHeaderRowItem>
                <TableHeaderRowItem class="hidden sm:table-cell">
@@ -111,6 +112,11 @@
                 <TableBodyRowItem class="hidden sm:table-cell">
                     <span class="py-1 rounded-[5px] text-xs px-3 bg-[#ddebf7] text-slate-700">
                         {{ item.subscription?.plan?.name ?? $t('Not set') }}
+                    </span>
+                </TableBodyRowItem>
+                <TableBodyRowItem class="hidden sm:table-cell">
+                    <span class="py-1 rounded-[5px] text-xs px-3 bg-[#ddebf7] text-slate-700">
+                        {{ item.metadata !== null ? $t('True') : $t('False') }}
                     </span>
                 </TableBodyRowItem>
 
