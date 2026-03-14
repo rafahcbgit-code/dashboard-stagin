@@ -6,6 +6,8 @@ use App\Helpers\DateTimeHelper;
 use App\Http\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use App\Models\CampaignLog;
+use App\Models\Setting;
 
 class Campaign extends Model
 {
@@ -118,5 +120,48 @@ class Campaign extends Model
             ->leftJoin('chats as chat', 'chat.id', '=', 'campaign_logs.chat_id')
             ->where('campaign_logs.campaign_id', $this->id)
             ->first();
+    }
+
+    /**
+     * Calculate total delivered messages across all campaigns for an organization.
+     *
+     * @param  int  $organizationId
+     * @return int
+     */
+    public static function overallDeliveryCountForOrg(int $organizationId): int
+    {
+        return CampaignLog::join('campaigns', 'campaign_logs.campaign_id', '=', 'campaigns.id')
+            ->join('chats', 'campaign_logs.chat_id', '=', 'chats.id')
+            ->where('campaigns.organization_id', $organizationId)
+            ->where('campaign_logs.status', 'success')
+            ->whereIn('chats.status', ['delivered', 'read'])
+            ->count();
+    }
+
+    /**
+     * Accessor so that $campaign->overall_delivery_count returns org-wide value.
+     */
+    public function getOverallDeliveryCountAttribute(): int
+    {
+        return self::overallDeliveryCountForOrg($this->organization_id);
+    }
+
+    /**
+     * Return the campaign messages limit configured for the organization (trial_limits).
+     * Defaults to 250 if not set.
+     */
+    public static function campaignMessagesLimit(): int
+    {
+        $setting = Setting::where('key', 'trial_limits')->first();
+        if (!$setting) {
+            return 250;
+        }
+
+        $limits = json_decode($setting->value, true);
+        if (isset($limits['campaign_messages'])) {
+            return (int) $limits['campaign_messages'];
+        }
+
+        return 250;
     }
 }

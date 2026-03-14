@@ -21,14 +21,21 @@ class RedirectIfAuthenticated
         $guards = empty($guards) ? ['user', 'admin'] : $guards;
 
         foreach ($guards as $guard) {
-            if (Auth::guard($guard)->check()) {
-                $user = Auth::guard($guard)->user();
-                if ($user->role == 'admin') {
-                    return redirect('/admin/dashboard');
-                } else {
-                    return redirect('/dashboard');
-                }
+            if (!Auth::guard($guard)->check()) {
+                continue;
             }
+
+            $user = Auth::guard($guard)->user();
+
+            if ($guard === 'user' && $user->code_verified != 1) {
+                continue;
+            }
+
+            if ($user->role == 'admin') {
+                return redirect('/admin/dashboard');
+            }
+
+            return redirect('/dashboard');
         }
 
         return $next($request);

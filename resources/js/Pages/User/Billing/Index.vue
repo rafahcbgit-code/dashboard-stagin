@@ -28,10 +28,10 @@
                     <h2 v-if="props.subscription?.status === 'active'" class="text-sm">{{ $t('We were unable to autorenew your subscription') }} <br> {{ $t('To continue using the app, please make a payment of') }} {{ props.subscriptionDetails?.accountBalance }}.</h2>
                 </div>
                 <div>
-                    <div class="float-right">
+                    <!-- <div class="float-right">
                         <Link href="/subscription" v-if="props.subscription?.status === 'trial'" type="button" class="rounded-md bg-white text-gray-600 px-3 py-2 text-sm shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">{{ $t('Subscribe') }}</Link>
                         <button @click="openModal()" v-if="props.subscription?.status === 'active' && props.setting['enable_custom_payment'] == 1" type="button" class="rounded-md bg-white text-gray-600 px-3 py-2 text-sm shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">{{ $t('Add payment') }}</button>
-                    </div>
+                    </div> -->
                 </div>
             </div>
             <div class="md:flex bg-slate-100 md:bg-white shadow-sm p-5 rounded-[0.5rem] space-y-6">

@@ -28,6 +28,8 @@ class StoreOrganization extends FormRequest
         $rules = [
             'name' => 'required',
             'plan' => 'required',
+            'valid_until' => 'nullable|date|after_or_equal:now',
+            'subscription_status' => 'nullable|in:trial,active,suspended',
         ];
 
         if ($this->isMethod('post')) {

@@ -15,6 +15,34 @@ class Subscription extends Model {
     protected $appends = ['next_billing_date'];
     public $timestamps = true;
 
+    /**
+     * Returns true if the given organization currently has an active trial subscription.
+     */
+    public static function isActiveTrialForOrg(int $organizationId): bool
+    {
+        // Use the most recent subscription record for this organization.
+        $subscription = self::where('organization_id', $organizationId)
+            ->orderByDesc('created_at')
+            ->first();
+
+        if (! $subscription) {
+            return false;
+        }
+
+        // Treat as trial for display purposes if status is trial.
+        if ($subscription->status === 'trial') {
+            return true;
+        }
+
+        // Some subscriptions may remain 'active' while still in a trial window.
+        // If a valid_until date exists and is in the future, consider this a trial for display.
+        /*if ($subscription->valid_until) {
+            return Carbon::parse($subscription->valid_until)->isFuture();
+        }*/
+
+        return false;
+    }
+
     public function getCreatedAtAttribute($value)
     {
         return DateTimeHelper::convertToOrganizationTimezone($value)->toDateTimeString();

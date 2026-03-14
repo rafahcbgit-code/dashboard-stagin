@@ -21,6 +21,7 @@ use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Str;
 use Propaganistas\LaravelPhone\PhoneNumber;
+use Carbon\Carbon;
 
 class OrganizationService
 {
@@ -74,7 +75,8 @@ class OrganizationService
      */
     public function get(object $request, $userId = null)
     {
-        $organizations = (new Organization)->listAll($request->query('search'), $userId);
+        $statusFilter = $request->query('subscription_status');
+        $organizations = (new Organization)->listAll($request->query('search'), $userId, $statusFilter);
 
         return OrganizationsResource::collection($organizations);
     }
@@ -167,15 +169,14 @@ class OrganizationService
             ]);
 
             $plan = SubscriptionPlan::where('uuid', $request->plan)->first();
-            $config = Setting::where('key', 'trial_period')->first();
-            $has_trial = isset($config->value) && $config->value > 0 ? true : false;
+            $subscriptionMeta = $this->resolveSubscriptionExpiration($request, $plan);
 
             Subscription::create([
                 'organization_id' => $organization->id,
-                'status' => $has_trial ? 'trial' : 'active',
-                'plan_id' => $plan ? $plan->id : NULL,
+                'status' => $subscriptionMeta['status'],
+                'plan_id' => $plan ? $plan->id : null,
                 'start_date' => now(),
-                'valid_until' => $has_trial ? date('Y-m-d H:i:s', strtotime('+' . $config->value . ' days')) : now(),
+                'valid_until' => $subscriptionMeta['valid_until'],
             ]);
 
             return $organization;
@@ -206,36 +207,62 @@ class OrganizationService
 
         $subscription = Subscription::where('organization_id', $organization->id)->first();
         $plan = SubscriptionPlan::where('uuid', $request->plan)->first();
+        $subscriptionMeta = $this->resolveSubscriptionExpiration($request, $plan);
 
         if ($subscription) {
-            
-            // Calculate the subscription expiration date
-            $validUntil = match ($plan->period) {
-                'yearly'  => now()->addYear(),
-                'monthly' => now()->addMonth(),
-                };
-
             $subscription->update([
-                'plan_id' => $plan->id,
-                'status'  => 'active',
+                'plan_id' => $plan ? $plan->id : null,
+                'status' => $subscriptionMeta['status'],
                 'start_date' => now(),
-                'valid_until' => $validUntil
-            
+                'valid_until' => $subscriptionMeta['valid_until'],
             ]);
         } else {
-            $config = Setting::where('key', 'trial_period')->first();
-            $has_trial = isset($config->value) && $config->value > 0 ? true : false;
-
             Subscription::create([
                 'organization_id' => $organization->id,
-                'status' => $has_trial ? 'trial' : 'active',
-                'plan_id' => $plan->id,
+                'status' => $subscriptionMeta['status'],
+                'plan_id' => $plan ? $plan->id : null,
                 'start_date' => now(),
-                'valid_until' => $has_trial ? date('Y-m-d H:i:s', strtotime('+' . $config->value . ' days')) : now(),
+                'valid_until' => $subscriptionMeta['valid_until'],
             ]);
         }
 
         return $organization;
+    }
+
+    private function resolveSubscriptionExpiration($request, ?SubscriptionPlan $plan): array
+    {
+        $config = Setting::where('key', 'trial_period')->first();
+        $trialDays = isset($config->value) && (int) $config->value > 0 ? (int) $config->value : 7;
+        $hasTrialConfig = isset($config->value) && (int) $config->value > 0;
+        $trialExpiration = now()->addDays($trialDays);
+        $customExpiration = $request->filled('valid_until') ? Carbon::parse($request->input('valid_until')) : null;
+        $isTrialPlan = $request->plan === 'trial';
+        $statusOverride = $request->input('subscription_status');
+
+        $defaultExpiration = $plan && !$isTrialPlan
+            ? match ($plan->period) {
+                'yearly' => now()->addYear(),
+                'monthly' => now()->addMonth(),
+                default => $trialExpiration,
+            }
+            : $trialExpiration;
+
+        return [
+            'valid_until' => $customExpiration ?? $defaultExpiration,
+            'status' => $this->resolveSubscriptionStatus($isTrialPlan, $hasTrialConfig, $statusOverride),
+        ];
+    }
+
+    private function resolveSubscriptionStatus(bool $isTrialPlan, bool $hasTrialConfig, ?string $statusOverride): string
+    {
+        $allowed = ['trial', 'active', 'suspended'];
+        $default = $isTrialPlan || $hasTrialConfig ? 'trial' : 'active';
+
+        if ($statusOverride && in_array($statusOverride, $allowed, true)) {
+            return $statusOverride;
+        }
+
+        return $default;
     }
 
     public function storeTransaction($request, $uuid)
