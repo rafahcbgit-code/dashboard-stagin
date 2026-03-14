@@ -10,7 +10,25 @@
                     </p>
                 </div>
                 <div v-if="props.role !== 'agent'">
-                    <Link href="/campaigns/create" class="rounded-md bg-primary px-3 py-2 text-sm text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 md:block hidden">{{ $t('Create campaign') }}</Link>
+                    <template v-if="canCreateCampaign">
+                        <Link
+                            href="/campaigns/create"
+                            class="rounded-md bg-primary px-3 py-2 text-sm text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 md:block hidden"
+                        >
+                            {{ $t('Create campaign') }}
+                        </Link>
+                    </template>
+                    <template v-else>
+                        <button
+                            type="button"
+                            @click="onTrialLimitClick"
+                            title="You have exceeded your trial campaign messages limit. Please upgrade your plan."
+                            class="rounded-md bg-gray-400 px-3 py-2 text-sm text-gray-700 shadow-sm md:block hidden"
+                        >
+                            {{ $t('Create campaign') }}
+                        </button>
+                    </template>
+                
                 </div>
             </div>
 
@@ -45,12 +63,33 @@
     </AppLayout>
 </template>
 <script setup>
-    import { computed } from 'vue';
+    import { computed, ref } from 'vue';
     import AppLayout from "./../Layout/App.vue";
     import { Link } from "@inertiajs/vue3";
     import CampaignTable from '@/Components/Tables/CampaignTable.vue';
 
     const props = defineProps(['rows', 'filters', 'role', 'overall_delivery_count', 'campaign_messages_limit', 'trial']);
+
+    const canCreateCampaign = computed(() => {
+        if (!props.trial) {
+            return true;
+        }
+
+        const limit = Number(props.campaign_messages_limit || 0);
+        const delivered = Number(props.overall_delivery_count || 0);
+        if (limit <= 0) {
+            return true;
+        }
+
+        return delivered < limit;
+    });
+
+    const showTrialLimitError = ref(false);
+
+    const onTrialLimitClick = () => {
+        showTrialLimitError.value = true;
+        alert('You have exceeded your trial campaign messages limit. Please upgrade your plan.');
+    };
 
     const progressPercentage = computed(() => {
         if (!props.campaign_messages_limit || props.campaign_messages_limit <= 0) {
