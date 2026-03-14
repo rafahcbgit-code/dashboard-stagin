@@ -60,7 +60,7 @@ class CampaignController extends BaseController
                     ->latest()
                     ->paginate(10)
             );
-
+        
             return Inertia::render('User/Campaign/Index', [
                 'title' => __('Campaigns'),
                 'allowCreate' => true,
@@ -70,6 +70,7 @@ class CampaignController extends BaseController
                 'role' => $team->role,
                 'overall_delivery_count' => $overallDelivered,
                 'campaign_messages_limit' => $campaignLimit,
+                'trial' => $showStats,
             ]);
         } elseif ($uuid == 'create') {
             $data['settings'] = Organization::where('id', $organizationId)->first();

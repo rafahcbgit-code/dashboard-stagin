@@ -36,9 +36,9 @@ class Subscription extends Model {
 
         // Some subscriptions may remain 'active' while still in a trial window.
         // If a valid_until date exists and is in the future, consider this a trial for display.
-        if ($subscription->valid_until) {
+        /*if ($subscription->valid_until) {
             return Carbon::parse($subscription->valid_until)->isFuture();
-        }
+        }*/
 
         return false;
     }

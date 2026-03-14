@@ -15,7 +15,7 @@
             </div>
 
             <!-- stats (only show during trial) -->
-            <div v-if="props.overall_delivery_count !== null" class="grid grid-cols-1 sm:grid-cols-3 gap-4 my-6">
+            <div v-if="props.trial" class="grid grid-cols-1 sm:grid-cols-3 gap-4 my-6">
                 <div class="bg-gray-100 p-4 rounded">
                     <h2 class="text-2xl font-bold">{{ props.campaign_messages_limit }}</h2>
                     <p class="text-sm text-gray-600">{{ $t('Campaign messages limit') }}</p>
@@ -29,6 +29,15 @@
                     <p class="text-sm text-gray-600">{{ $t('Remaining balance') }}</p>
                 </div>
             </div>
+            <div v-if="props.trial" class="mb-6">
+                <div class="flex items-baseline justify-between mb-1">
+                    <p class="text-sm font-medium text-gray-700">{{ $t('Progress') }}</p>
+                    <p class="text-sm font-semibold text-gray-700">{{ progressPercentage }}%</p>
+                </div>
+                <div class="h-2 w-full bg-gray-200 rounded-full overflow-hidden">
+                    <div :style="{ width: progressPercentage + '%' }" class="h-full bg-primary"></div>
+                </div>
+            </div>
 
             <!-- Table Component-->
             <CampaignTable :rows="props.rows" :filters="props.filters" :role="props.role"/>
@@ -36,9 +45,19 @@
     </AppLayout>
 </template>
 <script setup>
+    import { computed } from 'vue';
     import AppLayout from "./../Layout/App.vue";
     import { Link } from "@inertiajs/vue3";
     import CampaignTable from '@/Components/Tables/CampaignTable.vue';
 
-    const props = defineProps(['rows', 'filters', 'role', 'overall_delivery_count', 'campaign_messages_limit']);
+    const props = defineProps(['rows', 'filters', 'role', 'overall_delivery_count', 'campaign_messages_limit', 'trial']);
+
+    const progressPercentage = computed(() => {
+        if (!props.campaign_messages_limit || props.campaign_messages_limit <= 0) {
+            return 0;
+        }
+
+        const percent = (props.overall_delivery_count / props.campaign_messages_limit) * 100;
+        return Math.min(100, Math.max(0, Math.round(percent)));
+    });
 </script>
