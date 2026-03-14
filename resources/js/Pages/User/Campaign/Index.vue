@@ -14,6 +14,18 @@
                 </div>
             </div>
 
+            <!-- stats (only show during trial) -->
+            <div v-if="props.overall_delivery_count !== null" class="grid grid-cols-1 sm:grid-cols-2 gap-4 my-6">
+                <div class="bg-gray-100 p-4 rounded">
+                    <h2 class="text-2xl font-bold">{{ props.overall_delivery_count }}</h2>
+                    <p class="text-sm text-gray-600">{{ $t('Delivered messages') }}</p>
+                </div>
+                <div class="bg-gray-100 p-4 rounded">
+                    <h2 class="text-2xl font-bold">{{ props.campaign_messages_limit }}</h2>
+                    <p class="text-sm text-gray-600">{{ $t('Campaign messages limit') }}</p>
+                </div>
+            </div>
+
             <!-- Table Component-->
             <CampaignTable :rows="props.rows" :filters="props.filters" :role="props.role"/>
         </div>
@@ -24,5 +36,5 @@
     import { Link } from "@inertiajs/vue3";
     import CampaignTable from '@/Components/Tables/CampaignTable.vue';
 
-    const props = defineProps(['rows', 'filters', 'role']);
+    const props = defineProps(['rows', 'filters', 'role', 'overall_delivery_count', 'campaign_messages_limit']);
 </script>

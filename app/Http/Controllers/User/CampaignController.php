@@ -12,6 +12,7 @@ use App\Models\CampaignLog;
 use App\Models\ContactGroup;
 use App\Models\Organization;
 use App\Models\Setting;
+use App\Models\Subscription;
 use App\Models\Team;
 use App\Models\Template;
 use App\Services\CampaignService;
@@ -39,6 +40,13 @@ class CampaignController extends BaseController
         if ($uuid == null) {
             $searchTerm = $request->query('search');
             $settings = Organization::where('id', $organizationId)->first();
+
+            // show stats only during active trial
+            $showStats = Subscription::isActiveTrialForOrg($organizationId);
+
+            $overallDelivered = $showStats ? Campaign::overallDeliveryCountForOrg($organizationId) : null;
+            $campaignLimit = $showStats ? Campaign::campaignMessagesLimit() : null;
+
             $rows = CampaignResource::collection(
                 Campaign::with(['template'])
                     ->where('organization_id', $organizationId)
@@ -53,7 +61,16 @@ class CampaignController extends BaseController
                     ->paginate(10)
             );
 
-            return Inertia::render('User/Campaign/Index', ['title' => __('Campaigns'), 'allowCreate' => true, 'rows' => $rows, 'filters' => request()->all(['search']), 'settings' => $settings, 'role' => $team->role]);
+            return Inertia::render('User/Campaign/Index', [
+                'title' => __('Campaigns'),
+                'allowCreate' => true,
+                'rows' => $rows,
+                'filters' => request()->all(['search']),
+                'settings' => $settings,
+                'role' => $team->role,
+                'overall_delivery_count' => $overallDelivered,
+                'campaign_messages_limit' => $campaignLimit,
+            ]);
         } elseif ($uuid == 'create') {
             $data['settings'] = Organization::where('id', $organizationId)->first();
             $data['templates'] = Template::where('organization_id', $organizationId)
