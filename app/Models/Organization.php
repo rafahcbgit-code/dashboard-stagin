@@ -41,12 +41,35 @@ class Organization extends Model
         });
     }
 
-    public function listAll($searchTerm, $userId = null)
+    public function listAll($searchTerm, $userId = null, $subscriptionStatus = null)
     {
         $query = $this->with(['teams.user', 'owner.user', 'subscription.plan'])
             ->when($userId !== null, function ($query) use ($userId) {
                 $query->whereHas('teams', function ($teamsQuery) use ($userId) {
                     $teamsQuery->where('user_id', $userId);
+                });
+            })
+            ->when($subscriptionStatus === 'trial', function ($query) {
+                $query->whereHas('subscription', function ($subQuery) {
+                    $subQuery->where('status', 'trial');
+                });
+            })
+            ->when($subscriptionStatus === 'active', function ($query) {
+                $query->whereHas('subscription', function ($subQuery) {
+                    $subQuery->where('status', 'active');
+                });
+            })
+            ->when($subscriptionStatus === 'suspended', function ($query) {
+                $query->whereHas('subscription', function ($subQuery) {
+                    $subQuery->where('status', 'suspended');
+                });
+            })
+            ->when($subscriptionStatus === 'no_trial', function ($query) {
+                $query->where(function ($subQuery) {
+                    $subQuery->whereDoesntHave('subscription')
+                        ->orWhereHas('subscription', function ($subSubQuery) {
+                            $subSubQuery->where('status', '!=', 'trial');
+                        });
                 });
             })
             ->where(function ($query) use ($searchTerm) {

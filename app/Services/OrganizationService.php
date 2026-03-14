@@ -75,7 +75,8 @@ class OrganizationService
      */
     public function get(object $request, $userId = null)
     {
-        $organizations = (new Organization)->listAll($request->query('search'), $userId);
+        $statusFilter = $request->query('subscription_status');
+        $organizations = (new Organization)->listAll($request->query('search'), $userId, $statusFilter);
 
         return OrganizationsResource::collection($organizations);
     }
