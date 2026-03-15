@@ -65,6 +65,13 @@ class PopulateGoogleSheetJob implements ShouldQueue
         // 5. Parse the submitted form JSON
         $parsedJson = json_decode($response->response_json, true) ?? [];
 
+        // Meta returns response keys based on the Footer on-click-action.payload keys
+        // (e.g. "screen_0_TextArea_0") rather than the component name attributes
+        // (e.g. "TextArea_de923b") that the sheet mapping was built with.
+        // Build a normalized field_name → value map by reversing the Footer payload
+        // expressions (${form.field_name}) found in the flow JSON.
+        $submittedValues = $this->normalizeResponseValues($parsedJson, $flow);
+
         // 6. Build a column-name → value dictionary from the mapping
         $mapping      = $flow->google_sheet_mapping ?? [];
         $columnValues = [];
@@ -82,7 +89,7 @@ class PopulateGoogleSheetJob implements ShouldQueue
                 '__contact_phone' => $contact?->phone ?? '',
                 '__contact_name'  => trim(($contact?->first_name ?? '') . ' ' . ($contact?->last_name ?? '')),
                 '__flow_token'    => $response->flow_token ?? '',
-                default           => $parsedJson[$field] ?? '',
+                default           => $submittedValues[$field] ?? '',
             };
         }
 
@@ -101,6 +108,61 @@ class PopulateGoogleSheetJob implements ShouldQueue
             'organization_id' => $this->organizationId,
             'spreadsheet_id' => $spreadsheetId,
         ]);
+    }
+
+    /**
+     * Normalize the raw Meta response JSON into a field_name → value map.
+     *
+     * Meta returns keys from the Footer on-click-action.payload (e.g. "screen_0_TextArea_0"),
+     * but the sheet mapping references component name attributes (e.g. "TextArea_de923b").
+     * We parse the flow's Footer payload expressions "${form.field_name}" to build the
+     * reverse mapping, so every field_name resolves to the correct submitted value.
+     */
+    private function normalizeResponseValues(array $parsedJson, MetaFlow $flow): array
+    {
+        // Start with direct keys — covers metadata fields and any future Meta format changes
+        $values = $parsedJson;
+
+        if (!$flow->asset_content) {
+            return $values;
+        }
+
+        try {
+            $json    = json_decode($flow->asset_content, true);
+            $screens = $json['screens'] ?? [];
+
+            foreach ($screens as $screen) {
+                $children = $screen['layout']['children'] ?? [];
+
+                foreach ($children as $child) {
+                    // Unwrap Form containers
+                    $items = ($child['type'] === 'Form') ? ($child['children'] ?? []) : [$child];
+
+                    foreach ($items as $item) {
+                        if (($item['type'] ?? '') !== 'Footer') {
+                            continue;
+                        }
+
+                        $payload = $item['on-click-action']['payload'] ?? [];
+
+                        // payload: { "screen_0_TextArea_0": "${form.TextArea_de923b}", ... }
+                        foreach ($payload as $payloadKey => $expression) {
+                            // Extract field name from "${form.field_name}"
+                            if (preg_match('/\$\{form\.(.+?)\}/', (string) $expression, $matches)) {
+                                $fieldName = $matches[1];
+                                if (isset($parsedJson[$payloadKey])) {
+                                    $values[$fieldName] = $parsedJson[$payloadKey];
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (\Throwable) {
+            // Malformed flow JSON — fall back to direct key lookup
+        }
+
+        return $values;
     }
 
     // Log permanent failures after all retries are exhausted
