@@ -6,6 +6,7 @@ use Illuminate\Foundation\Auth\EmailVerificationRequest;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Http;
+use App\Http\Controllers\ShopifyController;
 /*
 |--------------------------------------------------------------------------
 | Web Routes
@@ -16,6 +17,11 @@ use Illuminate\Support\Facades\Http;
 | be assigned to the "web" middleware group. Make something great!
 |
 */
+
+
+Route::get('/new-install', [ShopifyController::class, 'install']);
+
+Route::get('/shopify/callback', [ShopifyController::class, 'callback']);
 
 Route::post('/webhook/{organization}', [App\Http\Controllers\WebhookController::class, 'handlePostRequest'])
     ->whereNumber('organization');
