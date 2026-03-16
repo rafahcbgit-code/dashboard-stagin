@@ -6,7 +6,9 @@ use Illuminate\Foundation\Auth\EmailVerificationRequest;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Http;
-use App\Http\Controllers\ShopifyController;
+use App\Http\Controllers\ShopifyIntegratin\ShopifyAuthController;
+use App\Http\Controllers\ShopifyIntegratin\ShopifyWebhookController;
+
 /*
 |--------------------------------------------------------------------------
 | Web Routes
@@ -19,9 +21,9 @@ use App\Http\Controllers\ShopifyController;
 */
 
 
-Route::get('/new-install', [ShopifyController::class, 'install']);
-
-Route::get('/shopify/callback', [ShopifyController::class, 'callback']);
+Route::get('/new-install', [ShopifyAuthController::class, 'install']);
+Route::get('/shopify/callback', [ShopifyAuthController::class, 'callback']);
+Route::post('/shopify/webhooks/order-created', [ShopifyWebhookController::class, 'handleOrderCreated']);
 
 Route::post('/webhook/{organization}', [App\Http\Controllers\WebhookController::class, 'handlePostRequest'])
     ->whereNumber('organization');
@@ -273,7 +275,7 @@ Route::middleware(['auth:user'])->group(function () {
                     Route::match(['get', 'post'], '/settings/campaign', [App\Http\Controllers\User\SettingController::class, 'campaign']);
 
                     Route::get('/settings/whatsapp', [App\Http\Controllers\User\SettingController::class, 'viewWhatsappSettings']);
-                    Route::get('/settings/plugins', [App\Http\Controllers\User\PluginController::class, 'index']);
+                    Route::get('/settings/plugins', [App\Http\Controllers\User\PluginController::class, 'index'])->name('settings.plugins');
                     Route::get('/plugin/download/{name}', [App\Http\Controllers\User\PluginController::class, 'download'])->name('plugin.download');
                     Route::get('/settings/whatsapp/refresh', [App\Http\Controllers\User\SettingController::class, 'refreshWhatsappData']);
                     Route::post('/settings/whatsapp/token', [App\Http\Controllers\User\SettingController::class, 'updateToken']);

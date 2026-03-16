@@ -33,6 +33,33 @@
                                             </svg>
                                         </div>
                                     </Link>
+                                    <div class="border rounded-lg p-4 mb-6 hover:shadow-md transition-shadow">
+                                        <div class="flex justify-between items-center mb-2">
+                                            <div>
+                                                <div class="font-semibold text-base">{{ $t('Shopify Integration') }}</div>
+                                                <div class="text-sm text-slate-500">{{ $t('Connect your Shopify store to use automation and sync.') }}</div>
+                                            </div>
+                                        </div>
+                                        <div class="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
+                                            <input
+                                                v-model="shopDomain"
+                                                type="text"
+                                                placeholder="shop-name.myshopify.com"
+                                                class="w-full border rounded-lg px-3 py-2"
+                                            />
+                                            <button
+                                                type="button"
+                                                @click="connectShopify"
+                                                class="bg-blue-600 text-white rounded-lg px-4 py-2 hover:bg-blue-700 transition"
+                                            >
+                                                {{ $t('Connect with Shopify') }}
+                                            </button>
+                                        </div>
+                                        <p v-if="shopError" class="text-sm text-red-600 mt-1">{{ shopError }}</p>
+                                        <p class="text-xs text-slate-500 mt-2">
+                                            {{ $t('After authorizing, Shopify will redirect to /shopify/callback.') }}
+                                        </p>
+                                    </div>
                                     <div v-if="plugins.length === 0" class="text-center py-12">
                                         <div class="mx-auto w-24 h-24 text-gray-300 mb-4">
                                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -70,6 +97,18 @@ import { Link } from '@inertiajs/vue3';
 import SettingLayout from "./../Layout.vue";
 
 const props = defineProps(['modules', 'plugins']);
+const shopDomain = ref('');
+const shopError = ref('');
+
+const connectShopify = () => {
+    const shop = shopDomain.value.trim();
+    if (!shop) {
+        shopError.value = 'يرجى إدخال رابط متجر Shopify';
+        return;
+    }
+    shopError.value = '';
+    window.location.href = `/new-install?shop=${encodeURIComponent(shop)}`;
+};
 
 const getPluginComponent = (pluginName) => {
     try {
