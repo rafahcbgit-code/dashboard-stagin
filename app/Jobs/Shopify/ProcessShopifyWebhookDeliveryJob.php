@@ -2,6 +2,7 @@
 
 namespace App\Jobs\Shopify;
 
+use App\Jobs\Shopify\HandleShopifyWebhookDeliveryJob;
 use App\Models\ShopifyWebhookDelivery;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -20,7 +21,9 @@ class ProcessShopifyWebhookDeliveryJob implements ShouldQueue
 
     public function __construct(
         public readonly string $rawBody,
-        public readonly array $headers
+        public readonly array $headers,
+        public readonly int $shopifyStoreId,
+        public readonly ?int $organizationId
     ) {}
 
     public function handle(): void
@@ -28,12 +31,15 @@ class ProcessShopifyWebhookDeliveryJob implements ShouldQueue
         $payload = json_decode($this->rawBody, true) ?? [];
         $payloadHash = hash('sha256', $this->rawBody);
 
-        $existing = ShopifyWebhookDelivery::where('payload_hash', $payloadHash)->first();
+        $existing = ShopifyWebhookDelivery::where('payload_hash', $payloadHash)
+            ->where('shopify_store_id', $this->shopifyStoreId)
+            ->first();
         if ($existing) {
             $existing->increment('attempts');
             Log::info('Shopify webhook duplicate ignored', [
                 'payload_hash' => $payloadHash,
                 'event_id' => data_get($this->headers, 'x-shopify-event-id'),
+                'shopify_store_id' => $this->shopifyStoreId,
             ]);
             return;
         }
@@ -51,6 +57,8 @@ class ProcessShopifyWebhookDeliveryJob implements ShouldQueue
             'hmac' => $headers['x-shopify-hmac-sha256'] ?? null,
             'payload' => $payload,
             'headers' => $headers,
+            'shopify_store_id' => $this->shopifyStoreId,
+            'organization_id' => $this->organizationId,
             'status' => 'received',
             'attempts' => 1,
         ]);
@@ -58,6 +66,8 @@ class ProcessShopifyWebhookDeliveryJob implements ShouldQueue
             Log::warning('Shopify webhook could not be stored', ['payload_hash' => $payloadHash]);
             return;
         }
+
+        HandleShopifyWebhookDeliveryJob::dispatch($stored->id);
 
         Log::info('Shopify webhook stored', [
             'shop_domain' => data_get($this->headers, 'x-shopify-shop-domain'),

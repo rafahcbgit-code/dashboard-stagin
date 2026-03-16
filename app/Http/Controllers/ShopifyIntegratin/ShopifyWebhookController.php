@@ -31,7 +31,9 @@ class ShopifyWebhookController extends Controller
 
         ProcessShopifyWebhookDeliveryJob::dispatch(
             $request->getContent(),
-            $request->headers->all()
+            $request->headers->all(),
+            $store->id,
+            $store->organization_id
         );
 
         Log::info('New Order Received from Shopify webhook', [
@@ -43,4 +45,3 @@ class ShopifyWebhookController extends Controller
         return response()->json(['status' => 'success'], 200);
     }
 }
-

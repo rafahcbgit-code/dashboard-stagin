@@ -198,6 +198,11 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::post('/settings/salla/automations/communication-whatsapp-send', [App\Http\Controllers\User\SallaAutomationController::class, 'updateCommunicationWhatsappSend'])->name('salla.automations.communication_whatsapp_send.update');
                 Route::get('/settings/salla/message-logs', [App\Http\Controllers\User\SallaMessageLogController::class, 'index'])->name('salla.logs.index');
                
+                Route::get('/settings/shopify/automations', [App\Http\Controllers\User\ShopifyAutomationController::class, 'index'])->name('shopify.automations.index');
+                Route::get('/settings/shopify/automations/template/{templateId}/variables', [App\Http\Controllers\User\ShopifyAutomationController::class, 'templateVariables'])->whereNumber('templateId');
+                Route::get('/settings/shopify/automations/order-created/webhook-fields', [App\Http\Controllers\User\ShopifyAutomationController::class, 'webhookFields'])->name('shopify.automations.order_created.fields');
+                Route::post('/settings/shopify/automations/order-created', [App\Http\Controllers\User\ShopifyAutomationController::class, 'updateOrderCreated'])->name('shopify.automations.order_created.update');
+
                 Route::post('/settings/salla/customer-sync', [App\Http\Controllers\Salla\CustomerSyncController::class, 'sync'])->name('salla.customer.sync');
              
                 Route::get('/settings/salla/message-logs/export', [App\Http\Controllers\User\SallaMessageLogController::class, 'export'])->name('salla.logs.export');

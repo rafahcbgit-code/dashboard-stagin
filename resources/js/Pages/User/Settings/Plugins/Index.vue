@@ -59,6 +59,9 @@
                                         <p class="text-xs text-slate-500 mt-2">
                                             {{ $t('After authorizing, Shopify will redirect to /shopify/callback.') }}
                                         </p>
+                                        <Link href="/settings/shopify/automations" class="text-xs text-slate-500 mt-1 inline-block hover:text-blue-600">
+                                            {{ $t('Configure Shopify Automations') }}
+                                        </Link>
                                     </div>
                                     <div v-if="plugins.length === 0" class="text-center py-12">
                                         <div class="mx-auto w-24 h-24 text-gray-300 mb-4">
