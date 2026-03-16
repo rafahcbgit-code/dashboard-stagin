@@ -48,6 +48,7 @@ class MetaFlowController extends BaseController
 
         $flow = MetaFlow::where('uuid', $uuid)
             ->where('organization_id', session()->get('current_organization'))
+            ->withCount(['responses' => fn($q) => $q->whereNotNull('response_json')])
             ->firstOrFail();
 
         $data['flow'] = $flow;
