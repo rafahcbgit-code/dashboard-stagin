@@ -241,21 +241,30 @@ class ShopifyAuthController extends Controller
     private function registerWebhooks($shop, $accessToken)
     {
         $url = "https://{$shop}/admin/api/2024-01/webhooks.json";
+        $topics = [
+            'orders/create',   // عند إنشاء طلب جديد (لإرسال رسالة ترحيب/تأكيد)
+            'orders/updated',  // عند أي تعديل على الطلب أو تغيير حالته العامة
+            'orders/fulfilled' // عند شحن الطلب (لإرسال رقم التتبع للعميل)
+        ];
 
+        foreach ($topics as $topic) {
         $response = Http::withHeaders([
             'X-Shopify-Access-Token' => $accessToken,
         ])->post($url, [
             'webhook' => [
-                'topic' => 'orders/create', // الحدث: إنشاء طلب جديد
+                'topic'   => $topic, 
                 'address' => 'https://molecular-felicidad-irrotationally.ngrok-free.dev/shopify/webhooks/order-created', // رابط الاستقبال لديك
                 'format' => 'json'
             ]
         ]);
 
-        if ($response->successful()) {
-            Log::info("Webhook registered successfully for $shop");
+       if ($response->successful()) {
+            Log::info("Webhook [{$topic}] registered successfully for $shop");
         } else {
-            Log::error("Failed to register webhook for $shop", ['response' => $response->body()]);
+            Log::error("Failed to register webhook [{$topic}] for $shop", [
+                'response' => $response->body()
+            ]);
+        }
         }
     }
 }
