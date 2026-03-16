@@ -162,6 +162,7 @@ class MetaFlowController extends BaseController
         $flows = MetaFlow::where('organization_id', $orgId)
             ->where('status', 'published')
             ->whereNotNull('meta_flow_id')
+            ->whereNotNull('asset_content')
             ->orderBy('name')
             ->get(['uuid', 'name', 'categories', 'status', 'meta_flow_id', 'asset_content'])
             ->map(function ($flow) {
