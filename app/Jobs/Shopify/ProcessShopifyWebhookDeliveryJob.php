@@ -32,6 +32,21 @@ class ProcessShopifyWebhookDeliveryJob implements ShouldQueue
         $payload = json_decode($this->rawBody, true) ?? [];
         $payloadHash = hash('sha256', $this->rawBody);
 
+        $headers = collect($this->headers)
+            ->map(fn($value) => is_array($value) ? $value[0] : $value)
+            ->toArray();
+
+        $topic = $this->normalizeTopic($headers['x-shopify-topic'] ?? null);
+
+        if ($topic === 'checkouts/create' && data_get($payload, 'phone')) {
+            Log::info('Shopify checkouts/create webhook skipped because payload already contains phone', [
+                'shopify_store_id' => $this->shopifyStoreId,
+                'payload_hash' => $payloadHash,
+            ]);
+
+            return;
+        }
+
         $existing = ShopifyWebhookDelivery::where('payload_hash', $payloadHash)
             ->where('shopify_store_id', $this->shopifyStoreId)
             ->first();
@@ -45,11 +60,6 @@ class ProcessShopifyWebhookDeliveryJob implements ShouldQueue
             return;
         }
 
-        $headers = collect($this->headers)
-            ->map(fn($value) => is_array($value) ? $value[0] : $value)
-            ->toArray();
-
-        $topic = $this->normalizeTopic($headers['x-shopify-topic'] ?? null);
         $delayHours = $this->getScheduledDelayHours($topic);
         $scheduledFor = $delayHours > 0 ? now()->addHours($delayHours) : null;
 
