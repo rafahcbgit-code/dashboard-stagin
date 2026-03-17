@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 use App\Http\Controllers\Admin\SallaAppInstallationController;
 use App\Models\Language;
@@ -26,6 +26,7 @@ Route::get('/shopify/callback', [ShopifyAuthController::class, 'callback']);
 Route::post('/shopify/webhooks/order-created', [ShopifyWebhookController::class, 'handleOrderCreated']);
 Route::post('/shopify/webhooks/orders-updated', [ShopifyWebhookController::class, 'handleOrderUpdated']);
 Route::post('/shopify/webhooks/orders-fulfilled', [ShopifyWebhookController::class, 'handleOrderFulfilled']);
+Route::post('/shopify/webhooks/checkouts-created', [ShopifyWebhookController::class, 'handleCheckoutsCreated']);
 
 Route::post('/webhook/{organization}', [App\Http\Controllers\WebhookController::class, 'handlePostRequest'])
     ->whereNumber('organization');
@@ -204,8 +205,12 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::get('/settings/shopify/automations/template/{templateId}/variables', [App\Http\Controllers\User\ShopifyAutomationController::class, 'templateVariables'])->whereNumber('templateId');
                 Route::get('/settings/shopify/automations/order-created/webhook-fields', [App\Http\Controllers\User\ShopifyAutomationController::class, 'webhookFields'])->name('shopify.automations.order_created.fields');
                 Route::post('/settings/shopify/automations/order-created', [App\Http\Controllers\User\ShopifyAutomationController::class, 'updateOrderCreated'])->name('shopify.automations.order_created.update');
+                Route::get('/settings/shopify/automations/checkouts-created/webhook-fields', [App\Http\Controllers\User\ShopifyAutomationController::class, 'webhookFieldsCheckoutsCreated'])->name('shopify.automations.checkouts_created.fields');
+                Route::post('/settings/shopify/automations/checkouts-created', [App\Http\Controllers\User\ShopifyAutomationController::class, 'updateCheckoutsCreated'])->name('shopify.automations.checkouts_created.update');
                 Route::get('/settings/shopify/automations/orders-fulfilled/webhook-fields', [App\Http\Controllers\User\ShopifyAutomationController::class, 'webhookFieldsOrderFulfilled'])->name('shopify.automations.orders_fulfilled.fields');
                 Route::post('/settings/shopify/automations/orders-fulfilled', [App\Http\Controllers\User\ShopifyAutomationController::class, 'updateOrderFulfilled'])->name('shopify.automations.orders_fulfilled.update');
+                Route::get('/settings/shopify/automations/orders-fulfilled/notification/webhook-fields', [App\Http\Controllers\User\ShopifyAutomationController::class, 'webhookFieldsOrderFulfilledNotification'])->name('shopify.automations.orders_fulfilled.notification.fields');
+                Route::post('/settings/shopify/automations/orders-fulfilled/notification', [App\Http\Controllers\User\ShopifyAutomationController::class, 'updateOrderFulfilledNotification'])->name('shopify.automations.orders_fulfilled.notification.update');
 
                 Route::post('/settings/salla/customer-sync', [App\Http\Controllers\Salla\CustomerSyncController::class, 'sync'])->name('salla.customer.sync');
              
@@ -409,3 +414,7 @@ Route::prefix('admin')->middleware(['auth:admin'])->group(function () {
     Route::post('/webhook-failures/{id}/retry', [App\Http\Controllers\Admin\WebhookFailureController::class, 'retry']);
     Route::delete('/webhook-failures/{id}', [App\Http\Controllers\Admin\WebhookFailureController::class, 'destroy']);
 });
+
+
+
+

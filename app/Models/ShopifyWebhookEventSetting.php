@@ -13,6 +13,7 @@ class ShopifyWebhookEventSetting extends Model
 
     protected $casts = [
         'enabled' => 'boolean',
+        'delay_hours' => 'integer',
     ];
 
     public function organization()

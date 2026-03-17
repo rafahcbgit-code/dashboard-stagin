@@ -48,6 +48,16 @@ class ShopifyOrderFulfilledHandler implements ShopifyWebhookEventHandlerInterfac
             return;
         }
 
+        $topic = strtolower(trim((string) ($delivery->topic ?? '')));
+        if ($topic !== 'orders/updated') {
+            $delivery->update([
+                'status' => 'ignored',
+                'processed_at' => now(),
+                'error' => 'topic_not_supported',
+            ]);
+            return;
+        }
+
         if (!$setting->template_id) {
             $delivery->update([
                 'status' => 'skipped',

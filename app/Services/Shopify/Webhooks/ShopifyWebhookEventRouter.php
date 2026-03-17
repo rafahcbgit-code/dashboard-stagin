@@ -2,15 +2,18 @@
 
 namespace App\Services\Shopify\Webhooks;
 
+use App\Services\Shopify\Webhooks\Handlers\ShopifyCheckoutCreatedHandler;
 use App\Services\Shopify\Webhooks\Handlers\ShopifyOrderCreatedHandler;
 use App\Services\Shopify\Webhooks\Handlers\ShopifyOrderFulfilledHandler;
+use App\Services\Shopify\Webhooks\Handlers\ShopifyOrderFulfillmentNotificationHandler;
 
 class ShopifyWebhookEventRouter
 {
     private array $map = [
         'orders/create' => ShopifyOrderCreatedHandler::class,
-        'orders/fulfilled' => ShopifyOrderFulfilledHandler::class,
         'orders/updated' => ShopifyOrderFulfilledHandler::class,
+        'orders/fulfilled' => ShopifyOrderFulfillmentNotificationHandler::class,
+        'checkouts/create' => ShopifyCheckoutCreatedHandler::class,
     ];
 
     public function resolve(?string $event): ?ShopifyWebhookEventHandlerInterface

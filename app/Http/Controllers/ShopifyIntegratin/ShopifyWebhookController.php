@@ -61,6 +61,11 @@ class ShopifyWebhookController extends Controller
         return $this->processWebhook($request, 'orders/fulfilled');
     }
 
+    public function handleCheckoutsCreated(Request $request)
+    {
+        return $this->processWebhook($request, 'checkouts/create');
+    }
+
     /**
      * Common logic to handle Shopify webhooks
      * This keeps your code clean (DRY - Don't Repeat Yourself)

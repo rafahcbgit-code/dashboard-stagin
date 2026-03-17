@@ -16,6 +16,7 @@ class ShopifyWebhookDelivery extends Model
     protected $casts = [
         'processed_at' => 'datetime',
         'sent_chat_id' => 'integer',
+        'scheduled_for' => 'datetime',
     ];
 
     public function organization()

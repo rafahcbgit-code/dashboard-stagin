@@ -244,7 +244,8 @@ class ShopifyAuthController extends Controller
         $topics = [
             'orders/create',   // عند إنشاء طلب جديد (لإرسال رسالة ترحيب/تأكيد)
             'orders/updated',  // عند أي تعديل على الطلب أو تغيير حالته العامة
-            'orders/fulfilled' // عند شحن الطلب (لإرسال رقم التتبع للعميل)
+            'orders/fulfilled' ,// عند شحن الطلب (لإرسال رقم التتبع للعميل)
+            'checkouts/create'
         ];
 
         foreach ($topics as $topic) {
