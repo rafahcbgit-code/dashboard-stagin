@@ -23,6 +23,7 @@ use App\Http\Controllers\ShopifyIntegratin\ShopifyWebhookController;
 
 Route::get('/new-install', [ShopifyAuthController::class, 'install']);
 Route::get('/shopify/callback', [ShopifyAuthController::class, 'callback']);
+Route::get('/shopify/install/success', [ShopifyAuthController::class, 'installSuccess'])->name('shopify.install.success');
 Route::post('/shopify/webhooks/order-created', [ShopifyWebhookController::class, 'handleOrderCreated']);
 Route::post('/shopify/webhooks/orders-updated', [ShopifyWebhookController::class, 'handleOrderUpdated']);
 Route::post('/shopify/webhooks/orders-fulfilled', [ShopifyWebhookController::class, 'handleOrderFulfilled']);

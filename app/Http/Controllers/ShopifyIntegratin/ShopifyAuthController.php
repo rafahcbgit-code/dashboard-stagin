@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use App\Models\ShopifyStore;
 use App\Http\Controllers\Controller;
+use Inertia\Inertia;
 
 class ShopifyAuthController extends Controller
 {
@@ -78,6 +79,14 @@ class ShopifyAuthController extends Controller
 
         // Redirect the merchant to Shopify authorization page
         return redirect($installUrl);
+    }
+
+    public function installSuccess()
+    {
+        return Inertia::render('Shopify/InstallSuccess', [
+            'contactEmail' => 'info@chatberry.net',
+            'whatsapp' => '+966542922948',
+        ]);
     }
 
     /**
@@ -177,9 +186,7 @@ class ShopifyAuthController extends Controller
             }
 
             // Fallback for public installs (e.g., directly from Shopify App Store)
-            return response()->json([
-                'message' => 'App installed successfully in ' . $shop
-            ], 200);
+            return redirect()->route('shopify.install.success');
         }
 
         /**
@@ -242,9 +249,9 @@ class ShopifyAuthController extends Controller
     {
         $url = "https://{$shop}/admin/api/2024-01/webhooks.json";
         $topics = [
-            'orders/create',   // عند إنشاء طلب جديد (لإرسال رسالة ترحيب/تأكيد)
-            'orders/updated',  // عند أي تعديل على الطلب أو تغيير حالته العامة
-            'orders/fulfilled' ,// عند شحن الطلب (لإرسال رقم التتبع للعميل)
+            'orders/create',  
+            'orders/updated', 
+            'orders/fulfilled' ,
             'checkouts/create'
         ];
 
@@ -254,7 +261,7 @@ class ShopifyAuthController extends Controller
         ])->post($url, [
             'webhook' => [
                 'topic'   => $topic, 
-                'address' => 'https://molecular-felicidad-irrotationally.ngrok-free.dev/shopify/webhooks/order-created', // رابط الاستقبال لديك
+                'address' => 'https://molecular-felicidad-irrotationally.ngrok-free.dev/shopify/webhooks/order-created', 
                 'format' => 'json'
             ]
         ]);
