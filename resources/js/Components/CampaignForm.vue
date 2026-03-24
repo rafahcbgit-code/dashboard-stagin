@@ -325,6 +325,43 @@ const extractComponent = (data, type, customProperty) => {
   return component ? component[customProperty] : null;
 };
 
+const resolveTierLimit = (tier) => {
+  if (!tier) return 250;
+
+  const normalizedTier = tier.toString().trim().toUpperCase();
+
+  if (normalizedTier === 'TIER_UNLIMITED') return Number.MAX_SAFE_INTEGER;
+
+  const matched = normalizedTier.match(/TIER_(\d+)(K?)/i);
+  if (!matched) return 250;
+
+  const value = Number(matched[1]);
+  return matched[2].toUpperCase() === 'K' ? value * 1000 : value;
+};
+
+const validateGroupLimit = () => {
+  if (!settings.value?.whatsapp || !form.contacts || form.contacts === 'all') return true;
+
+  const messagingTier = settings.value?.whatsapp?.messaging_limit_tier;
+  const maxContacts = resolveTierLimit(messagingTier);
+
+  const selectedGroup = props.contactGroups.find((group) => group.uuid === form.contacts);
+  if (!selectedGroup || selectedGroup.contacts_count === undefined) return true;
+
+  if (selectedGroup.contacts_count > maxContacts) {
+    form.setError(
+      'contacts',
+      trans(
+        'The selected group has :count contacts, which exceeds the messaging limit of :limit for your current WhatsApp tier.',
+        { count: selectedGroup.contacts_count, limit: maxContacts },
+      ),
+    );
+    return false;
+  }
+
+  return true;
+};
+
 const transformOptions = (options) => {
   return options.map((option) => ({
     value: option.uuid,
@@ -383,6 +420,12 @@ const submitForm = () => {
   }
 
   if (hasValidationError) {
+    isLoading.value = false;
+    return;
+  }
+
+  // 客户端：تحقق من حد رسائل Whatsapp قبل الإرسال
+  if (!validateGroupLimit()) {
     isLoading.value = false;
     return;
   }
