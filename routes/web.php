@@ -1,4 +1,4 @@
-<?php
+﻿<?php
 
 use App\Http\Controllers\Admin\SallaAppInstallationController;
 use App\Models\Language;
@@ -6,6 +6,9 @@ use Illuminate\Foundation\Auth\EmailVerificationRequest;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Http;
+use App\Http\Controllers\ShopifyIntegratin\ShopifyAuthController;
+use App\Http\Controllers\ShopifyIntegratin\ShopifyWebhookController;
+
 /*
 |--------------------------------------------------------------------------
 | Web Routes
@@ -16,6 +19,15 @@ use Illuminate\Support\Facades\Http;
 | be assigned to the "web" middleware group. Make something great!
 |
 */
+
+
+Route::get('/new-install', [ShopifyAuthController::class, 'install']);
+Route::get('/shopify/callback', [ShopifyAuthController::class, 'callback']);
+Route::get('/shopify/install/success', [ShopifyAuthController::class, 'installSuccess'])->name('shopify.install.success');
+Route::post('/shopify/webhooks/order-created', [ShopifyWebhookController::class, 'handleOrderCreated']);
+Route::post('/shopify/webhooks/orders-updated', [ShopifyWebhookController::class, 'handleOrderUpdated']);
+Route::post('/shopify/webhooks/orders-fulfilled', [ShopifyWebhookController::class, 'handleOrderFulfilled']);
+Route::post('/shopify/webhooks/checkouts-created', [ShopifyWebhookController::class, 'handleCheckoutsCreated']);
 
 Route::post('/webhook/{organization}', [App\Http\Controllers\WebhookController::class, 'handlePostRequest'])
     ->whereNumber('organization');
@@ -190,6 +202,17 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::post('/settings/salla/automations/communication-whatsapp-send', [App\Http\Controllers\User\SallaAutomationController::class, 'updateCommunicationWhatsappSend'])->name('salla.automations.communication_whatsapp_send.update');
                 Route::get('/settings/salla/message-logs', [App\Http\Controllers\User\SallaMessageLogController::class, 'index'])->name('salla.logs.index');
                
+                Route::get('/settings/shopify/automations', [App\Http\Controllers\User\ShopifyAutomationController::class, 'index'])->name('shopify.automations.index');
+                Route::get('/settings/shopify/automations/template/{templateId}/variables', [App\Http\Controllers\User\ShopifyAutomationController::class, 'templateVariables'])->whereNumber('templateId');
+                Route::get('/settings/shopify/automations/order-created/webhook-fields', [App\Http\Controllers\User\ShopifyAutomationController::class, 'webhookFields'])->name('shopify.automations.order_created.fields');
+                Route::post('/settings/shopify/automations/order-created', [App\Http\Controllers\User\ShopifyAutomationController::class, 'updateOrderCreated'])->name('shopify.automations.order_created.update');
+                Route::get('/settings/shopify/automations/checkouts-created/webhook-fields', [App\Http\Controllers\User\ShopifyAutomationController::class, 'webhookFieldsCheckoutsCreated'])->name('shopify.automations.checkouts_created.fields');
+                Route::post('/settings/shopify/automations/checkouts-created', [App\Http\Controllers\User\ShopifyAutomationController::class, 'updateCheckoutsCreated'])->name('shopify.automations.checkouts_created.update');
+                Route::get('/settings/shopify/automations/orders-fulfilled/webhook-fields', [App\Http\Controllers\User\ShopifyAutomationController::class, 'webhookFieldsOrderFulfilled'])->name('shopify.automations.orders_fulfilled.fields');
+                Route::post('/settings/shopify/automations/orders-fulfilled', [App\Http\Controllers\User\ShopifyAutomationController::class, 'updateOrderFulfilled'])->name('shopify.automations.orders_fulfilled.update');
+                Route::get('/settings/shopify/automations/orders-fulfilled/notification/webhook-fields', [App\Http\Controllers\User\ShopifyAutomationController::class, 'webhookFieldsOrderFulfilledNotification'])->name('shopify.automations.orders_fulfilled.notification.fields');
+                Route::post('/settings/shopify/automations/orders-fulfilled/notification', [App\Http\Controllers\User\ShopifyAutomationController::class, 'updateOrderFulfilledNotification'])->name('shopify.automations.orders_fulfilled.notification.update');
+
                 Route::post('/settings/salla/customer-sync', [App\Http\Controllers\Salla\CustomerSyncController::class, 'sync'])->name('salla.customer.sync');
              
                 Route::get('/settings/salla/message-logs/export', [App\Http\Controllers\User\SallaMessageLogController::class, 'export'])->name('salla.logs.export');
@@ -267,7 +290,7 @@ Route::middleware(['auth:user'])->group(function () {
                     Route::match(['get', 'post'], '/settings/campaign', [App\Http\Controllers\User\SettingController::class, 'campaign']);
 
                     Route::get('/settings/whatsapp', [App\Http\Controllers\User\SettingController::class, 'viewWhatsappSettings']);
-                    Route::get('/settings/plugins', [App\Http\Controllers\User\PluginController::class, 'index']);
+                    Route::get('/settings/plugins', [App\Http\Controllers\User\PluginController::class, 'index'])->name('settings.plugins');
                     Route::get('/plugin/download/{name}', [App\Http\Controllers\User\PluginController::class, 'download'])->name('plugin.download');
                     Route::get('/settings/whatsapp/refresh', [App\Http\Controllers\User\SettingController::class, 'refreshWhatsappData']);
                     Route::post('/settings/whatsapp/token', [App\Http\Controllers\User\SettingController::class, 'updateToken']);
@@ -392,3 +415,7 @@ Route::prefix('admin')->middleware(['auth:admin'])->group(function () {
     Route::post('/webhook-failures/{id}/retry', [App\Http\Controllers\Admin\WebhookFailureController::class, 'retry']);
     Route::delete('/webhook-failures/{id}', [App\Http\Controllers\Admin\WebhookFailureController::class, 'destroy']);
 });
+
+
+
+

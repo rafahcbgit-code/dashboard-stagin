@@ -12,6 +12,7 @@ use App\Models\Contact;
 use App\Models\Organization;
 use App\Models\Setting;
 use App\Models\Template;
+use App\Models\Subscription;
 use App\Services\ContactFieldService;
 use App\Services\WhatsappService;
 use Illuminate\Http\Request;
@@ -23,6 +24,21 @@ class PluginController extends BaseController
 {
     public function index(Request $request){
         if ($request->isMethod('get')) {
+            $organizationId = session()->get('current_organization');
+            $subscription = Subscription::with('plan')
+                ->where('organization_id', $organizationId)
+                ->first();
+            $plan = $subscription?->plan;
+            $currentPlanName = $plan?->name ?? null;
+            $shopifyAccessAllowed = true;
+
+            if ($plan && $plan->metadata) {
+                $planMetadata = json_decode($plan->metadata, true) ?? [];
+                if (array_key_exists('shopify_integration_enabled', $planMetadata)) {
+                    $shopifyAccessAllowed = (bool) $planMetadata['shopify_integration_enabled'];
+                }
+            }
+
             $data['title'] = __('Plugin Settings');
             $data['modules'] = Addon::get();
             $allModules = Addon::where('category', 'plugins')->where('is_active', 1)->where('status', 1)->get();
@@ -41,6 +57,8 @@ class PluginController extends BaseController
                 }
                 return $module;
             });
+            $data['shopifyAccessAllowed'] = $shopifyAccessAllowed;
+            $data['currentPlanName'] = $currentPlanName;
             
             return Inertia::render('User/Settings/Plugins/Index', $data);
         }
