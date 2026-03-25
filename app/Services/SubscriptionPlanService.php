@@ -46,6 +46,9 @@ class SubscriptionPlanService
         $sallaIntegrationEnabled = $request->has('salla_integration_enabled')
             ? (bool) $request->input('salla_integration_enabled')
             : false;
+        $shopifyIntegrationEnabled = $request->has('shopify_integration_enabled')
+            ? (bool) $request->input('shopify_integration_enabled')
+            : false;
 
         $newSubscriptionPlan = SubscriptionPlan::create([
             'name' => $request->input('name'),
@@ -62,7 +65,8 @@ class SubscriptionPlanService
                 'ai_text_response_limit' => $request->input('ai_text_response_limit'),
                 'ai_audio_response_limit' => $request->input('ai_audio_response_limit'),
                 'addons' => $request->input('addons', []),
-                'salla_integration_enabled' => $sallaIntegrationEnabled
+                'salla_integration_enabled' => $sallaIntegrationEnabled,
+                'shopify_integration_enabled' => $shopifyIntegrationEnabled
             ]),
         ]);
 
@@ -102,6 +106,9 @@ class SubscriptionPlanService
         $metadata['salla_integration_enabled'] = $request->has('salla_integration_enabled')
             ? (bool) $request->input('salla_integration_enabled')
             : ($metadata['salla_integration_enabled'] ?? false);
+        $metadata['shopify_integration_enabled'] = $request->has('shopify_integration_enabled')
+            ? (bool) $request->input('shopify_integration_enabled')
+            : ($metadata['shopify_integration_enabled'] ?? false);
 
         $plan->name = $request->input('name');
         $plan->price = $request->input('price');

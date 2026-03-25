@@ -40,26 +40,37 @@
                                                 <div class="text-sm text-slate-500">{{ $t('Connect your Shopify store to use automation and sync.') }}</div>
                                             </div>
                                         </div>
-                                        <div class="mt-3 grid gap-2 sm:grid-cols-[1fr_auto]">
-                                            <input
-                                                v-model="shopDomain"
-                                                type="text"
-                                                placeholder="shop-name.myshopify.com"
-                                                class="w-full border rounded-lg px-3 py-2"
-                                            />
-                                            <button
-                                                type="button"
-                                                @click="connectShopify"
-                                                class="bg-blue-600 text-white rounded-lg px-4 py-2 hover:bg-blue-700 transition"
-                                            >
-                                                {{ $t('Connect with Shopify') }}
-                                            </button>
+                                        <div class="mt-3">
+                                            <div v-if="props.shopifyAccessAllowed" class="grid gap-2 sm:grid-cols-[1fr_auto]">
+                                                <input
+                                                    v-model="shopDomain"
+                                                    type="text"
+                                                    placeholder="shop-name.myshopify.com"
+                                                    class="w-full border rounded-lg px-3 py-2"
+                                                />
+                                                <button
+                                                    type="button"
+                                                    @click="connectShopify"
+                                                    class="bg-blue-600 text-white rounded-lg px-4 py-2 hover:bg-blue-700 transition"
+                                                >
+                                                    {{ $t('Connect with Shopify') }}
+                                                </button>
+                                            </div>
+                                            <div v-else class="rounded-lg border border-rose-200 bg-rose-50 p-4 text-sm text-rose-900 space-y-2">
+                                                <p>{{ $t('Shopify integration is available for eligible plans only.') }}</p>
+                                                <p class="text-xs text-slate-700">
+                                                    {{ $t('Current plan') }}: <strong>{{ props.currentPlanName || $t('No plan assigned') }}</strong>
+                                                </p>
+                                                <Link href="/billing" class="inline-flex items-center gap-1 text-xs font-semibold text-rose-700 hover:text-rose-900">
+                                                    {{ $t('Upgrade your plan to unlock Shopify integration') }}
+                                                </Link>
+                                            </div>
                                         </div>
-                                        <p v-if="shopError" class="text-sm text-red-600 mt-1">{{ shopError }}</p>
-                                        <p class="text-xs text-slate-500 mt-2">
+                                        <p v-if="shopError && props.shopifyAccessAllowed" class="text-sm text-red-600 mt-1">{{ shopError }}</p>
+                                        <p v-if="props.shopifyAccessAllowed" class="text-xs text-slate-500 mt-2">
                                             {{ $t('After authorizing, Shopify will redirect to /shopify/callback.') }}
                                         </p>
-                                        <Link href="/settings/shopify/automations" class="text-xs text-slate-500 mt-1 inline-block hover:text-blue-600">
+                                        <Link v-if="props.shopifyAccessAllowed" href="/settings/shopify/automations" class="text-xs text-slate-500 mt-1 inline-block hover:text-blue-600">
                                             {{ $t('Configure Shopify Automations') }}
                                         </Link>
                                     </div>
@@ -99,11 +110,31 @@ import { ref, defineAsyncComponent } from 'vue';
 import { Link } from '@inertiajs/vue3';
 import SettingLayout from "./../Layout.vue";
 
-const props = defineProps(['modules', 'plugins']);
+const props = defineProps({
+    modules: {
+        type: Array,
+        default: () => []
+    },
+    plugins: {
+        type: Array,
+        default: () => []
+    },
+    shopifyAccessAllowed: {
+        type: Boolean,
+        default: true
+    },
+    currentPlanName: {
+        type: String,
+        default: ''
+    }
+});
 const shopDomain = ref('');
 const shopError = ref('');
 
 const connectShopify = () => {
+    if (!props.shopifyAccessAllowed) {
+        return;
+    }
     const shop = shopDomain.value.trim();
     if (!shop) {
         shopError.value = 'يرجى إدخال رابط متجر Shopify';

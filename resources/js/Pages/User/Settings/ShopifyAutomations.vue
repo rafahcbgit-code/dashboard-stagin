@@ -1,6 +1,6 @@
 ﻿<template>
     <AppLayout>
-        <div class="bg-white md:bg-inherit pt-10 px-4 md:pt-8 md:p-8 rounded-[5px] text-[#000] h-full md:overflow-y-auto">
+        <div v-if="props.shopifyAccessAllowed" class="bg-white md:bg-inherit pt-10 px-4 md:pt-8 md:p-8 rounded-[5px] text-[#000] h-full md:overflow-y-auto">
             <div class="flex justify-between mb-6">
                 <div>
                     <h1 class="text-xl mb-1">{{ $t('Shopify Automations') }}</h1>
@@ -411,6 +411,24 @@
                 </div>
             </div>
         </div>
+        <div v-else class="bg-white border border-slate-200 rounded-lg p-8 text-center mx-auto max-w-2xl shadow-sm">
+            <div class="mb-4">
+                <svg class="mx-auto h-12 w-12 text-gray-400" xmlns="http://www.w3.org/2000/svg" fill="none"
+                     viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                          d="M13 16h-1v-4h1m0-2h-1v-1h1m-1 11a9 9 0 1 0 0-18a9 9 0 0 0 0 18Z" />
+                </svg>
+            </div>
+            <h3 class="text-lg font-semibold mb-2">{{ $t('Shopify integration is available on eligible plans only.') }}</h3>
+            <p class="text-sm text-gray-600 mb-2">
+                {{ $t('Current plan') }}: <strong>{{ props.currentPlanName || $t('No plan assigned') }}</strong>
+            </p>
+            <p class="text-sm text-gray-600 mb-6">{{ $t('Shopify integration is currently disabled on this plan.') }}</p>
+            <Link href="/billing"
+                  class="inline-flex items-center justify-center gap-2 px-6 py-3 bg-[#5C3A76] hover:bg-[#4a2f5f] text-white rounded-lg transition-colors">
+                {{ $t('Upgrade your plan to unlock Shopify integration') }}
+            </Link>
+        </div>
     </AppLayout>
 </template>
 
@@ -491,6 +509,14 @@ const props = defineProps({
     fulfilledNotificationMappings: {
         type: Object,
         default: () => ({})
+    },
+    shopifyAccessAllowed: {
+        type: Boolean,
+        default: true
+    },
+    currentPlanName: {
+        type: String,
+        default: ''
     }
 });
 

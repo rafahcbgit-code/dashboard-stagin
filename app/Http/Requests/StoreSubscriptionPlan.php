@@ -31,6 +31,7 @@ class StoreSubscriptionPlan extends FormRequest
             'canned_replies_limit' => 'required|numeric|gte:-1',
             'status' => 'required',
             'salla_integration_enabled' => 'sometimes|boolean',
+            'shopify_integration_enabled' => 'sometimes|boolean',
         ];
 
         return $rules;

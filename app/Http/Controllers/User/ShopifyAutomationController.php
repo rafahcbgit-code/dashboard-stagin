@@ -5,6 +5,7 @@ namespace App\Http\Controllers\User;
 use App\Http\Controllers\Controller as BaseController;
 use App\Models\ShopifyWebhookDelivery;
 use App\Models\ShopifyWebhookEventSetting;
+use App\Models\Subscription;
 use App\Models\Template;
 use App\Services\Shopify\Webhooks\Schemas\ShopifyCheckoutCreatedFieldSchema;
 use App\Services\Shopify\Webhooks\Schemas\ShopifyOrderCreatedFieldSchema;
@@ -22,6 +23,19 @@ class ShopifyAutomationController extends BaseController
         WhatsAppTemplateVariableExtractor $extractor
     ) {
         $organizationId = (int) session()->get('current_organization');
+        $subscription = Subscription::with('plan')
+            ->where('organization_id', $organizationId)
+            ->first();
+        $plan = $subscription?->plan;
+        $currentPlanName = $plan?->name ?? null;
+        $shopifyAccessAllowed = true;
+
+        if ($plan && $plan->metadata) {
+            $planMetadata = json_decode($plan->metadata, true) ?? [];
+            if (array_key_exists('shopify_integration_enabled', $planMetadata)) {
+                $shopifyAccessAllowed = (bool) $planMetadata['shopify_integration_enabled'];
+            }
+        }
 
         $setting = ShopifyWebhookEventSetting::with('mappings')
             ->where('organization_id', $organizationId)
@@ -210,6 +224,8 @@ class ShopifyAutomationController extends BaseController
             'fulfilledNotificationTemplateVariables' => $fulfilledNotificationTemplateVariables,
             'fulfilledNotificationWebhookFields' => $fulfilledNotificationWebhookFields,
             'fulfilledNotificationMappings' => $fulfilledNotificationMappings,
+            'shopifyAccessAllowed' => $shopifyAccessAllowed,
+            'currentPlanName' => $currentPlanName,
         ]);
     }
 
