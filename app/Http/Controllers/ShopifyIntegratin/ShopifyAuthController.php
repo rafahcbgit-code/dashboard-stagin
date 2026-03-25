@@ -27,7 +27,7 @@ class ShopifyAuthController extends Controller
         $this->scopes = env('SHOPIFY_SCOPES');
 
         // The URL Shopify will redirect to after the merchant approves the app
-        $this->redirectUri = "http://localhost:8000/shopify/callback";
+        $this->redirectUri = "https://dashboard.chatberry.net/shopify/callback";
     }
 
     /**
@@ -261,7 +261,7 @@ class ShopifyAuthController extends Controller
         ])->post($url, [
             'webhook' => [
                 'topic'   => $topic, 
-                'address' => 'https://molecular-felicidad-irrotationally.ngrok-free.dev/shopify/webhooks/order-created', 
+                'address' => 'https://dashboard.chatberry.net/shopify/webhooks/order-created', 
                 'format' => 'json'
             ]
         ]);
