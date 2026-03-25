@@ -73,6 +73,7 @@ class CampaignController extends BaseController
                 'trial' => $showStats,
             ]);
         } elseif ($uuid == 'create') {
+            
             $data['settings'] = Organization::where('id', $organizationId)->first();
             $data['templates'] = Template::where('organization_id', $organizationId)
                 ->where('deleted_at', null)
@@ -85,11 +86,13 @@ class CampaignController extends BaseController
             $data['contactGroups'] = ContactGroup::where('organization_id', $organizationId)
                 ->whereNull('deleted_at')
                 ->whereHas('contacts')
+                ->withCount(['contacts as contacts_count' => function ($query) use ($organizationId) {
+                    $query->where('organization_id', $organizationId);
+                }])
                 ->get();
 
             $data['title'] = __('Create campaign');
 
-            //dd($data['templates']);
             return Inertia::render('User/Campaign/Create', $data);
         } else {
             $data['campaign'] = Campaign::with('contactGroup', 'template')->where('uuid', $uuid)->first();

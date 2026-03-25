@@ -48,6 +48,7 @@ class MetaFlowController extends BaseController
 
         $flow = MetaFlow::where('uuid', $uuid)
             ->where('organization_id', session()->get('current_organization'))
+            ->withCount(['responses' => fn($q) => $q->whereNotNull('response_json')])
             ->firstOrFail();
 
         $data['flow'] = $flow;
@@ -162,6 +163,7 @@ class MetaFlowController extends BaseController
         $flows = MetaFlow::where('organization_id', $orgId)
             ->where('status', 'published')
             ->whereNotNull('meta_flow_id')
+            ->whereNotNull('asset_content')
             ->orderBy('name')
             ->get(['uuid', 'name', 'categories', 'status', 'meta_flow_id', 'asset_content'])
             ->map(function ($flow) {

@@ -5,14 +5,12 @@ namespace App\Services;
 use Carbon\Carbon;
 use App\Jobs\SendCampaignJob;
 use App\Models\Campaign;
-use App\Models\CampaignLog;
 use App\Models\ChatMedia;
 use App\Models\Contact;
 use App\Models\ContactGroup;
 use App\Models\Organization;
 use App\Models\Setting;
 use App\Models\Template;
-use App\Services\WhatsappService;
 use App\Traits\TemplateTrait;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -20,7 +18,6 @@ use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\File;
 use Illuminate\Validation\ValidationException;
-use Validator;
 
 class CampaignService
 {
@@ -33,6 +30,40 @@ class CampaignService
         $organization = Organization::find($organizationId);
         $organizationMetadata = json_decode($organization->metadata ?? '{}', true);
         $timezone = $organizationMetadata['timezone'] ?? $timezone;
+
+        // Enforce messaging_limit_tier: selected group size must be <= allowed tier value
+        $tier = $organizationMetadata['whatsapp']['whatsapp_business_manager_messaging_limit'] ?? null;
+        $tierLimit = $this->resolveTierLimit($tier);
+
+        if ($request->contacts === 'all') {
+            $selectedCount = Contact::where('organization_id', $organizationId)
+                ->whereNull('deleted_at')
+                ->count();
+        } else {
+            $selectedGroup = ContactGroup::where('uuid', $request->contacts)
+                ->where('organization_id', $organizationId)
+                ->withCount(['contacts as contacts_count' => function ($q) use ($organizationId) {
+                    $q->where('organization_id', $organizationId);
+                }])
+                ->first();
+
+            if (!$selectedGroup) {
+                throw ValidationException::withMessages([
+                    'contacts' => __('Selected contact group is invalid or does not belong to your organization.'),
+                ]);
+            }
+
+            $selectedCount = $selectedGroup->contacts_count;
+        }
+
+        if ($selectedCount > $tierLimit) {
+            throw \Illuminate\Validation\ValidationException::withMessages([
+                'contacts' => __(
+                    'The selected group contains :groupCount contacts, which exceeds your messaging limit of :limit. Please choose a smaller group or update your WhatsApp tier.',
+                    ['groupCount' => $selectedCount, 'limit' => $tierLimit]
+                ),
+            ]);
+        }
 
         $template = Template::where('uuid', $request->template)->first();
         $contactGroup = ContactGroup::where('uuid', $request->contacts)->first();
@@ -130,6 +161,28 @@ class CampaignService
                 'stack_trace' => $e->getTraceAsString(),
             ]);
         }
+    }
+
+    private function resolveTierLimit(?string $tier): int
+    {
+        if (!$tier) {
+            return 250;
+        }
+
+        $tier = strtoupper(trim($tier));
+
+        if ($tier === 'TIER_UNLIMITED') {
+            return PHP_INT_MAX;
+        }
+
+        if (preg_match('/TIER_(\d+)(K?)/i', $tier, $matches)) {
+            $number = (int) $matches[1];
+            $suffix = strtoupper($matches[2] ?? '');
+
+            return $suffix === 'K' ? $number * 1000 : $number;
+        }
+
+        return 250;
     }
 
     private function getMediaInfo($path)

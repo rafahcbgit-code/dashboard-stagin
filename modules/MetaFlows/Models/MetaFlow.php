@@ -76,7 +76,7 @@ class MetaFlow extends Model
             ->when($searchTerm, function ($query) use ($searchTerm) {
                 $query->where('name', 'like', '%' . $searchTerm . '%');
             })
-            ->withCount('responses')
+            ->withCount(['responses' => fn($q) => $q->whereNotNull('response_json')])
             ->latest()
             ->paginate(10);
     }
