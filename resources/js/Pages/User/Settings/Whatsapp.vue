@@ -348,8 +348,8 @@
         { label: 'Other', value: 'OTHER' },
     ]
 
-    const sync_contacts = ref(settings?.value?.sync_contacts ? 1 : 0);
-    const sync_history = ref(settings?.value?.sync_history ? 1 : 0);
+    const sync_contacts = ref(settings?.value?.whatsapp?.sync_contacts ? 1 : 0);
+    const sync_history = ref(settings?.value?.whatsapp?.sync_history ? 1 : 0);
 
     function openModal() {
         isOpenFormModal.value = true;

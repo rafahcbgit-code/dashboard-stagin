@@ -28,17 +28,22 @@
         }(document, 'script', 'facebook-jssdk'));
     });
 
+    let sessionPhoneNumberId = null;
+    let sessionWabaId = null;
+
     const sessionInfoListener = (event) => {
         if (event.origin !== "https://www.facebook.com" && event.origin !== "https://web.facebook.com") {
             return;
         }
-        
+
         try {
             const data = JSON.parse(event.data);
-            if (data.type === 'WA_EMBEDDED_SIGNUP') {
+            if (data.type === ‘WA_EMBEDDED_SIGNUP’) {
                 // if user finishes the Embedded Signup flow
-                if (data.event === 'FINISH') {
+                if (data.event === ‘FINISH’) {
                     const {phone_number_id, waba_id} = data.data;
+                    sessionPhoneNumberId = phone_number_id;
+                    sessionWabaId = waba_id;
                 }
                 // if user cancels the Embedded Signup flow
                 else {
@@ -47,7 +52,7 @@
             }
         } catch {
             // Don’t parse info that’s not a JSON
-            //console.log('Non JSON Response', event.data);
+            //console.log(‘Non JSON Response’, event.data);
         }
     };
 
@@ -70,6 +75,8 @@
                 //console.log(response.authResponse);
                 router.post(`/whatsapp/exchange-code`, {
                     token: response.authResponse.code,
+                    phone_number_id: sessionPhoneNumberId,
+                    waba_id: sessionWabaId,
                 }, {
                     preserveState: true,
                     onSuccess: () => {
@@ -86,7 +93,7 @@
             response_type: 'code', // must be set to 'code' for System User access token
             override_default_response_type: true, // when true, any response types passed in the "response_type" will take precedence over the default types
             extras: {
-                sessionInfoVersion: 2,
+                sessionInfoVersion: '3',
                 setup: {
                     // Prefilled data can go here
                 }
