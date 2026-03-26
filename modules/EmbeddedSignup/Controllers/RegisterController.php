@@ -149,20 +149,27 @@ class RegisterController extends BaseController
         Log::info("[STEP 5] account_review_status: " . ($accountReviewStatusResponse->data->account_review_status ?? 'NULL'));
 
         // 6) Register number (non-coexistence only)
+        // Skip if number is already CONNECTED — calling /register on a connected number
+        // returns #133015 (cooldown) or #131000 (already registered).
+        $currentStatus = $phoneNumberStatusResponse->data->status ?? null;
         if (!$isCoexistence) {
-            Log::info("[STEP 6] Registering phone number: {$phoneNumberId}");
-            $registerNumber = $this->registerNumber($accessToken, $phoneNumberId);
-            Log::info("[STEP 6] registerNumber success: " . ($registerNumber->success ? 'true' : 'false'));
+            if ($currentStatus === 'CONNECTED') {
+                Log::info("[STEP 6] Skipping registration — number is already CONNECTED");
+            } else {
+                Log::info("[STEP 6] Registering phone number: {$phoneNumberId} (current status: {$currentStatus})");
+                $registerNumber = $this->registerNumber($accessToken, $phoneNumberId);
+                Log::info("[STEP 6] registerNumber success: " . ($registerNumber->success ? 'true' : 'false'));
 
-            if (!$registerNumber->success) {
-                Log::error("[STEP 6] FAILED — Full error: " . json_encode($registerNumber->data));
-                return back()->with('status', [
-                    'type' => 'error',
-                    'message' => $registerNumber->data->error->message
-                ]);
+                if (!$registerNumber->success) {
+                    Log::error("[STEP 6] FAILED — Full error: " . json_encode($registerNumber->data));
+                    return back()->with('status', [
+                        'type' => 'error',
+                        'message' => $registerNumber->data->error->message
+                    ]);
+                }
+
+                Log::info("[STEP 6] Number registered successfully");
             }
-
-            Log::info("[STEP 6] Number registered successfully");
         } else {
             Log::info("[STEP 6] Skipping registration (coexistence mode)");
         }
