@@ -104,12 +104,26 @@ class RegisterController extends BaseController
         }
 
         // 6) Register number (ONLY for non-coexistence; ESU + Coex already link/register the number)
+        // Note: #131000 can occur if the number is already registered via the embedded signup OAuth flow
+        // or if the user has a personal WhatsApp 2FA PIN. We treat this as non-fatal and continue.
         if (!$isCoexistence) {
             $registerNumber = $this->registerNumber($accessToken, $phoneNumberId);
             if (!$registerNumber->success) {
-                return back()->with('status', [
-                    'type' => 'error',
-                    'message' => $registerNumber->data->error->message
+                $errorBody = $registerNumber->data->error->message ?? '';
+                $errorData = json_decode($errorBody, true);
+                $errorCode = $errorData['error']['code'] ?? null;
+
+                // #131000 = number already registered or 2FA PIN mismatch — safe to continue
+                if ($errorCode !== 131000) {
+                    return back()->with('status', [
+                        'type' => 'error',
+                        'message' => $registerNumber->data->error->message
+                    ]);
+                }
+
+                Log::warning("registerNumber returned #131000 — number may already be registered via embedded signup. Continuing flow.", [
+                    'phone_number_id' => $phoneNumberId,
+                    'error' => $errorBody,
                 ]);
             }
         }
