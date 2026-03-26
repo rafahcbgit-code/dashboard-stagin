@@ -38,9 +38,9 @@
 
         try {
             const data = JSON.parse(event.data);
-            if (data.type === ‘WA_EMBEDDED_SIGNUP’) {
+            if (data.type === 'WA_EMBEDDED_SIGNUP') {
                 // if user finishes the Embedded Signup flow
-                if (data.event === ‘FINISH’) {
+                if (data.event === 'FINISH') {
                     const {phone_number_id, waba_id} = data.data;
                     sessionPhoneNumberId = phone_number_id;
                     sessionWabaId = waba_id;
@@ -52,7 +52,7 @@
             }
         } catch {
             // Don’t parse info that’s not a JSON
-            //console.log(‘Non JSON Response’, event.data);
+            console.log('Non JSON Response', event.data);
         }
     };
 
