@@ -32,13 +32,20 @@ class RegisterController extends BaseController
         $isCoexistence = (bool) $request->boolean('coexistence');
         $phoneNumberIdFromUI = $request->input('phone_number_id');
         $wabaIdFromUI = $request->input('waba_id');
-        $rawToken = $request->token;
+        $rawToken = $request->input('token') ?: $request->input('code');
 
         Log::info("[STEP 0] Coexistence: " . ($isCoexistence ? 'true' : 'false'));
         Log::info("[STEP 0] phone_number_id from UI: " . ($phoneNumberIdFromUI ?: 'NOT PROVIDED'));
         Log::info("[STEP 0] waba_id from UI: " . ($wabaIdFromUI ?: 'NOT PROVIDED'));
         Log::info("[STEP 0] Token received — length: " . strlen($rawToken ?? '') . " | first 20 chars: " . substr($rawToken ?? '', 0, 20));
         Log::info("[STEP 0] Graph API version: {$this->apiVersion}");
+
+        if (empty($rawToken)) {
+            return back()->with('status', [
+                'type' => 'error',
+                'message' => __('Authorization code is missing. Please try onboarding again.')
+            ]);
+        }
 
         // 1) Exchange code for short-lived access token
         Log::info("[STEP 1] Exchanging authorization code for access token...");
@@ -83,6 +90,10 @@ class RegisterController extends BaseController
         Log::info("[STEP 2] waba_id from debug_token: " . ($debugTokenResponse->data->waba_id ?? 'NULL'));
 
         $wabaId = $wabaIdFromUI ?: $debugTokenResponse->data->waba_id;
+        if (empty($wabaId)) {
+            $wabaId = $this->discoverWabaIdFromBusinesses($accessToken);
+            Log::info("[STEP 2] WABA ID fallback from businesses: " . ($wabaId ?: 'NULL'));
+        }
         Log::info("[STEP 2] Final waba_id to use: " . ($wabaId ?: 'EMPTY — WILL FAIL'));
 
         if (empty($wabaId)) {
@@ -455,11 +466,25 @@ class RegisterController extends BaseController
     public function debugToken($token){
         Log::info("Getting debug token");
 
-        $accessToken = Setting::where('key', 'whatsapp_access_token')->value('value');
+        $settings = Setting::whereIn('key', ['whatsapp_client_id', 'whatsapp_client_secret', 'whatsapp_access_token'])->pluck('value', 'key');
+        $clientId = $settings->get('whatsapp_client_id', null);
+        $clientSecret = $settings->get('whatsapp_client_secret', null);
+        $systemToken = $settings->get('whatsapp_access_token', null);
+        $debugAccessToken = (!empty($clientId) && !empty($clientSecret)) ? ($clientId . '|' . $clientSecret) : $systemToken;
+
+        Log::info("[debugToken] Using app token? " . ((!empty($clientId) && !empty($clientSecret)) ? 'YES' : 'NO'));
         $responseObject = new \stdClass();
 
+        if (empty($debugAccessToken)) {
+            $responseObject->success = false;
+            $responseObject->data = new \stdClass();
+            $responseObject->data->error = new \stdClass();
+            $responseObject->data->error->message = 'Missing app credentials/token for debug_token call';
+            return $responseObject;
+        }
+
         $response = Http::withHeaders([
-            'Authorization' => 'Bearer ' . $accessToken
+            'Authorization' => 'Bearer ' . $debugAccessToken
         ])->get("https://graph.facebook.com/{$this->apiVersion}/debug_token", [
             'input_token' => $token
         ]);
@@ -480,8 +505,10 @@ class RegisterController extends BaseController
     
                 // Check if the response data is structured as expected
                 if (isset($response['data']['granular_scopes'])) {
+                    $allowedScopes = ['whatsapp_business_management', 'whatsapp_business_messaging', 'business_management'];
                     foreach ($response['data']['granular_scopes'] as $scope) {
-                        if ($scope['scope'] === 'whatsapp_business_management' && isset($scope['target_ids'][0])) {
+                        $scopeName = $scope['scope'] ?? ($scope['permission'] ?? null);
+                        if (in_array($scopeName, $allowedScopes, true) && isset($scope['target_ids'][0])) {
                             $firstWabaId = $scope['target_ids'][0];
                             break;
                         }
@@ -502,6 +529,45 @@ class RegisterController extends BaseController
         }
 
         return $responseObject;
+    }
+
+    private function discoverWabaIdFromBusinesses($accessToken)
+    {
+        try {
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer ' . $accessToken
+            ])->get("https://graph.facebook.com/{$this->apiVersion}/me", [
+                'fields' => 'businesses{id}'
+            ]);
+
+            if (!$response->successful()) {
+                Log::warning('[discoverWabaIdFromBusinesses] /me businesses failed: ' . $response->body());
+                return null;
+            }
+
+            $businessData = $response->json();
+            $businessId = $businessData['businesses']['data'][0]['id'] ?? ($businessData['id'] ?? null);
+
+            if (empty($businessId)) {
+                Log::warning('[discoverWabaIdFromBusinesses] No business ID found in /me response');
+                return null;
+            }
+
+            $wabaResponse = Http::withHeaders([
+                'Authorization' => 'Bearer ' . $accessToken
+            ])->get("https://graph.facebook.com/{$this->apiVersion}/{$businessId}/owned_whatsapp_business_accounts");
+
+            if (!$wabaResponse->successful()) {
+                Log::warning('[discoverWabaIdFromBusinesses] owned_waba request failed: ' . $wabaResponse->body());
+                return null;
+            }
+
+            $wabaData = $wabaResponse->json();
+            return $wabaData['data'][0]['id'] ?? null;
+        } catch (\Throwable $e) {
+            Log::error('[discoverWabaIdFromBusinesses] Exception: ' . $e->getMessage());
+            return null;
+        }
     }
 
     public function getPhoneNumberId($accessToken, $wabaId){

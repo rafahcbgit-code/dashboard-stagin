@@ -9,6 +9,8 @@ const props = defineProps({
 });
 
 const isSetupLoading = ref(false);
+let sessionPhoneNumberId = null;
+let sessionWabaId = null;
 
 function initFacebookSDK() {
   window.fbAsyncInit = function () {
@@ -40,6 +42,8 @@ function sessionInfoListener(event) {
     if (data.type === 'WA_EMBEDDED_SIGNUP') {
       if (data.event === 'FINISH') {
         const { phone_number_id, waba_id } = data.data;
+        sessionPhoneNumberId = phone_number_id || null;
+        sessionWabaId = waba_id || null;
         console.log("✅ Coexistence finished:", { phone_number_id, waba_id });
       } else {
         console.log("⚠️ User cancelled at step:", data.data.current_step);
@@ -68,6 +72,8 @@ function launchWhatsAppCoexistenceSignup() {
       router.post(`/whatsapp/exchange-code`, {
         token: response.authResponse.code,
         coexistence: true, // 🚩 Important flag
+        phone_number_id: sessionPhoneNumberId,
+        waba_id: sessionWabaId,
       }, {
         preserveState: true,
         onSuccess: () => {
@@ -135,4 +141,3 @@ onBeforeUnmount(() => {
         </svg>
     </button>
 </template>
-
