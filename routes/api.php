@@ -5,6 +5,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Str;
+use App\Http\Controllers\ShopifyIntegratin\PrivacyWebhookController;
 
 /*
 |--------------------------------------------------------------------------
@@ -16,6 +17,11 @@ use Illuminate\Support\Str;
 | be assigned to the "api" middleware group. Make something great!
 |
 */
+
+
+Route::post('/webhooks/privacy/customer-data', [PrivacyWebhookController::class, 'handle']);
+Route::post('/webhooks/privacy/customer-redact', [PrivacyWebhookController::class, 'handle']);
+Route::post('/webhooks/privacy/shop-redact', [PrivacyWebhookController::class, 'handle']);
 
 /*Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();

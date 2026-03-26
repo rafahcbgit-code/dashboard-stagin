@@ -13,6 +13,7 @@ class VerifyCsrfToken extends Middleware
      */
     protected $except = [
         'webhook/*',
-        'shopify/webhooks/*'
+        'shopify/webhooks/*',
+        'api/webhooks/privacy/*'
     ];
 }
