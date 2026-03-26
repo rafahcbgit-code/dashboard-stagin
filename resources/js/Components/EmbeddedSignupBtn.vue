@@ -7,29 +7,42 @@
     const isSetupLoading = ref(false);
 
     onMounted(() => {
+        console.log('[ESU] Component mounted');
+        console.log('[ESU] Props received:', {
+            appId: props.appId,
+            configId: props.configId,
+            graphAPIVersion: props.graphAPIVersion,
+        });
+        console.log('[ESU] FB SDK already loaded?', typeof FB !== 'undefined');
+
         window.fbAsyncInit = function () {
-            // JavaScript SDK configuration and setup
+            console.log('[ESU] fbAsyncInit fired — calling FB.init()');
             FB.init({
-                appId: props.appId, // Facebook App ID
-                cookie: true, // enable cookies
-                xfbml: true, // parse social plugins on this page
-                version: props.graphAPIVersion // Graph API version
+                appId: props.appId,
+                cookie: true,
+                xfbml: true,
+                version: props.graphAPIVersion
             });
+            console.log('[ESU] FB.init() done');
         };
 
         // Load the JavaScript SDK asynchronously
         (function (d, s, id) {
+            const existing = d.getElementById(id);
+            console.log('[ESU] FB SDK script already in DOM?', !!existing);
+            if (existing) return;
             var js, fjs = d.getElementsByTagName(s)[0];
-            if (d.getElementById(id)) return;
             js = d.createElement(s);
             js.id = id;
             js.src = "https://connect.facebook.net/en_US/sdk.js";
+            js.onload = () => console.log('[ESU] FB SDK script loaded from network');
             fjs.parentNode.insertBefore(js, fjs);
         }(document, 'script', 'facebook-jssdk'));
     });
 
     let sessionPhoneNumberId = null;
     let sessionWabaId = null;
+    let codeGeneratedAt = null;
 
     const sessionInfoListener = (event) => {
         if (event.origin !== "https://www.facebook.com" && event.origin !== "https://web.facebook.com") {
@@ -38,25 +51,30 @@
 
         try {
             const data = JSON.parse(event.data);
+            console.log('[ESU] postMessage received from Meta:', JSON.stringify(data));
+
             if (data.type === 'WA_EMBEDDED_SIGNUP') {
-                // if user finishes the Embedded Signup flow
                 if (data.event === 'FINISH') {
                     const {phone_number_id, waba_id} = data.data;
                     sessionPhoneNumberId = phone_number_id;
                     sessionWabaId = waba_id;
-                }
-                // if user cancels the Embedded Signup flow
-                else {
-                    const{current_step} = data.data;
+                    console.log('[ESU] FINISH event — phone_number_id:', phone_number_id, '| waba_id:', waba_id);
+                } else if (data.event === 'CANCEL') {
+                    console.warn('[ESU] CANCEL event — user cancelled at step:', data.data?.current_step);
+                } else if (data.event === 'ERROR') {
+                    console.error('[ESU] ERROR event from Meta dialog:', JSON.stringify(data.data));
+                } else {
+                    console.log('[ESU] Unknown WA_EMBEDDED_SIGNUP event:', data.event, JSON.stringify(data.data));
                 }
             }
         } catch {
-            // Don’t parse info that’s not a JSON
-            console.log('Non JSON Response', event.data);
+            // non-JSON postMessage — ignore
         }
     };
 
     function launchWhatsAppSignup() {
+        console.log('[ESU] launchWhatsAppSignup() called at', new Date().toISOString());
+        console.log('[ESU] FB object available?', typeof FB !== 'undefined');
         window.addEventListener("message", sessionInfoListener);
 
         // Conversion tracking code
@@ -69,34 +87,50 @@
 
         // Launch Facebook login
         FB.login(function (response) {
+            const callbackAt = new Date().toISOString();
+            console.log('[ESU] FB.login() callback fired at', callbackAt);
+            console.log('[ESU] Full authResponse:', JSON.stringify(response));
+
             if (response.authResponse) {
+                codeGeneratedAt = Date.now();
+                const code = response.authResponse.code;
+                console.log('[ESU] Auth code received — length:', code?.length, '| first 10 chars:', code?.substring(0, 10));
+                console.log('[ESU] session phone_number_id:', sessionPhoneNumberId, '| waba_id:', sessionWabaId);
+                console.log('[ESU] Sending POST to /whatsapp/exchange-code at', new Date().toISOString());
+
                 isSetupLoading.value = true;
 
-                //console.log(response.authResponse);
                 router.post(`/whatsapp/exchange-code`, {
-                    token: response.authResponse.code,
+                    token: code,
                     phone_number_id: sessionPhoneNumberId,
                     waba_id: sessionWabaId,
                 }, {
                     preserveState: true,
                     onSuccess: () => {
+                        console.log('[ESU] Backend exchange-code: SUCCESS');
                         router.visit('/settings/whatsapp', {
                             preserveState: false,
                         });
                     },
+                    onError: (errors) => {
+                        console.error('[ESU] Backend exchange-code: ERROR', JSON.stringify(errors));
+                        isSetupLoading.value = false;
+                    },
+                    onFinish: () => {
+                        const elapsed = Date.now() - codeGeneratedAt;
+                        console.log('[ESU] Backend request finished. Time from code received to finish:', elapsed, 'ms');
+                    }
                 })
             } else {
-                //console.log('User cancelled login or did not fully authorize.');
+                console.warn('[ESU] No authResponse — user cancelled or did not authorize. Status:', response.status);
             }
         }, {
-            config_id: props.configId, // configuration ID goes here
-            response_type: 'code', // must be set to 'code' for System User access token
-            override_default_response_type: true, // when true, any response types passed in the "response_type" will take precedence over the default types
+            config_id: props.configId,
+            response_type: 'code',
+            override_default_response_type: true,
             extras: {
                 sessionInfoVersion: '3',
-                setup: {
-                    // Prefilled data can go here
-                }
+                setup: {}
             }
         });
     }
