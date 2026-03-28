@@ -1,6 +1,7 @@
 <script setup>
     import { ref, onMounted } from 'vue';
     import { router } from "@inertiajs/vue3";
+    import { decodeMetaUnicode } from '../lib/embeddedSignupHelpers.js';
     
     const props = defineProps(['appId', 'configId', 'graphAPIVersion'])
 
@@ -44,6 +45,21 @@
     let sessionWabaId = null;
     let codeGeneratedAt = null;
 
+    const logEmbeddedSignupEvent = (eventName, payload) => {
+        if (!payload) {
+            console.log('[ESU] Embedded Signup event:', eventName, 'payload: empty');
+            return;
+        }
+
+        const decodedHtml = decodeMetaUnicode(payload.html);
+        const payloadForLog = {
+            ...payload,
+            ...(decodedHtml && decodedHtml !== payload.html ? { decoded_html: decodedHtml } : {})
+        };
+
+        console.log('[ESU] Embedded Signup event:', eventName, payloadForLog);
+    };
+
     const sessionInfoListener = (event) => {
         if (event.origin !== "https://www.facebook.com" && event.origin !== "https://web.facebook.com") {
             return;
@@ -51,9 +67,9 @@
 
         try {
             const data = JSON.parse(event.data);
-            console.log('[ESU] postMessage received from Meta:', JSON.stringify(data));
 
             if (data.type === 'WA_EMBEDDED_SIGNUP') {
+                logEmbeddedSignupEvent(data.event, data.data);
                 if (data.event === 'FINISH') {
                     const {phone_number_id, waba_id} = data.data;
                     sessionPhoneNumberId = phone_number_id;
