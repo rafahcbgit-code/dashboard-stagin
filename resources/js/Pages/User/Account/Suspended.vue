@@ -14,7 +14,7 @@
                     Your subscription has been deactivated, so navigation to sections like Chats, Campaigns, and Contacts is disabled.
                 </p>
                 <p class="text-sm text-slate-600 mb-6">
-                    Please email <span class="font-semibold text-slate-900">{{ props.supportEmail }}</span> if you believe the suspension is a mistake.
+                    Please email <span class="font-semibold text-slate-900">{{ props.supportEmail }}</span> to resolve account status.
                 </p>
                 <a :href="`mailto:${props.supportEmail}`" class="inline-flex items-center justify-center px-5 py-2 rounded-full bg-red-600 text-white text-sm font-semibold hover:bg-red-700 transition">
                     Contact support
