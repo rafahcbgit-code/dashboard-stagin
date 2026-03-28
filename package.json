@@ -3,7 +3,8 @@
     "type": "module",
     "scripts": {
         "dev": "vite",
-        "build": "vite build"
+        "build": "vite build",
+        "test:embedded-signup": "node scripts/test-embedded-signup.js"
     },
     "devDependencies": {
         "autoprefixer": "^10.4.15",

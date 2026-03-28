@@ -1,6 +1,7 @@
 <script setup>
     import { ref, onMounted } from 'vue';
     import { router } from "@inertiajs/vue3";
+    import { decodeMetaUnicode } from '../lib/embeddedSignupHelpers.js';
     
     const props = defineProps(['appId', 'configId', 'graphAPIVersion'])
 
@@ -43,16 +44,6 @@
     let sessionPhoneNumberId = null;
     let sessionWabaId = null;
     let codeGeneratedAt = null;
-
-    const decodeMetaUnicode = (value) => {
-        if (typeof value !== 'string' || !value.includes('\\u')) {
-            return value;
-        }
-
-        return value.replace(/\\u([0-9A-Fa-f]{4})/g, (_, hex) =>
-            String.fromCharCode(parseInt(hex, 16))
-        );
-    };
 
     const logEmbeddedSignupEvent = (eventName, payload) => {
         if (!payload) {
