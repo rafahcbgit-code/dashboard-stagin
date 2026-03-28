@@ -44,6 +44,31 @@
     let sessionWabaId = null;
     let codeGeneratedAt = null;
 
+    const decodeMetaUnicode = (value) => {
+        if (typeof value !== 'string' || !value.includes('\\u')) {
+            return value;
+        }
+
+        return value.replace(/\\u([0-9A-Fa-f]{4})/g, (_, hex) =>
+            String.fromCharCode(parseInt(hex, 16))
+        );
+    };
+
+    const logEmbeddedSignupEvent = (eventName, payload) => {
+        if (!payload) {
+            console.log('[ESU] Embedded Signup event:', eventName, 'payload: empty');
+            return;
+        }
+
+        const decodedHtml = decodeMetaUnicode(payload.html);
+        const payloadForLog = {
+            ...payload,
+            ...(decodedHtml && decodedHtml !== payload.html ? { decoded_html: decodedHtml } : {})
+        };
+
+        console.log('[ESU] Embedded Signup event:', eventName, payloadForLog);
+    };
+
     const sessionInfoListener = (event) => {
         if (event.origin !== "https://www.facebook.com" && event.origin !== "https://web.facebook.com") {
             return;
@@ -51,9 +76,9 @@
 
         try {
             const data = JSON.parse(event.data);
-            console.log('[ESU] postMessage received from Meta:', JSON.stringify(data));
 
             if (data.type === 'WA_EMBEDDED_SIGNUP') {
+                logEmbeddedSignupEvent(data.event, data.data);
                 if (data.event === 'FINISH') {
                     const {phone_number_id, waba_id} = data.data;
                     sessionPhoneNumberId = phone_number_id;
