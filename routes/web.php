@@ -28,7 +28,9 @@ Route::post('/shopify/webhooks/order-created', [ShopifyWebhookController::class,
 Route::post('/shopify/webhooks/orders-updated', [ShopifyWebhookController::class, 'handleOrderUpdated']);
 Route::post('/shopify/webhooks/orders-fulfilled', [ShopifyWebhookController::class, 'handleOrderFulfilled']);
 Route::post('/shopify/webhooks/checkouts-created', [ShopifyWebhookController::class, 'handleCheckoutsCreated']);
-
+Route::post('/shopify/webhooks/customers/data_request', [PrivacyWebhookController::class, 'handle']);
+Route::post('/shopify/webhooks/customers/redact', [PrivacyWebhookController::class, 'handle']);
+Route::post('/shopify/webhooks/shop/redact', [PrivacyWebhookController::class, 'handle']);
 
 Route::post('/webhook/{organization}', [App\Http\Controllers\WebhookController::class, 'handlePostRequest'])
     ->whereNumber('organization');

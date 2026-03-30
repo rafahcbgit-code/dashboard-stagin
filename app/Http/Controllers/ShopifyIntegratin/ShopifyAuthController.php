@@ -8,6 +8,8 @@ use Illuminate\Support\Facades\Log;
 use App\Models\ShopifyStore;
 use App\Http\Controllers\Controller;
 use Inertia\Inertia;
+use App\Services\Webhooks\ShopifyGDPRWebhookService;
+use GuzzleHttp\Client;
 
 class ShopifyAuthController extends Controller
 {
@@ -18,6 +20,8 @@ class ShopifyAuthController extends Controller
     protected $apiSecret;
     protected $scopes;
     protected $redirectUri;
+    protected $baseUrl;
+    protected $client;
 
     public function __construct()
     {
@@ -25,9 +29,10 @@ class ShopifyAuthController extends Controller
         $this->apiKey = env('SHOPIFY_API_KEY');
         $this->apiSecret = env('SHOPIFY_API_SECRET');
         $this->scopes = env('SHOPIFY_SCOPES');
-
+        $this->baseUrl = 'https://molecular-felicidad-irrotationally.ngrok-free.dev';
         // The URL Shopify will redirect to after the merchant approves the app
-        $this->redirectUri = "https://dashboard.chatberry.net/shopify/callback";
+        $this->redirectUri = $this->baseUrl . '/shopify/callback';
+         $this->client = new Client();
     }
 
     /**
@@ -70,6 +75,7 @@ class ShopifyAuthController extends Controller
          *
          * The merchant will be redirected to this URL to approve the app.
          */
+        Log::info("API Key check: " . $this->apiKey);
         $installUrl = "https://{$shop}/admin/oauth/authorize?" . http_build_query([
             'client_id'    => $this->apiKey,
             'scope'        => $this->scopes,
@@ -163,6 +169,14 @@ class ShopifyAuthController extends Controller
                 ]
             );
 
+            Log::info("Shop connected successfully", ['shop' => $shop]);
+
+            //$webhookService = new ShopifyGDPRWebhookService();
+            //$webhookService->registerComplianceWebhooks($shop, $accessToken, $this->baseUrl);
+
+            Log::info("Compliance webhooks registered", ['shop' => $shop]);
+
+
             Log::info("Shopify Access Token Acquired and Store Saved", [
                 'shop' => $shop,
                 'org_id' => $organizationId
@@ -247,32 +261,38 @@ class ShopifyAuthController extends Controller
 
     private function registerWebhooks($shop, $accessToken)
     {
-        $url = "https://{$shop}/admin/api/2024-01/webhooks.json";
         $topics = [
-            'orders/create',  
-            'orders/updated', 
-            'orders/fulfilled' ,
-            'checkouts/create'
+            'orders/create' => '/shopify/webhooks/order-created',
+            'orders/updated' => '/shopify/webhooks/orders-updated',
+            'orders/fulfilled' => '/shopify/webhooks/orders-fulfilled',
+            'checkouts/create' => '/shopify/webhooks/checkouts-created',
+            'customers/data_request' => '/shopify/webhooks/customers/data_request',
+            'customers/redact' => '/shopify/webhooks/customers/redact',
+            'shop/redact' => '/shopify/webhooks/shop/redact'
         ];
 
-        foreach ($topics as $topic) {
-        $response = Http::withHeaders([
-            'X-Shopify-Access-Token' => $accessToken,
-        ])->post($url, [
-            'webhook' => [
-                'topic'   => $topic, 
-                'address' => 'https://dashboard.chatberry.net/shopify/webhooks/order-created', 
-                'format' => 'json'
-            ]
-        ]);
+        foreach ($topics as $topic => $endpoint) {
+            try {
+                $this->client->post("https://{$shop}/admin/api/2026-01/webhooks.json", [
+                    'headers' => [
+                        'X-Shopify-Access-Token' => $accessToken,
+                        'Content-Type' => 'application/json',
+                    ],
+                    'json' => [
+                        'webhook' => [
+                            'topic' => $topic,
+                            'address' => $this->baseUrl . $endpoint,
+                            'format' => 'json'
+                        ]
+                    ]
+                ]);
 
-       if ($response->successful()) {
-            Log::info("Webhook [{$topic}] registered successfully for $shop");
-        } else {
-            Log::error("Failed to register webhook [{$topic}] for $shop", [
-                'response' => $response->body()
-            ]);
-        }
+                Log::info("Webhook registered: $topic");
+            } catch (\Exception $e) {
+                Log::error("Failed to register webhook: $topic", [
+                    'error' => $e->getMessage()
+                ]);
+            }
         }
     }
 }
