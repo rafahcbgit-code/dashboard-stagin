@@ -68,7 +68,7 @@ class WebhookController extends BaseController
         $challenge = $request->input('hub_challenge');
 
         if ($mode === 'subscribe' && $token === $verifyToken) {
-            return Response::make($challenge, 200);
+            return $this->challengeResponse($challenge);
         } else {
             return Response::json(['error' => 'Forbidden'], 200);
         }
@@ -144,7 +144,7 @@ class WebhookController extends BaseController
             $challenge = $request->input('hub_challenge');
 
             if ($mode === 'subscribe' && $token === $verifyToken) {
-                return Response::make($challenge, 200);
+                return $this->challengeResponse($challenge);
             } else {
                 return Response::json(['error' => 'Forbidden'], 404);
             }
@@ -152,6 +152,21 @@ class WebhookController extends BaseController
             Log::error("Error processing webhook: " . $e->getMessage());
             return Response::json(['error' => $e->getMessage()], 403);
         }
+    }
+
+    /**
+     * Meta webhook verification requires exact raw challenge body.
+     * Clear any buffered output and strip UTF-8 BOM to avoid code 2201 mismatch.
+     */
+    protected function challengeResponse($challenge)
+    {
+        while (ob_get_level() > 0) {
+            @ob_end_clean();
+        }
+
+        $challengeValue = ltrim((string) $challenge, "\xEF\xBB\xBF");
+
+        return response($challengeValue, 200)->header('Content-Type', 'text/plain; charset=UTF-8');
     }
 
     /**

@@ -21,62 +21,103 @@ class RegisterController extends BaseController
     }
 
     public function handleSignup(Request $request){
-        
-        Log::info("Starting signup flow");
+
+        $startTime = microtime(true);
+        Log::info("========== SIGNUP FLOW START ==========");
+        Log::info("[STEP 0] Request received at: " . now()->toDateTimeString());
 
         $organizationId = session()->get('current_organization');
+        Log::info("[STEP 0] Organization ID: {$organizationId}");
 
-        Log::info("Organization ID: {$organizationId}");
-
-
-        // NEW: read coexistence + optionally exact ids from the UI
         $isCoexistence = (bool) $request->boolean('coexistence');
-        $phoneNumberIdFromUI = $request->input('phone_number_id'); // may be null
-        $wabaIdFromUI = $request->input('waba_id'); // may be null
+        $phoneNumberIdFromUI = $request->input('phone_number_id');
+        $wabaIdFromUI = $request->input('waba_id');
+        $rawToken = $request->input('token') ?: $request->input('code');
 
-        Log::info("Coexistence: {$isCoexistence}");
-        Log::info("Phone number ID from UI: {$phoneNumberIdFromUI}");
-        Log::info("WABA ID from UI: {$wabaIdFromUI}");
+        Log::info("[STEP 0] Coexistence: " . ($isCoexistence ? 'true' : 'false'));
+        Log::info("[STEP 0] phone_number_id from UI: " . ($phoneNumberIdFromUI ?: 'NOT PROVIDED'));
+        Log::info("[STEP 0] waba_id from UI: " . ($wabaIdFromUI ?: 'NOT PROVIDED'));
+        Log::info("[STEP 0] Token received — length: " . strlen($rawToken ?? '') . " | first 20 chars: " . substr($rawToken ?? '', 0, 20));
+        Log::info("[STEP 0] Graph API version: {$this->apiVersion}");
 
+        if (empty($rawToken)) {
+            return back()->with('status', [
+                'type' => 'error',
+                'message' => __('Authorization code is missing. Please try onboarding again.')
+            ]);
+        }
 
         // 1) Exchange code for short-lived access token
-        $accessTokenResponse = $this->getAccessToken($request->token);
+        Log::info("[STEP 1] Exchanging authorization code for access token...");
+        Log::info("[STEP 1] Calling: GET https://graph.facebook.com/{$this->apiVersion}/oauth/access_token");
+
+        $settings = \App\Models\Setting::whereIn('key', ['whatsapp_client_id', 'whatsapp_client_secret'])->pluck('value', 'key');
+        Log::info("[STEP 1] client_id from DB: " . substr($settings->get('whatsapp_client_id', 'NOT SET'), 0, 8) . '...');
+        Log::info("[STEP 1] client_secret from DB: " . (empty($settings->get('whatsapp_client_secret')) ? 'EMPTY/NOT SET' : 'SET (hidden)'));
+
+        $accessTokenResponse = $this->getAccessToken($rawToken);
+        Log::info("[STEP 1] getAccessToken success: " . ($accessTokenResponse->success ? 'true' : 'false'));
+
         if (!$accessTokenResponse->success) {
+            Log::error("[STEP 1] FAILED — Full error: " . json_encode($accessTokenResponse->data));
             return back()->with('status', [
                 'type' => 'error',
                 'message' => $accessTokenResponse->data->error->message
             ]);
         }
 
+        Log::info("[STEP 1] Access token obtained — length: " . strlen($accessTokenResponse->data->access_token ?? ''));
+
         $accessToken = $accessTokenResponse->data->access_token;
 
         // 2) Debug token -> app_id + waba_id (granular_scopes)
+        Log::info("[STEP 2] Debugging token to extract app_id and waba_id...");
+        $systemToken = \App\Models\Setting::where('key', 'whatsapp_access_token')->value('value');
+        Log::info("[STEP 2] System token (whatsapp_access_token) from DB: " . (empty($systemToken) ? 'EMPTY/NOT SET' : 'SET — length: ' . strlen($systemToken)));
+
         $debugTokenResponse = $this->debugToken($accessToken);
+        Log::info("[STEP 2] debugToken success: " . ($debugTokenResponse->success ? 'true' : 'false'));
+
         if (!$debugTokenResponse->success) {
+            Log::error("[STEP 2] FAILED — Full error: " . json_encode($debugTokenResponse->data));
             return back()->with('status', [
                 'type' => 'error',
                 'message' => $debugTokenResponse->data->error->message
             ]);
         }
 
-        // Prefer the WABA id passed by the UI (what user selected), else from debug_token
+        Log::info("[STEP 2] app_id from debug_token: " . ($debugTokenResponse->data->app_id ?? 'NULL'));
+        Log::info("[STEP 2] waba_id from debug_token: " . ($debugTokenResponse->data->waba_id ?? 'NULL'));
+
         $wabaId = $wabaIdFromUI ?: $debugTokenResponse->data->waba_id;
+        if (empty($wabaId)) {
+            $wabaId = $this->discoverWabaIdFromBusinesses($accessToken);
+            Log::info("[STEP 2] WABA ID fallback from businesses: " . ($wabaId ?: 'NULL'));
+        }
+        Log::info("[STEP 2] Final waba_id to use: " . ($wabaId ?: 'EMPTY — WILL FAIL'));
 
         if (empty($wabaId)) {
+            Log::error("[STEP 2] FAILED — Could not determine WABA ID");
             return back()->with('status', [
                 'type' => 'error',
                 'message' => __('Unable to determine WABA ID from signup flow.')
             ]);
         }
 
-        // 3) Fetch the chosen phone number (if UI gave us one), else fallback to first phone on the WABA (current behavior)
+        // 3) Fetch phone number
+        Log::info("[STEP 3] Fetching phone number...");
         if (!empty($phoneNumberIdFromUI)) {
+            Log::info("[STEP 3] Using phone_number_id from UI: {$phoneNumberIdFromUI}");
             $phoneNumberResponse = $this->getPhoneNumberById($accessToken, $phoneNumberIdFromUI);
         } else {
+            Log::info("[STEP 3] No phone_number_id from UI — fetching first number from WABA: {$wabaId}");
             $phoneNumberResponse = $this->getPhoneNumberId($accessToken, $wabaId);
         }
 
+        Log::info("[STEP 3] getPhoneNumber success: " . ($phoneNumberResponse->success ? 'true' : 'false'));
+
         if (!$phoneNumberResponse->success) {
+            Log::error("[STEP 3] FAILED — Full error: " . json_encode($phoneNumberResponse->data));
             return back()->with('status', [
                 'type' => 'error',
                 'message' => $phoneNumberResponse->data->error->message
@@ -84,39 +125,73 @@ class RegisterController extends BaseController
         }
 
         $phoneNumberId = $phoneNumberResponse->data->id;
+        Log::info("[STEP 3] phone_number_id resolved: {$phoneNumberId}");
+        Log::info("[STEP 3] display_phone_number: " . ($phoneNumberResponse->data->display_phone_number ?? 'NULL'));
 
-        // 4) Status for the phone number
+        // 4) Phone number status
+        Log::info("[STEP 4] Getting phone number status for: {$phoneNumberId}");
         $phoneNumberStatusResponse = $this->getPhoneNumberStatus($accessToken, $phoneNumberId);
+        Log::info("[STEP 4] success: " . ($phoneNumberStatusResponse->success ? 'true' : 'false'));
+
         if (!$phoneNumberStatusResponse->success) {
+            Log::error("[STEP 4] FAILED — Full error: " . json_encode($phoneNumberStatusResponse->data));
             return back()->with('status', [
                 'type' => 'error',
                 'message' => $phoneNumberStatusResponse->data->error->message
             ]);
         }
 
+        Log::info("[STEP 4] status: " . ($phoneNumberStatusResponse->data->status ?? 'NULL'));
+        Log::info("[STEP 4] code_verification_status: " . ($phoneNumberStatusResponse->data->code_verification_status ?? 'NULL'));
+
         // 5) Account review status
+        Log::info("[STEP 5] Getting account review status for WABA: {$wabaId}");
         $accountReviewStatusResponse = $this->getAccountReviewStatus($accessToken, $wabaId);
+        Log::info("[STEP 5] success: " . ($accountReviewStatusResponse->success ? 'true' : 'false'));
+
         if (!$accountReviewStatusResponse->success) {
+            Log::error("[STEP 5] FAILED — Full error: " . json_encode($accountReviewStatusResponse->data));
             return back()->with('status', [
                 'type' => 'error',
                 'message' => $accountReviewStatusResponse->data->error->message
             ]);
         }
 
-        // 6) Register number (ONLY for non-coexistence; ESU + Coex already link/register the number)
+        Log::info("[STEP 5] account_review_status: " . ($accountReviewStatusResponse->data->account_review_status ?? 'NULL'));
+
+        // 6) Register number (non-coexistence only)
+        // Skip if number is already CONNECTED — calling /register on a connected number
+        // returns #133015 (cooldown) or #131000 (already registered).
+        $currentStatus = $phoneNumberStatusResponse->data->status ?? null;
         if (!$isCoexistence) {
-            $registerNumber = $this->registerNumber($accessToken, $phoneNumberId);
-            if (!$registerNumber->success) {
-                return back()->with('status', [
-                    'type' => 'error',
-                    'message' => $registerNumber->data->error->message
-                ]);
+            if ($currentStatus === 'CONNECTED') {
+                Log::info("[STEP 6] Skipping registration — number is already CONNECTED");
+            } else {
+                Log::info("[STEP 6] Registering phone number: {$phoneNumberId} (current status: {$currentStatus})");
+                $registerNumber = $this->registerNumber($accessToken, $phoneNumberId);
+                Log::info("[STEP 6] registerNumber success: " . ($registerNumber->success ? 'true' : 'false'));
+
+                if (!$registerNumber->success) {
+                    Log::error("[STEP 6] FAILED — Full error: " . json_encode($registerNumber->data));
+                    return back()->with('status', [
+                        'type' => 'error',
+                        'message' => $registerNumber->data->error->message
+                    ]);
+                }
+
+                Log::info("[STEP 6] Number registered successfully");
             }
+        } else {
+            Log::info("[STEP 6] Skipping registration (coexistence mode)");
         }
 
         // 7) Business profile
+        Log::info("[STEP 7] Getting business profile for phone: {$phoneNumberId}");
         $businessProfileResponse = $this->getBusinessProfile($accessToken, $phoneNumberId);
+        Log::info("[STEP 7] success: " . ($businessProfileResponse->success ? 'true' : 'false'));
+
         if (!$businessProfileResponse->success) {
+            Log::error("[STEP 7] FAILED — Full error: " . json_encode($businessProfileResponse->data));
             return back()->with('status', [
                 'type' => 'error',
                 'message' => $businessProfileResponse->data->error->message
@@ -128,57 +203,61 @@ class RegisterController extends BaseController
         $callbackUrl = URL::to('/') . '/webhook/whatsapp/' . $organizationConfig->identifier;
         $token = $organizationConfig->identifier;
 
+        Log::info("[STEP 8] Subscribing app to WABA: {$wabaId}");
         $subscribeToWabaResponse = $this->subscribeToWaba($accessToken, $wabaId);
+        Log::info("[STEP 8] subscribeToWaba success: " . ($subscribeToWabaResponse->success ? 'true' : 'false'));
+
         if (!$subscribeToWabaResponse->success) {
+            Log::error("[STEP 8] subscribeToWaba FAILED — Full error: " . json_encode($subscribeToWabaResponse->data));
             return back()->with('status', [
                 'type' => 'error',
                 'message' => $subscribeToWabaResponse->data->error->message
             ]);
         }
 
+        Log::info("[STEP 8] Overriding WABA callback URL to: {$callbackUrl}");
         $overridecallbackResponse = $this->overrideWabaCallbackUrl($accessToken, $wabaId, $callbackUrl, $token);
+        Log::info("[STEP 8] overrideWabaCallbackUrl success: " . ($overridecallbackResponse->success ? 'true' : 'false'));
+
         if (!$overridecallbackResponse->success) {
+            Log::error("[STEP 8] overrideWabaCallbackUrl FAILED — Full error: " . json_encode($overridecallbackResponse->data));
             return back()->with('status', [
                 'type' => 'error',
                 'message' => $overridecallbackResponse->data->error->message
             ]);
         }
 
-        // NEW: Additional setup for coexistence mode
+        // Additional setup for coexistence mode
         if ($isCoexistence) {
-            // Set phone-level webhook for coexistence
+            Log::info("[STEP 8-CO] Setting phone-level webhook for coexistence...");
             $overridePhoneCallbackResponse = $this->overridePhoneCallbackUrl($accessToken, $phoneNumberId, $callbackUrl, $token);
+            Log::info("[STEP 8-CO] overridePhoneCallbackUrl success: " . ($overridePhoneCallbackResponse->success ? 'true' : 'false'));
             if (!$overridePhoneCallbackResponse->success) {
-                Log::warning('Failed to set phone-level webhook for coexistence', [
-                    'phone_number_id' => $phoneNumberId,
-                    'error' => $overridePhoneCallbackResponse->data->error->message ?? 'Unknown error'
-                ]);
+                Log::warning('[STEP 8-CO] overridePhoneCallbackUrl FAILED: ' . json_encode($overridePhoneCallbackResponse->data));
             }
 
-            // Request history sync for coexistence (optional, may fail if not enabled)
+            Log::info("[STEP 8-CO] Requesting history sync for WABA: {$wabaId}");
             $historySync = $this->requestHistorySync($accessToken, $wabaId);
+            Log::info("[STEP 8-CO] requestHistorySync success: " . ($historySync->success ? 'true' : 'false'));
             if (!$historySync->success) {
-                Log::info('History sync request failed (may not be enabled)', [
-                    'waba_id' => $wabaId,
-                    'error' => $historySync->data->error->message ?? 'Unknown error'
-                ]);
+                Log::warning('[STEP 8-CO] requestHistorySync FAILED: ' . json_encode($historySync->data));
             }
 
-            // 🔹 Sync contacts
+            Log::info("[STEP 8-CO] Syncing SMB contacts...");
             $this->syncSmbAppData($accessToken, $phoneNumberId, "smb_app_state_sync");
 
-            // 🔹 Sync message history
+            Log::info("[STEP 8-CO] Syncing SMB message history...");
             $this->syncSmbAppData($accessToken, $phoneNumberId, "history");
 
-            // Verify webhook configurations after setup
             $this->verifyPhoneNumberConnection($accessToken, $phoneNumberId);
             $this->getWebhookSubscriptions($accessToken, $wabaId);
         }
 
-        // 9) Persist metadata (add is_coexistence without touching existing flags)
+        // 9) Persist metadata
+        Log::info("[STEP 9] Saving metadata to organization...");
         $metadataArray = $organizationConfig->metadata ? json_decode($organizationConfig->metadata, true) : [];
-        $metadataArray['whatsapp']['is_embedded_signup'] = 1; // keep your existing marker
-        $metadataArray['whatsapp']['is_coexistence'] = $isCoexistence ? 1 : 0; // NEW
+        $metadataArray['whatsapp']['is_embedded_signup'] = 1;
+        $metadataArray['whatsapp']['is_coexistence'] = $isCoexistence ? 1 : 0;
         $metadataArray['whatsapp']['sync_contacts'] = 1;
         $metadataArray['whatsapp']['sync_history'] = 1;
         $metadataArray['whatsapp']['access_token'] = $accessToken;
@@ -204,11 +283,15 @@ class RegisterController extends BaseController
 
         $organizationConfig->metadata = json_encode($metadataArray);
         $organizationConfig->save();
+        Log::info("[STEP 9] Metadata saved");
 
-        // 10) Sync templates (same for both)
+        // 10) Sync templates
+        Log::info("[STEP 10] Syncing templates for WABA: {$wabaId}");
         $this->syncTemplates($accessToken, $wabaId);
 
-        Log::info("\n----------End signup flow--------\n");
+        $totalTime = round((microtime(true) - $startTime) * 1000);
+        Log::info("========== SIGNUP FLOW COMPLETE — total time: {$totalTime}ms ==========");
+
         return back()->with('status', [
             'type' => 'success',
             'message' => $isCoexistence
@@ -332,11 +415,16 @@ class RegisterController extends BaseController
     }
 
     public function getAccessToken($token){
-        Log::info("Getting access token");
+        Log::info("[getAccessToken] START");
 
         $settings = Setting::whereIn('key', ['whatsapp_client_id', 'whatsapp_client_secret'])->pluck('value', 'key');
         $clientId = $settings->get('whatsapp_client_id', null);
         $clientSecret = $settings->get('whatsapp_client_secret', null);
+
+        Log::info("[getAccessToken] client_id: " . substr($clientId ?? 'NULL', 0, 8) . '...');
+        Log::info("[getAccessToken] client_secret set: " . (empty($clientSecret) ? 'NO' : 'YES'));
+        Log::info("[getAccessToken] code length: " . strlen($token ?? ''));
+        Log::info("[getAccessToken] code first 20 chars: " . substr($token ?? '', 0, 20));
 
         $responseObject = new \stdClass();
 
@@ -346,25 +434,30 @@ class RegisterController extends BaseController
             'code' => $token,
         ]);
 
+        Log::info("[getAccessToken] HTTP status: " . $response->status());
+        Log::info("[getAccessToken] Raw response body: " . $response->body());
+
         if ($response->successful()) {
             $response = $response->json();
             if (isset($response['error'])) {
+                Log::error("[getAccessToken] Meta returned error in body: " . json_encode($response['error']));
                 $responseObject->success = false;
                 $responseObject->data = new \stdClass();
                 $responseObject->data->error = new \stdClass();
                 $responseObject->data->error->code = $response['error']['code'];
                 $responseObject->data->error->message = $response['error']['message'];
             } else {
+                Log::info("[getAccessToken] SUCCESS — token_type: " . ($response['token_type'] ?? 'N/A'));
                 $responseObject->success = true;
                 $responseObject->data = new \stdClass();
                 $responseObject->data = (object) $response;
             }
         } else {
+            Log::error("[getAccessToken] HTTP error — status: " . $response->status() . " body: " . $response->body());
             $responseObject->success = false;
             $responseObject->data = new \stdClass();
             $responseObject->data->error = new \stdClass();
             $responseObject->data->error->message = $response->body();
-            Log::error($response->body());
         }
 
         return $responseObject;
@@ -373,11 +466,25 @@ class RegisterController extends BaseController
     public function debugToken($token){
         Log::info("Getting debug token");
 
-        $accessToken = Setting::where('key', 'whatsapp_access_token')->value('value');
+        $settings = Setting::whereIn('key', ['whatsapp_client_id', 'whatsapp_client_secret', 'whatsapp_access_token'])->pluck('value', 'key');
+        $clientId = $settings->get('whatsapp_client_id', null);
+        $clientSecret = $settings->get('whatsapp_client_secret', null);
+        $systemToken = $settings->get('whatsapp_access_token', null);
+        $debugAccessToken = (!empty($clientId) && !empty($clientSecret)) ? ($clientId . '|' . $clientSecret) : $systemToken;
+
+        Log::info("[debugToken] Using app token? " . ((!empty($clientId) && !empty($clientSecret)) ? 'YES' : 'NO'));
         $responseObject = new \stdClass();
 
+        if (empty($debugAccessToken)) {
+            $responseObject->success = false;
+            $responseObject->data = new \stdClass();
+            $responseObject->data->error = new \stdClass();
+            $responseObject->data->error->message = 'Missing app credentials/token for debug_token call';
+            return $responseObject;
+        }
+
         $response = Http::withHeaders([
-            'Authorization' => 'Bearer ' . $accessToken
+            'Authorization' => 'Bearer ' . $debugAccessToken
         ])->get("https://graph.facebook.com/{$this->apiVersion}/debug_token", [
             'input_token' => $token
         ]);
@@ -398,8 +505,10 @@ class RegisterController extends BaseController
     
                 // Check if the response data is structured as expected
                 if (isset($response['data']['granular_scopes'])) {
+                    $allowedScopes = ['whatsapp_business_management', 'whatsapp_business_messaging', 'business_management'];
                     foreach ($response['data']['granular_scopes'] as $scope) {
-                        if ($scope['scope'] === 'whatsapp_business_management' && isset($scope['target_ids'][0])) {
+                        $scopeName = $scope['scope'] ?? ($scope['permission'] ?? null);
+                        if (in_array($scopeName, $allowedScopes, true) && isset($scope['target_ids'][0])) {
                             $firstWabaId = $scope['target_ids'][0];
                             break;
                         }
@@ -420,6 +529,45 @@ class RegisterController extends BaseController
         }
 
         return $responseObject;
+    }
+
+    private function discoverWabaIdFromBusinesses($accessToken)
+    {
+        try {
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer ' . $accessToken
+            ])->get("https://graph.facebook.com/{$this->apiVersion}/me", [
+                'fields' => 'businesses{id}'
+            ]);
+
+            if (!$response->successful()) {
+                Log::warning('[discoverWabaIdFromBusinesses] /me businesses failed: ' . $response->body());
+                return null;
+            }
+
+            $businessData = $response->json();
+            $businessId = $businessData['businesses']['data'][0]['id'] ?? ($businessData['id'] ?? null);
+
+            if (empty($businessId)) {
+                Log::warning('[discoverWabaIdFromBusinesses] No business ID found in /me response');
+                return null;
+            }
+
+            $wabaResponse = Http::withHeaders([
+                'Authorization' => 'Bearer ' . $accessToken
+            ])->get("https://graph.facebook.com/{$this->apiVersion}/{$businessId}/owned_whatsapp_business_accounts");
+
+            if (!$wabaResponse->successful()) {
+                Log::warning('[discoverWabaIdFromBusinesses] owned_waba request failed: ' . $wabaResponse->body());
+                return null;
+            }
+
+            $wabaData = $wabaResponse->json();
+            return $wabaData['data'][0]['id'] ?? null;
+        } catch (\Throwable $e) {
+            Log::error('[discoverWabaIdFromBusinesses] Exception: ' . $e->getMessage());
+            return null;
+        }
     }
 
     public function getPhoneNumberId($accessToken, $wabaId){
