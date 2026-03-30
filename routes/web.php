@@ -8,7 +8,7 @@ use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Http;
 use App\Http\Controllers\ShopifyIntegratin\ShopifyAuthController;
 use App\Http\Controllers\ShopifyIntegratin\ShopifyWebhookController;
-
+use App\Http\Controllers\ShopifyIntegratin\PrivacyWebhookController;
 /*
 |--------------------------------------------------------------------------
 | Web Routes
@@ -28,6 +28,9 @@ Route::post('/shopify/webhooks/order-created', [ShopifyWebhookController::class,
 Route::post('/shopify/webhooks/orders-updated', [ShopifyWebhookController::class, 'handleOrderUpdated']);
 Route::post('/shopify/webhooks/orders-fulfilled', [ShopifyWebhookController::class, 'handleOrderFulfilled']);
 Route::post('/shopify/webhooks/checkouts-created', [ShopifyWebhookController::class, 'handleCheckoutsCreated']);
+Route::post('/shopify/webhooks/customers/data_request', [PrivacyWebhookController::class, 'handle']);
+Route::post('/shopify/webhooks/customers/redact', [PrivacyWebhookController::class, 'handle']);
+Route::post('/shopify/webhooks/shop/redact', [PrivacyWebhookController::class, 'handle']);
 
 Route::post('/webhook/{organization}', [App\Http\Controllers\WebhookController::class, 'handlePostRequest'])
     ->whereNumber('organization');

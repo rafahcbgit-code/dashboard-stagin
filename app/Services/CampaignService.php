@@ -29,11 +29,11 @@ class CampaignService
         $timezone = Setting::where('key', 'timezone')->value('value');
         $organization = Organization::find($organizationId);
         $organizationMetadata = json_decode($organization->metadata ?? '{}', true);
+        $organizationMetadata = is_array($organizationMetadata) ? $organizationMetadata : [];
         $timezone = $organizationMetadata['timezone'] ?? $timezone;
 
         // Enforce messaging_limit_tier: selected group size must be <= allowed tier value
-        $tier = $organizationMetadata['whatsapp']['whatsapp_business_manager_messaging_limit'] ?? null;
-        $tierLimit = $this->resolveTierLimit($tier);
+        $tierLimit = $this->resolveTierLimit($organizationMetadata);
 
         if ($request->contacts === 'all') {
             $selectedCount = Contact::where('organization_id', $organizationId)
@@ -163,26 +163,66 @@ class CampaignService
         }
     }
 
-    private function resolveTierLimit(?string $tier): int
+    private function resolveTierLimit(array $metadata): int
     {
-        if (!$tier) {
-            return 250;
+        $tierValue = $this->extractTierValueFromMetadata($metadata);
+        $limit = $this->parseTierLimitValue($tierValue);
+
+        return $limit ?? 250;
+    }
+
+    private function extractTierValueFromMetadata(array $metadata): ?string
+    {
+        $candidates = [];
+
+        if (isset($metadata['whatsapp']) && is_array($metadata['whatsapp'])) {
+            $candidates[] = $metadata['whatsapp']['whatsapp_business_manager_messaging_limit'] ?? null;
+            $candidates[] = $metadata['whatsapp']['messaging_limit_tier'] ?? null;
         }
 
-        $tier = strtoupper(trim($tier));
+        $candidates[] = $metadata['whatsapp_business_manager_messaging_limit'] ?? null;
+        $candidates[] = $metadata['messaging_limit_tier'] ?? null;
 
-        if ($tier === 'TIER_UNLIMITED') {
+        foreach ($candidates as $candidate) {
+            if ($candidate !== null && $candidate !== '') {
+                return (string) $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    private function parseTierLimitValue(?string $tier): ?int
+    {
+        if (!$tier) {
+            return null;
+        }
+
+        $value = strtoupper(trim($tier));
+
+        if ($value === 'TIER_UNLIMITED' || $value === 'UNLIMITED') {
             return PHP_INT_MAX;
         }
 
-        if (preg_match('/TIER_(\d+)(K?)/i', $tier, $matches)) {
-            $number = (int) $matches[1];
-            $suffix = strtoupper($matches[2] ?? '');
-
-            return $suffix === 'K' ? $number * 1000 : $number;
+        if (is_numeric($value)) {
+            return (int) $value;
         }
 
-        return 250;
+        if (preg_match('/TIER_(\d+(?:\.\d+)?)([KM]?)/i', $value, $matches)) {
+            $number = (float) $matches[1];
+            $suffix = strtoupper($matches[2] ?? '');
+
+            switch ($suffix) {
+                case 'K':
+                    return (int) ($number * 1000);
+                case 'M':
+                    return (int) ($number * 1000000);
+                default:
+                    return (int) $number;
+            }
+        }
+
+        return null;
     }
 
     private function getMediaInfo($path)
