@@ -5,6 +5,7 @@ namespace App\Services\Outbound;
 use App\Models\Contact;
 use App\Models\OutboundMessage;
 use App\Models\OutboundMessageAttempt;
+use App\Models\SallaWebhookDelivery;
 use App\Models\ShopifyWebhookDelivery;
 use App\Models\Template;
 use Illuminate\Support\Arr;

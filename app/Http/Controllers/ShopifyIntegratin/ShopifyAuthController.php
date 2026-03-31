@@ -32,7 +32,7 @@ class ShopifyAuthController extends Controller
         $this->baseUrl = 'https://molecular-felicidad-irrotationally.ngrok-free.dev';
         // The URL Shopify will redirect to after the merchant approves the app
         $this->redirectUri = $this->baseUrl . '/shopify/callback';
-         $this->client = new Client();
+        $this->client = new Client();
     }
 
     /**
@@ -87,9 +87,12 @@ class ShopifyAuthController extends Controller
         return redirect($installUrl);
     }
 
-    public function installSuccess()
+    public function installSuccess(Request $request)
     {
         return Inertia::render('Shopify/InstallSuccess', [
+            'apiKey' => env('SHOPIFY_API_KEY'),
+            'shop' => $request->query('shop'),
+            'host' => $request->query('host'),
             'contactEmail' => 'info@chatberry.net',
             'whatsapp' => '+966542922948',
         ]);
@@ -266,9 +269,6 @@ class ShopifyAuthController extends Controller
             'orders/updated' => '/shopify/webhooks/orders-updated',
             'orders/fulfilled' => '/shopify/webhooks/orders-fulfilled',
             'checkouts/create' => '/shopify/webhooks/checkouts-created',
-            'customers/data_request' => '/shopify/webhooks/customers/data_request',
-            'customers/redact' => '/shopify/webhooks/customers/redact',
-            'shop/redact' => '/shopify/webhooks/shop/redact'
         ];
 
         foreach ($topics as $topic => $endpoint) {

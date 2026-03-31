@@ -76,6 +76,12 @@ return [
         'client_secret' => env('GOOGLE_SHEETS_CLIENT_SECRET'),
         'redirect'      => env('GOOGLE_SHEETS_REDIRECT_URI', '/automation/meta-flows/google/callback'),
     ],
+
+    'shopify' => [
+        'api_key'    => env('SHOPIFY_API_KEY'),
+        'api_secret' => env('SHOPIFY_API_SECRET'),
+        'scopes'     => env('SHOPIFY_SCOPES'),
+    ],
 ];
 
 

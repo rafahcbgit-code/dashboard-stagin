@@ -1,0 +1,43 @@
+# معرف التطبيق (Client ID) من لوحة الشركاء
+client_id = "0b73da32d68bba1a2ffc41f9cb24e907"
+name = "Chatberry"
+handle = "chatberry-app"
+application_url = "https://molecular-felicidad-irrotationally.ngrok-free.dev"
+embedded = false
+
+[auth]
+redirect_urls = [
+  "https://molecular-felicidad-irrotationally.ngrok-free.dev/shopify/callback"
+]
+
+[access_scopes]
+scopes = "read_assigned_fulfillment_orders,write_assigned_fulfillment_orders,read_customer_events,read_cart_transforms,read_validations,read_customers,read_order_edits,read_orders,customer_read_customers,customer_read_orders,unauthenticated_read_checkouts,unauthenticated_read_customers"
+
+[webhooks]
+api_version = "2026-01"
+
+
+# ويبهوك إنشاء الطلبات
+  [[webhooks.subscriptions]]
+  topics = [ "orders/create" ]
+  uri = "/shopify/webhooks/order-created"
+
+  # ويبهوك تحديث الطلبات
+  [[webhooks.subscriptions]]
+  topics = [ "orders/updated" ]
+  uri = "/shopify/webhooks/orders-updated"
+
+  # ويبهوك تنفيذ الطلبات
+  [[webhooks.subscriptions]]
+  topics = [ "orders/fulfilled" ]
+  uri = "/shopify/webhooks/orders-fulfilled"
+
+  # ويبهوك إنشاء السلات الشرائية
+  [[webhooks.subscriptions]]
+  topics = [ "checkouts/create" ]
+  uri = "/shopify/webhooks/checkouts-created"
+
+[[webhooks.subscriptions]]
+topics = [ "app/uninstalled" ]
+compliance_topics = [ "customers/redact", "customers/data_request", "shop/redact" ]
+uri = "/shopify/webhooks/shop/redact"
