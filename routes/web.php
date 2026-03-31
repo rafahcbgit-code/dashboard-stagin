@@ -20,7 +20,6 @@ use App\Http\Controllers\ShopifyIntegratin\PrivacyWebhookController;
 |
 */
 
-
 Route::get('/new-install', [ShopifyAuthController::class, 'install']);
 Route::get('/shopify/callback', [ShopifyAuthController::class, 'callback']);
 Route::get('/shopify/install/success', [ShopifyAuthController::class, 'installSuccess'])->name('shopify.install.success');
