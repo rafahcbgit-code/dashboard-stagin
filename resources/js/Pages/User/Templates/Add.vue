@@ -500,6 +500,18 @@
     import 'vue3-toastify/dist/index.css';
     import { router } from '@inertiajs/vue3';
 
+    const createAuthenticationButton = () => ({
+        otp_type: 'zero_tap',
+        text: 'Copy Code',
+        autofill_text: 'Autofill',
+        supported_apps: [
+            {
+                package_name: null,
+                signature_hash: null,
+            },
+        ],
+    });
+
     const props = defineProps(['languages', 'settings']);
     const headerCharacterLimit = ref('60');
     const headerCharacterCount = ref('0');
@@ -547,6 +559,7 @@
         },
         'code_expiration' : false,
         'set_custom_validity_period' : false,
+        'authentication_button' : createAuthenticationButton(),
         'buttons' : [],
         'carousel_cards' : [],
         'carousel_message_body' : '',
@@ -564,6 +577,20 @@
     });
     const config = ref(props.settings.metadata);
     const settings = ref(config.value ? JSON.parse(config.value) : null);
+
+    const ensureAuthenticationButton = () => {
+        if (!form.value.authentication_button) {
+            form.value.authentication_button = createAuthenticationButton();
+        }
+
+        if (!Array.isArray(form.value.authentication_button.supported_apps)) {
+            form.value.authentication_button.supported_apps = [];
+        }
+
+        return form.value.authentication_button;
+    };
+
+    ensureAuthenticationButton();
 
     const formattedMessage = ref('');
 
@@ -734,10 +761,11 @@
     }
 
     const addSupportedApp = () => {
-        const appsCount = form.value.authentication_button.supported_apps.length;
+        const authButton = ensureAuthenticationButton();
+        const appsCount = authButton.supported_apps.length;
 
-        if(appsCount < 5){
-            form.value.authentication_button.supported_apps.push({
+        if (appsCount < 5) {
+            authButton.supported_apps.push({
                 'package_name' : null,
                 'signature_hash' : null,
             });
@@ -745,7 +773,10 @@
     }
 
     const removeSupportedApp = (index) => {
-        form.value.authentication_button.supported_apps.splice(index, 1);
+        const authButton = ensureAuthenticationButton();
+        if (index >= 0 && index < authButton.supported_apps.length) {
+            authButton.supported_apps.splice(index, 1);
+        }
     }
 
     const removeButton = (index) => {
@@ -819,7 +850,7 @@
                 return false;
             }
 
-            if (form.value.body.example.length > 0) {
+            if ((form.value.body.example?.length ?? 0) > 0) {
                 const allKeysHaveValues = Object.keys(form.value.body.example).every(key => {
                     const value = form.value.body.example[key];
                     return value !== undefined && value !== null && value !== '';
@@ -832,7 +863,7 @@
 
             // Exclude header validation if category is 'authentication'
             if (
-                form.value.header.example.length > 0 &&
+                (form.value.header.example?.length ?? 0) > 0 &&
                 !Object.keys(form.value.header.example).every(key => {
                     const value = form.value.header.example[key];
                     return value !== undefined && value !== null && value !== '';
@@ -844,7 +875,7 @@
         
         // Additional validation for authentication category
         if (form.value.category === 'AUTHENTICATION') {
-            const authButton = form.value.authentication_button;
+            const authButton = ensureAuthenticationButton();
 
             // Ensure otp_type has a value
             if (!authButton.otp_type || authButton.otp_type.trim() === "") {
@@ -945,7 +976,9 @@
                     router.visit('/templates', { method: 'get' });
                 }
             })
-            .catch(() => {});
+            .catch(error => {
+                console.error('Carousel template submission failed', error);
+            });
 
             return;
         }
@@ -967,8 +1000,7 @@
             }
         })
         .catch(error => {
-            // Handle any errors that occur during the request
-            //console.error('An error occurred:', error);
+            console.error('Template submission failed', error);
         });
     }
 

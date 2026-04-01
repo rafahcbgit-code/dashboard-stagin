@@ -1,9 +1,22 @@
 import { createApp, h, watchEffect } from 'vue';
-import { createInertiaApp } from '@inertiajs/vue3';
+import { createInertiaApp, router } from '@inertiajs/vue3';
 import VueApexCharts from 'vue3-apexcharts';
 import VueTelInput from 'vue-tel-input';
 import { createI18n } from 'vue-i18n';
 import axios from 'axios';
+
+router.on('start', () => {
+  console.debug('Inertia navigation started');
+});
+router.on('finish', () => {
+  console.debug('Inertia navigation finished');
+});
+router.on('error', (error) => {
+  console.error('Inertia request error', error);
+});
+router.on('invalid', (event) => {
+  console.warn('Invalid Inertia response received', event.detail ?? event);
+});
 
 // Function to load locale messages via API
 async function loadLocaleMessages(locale) {
@@ -59,6 +72,10 @@ createInertiaApp({
       });
 
       const app = createApp({ render: () => h(App, props) });
+
+      app.config.errorHandler = (error, instance, info) => {
+        console.error('Vue runtime error', error, info, instance);
+      };
 
       app.use(plugin)
         .use(VueApexCharts)
