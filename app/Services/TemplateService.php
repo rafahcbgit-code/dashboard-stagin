@@ -9,6 +9,8 @@ use App\Models\Template;
 use App\Services\WhatsappService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
+
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use DB;
@@ -117,7 +119,7 @@ class TemplateService
             // the dedicated carousel creation method on WhatsappService.
             // Everything else (UTILITY, AUTHENTICATION, standard MARKETING)
             // continues through the original createTemplate method.
-            \Log::info("Request", $request->all());
+            //Log::info("Request", $request->all());
             if ($request->get('template_type') === 'carousel') {
                 return $this->whatsappService->createCarouselTemplate($request);
             }
