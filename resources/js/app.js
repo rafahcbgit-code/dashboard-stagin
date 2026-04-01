@@ -1,21 +1,20 @@
 import { createApp, h, watchEffect } from 'vue';
-import { createInertiaApp } from '@inertiajs/vue3';
-import { Inertia } from '@inertiajs/core';
+import { createInertiaApp, router } from '@inertiajs/vue3';
 import VueApexCharts from 'vue3-apexcharts';
 import VueTelInput from 'vue-tel-input';
 import { createI18n } from 'vue-i18n';
 import axios from 'axios';
 
-Inertia.on('start', () => {
+router.on('start', () => {
   console.debug('Inertia navigation started');
 });
-Inertia.on('finish', () => {
+router.on('finish', () => {
   console.debug('Inertia navigation finished');
 });
-Inertia.on('error', (error) => {
+router.on('error', (error) => {
   console.error('Inertia request error', error);
 });
-Inertia.on('invalid', (event) => {
+router.on('invalid', (event) => {
   console.warn('Invalid Inertia response received', event.detail ?? event);
 });
 
