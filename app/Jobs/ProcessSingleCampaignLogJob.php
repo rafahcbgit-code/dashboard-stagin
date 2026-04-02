@@ -81,22 +81,37 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
                 $this->initializeWhatsappService();
 
                 try {
+                    $jobStartTime = microtime(true);
 
-                    // **NEW: Detect if this is a carousel template**
-                    $campaign = Campaign::find($this->campaignLog->campaign_id);
+                    // Detect if this is a carousel template (reuse already-loaded $campaign)
                     $template = Template::find($campaign->template_id);
                     $metadata = json_decode($template->metadata, true);
                     $isCarousel = ($metadata['template_type'] ?? '') === 'carousel';
 
                     if ($isCarousel) {
                         // Build carousel template payload
+                        $buildStart = microtime(true);
                         $templatePayload = $this->buildCarouselTemplateRequest(
                             $campaign->template_id,
                             $this->campaignLog->contact
                         );
+                        $buildDuration = round((microtime(true) - $buildStart) * 1000, 2);
                         
-                        // Enrich with fresh media IDs
-                        $templatePayload = $this->whatsappService->enrichCarouselWithMediaIds($templatePayload);
+                        // Enrich with fresh media IDs (cached per campaign)
+                        $enrichStart = microtime(true);
+                        $templatePayload = $this->whatsappService->enrichCarouselWithMediaIds(
+                            $templatePayload,
+                            $this->campaignLog->campaign_id
+                        );
+                        $enrichDuration = round((microtime(true) - $enrichStart) * 1000, 2);
+
+                        Log::channel('campaign')->info('Carousel payload prepared', [
+                            'campaign_log_id' => $this->campaignLog->id,
+                            'campaign_id' => $this->campaignLog->campaign_id,
+                            'build_ms' => $buildDuration,
+                            'media_enrich_ms' => $enrichDuration,
+                            'card_count' => count($metadata['carousel_cards'] ?? []),
+                        ]);
                     } else {
                         // Build regular template payload
                         $templatePayload = $this->buildTemplateRequest(
@@ -117,15 +132,32 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
                         }
                     }
                     
-                    
+                    // Send to Meta API
+                    $sendStart = microtime(true);
                     $responseObject = $this->whatsappService->sendTemplateMessage(
                         $this->campaignLog->contact->uuid,
                         $templatePayload,
                         $campaign_user_id,
                         $this->campaignLog->campaign_id
                     );
+                    $sendDuration = round((microtime(true) - $sendStart) * 1000, 2);
 
+                    // Update DB log status
+                    $dbStart = microtime(true);
                     $this->updateLogStatus($lockedLog, $responseObject);
+                    $dbDuration = round((microtime(true) - $dbStart) * 1000, 2);
+
+                    $totalDuration = round((microtime(true) - $jobStartTime) * 1000, 2);
+
+                    Log::channel('campaign')->info('Campaign message processed', [
+                        'campaign_log_id' => $this->campaignLog->id,
+                        'campaign_id' => $this->campaignLog->campaign_id,
+                        'is_carousel' => $isCarousel,
+                        'meta_api_ms' => $sendDuration,
+                        'db_update_ms' => $dbDuration,
+                        'total_ms' => $totalDuration,
+                        'success' => $responseObject->success ?? false,
+                    ]);
                 } catch (\Exception $e) {
                     // Reset status to failed so the log can be retried, preventing stuck "ongoing" state
                     $lockedLog->update(['status' => 'failed']);
