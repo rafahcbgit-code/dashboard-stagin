@@ -41,15 +41,19 @@ class WhatsappService
         $this->wabaId = $wabaId;
         $this->organizationId = $organizationId;
 
-        Config::set('broadcasting.connections.pusher', [
-            'driver' => 'pusher',
-            'key' => Setting::where('key', 'pusher_app_key')->first()->value,
-            'secret' => Setting::where('key', 'pusher_app_secret')->first()->value,
-            'app_id' => Setting::where('key', 'pusher_app_id')->first()->value,
-            'options' => [
-                'cluster' => Setting::where('key', 'pusher_app_cluster')->first()->value,
-            ],
-        ]);
+        // Cache Pusher config to avoid 4 DB queries per WhatsappService instantiation
+        $pusherConfig = \Illuminate\Support\Facades\Cache::remember('pusher_broadcast_config', 3600, function () {
+            return [
+                'driver' => 'pusher',
+                'key' => Setting::where('key', 'pusher_app_key')->first()->value ?? '',
+                'secret' => Setting::where('key', 'pusher_app_secret')->first()->value ?? '',
+                'app_id' => Setting::where('key', 'pusher_app_id')->first()->value ?? '',
+                'options' => [
+                    'cluster' => Setting::where('key', 'pusher_app_cluster')->first()->value ?? 'mt1',
+                ],
+            ];
+        });
+        Config::set('broadcasting.connections.pusher', $pusherConfig);
     }
 
     /**
@@ -184,16 +188,16 @@ class WhatsappService
         $requestData['template'] = $templateContent;
 
         
-        \Log::info('Template variables payload', [
+        Log::info('Template variables payload', [
             'template' => $templateContent['name'] ?? null,
             'contact_id' => $contact->id ?? null,
             'variables' => $this->extractTemplateVariables($templateContent),
         ]);
 
-        \Log::info('WhatsApp API Request: ' . json_encode($requestData));
+        Log::info('WhatsApp API Request: ' . json_encode($requestData));
 
         $responseObject = $this->sendHttpRequest('POST', $url, $requestData, $headers);
-        \Log::info("meta resp", [$responseObject]);
+        Log::info("meta resp", [$responseObject]);
         if($responseObject->success === true){
             // Determine metadata based on template type
             $metadata = null;
@@ -261,7 +265,7 @@ class WhatsappService
             // when the contact submits the flow, handleFlowResponse() can match the
             // incoming flow_token to the correct flow and contact.
             if (!empty($flowStubs)) {
-                \Log::info('MetaFlows: processing FLOW stubs after template send', [
+                Log::info('MetaFlows: processing FLOW stubs after template send', [
                     'stubs'          => $flowStubs,
                     'organization_id' => $contact->organization_id,
                     'contact_id'     => $contact->id,
@@ -270,7 +274,7 @@ class WhatsappService
 
             foreach ($flowStubs as $stub) {
                 if (empty($stub['flow_token']) || empty($stub['meta_flow_id'])) {
-                    \Log::warning('MetaFlows: skipping stub — missing flow_token or meta_flow_id', [
+                    Log::warning('MetaFlows: skipping stub — missing flow_token or meta_flow_id', [
                         'stub' => $stub,
                     ]);
                     continue;
@@ -286,7 +290,7 @@ class WhatsappService
                         'flow_token'      => $stub['flow_token'],
                         'response_json'   => null,
                     ]);
-                    \Log::info('MetaFlows: MetaFlowResponse stub created for template FLOW button', [
+                    Log::info('MetaFlows: MetaFlowResponse stub created for template FLOW button', [
                         'meta_flow_response_created' => true,
                         'meta_flow_id'               => $metaFlow->id,
                         'meta_flow_name'             => $metaFlow->name ?? null,
@@ -295,7 +299,7 @@ class WhatsappService
                         'organization_id'            => $contact->organization_id,
                     ]);
                 } else {
-                    \Log::warning('MetaFlows: no MetaFlow found for stub — stub NOT created', [
+                    Log::warning('MetaFlows: no MetaFlow found for stub — stub NOT created', [
                         'meta_flow_id_searched' => $stub['meta_flow_id'],
                         'organization_id'       => $contact->organization_id,
                     ]);
@@ -366,20 +370,42 @@ class WhatsappService
     }
 
     /**
-     * Enrich carousel template payload with fresh media IDs
-     * Called from TemplateTrait before sending
+     * Enrich carousel template payload with fresh media IDs.
+     * Uses campaign-level caching so media is uploaded only ONCE per campaign,
+     * then reused for all contacts. Meta media IDs are valid for 30 days.
+     *
+     * @param array $templatePayload The carousel template payload
+     * @param int|null $campaignId Optional campaign ID for cross-contact caching
+     * @return array The enriched payload with media IDs
      */
-    public function enrichCarouselWithMediaIds(array $templatePayload): array
+    public function enrichCarouselWithMediaIds(array $templatePayload, ?int $campaignId = null): array
     {
+        $cacheKey = $campaignId ? "carousel_media_ids_campaign_{$campaignId}" : null;
+        $cachedMediaIds = [];
+
+        // Try to load cached media IDs for this campaign
+        if ($cacheKey) {
+            $cachedMediaIds = \Illuminate\Support\Facades\Cache::get($cacheKey, []);
+            if (!empty($cachedMediaIds)) {
+                Log::info('Carousel media IDs loaded from cache', [
+                    'campaign_id' => $campaignId,
+                    'cached_count' => count($cachedMediaIds),
+                ]);
+            }
+        }
+
+        $newMediaIds = [];
+        $uploadCount = 0;
+        $cacheHitCount = 0;
+
         // Find carousel component
         foreach ($templatePayload['components'] as &$component) {
             if (($component['type'] ?? '') === 'carousel') {
                 // Process each card
-                foreach ($component['cards'] as &$card) {
+                foreach ($component['cards'] as $cardIndex => &$card) {
                     // Find header component in card
                     foreach ($card['components'] as &$cardComponent) {
                         if (($cardComponent['type'] ?? '') === 'header') {
-                            // Get the URL from parameters
                             $headerParam = &$cardComponent['parameters'][0] ?? null;
                             
                             if ($headerParam) {
@@ -387,16 +413,37 @@ class WhatsappService
                                 $mediaUrl = $headerParam[$mediaType]['link'] ?? null;
                                 
                                 if ($mediaUrl) {
-                                    // Upload and get fresh media ID
-                                    $mediaId = $this->uploadMediaForSending($mediaUrl);
+                                    // Check cache first (keyed by card index)
+                                    $mediaId = $cachedMediaIds[$cardIndex] ?? null;
+
+                                    if ($mediaId) {
+                                        $cacheHitCount++;
+                                    } else {
+                                        // Upload and get fresh media ID
+                                        $uploadStart = microtime(true);
+                                        $mediaId = $this->uploadMediaForSending($mediaUrl);
+                                        $uploadDuration = round((microtime(true) - $uploadStart) * 1000, 2);
+
+                                        Log::info('Carousel card media uploaded', [
+                                            'card_index' => $cardIndex,
+                                            'media_id' => $mediaId,
+                                            'duration_ms' => $uploadDuration,
+                                            'campaign_id' => $campaignId,
+                                        ]);
+                                        $uploadCount++;
+                                    }
                                     
                                     if ($mediaId) {
+                                        // Store for caching
+                                        $newMediaIds[$cardIndex] = $mediaId;
                                         // Replace 'link' with 'id'
                                         unset($headerParam[$mediaType]['link']);
                                         $headerParam[$mediaType]['id'] = $mediaId;
                                     } else {
-                                        \Log::error('Failed to get media ID for carousel card', [
-                                            'url' => $mediaUrl
+                                        Log::error('Failed to get media ID for carousel card', [
+                                            'card_index' => $cardIndex,
+                                            'url' => $mediaUrl,
+                                            'campaign_id' => $campaignId,
                                         ]);
                                     }
                                 }
@@ -406,7 +453,18 @@ class WhatsappService
                 }
             }
         }
-        
+
+        // Cache the media IDs for this campaign (valid for 24 hours — Meta IDs last 30 days)
+        if ($cacheKey && !empty($newMediaIds)) {
+            \Illuminate\Support\Facades\Cache::put($cacheKey, $newMediaIds, 86400);
+            Log::info('Carousel media IDs cached for campaign', [
+                'campaign_id' => $campaignId,
+                'uploads' => $uploadCount,
+                'cache_hits' => $cacheHitCount,
+                'total_cards' => count($newMediaIds),
+            ]);
+        }
+
         return $templatePayload;
     }
 
@@ -447,7 +505,7 @@ class WhatsappService
             $fileData = $this->getFileDataForUpload($fileUrl);
             
             if (!$fileData) {
-                \Log::error('Could not get file data', ['url' => $fileUrl]);
+                Log::error('Could not get file data', ['url' => $fileUrl]);
                 return null;
             }
 
@@ -478,7 +536,7 @@ class WhatsappService
 
             if ($response->successful()) {
                 $mediaId = $response->json('id');
-                \Log::info('Media uploaded for carousel card', [
+                Log::info('Media uploaded for carousel card', [
                     'media_id' => $mediaId,
                     'mime_type' => $fileData['mime_type'],
                     'filename' => $filename
@@ -486,7 +544,7 @@ class WhatsappService
                 return $mediaId;
             }
 
-            \Log::error('Media upload failed', [
+            Log::error('Media upload failed', [
                 'response' => $response->json(),
                 'mime_type' => $fileData['mime_type'],
                 'url' => $fileUrl
@@ -494,7 +552,7 @@ class WhatsappService
             return null;
             
         } catch (\Exception $e) {
-            \Log::error('uploadMediaForSending error', [
+            Log::error('uploadMediaForSending error', [
                 'error' => $e->getMessage(),
                 'url' => $fileUrl
             ]);
@@ -525,7 +583,7 @@ class WhatsappService
                     ];
                 }
                 
-                \Log::warning('Local file not found', ['path' => $decodedPath]);
+                Log::warning('Local file not found', ['path' => $decodedPath]);
                 return null;
             }
             
@@ -533,7 +591,7 @@ class WhatsappService
             $content = @file_get_contents($url);
             
             if ($content === false) {
-                \Log::error('Could not fetch external URL', ['url' => $url]);
+                Log::error('Could not fetch external URL', ['url' => $url]);
                 return null;
             }
             
@@ -546,7 +604,7 @@ class WhatsappService
             ];
             
         } catch (\Exception $e) {
-            \Log::error('getFileDataForUpload error', [
+            Log::error('getFileDataForUpload error', [
                 'error' => $e->getMessage(),
                 'url' => $url
             ]);
@@ -634,21 +692,21 @@ class WhatsappService
                     return \Storage::disk('local')->get($decodedPath);
                 }
                 
-                \Log::warning('Local file not found', ['path' => $decodedPath]);
+                Log::warning('Local file not found', ['path' => $decodedPath]);
             }
             
             // Otherwise fetch from external URL
             $content = @file_get_contents($url);
             
             if ($content === false) {
-                \Log::error('Could not fetch external URL', ['url' => $url]);
+                Log::error('Could not fetch external URL', ['url' => $url]);
                 return null;
             }
             
             return $content;
             
         } catch (\Exception $e) {
-            \Log::error('getFileContentFromUrl error', ['error' => $e->getMessage(), 'url' => $url]);
+            Log::error('getFileContentFromUrl error', ['error' => $e->getMessage(), 'url' => $url]);
             return null;
         }
     }
@@ -854,7 +912,7 @@ class WhatsappService
             }
         }
 
-        //\Log::info(json_encode($array));
+        //Log::info(json_encode($array));
         return json_encode($array);
     }
 
@@ -986,7 +1044,7 @@ class WhatsappService
             event(new NewChatEvent($chatArray, $contact->organization_id));
         }
 
-        //\Log::info(json_encode($responseObject, true));
+        //Log::info(json_encode($responseObject, true));
 
         // Trigger webhook
         WebhookHelper::triggerWebhookEvent('message.sent', [
@@ -1330,7 +1388,7 @@ class WhatsappService
         $client = new Client();
         $responseObject = new \stdClass();
 
-        //\Log::info($requestData);
+        //Log::info($requestData);
 
         try {
             $response = $client->post($url, [
@@ -1833,8 +1891,8 @@ class WhatsappService
         $updatedCards        = $request->carousel_cards ?? [];
         $updatedMessageBody  = $request->carousel_message_body ?? '';
 
-        \Log::info('REQUEST -> all', $request->all());
-        \Log::info('existingMeta', [$existingMeta]);
+        Log::info('REQUEST -> all', $request->all());
+        Log::info('existingMeta', [$existingMeta]);
 
         // ─── RE-UPLOAD MEDIA FROM LOCAL STORAGE ────────────────────────────────
         $uploader = new MediaUploadService(
@@ -1848,7 +1906,7 @@ class WhatsappService
             $localPath = $originalCard['local_path'] ?? null;
             
             if (!$localPath || !\Storage::disk('local')->exists($localPath)) {
-                \Log::error('Carousel card media missing', [
+                Log::error('Carousel card media missing', [
                     'card_index' => $index,
                     'local_path' => $localPath,
                 ]);
@@ -1884,7 +1942,7 @@ class WhatsappService
             @unlink($tempPath);
 
             if (!$uploadResult->success) {
-                \Log::error('Failed to re-upload carousel card media', [
+                Log::error('Failed to re-upload carousel card media', [
                     'card_index' => $index,
                     'error'      => $uploadResult->error,
                 ]);
@@ -1898,7 +1956,7 @@ class WhatsappService
 
             $freshHandles[$index] = $uploadResult->handle;
             
-            \Log::info('Fresh handle generated', [
+            Log::info('Fresh handle generated', [
                 'card_index' => $index,
                 'handle' => $uploadResult->handle,
             ]);
@@ -1978,7 +2036,7 @@ class WhatsappService
         ];
 
         // Better logging - use print_r to avoid "over 9 levels" issue
-        \Log::debug('Carousel Update Payload', [
+        Log::debug('Carousel Update Payload', [
             'payload_json' => json_encode($requestData, JSON_PRETTY_PRINT)
         ]);
 
@@ -2021,10 +2079,10 @@ class WhatsappService
             $template->updated_at = now();
             $template->save();
 
-            \Log::info('Template updated successfully', ['template_id' => $template->id]);
+            Log::info('Template updated successfully', ['template_id' => $template->id]);
 
         } catch (ConnectException $e) {
-            \Log::error('Connection error updating carousel', ['error' => $e->getMessage()]);
+            Log::error('Connection error updating carousel', ['error' => $e->getMessage()]);
             $responseObject->success = false;
             $responseObject->data    = new \stdClass();
             $responseObject->data->error = new \stdClass();
@@ -2032,7 +2090,7 @@ class WhatsappService
         } catch (GuzzleException $e) {
            $response = $e->getResponse();
             $errorBody = $response->getBody()->getContents();
-            \Log::error('Meta API error updating carousel', ['error' => $errorBody]);
+            Log::error('Meta API error updating carousel', ['error' => $errorBody]);
             
             $responseObject->success = false;
             $responseObject->data    = json_decode($errorBody);
@@ -2049,7 +2107,7 @@ class WhatsappService
                 $responseObject->message = 'Something went wrong';
             }
         } catch (\Exception $e) {
-            \Log::error('Unexpected error updating carousel', ['error' => $e->getMessage()]);
+            Log::error('Unexpected error updating carousel', ['error' => $e->getMessage()]);
             $responseObject->success = false;
             $responseObject->data    = new \stdClass();
             $responseObject->data->error = new \stdClass();

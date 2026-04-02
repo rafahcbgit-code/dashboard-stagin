@@ -447,7 +447,7 @@ public function campaign(Request $request)
         $metadataArray['whatsapp']['verified_name'] = $phoneNumberResponse->data->verified_name ?? null;
         $metadataArray['whatsapp']['quality_rating'] = $phoneNumberResponse->data->quality_rating ?? null;
         $metadataArray['whatsapp']['name_status'] = $phoneNumberResponse->data->name_status ?? null;
-        $metadataArray['whatsapp']['messaging_limit_tier'] = $phoneNumberResponse->data->messaging_limit_tier ?? NULL;
+        $metadataArray['whatsapp']['messaging_limit_tier'] = $phoneNumberStatusResponse->data->whatsapp_business_manager_messaging_limit ?? NULL;
         $metadataArray['whatsapp']['max_daily_conversation_per_phone'] = NULL;
         $metadataArray['whatsapp']['max_phone_numbers_per_business'] = NULL;
         $metadataArray['whatsapp']['whatsapp_business_manager_messaging_limit'] = $phoneNumberStatusResponse->data->whatsapp_business_manager_messaging_limit ?? NULL;
