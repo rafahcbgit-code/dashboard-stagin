@@ -24,7 +24,7 @@
         <!-- ── CARDS ────────────────────────────────────────────────────── -->
         <div
             v-for="(card, index) in cards"
-            :key="index"
+            :key="card._uid || index"
             class="bg-[#f9f9fa] border rounded-lg mb-4 overflow-hidden"
         >
             <!-- Card header bar -->
@@ -63,13 +63,13 @@
                 <div class="grid grid-cols-2 mt-2 bg-white border rounded-lg mb-3">
                     <button
                         type="button"
-                        @click="card.header_type = 'IMAGE'"
+                        @click="updateCardField(index, 'header_type', 'IMAGE')"
                         class="text-center py-2 text-sm text-slate-800 m-1"
                         :class="card.header_type === 'IMAGE' ? 'bg-[#f0f4ff] shadow rounded-lg border border-indigo-200' : ''"
                     >{{ $t('Image') }}</button>
                     <button
                         type="button"
-                        @click="card.header_type = 'VIDEO'"
+                        @click="updateCardField(index, 'header_type', 'VIDEO')"
                         class="text-center py-2 text-sm text-slate-800 m-1"
                         :class="card.header_type === 'VIDEO' ? 'bg-[#f0f4ff] shadow rounded-lg border border-indigo-200' : ''"
                     >{{ $t('Video') }}</button>
@@ -89,17 +89,17 @@
                     </div>
                     <div v-else class="flex justify-center px-4 pt-4 pb-4 border-2 border-gray-300 border-dashed rounded-md">
                         <input
-                            :type="'file'"
+                            type="file"
                             class="sr-only"
                             :accept="card.header_type === 'IMAGE' ? '.jpg,.jpeg,.png' : '.mp4'"
-                            :id="'carousel-file-' + index"
+                            :ref="el => setFileInputRef(el, index)"
                             @change="handleCardFileUpload($event, index)"
                         />
                         <div class="text-center">
-                            <label :for="'carousel-file-' + index" class="cursor-pointer">
+                            <div class="cursor-pointer" @click="triggerFileInput(index)">
                                 <svg v-if="card.header_type === 'IMAGE'" class="mx-auto h-10 w-10 text-gray-400" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M14 9a1.5 1.5 0 1 1 3 0a1.5 1.5 0 0 1-3 0Z"/><path fill="currentColor" fill-rule="evenodd" d="M7.268 4.658a54.647 54.647 0 0 1 9.465 0l1.51.132a3.138 3.138 0 0 1 2.831 2.66a30.604 30.604 0 0 1 0 9.1a3.138 3.138 0 0 1-2.831 2.66l-1.51.131c-3.15.274-6.316.274-9.465 0l-1.51-.131a3.138 3.138 0 0 1-2.832-2.66a30.601 30.601 0 0 1 0-9.1a3.138 3.138 0 0 1 2.831-2.66l1.51-.132Z" clip-rule="evenodd"/></svg>
                                 <svg v-else class="mx-auto h-10 w-10 text-gray-400" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.5" d="M2 11.5c0-3.287 0-4.931.908-6.038a4 4 0 0 1 .554-.554C4.57 4 6.212 4 9.5 4c3.287 0 4.931 0 6.038.908a4 4 0 0 1 .554.554C17 6.57 17 8.212 17 11.5v1c0 3.287 0 4.931-.908 6.038a4.001 4.001 0 0 1-.554.554C14.43 20 12.788 20 9.5 20c-3.287 0-4.931 0-6.038-.908a4 4 0 0 1-.554-.554C2 17.43 2 15.788 2 12.5v-1Zm15-2l.658-.329c1.946-.973 2.92-1.46 3.63-1.02c.712.44.712 1.528.712 3.703v.292c0 2.176 0 3.263-.711 3.703c-.712.44-1.685-.047-3.63-1.02L17 14.5v-5Z"/></svg>
-                            </label>
+                            </div>
                             <p class="text-xs text-gray-500 mt-1">
                                 {{ card.header_type === 'IMAGE' ? $t('JPG or PNG') : $t('MP4') }}
                             </p>
@@ -110,7 +110,8 @@
                 <!-- BODY TEXT (per card) -->
                 <h3 class="text-slate-600 text-sm mb-1">{{ $t('Card body') }} <span class="text-xs">({{ $t('Optional') }})</span></h3>
                 <textarea
-                    v-model="card.body_text"
+                    :value="card.body_text"
+                    @input="updateCardField(index, 'body_text', $event.target.value)"
                     rows="3"
                     class="block w-full rounded-md border-0 py-1.5 px-3 text-gray-900 shadow-sm outline-none ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 sm:text-sm sm:leading-6 mb-3"
                     :placeholder="$t('Card body text…')"
@@ -120,7 +121,7 @@
                 <!-- BUTTONS -->
                 <h3 class="text-slate-600 text-sm mb-1">{{ $t('Buttons') }} <span class="text-xs">({{ $t('Required, max 2') }})</span></h3>
                 <!-- Warning shown only when the card has zero buttons -->
-                <p v-if="card.buttons.length === 0" class="text-xs text-red-600 mb-2">{{ $t('Each card must have at least one button') }}</p>
+                <p v-if="card.buttons && card.buttons.length === 0" class="text-xs text-red-600 mb-2">{{ $t('Each card must have at least one button') }}</p>
                 <div v-for="(btn, btnIndex) in card.buttons" :key="btnIndex" class="bg-white border rounded-lg p-3 mb-2">
                     <div class="flex items-center justify-between mb-2">
                         <span class="text-xs text-slate-500 uppercase">{{ btn.type === 'QUICK_REPLY' ? $t('Custom') : btn.type === 'URL' ? $t('Website') : $t('Phone') }}</span>
@@ -137,7 +138,7 @@
                         </template>
                     </div>
                 </div>
-                <div v-if="card.buttons.length < 2" class="flex gap-x-2 mt-1">
+                <div v-if="card.buttons && card.buttons.length < 2" class="flex gap-x-2 mt-1">
                     <button type="button" @click="addCardButton(index, 'QUICK_REPLY')" class="flex-1 text-xs text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg py-1.5 px-2">{{ $t('Custom') }}</button>
                     <button type="button" @click="addCardButton(index, 'URL')"         class="flex-1 text-xs text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg py-1.5 px-2">{{ $t('Website') }}</button>
                     <button type="button" @click="addCardButton(index, 'PHONE_NUMBER')" class="flex-1 text-xs text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg py-1.5 px-2">{{ $t('Phone') }}</button>
@@ -158,14 +159,13 @@
 </template>
 
 <script setup>
-import { ref, defineProps, defineEmits } from 'vue';
+import { ref, watch, onErrorCaptured, nextTick } from 'vue';
 
 const props = defineProps({
     cards: {
         type: Array,
         required: true,
     },
-    // New: the shared top-level message body text
     messageBody: {
         type: String,
         default: '',
@@ -174,34 +174,109 @@ const props = defineProps({
 
 const emit = defineEmits([
     'update:cards',
-    'update:messageBody',   // new emit for the shared body
+    'update:messageBody',
 ]);
 
-const expandedCards = ref(
-    Object.fromEntries(props.cards.map((_, i) => [i, i === 0]))
-);
+/* ── Unique ID counter for stable v-for keys ────────────────────────── */
+let uidCounter = 0;
+function ensureUid(card) {
+    if (!card._uid) {
+        card._uid = '__card_' + (++uidCounter);
+    }
+    return card;
+}
+
+/* ── Expanded / collapsed state per card index ───────────────────────── */
+const expandedCards = ref({});
+
+// Initialize expandedCards from the current cards prop
+function syncExpandedCards() {
+    const current = expandedCards.value;
+    const next = {};
+    props.cards.forEach((_, i) => {
+        // Keep existing expand state, default first card open
+        next[i] = current[i] !== undefined ? current[i] : (i === 0);
+    });
+    expandedCards.value = next;
+}
+syncExpandedCards();
+
+// Re-sync whenever cards length changes (add/remove)
+watch(() => props.cards.length, () => {
+    syncExpandedCards();
+});
+
+/* ── File input refs (one per card index) ────────────────────────────── */
+const fileInputRefs = {};
+
+function setFileInputRef(el, index) {
+    if (el) {
+        fileInputRefs[index] = el;
+    } else {
+        delete fileInputRefs[index];
+    }
+}
+
+function triggerFileInput(index) {
+    const input = fileInputRefs[index];
+    if (input) {
+        input.click();
+    }
+}
+
+/* ── Error boundary — prevents white screen on unexpected errors ───── */
+onErrorCaptured((err) => {
+    console.error('CarouselForm: caught render error', err);
+    return false;   // stop propagation, prevent crash
+});
+
+/* ── Card mutation helpers ───────────────────────────────────────────── */
+
+/**
+ * Emit a fresh copy of the cards array.
+ * Each card gets a stable _uid for the v-for key.
+ */
+function emitCards(cards) {
+    cards.forEach(ensureUid);
+    emit('update:cards', [...cards]);
+}
+
+/**
+ * Update a single field on a card without replacing the whole object.
+ * Prevents accidental loss of other reactive properties.
+ */
+function updateCardField(index, field, value) {
+    const updated = props.cards.map((c, i) =>
+        i === index ? { ...c, [field]: value } : c
+    );
+    emitCards(updated);
+}
 
 function addCard() {
     if (props.cards.length >= 10) return;
-    props.cards.push({
+    const newCard = ensureUid({
         header_type: 'IMAGE',
         file: null,
         body_text: '',
-        buttons: [{ type: 'QUICK_REPLY', text: '' }],   // seed one default button
+        buttons: [{ type: 'QUICK_REPLY', text: '' }],
     });
-    expandedCards.value[props.cards.length - 1] = true;
-    emit('update:cards', props.cards);
+    const updated = [...props.cards, newCard];
+    // Expand the new card
+    expandedCards.value[updated.length - 1] = true;
+    emitCards(updated);
 }
 
 function removeCard(index) {
     if (props.cards.length <= 2) return;
-    props.cards.splice(index, 1);
+    const updated = [...props.cards];
+    updated.splice(index, 1);
+    // Rebuild expanded state with shifted indices
     const newExpanded = {};
-    props.cards.forEach((_, i) => {
+    updated.forEach((_, i) => {
         newExpanded[i] = expandedCards.value[i + (i >= index ? 1 : 0)] ?? false;
     });
     expandedCards.value = newExpanded;
-    emit('update:cards', props.cards);
+    emitCards(updated);
 }
 
 function toggleCard(index) {
@@ -209,28 +284,60 @@ function toggleCard(index) {
 }
 
 function handleCardFileUpload(event, cardIndex) {
-    const file = event.target.files[0];
+    const file = event.target.files?.[0];
     if (!file) return;
-    props.cards[cardIndex].file = file;
-    emit('update:cards', props.cards);
+
+    console.debug('CarouselForm: card file selected', {
+        cardIndex,
+        cardsLength: props.cards.length,
+        fileName: file.name,
+        fileSize: file.size,
+        fileType: file.type,
+    });
+
+    // Guard: index within bounds
+    if (cardIndex < 0 || cardIndex >= props.cards.length) {
+        console.error('CarouselForm: cardIndex out of bounds', cardIndex, props.cards.length);
+        return;
+    }
+
+    const updated = props.cards.map((c, i) =>
+        i === cardIndex ? { ...c, file } : c
+    );
+    emitCards(updated);
 }
 
 function removeCardFile(cardIndex) {
-    props.cards[cardIndex].file = null;
-    emit('update:cards', props.cards);
+    if (cardIndex < 0 || cardIndex >= props.cards.length) return;
+    const updated = props.cards.map((c, i) =>
+        i === cardIndex ? { ...c, file: null } : c
+    );
+    emitCards(updated);
 }
 
 function addCardButton(cardIndex, type) {
-    if (props.cards[cardIndex].buttons.length >= 2) return;
+    if (cardIndex < 0 || cardIndex >= props.cards.length) return;
+    if ((props.cards[cardIndex].buttons?.length ?? 0) >= 2) return;
+
     const btn = { type, text: '' };
     if (type === 'URL')          btn.url = '';
     if (type === 'PHONE_NUMBER') { btn.country = ''; btn.phone_number = ''; }
-    props.cards[cardIndex].buttons.push(btn);
-    emit('update:cards', props.cards);
+
+    const updated = props.cards.map((c, i) =>
+        i === cardIndex
+            ? { ...c, buttons: [...(c.buttons || []), btn] }
+            : c
+    );
+    emitCards(updated);
 }
 
 function removeCardButton(cardIndex, btnIndex) {
-    props.cards[cardIndex].buttons.splice(btnIndex, 1);
-    emit('update:cards', props.cards);
+    if (cardIndex < 0 || cardIndex >= props.cards.length) return;
+    const buttons = [...(props.cards[cardIndex].buttons || [])];
+    buttons.splice(btnIndex, 1);
+    const updated = props.cards.map((c, i) =>
+        i === cardIndex ? { ...c, buttons } : c
+    );
+    emitCards(updated);
 }
 </script>

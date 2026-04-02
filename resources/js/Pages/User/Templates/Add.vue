@@ -493,7 +493,7 @@
     import HeaderTextArea from '@/Components/Template/HeaderTextArea.vue';
     import CarouselForm from '@/Components/Template/CarouselForm.vue';
     import CarouselPreview from '@/Components/Template/CarouselPreview.vue';
-    import { ref, computed, watch, onMounted } from 'vue';
+    import { ref, computed, watch, onMounted, onErrorCaptured } from 'vue';
     import { Link } from "@inertiajs/vue3";
     import Modal from '@/Components/Modal.vue';
     import { toast } from 'vue3-toastify';
@@ -513,6 +513,12 @@
     });
 
     const props = defineProps(['languages', 'settings']);
+
+    // Prevent uncaught child-component errors from crashing the whole page
+    onErrorCaptured((err, instance, info) => {
+        console.error('Add.vue: caught error from child component', err, info);
+        return false;
+    });
     const headerCharacterLimit = ref('60');
     const headerCharacterCount = ref('0');
     const bodyCharacterLimit = ref('1098');
@@ -787,13 +793,13 @@
 
     const isFormValid = computed(() => {
         if (
-            form.value.name === null ||
-            form.value.name.trim() === "" ||
-            form.value.language === null ||
-            form.value.language.trim() === "" ||
-            form.value.category === null ||
-            form.value.category.trim() === "" ||
-            form.value.buttons.some(button => {
+            !form.value.name ||
+            (form.value.name || '').trim() === '' ||
+            !form.value.language ||
+            (form.value.language || '').trim() === '' ||
+            !form.value.category ||
+            (form.value.category || '').trim() === '' ||
+            (form.value.buttons || []).some(button => {
                 return (
                     (button.name === null || button.name === '') ||
                     (button.type === null || button.type === '') ||
@@ -1068,8 +1074,8 @@
     watch(templateType, (newVal) => {
         if (newVal === 'carousel' && form.value.carousel_cards.length < 2) {
             form.value.carousel_cards = [
-                { header_type: 'IMAGE', file: null, body_text: '', buttons: [{ type: 'QUICK_REPLY', text: '' }] },
-                { header_type: 'IMAGE', file: null, body_text: '', buttons: [{ type: 'QUICK_REPLY', text: '' }] },
+                { _uid: '__seed_1', header_type: 'IMAGE', file: null, body_text: '', buttons: [{ type: 'QUICK_REPLY', text: '' }] },
+                { _uid: '__seed_2', header_type: 'IMAGE', file: null, body_text: '', buttons: [{ type: 'QUICK_REPLY', text: '' }] },
             ];
         }
     });
