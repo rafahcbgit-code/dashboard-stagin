@@ -177,11 +177,8 @@ class CampaignService
 
         if (isset($metadata['whatsapp']) && is_array($metadata['whatsapp'])) {
             $candidates[] = $metadata['whatsapp']['whatsapp_business_manager_messaging_limit'] ?? null;
-            $candidates[] = $metadata['whatsapp']['messaging_limit_tier'] ?? null;
+            //$candidates[] = $metadata['whatsapp']['messaging_limit_tier'] ?? null;
         }
-
-        $candidates[] = $metadata['whatsapp_business_manager_messaging_limit'] ?? null;
-        $candidates[] = $metadata['messaging_limit_tier'] ?? null;
 
         foreach ($candidates as $candidate) {
             if ($candidate !== null && $candidate !== '') {
