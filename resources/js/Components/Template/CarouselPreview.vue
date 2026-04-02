@@ -16,18 +16,18 @@
             style="width: 22em;"
         >
             <!-- HEADER with actual media or placeholder -->
-            <div class="mb-2 bg-[#ccd0d5] flex justify-center overflow-hidden rounded" :class="hasMedia(card) ? 'py-0' : 'py-6'">
+            <div class="mb-2 bg-[#ccd0d5] flex justify-center overflow-hidden rounded" :class="hasMedia(card, index) ? 'py-0' : 'py-6'">
                 <!-- Show actual media if available -->
-                <template v-if="hasMedia(card)">
+                <template v-if="hasMedia(card, index)">
                     <img
                         v-if="card.header_type === 'IMAGE'"
-                        :src="getMediaUrl(card)"
+                        :src="getMediaUrl(card, index)"
                         class="w-full h-auto object-cover max-h-64"
                         @error="handleImageError"
                     />
                     <video
                         v-else-if="card.header_type === 'VIDEO'"
-                        :src="getMediaUrl(card)"
+                        :src="getMediaUrl(card, index)"
                         class="w-full h-auto object-cover max-h-64"
                         controls
                         @error="handleVideoError"
@@ -84,7 +84,9 @@
 </template>
 
 <script setup>
-defineProps({
+import { computed, onBeforeUnmount } from 'vue';
+
+const props = defineProps({
     /**
      * Array of card objects.
      * Each card: { 
@@ -103,33 +105,46 @@ defineProps({
 });
 
 /**
- * Check if card has media available (either local_url, header_handle, or file)
+ * Cache blob URLs so we don't call URL.createObjectURL on every render.
+ * The WeakMap is keyed by the File object so each file only gets one URL.
  */
-function hasMedia(card) {
-    return !!(card.local_url || card.header_handle || card.file);
+const blobUrlCache = new WeakMap();
+
+function getOrCreateBlobUrl(file) {
+    if (!file) return null;
+    if (blobUrlCache.has(file)) {
+        return blobUrlCache.get(file);
+    }
+    const url = URL.createObjectURL(file);
+    blobUrlCache.set(file, url);
+    return url;
 }
 
 /**
- * Get the media URL to display
- * Priority: local_url > header_handle > file preview
+ * Build a map of card-index → resolved media URL so the template can
+ * consume it without side-effects during the render phase.
  */
-function getMediaUrl(card) {
-    // Priority 1: Local URL (Edit page)
-    if (card.local_url) {
-        return card.local_url;
-    }
-    
-    // Priority 2: CDN URL from Meta (Edit page fallback)
-    if (card.header_handle && card.header_handle.startsWith('http')) {
-        return card.header_handle;
-    }
-    
-    // Priority 3: File preview (Add page)
-    if (card.file) {
-        return URL.createObjectURL(card.file);
-    }
-    
-    return null;
+const cardMediaUrls = computed(() => {
+    return props.cards.map((card) => {
+        if (card.local_url) return card.local_url;
+        if (card.header_handle && card.header_handle.startsWith('http')) return card.header_handle;
+        if (card.file) return getOrCreateBlobUrl(card.file);
+        return null;
+    });
+});
+
+/**
+ * Check if card has media available (either local_url, header_handle, or file)
+ */
+function hasMedia(card, index) {
+    return !!cardMediaUrls.value[index];
+}
+
+/**
+ * Get the cached / computed media URL for a card by its index.
+ */
+function getMediaUrl(card, index) {
+    return cardMediaUrls.value[index] ?? null;
 }
 
 /**
@@ -150,4 +165,4 @@ function handleVideoError(event) {
     event.target.parentNode.replaceChild(placeholder, event.target);
     console.warn('Failed to load carousel video');
 }
-</script>
+</script>

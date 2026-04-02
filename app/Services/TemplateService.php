@@ -121,7 +121,28 @@ class TemplateService
             // continues through the original createTemplate method.
             //Log::info("Request", $request->all());
             if ($request->get('template_type') === 'carousel') {
-                return $this->whatsappService->createCarouselTemplate($request);
+                Log::info('Creating carousel template request', [
+                    'user_id' => auth()->id(),
+                    'organization_id' => $this->organizationId,
+                    'name' => $request->get('name'),
+                    'category' => $request->get('category'),
+                    'language' => $request->get('language'),
+                    'cards' => count($request->input('cards', [])),
+                    'files' => count($request->file('card_files', [])),
+                ]);
+
+                $carouselResponse = $this->whatsappService->createCarouselTemplate($request);
+
+                if (isset($carouselResponse->success) && $carouselResponse->success === false) {
+                    Log::error('Carousel template creation failed', [
+                        'user_id' => auth()->id(),
+                        'organization_id' => $this->organizationId,
+                        'errors' => $carouselResponse->data ?? null,
+                        'message' => $carouselResponse->message ?? null,
+                    ]);
+                }
+
+                return $carouselResponse;
             }
 
             return $this->whatsappService->createTemplate($request);
