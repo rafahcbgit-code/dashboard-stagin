@@ -440,6 +440,20 @@ class DownloadWebhookMediaJob implements ShouldQueue
             $chat->update([
                 'media_id' => $chatMedia->id,
             ]);
+            
+            // Broadcast an updated chat event to trigger UI refresh for media
+            $chat->load(['contact', 'media']);
+            $chatLog = \App\Models\ChatLog::where('entity_type', 'chat')
+                ->where('entity_id', $chat->id)
+                ->first();
+
+            if ($chatLog) {
+                $chatArray = [[
+                    'type' => 'chat',
+                    'value' => $chatLog->relatedEntities,
+                ]];
+                event(new \App\Events\NewChatEvent($chatArray, $this->organizationId, $chat->contact->uuid));
+            }
 
             Log::channel('webhook')->info('Chat record updated with media', [
                 'chat_id' => $this->chatId,
