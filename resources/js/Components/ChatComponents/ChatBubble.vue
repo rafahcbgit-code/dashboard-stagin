@@ -341,7 +341,7 @@ const viewContactDetails = async (data) => {
                                 d="m13.299 3.148l8.634 14.954a1.5 1.5 0 0 1-1.299 2.25H3.366a1.5 1.5 0 0 1-1.299-2.25l8.634-14.954c.577-1 2.02-1 2.598 0ZM12 4.898L4.232 18.352h15.536L12 4.898ZM12 15a1 1 0 1 1 0 2a1 1 0 0 1 0-2Zm0-7a1 1 0 0 1 1 1v4a1 1 0 1 1-2 0V9a1 1 0 0 1 1-1Z" />
                         </g>
                     </svg>
-                    {{ $t('Content not available') }}
+                    <span class="text-xs">{{ props.type === 'outbound' ? $t('Content not available') : $t('Loading media...') }}</span>
                 </div>
                 <div v-if="JSON.parse(content.metadata).image?.caption" class="max-w-[300px]">{{
                     JSON.parse(content.metadata).image?.caption }}</div>
@@ -592,7 +592,7 @@ const viewContactDetails = async (data) => {
                                 d="m13.299 3.148l8.634 14.954a1.5 1.5 0 0 1-1.299 2.25H3.366a1.5 1.5 0 0 1-1.299-2.25l8.634-14.954c.577-1 2.02-1 2.598 0ZM12 4.898L4.232 18.352h15.536L12 4.898ZM12 15a1 1 0 1 1 0 2a1 1 0 0 1 0-2Zm0-7a1 1 0 0 1 1 1v4a1 1 0 1 1-2 0V9a1 1 0 0 1 1-1Z" />
                         </g>
                     </svg>
-                    {{ $t('Content not available') }}
+                    <span class="text-xs">{{ props.type === 'outbound' ? $t('Content not available') : $t('Loading media...') }}</span>
                 </div>
             </div>
 
@@ -626,7 +626,7 @@ const viewContactDetails = async (data) => {
                                 d="m13.299 3.148l8.634 14.954a1.5 1.5 0 0 1-1.299 2.25H3.366a1.5 1.5 0 0 1-1.299-2.25l8.634-14.954c.577-1 2.02-1 2.598 0ZM12 4.898L4.232 18.352h15.536L12 4.898ZM12 15a1 1 0 1 1 0 2a1 1 0 0 1 0-2Zm0-7a1 1 0 0 1 1 1v4a1 1 0 1 1-2 0V9a1 1 0 0 1 1-1Z" />
                         </g>
                     </svg>
-                    {{ $t('Content not available') }}
+                    <span class="text-xs">{{ props.type === 'outbound' ? $t('Content not available') : $t('Loading media...') }}</span>
                 </div>
             </div>
 
@@ -645,7 +645,7 @@ const viewContactDetails = async (data) => {
                                 d="m13.299 3.148l8.634 14.954a1.5 1.5 0 0 1-1.299 2.25H3.366a1.5 1.5 0 0 1-1.299-2.25l8.634-14.954c.577-1 2.02-1 2.598 0ZM12 4.898L4.232 18.352h15.536L12 4.898ZM12 15a1 1 0 1 1 0 2a1 1 0 0 1 0-2Zm0-7a1 1 0 0 1 1 1v4a1 1 0 1 1-2 0V9a1 1 0 0 1 1-1Z" />
                         </g>
                     </svg>
-                    {{ $t('Content not available') }}
+                    <span class="text-xs">{{ props.type === 'outbound' ? $t('Content not available') : $t('Loading media...') }}</span>
                 </div>
                 <div v-if="JSON.parse(content.metadata).video?.caption" class="max-w-[300px]">{{
                     JSON.parse(content.metadata).video?.caption }}</div>

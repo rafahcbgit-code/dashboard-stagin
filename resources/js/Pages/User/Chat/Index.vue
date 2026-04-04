@@ -285,11 +285,14 @@ const deleteThread = async () => {
 
 const updateChatThread = (chat) => {
   const wamId = chat[0].value.wam_id;
-  const wamIdExists = chatThread.value.some(
+  const existingIndex = chatThread.value.findIndex(
     (existingChat) => existingChat[0].value.wam_id === wamId
   );
 
-  if (!wamIdExists && chat[0].value.deleted_at == null) {
+  if (existingIndex !== -1) {
+    // Force Vue reactivity with splice
+    chatThread.value.splice(existingIndex, 1, chat);
+  } else if (chat[0].value.deleted_at == null) {
     chatThread.value.push(chat);
     setTimeout(scrollToBottom, 100);
   }
