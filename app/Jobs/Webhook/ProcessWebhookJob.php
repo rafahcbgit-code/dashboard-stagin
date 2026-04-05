@@ -489,23 +489,23 @@ class ProcessWebhookJob implements ShouldQueue
         // Add type-specific data
         switch ($type) {
             case 'text':
-                    $metadata['text'] = [
-                'body' => $message['text']['body'] ?? '',
-            ];
-
-            if (!empty($message['referral'])) {
-                $metadata['referral'] = [
-                    'headline' => $message['referral']['headline'] ?? null,
-                    'body'     => $message['referral']['body'] ?? null,
-                    'source_type'     => $message['referral']['source_type'] ?? null,
-                    'source_id'     => $message['referral']['source_id'] ?? null,
-                    'media_type'     => $message['referral']['media_type'] ?? null, 
-                    'video_url'     => $message['referral']['video_url'] ?? null,
-                    'thumbnail_url'     => $message['referral']['thumbnail_url'] ?? null,
-                    'ctwa_clid'     => $message['referral']['ctwa_clid'] ?? null,
+                $metadata['text'] = [
+                    'body' => $message['text']['body'] ?? '',
                 ];
-            }
-            break;
+
+                if (!empty($message['referral'])) {
+                    $metadata['referral'] = [
+                        'headline' => $message['referral']['headline'] ?? null,
+                        'body'     => $message['referral']['body'] ?? null,
+                        'source_type'     => $message['referral']['source_type'] ?? null,
+                        'source_id'     => $message['referral']['source_id'] ?? null,
+                        'media_type'     => $message['referral']['media_type'] ?? null,
+                        'video_url'     => $message['referral']['video_url'] ?? null,
+                        'thumbnail_url'     => $message['referral']['thumbnail_url'] ?? null,
+                        'ctwa_clid'     => $message['referral']['ctwa_clid'] ?? null,
+                    ];
+                }
+                break;
 
             case 'image':
                 $metadata['image'] = $message['image'] ?? [];
@@ -820,93 +820,132 @@ class ProcessWebhookJob implements ShouldQueue
         $messageType = $echo['type'] ?? 'text';
         $timestamp = $echo['timestamp'] ?? time();
 
-        // Validate required fields
-        if (! $wamId || ! $recipientPhone) {
-            Log::channel('webhook')->warning('Invalid SMB echo data - missing wam_id or recipient phone', [
-                'organization_id' => $this->organizationId,
-                'echo' => $echo,
+        try {
+            // Validate required fields
+            if (! $wamId || ! $recipientPhone) {
+                Log::channel('webhook')->warning('Invalid SMB echo data - missing wam_id or recipient phone', [
+                    'organization_id' => $this->organizationId,
+                    'echo' => $echo,
+                ]);
+
+                $this->logSmbEchoFailure($echo, 'missing_wam_or_recipient');
+
+                return;
+            }
+
+            // AC-1.10.6: Idempotency check - prevent duplicate chat creation
+            if ($this->isDuplicateMessage($wamId)) {
+                Log::channel('webhook')->info('Duplicate SMB echo skipped', [
+                    'organization_id' => $this->organizationId,
+                    'wam_id' => $wamId,
+                ]);
+
+                $this->logSmbEchoFailure($echo, 'duplicate_wam_id');
+
+                return;
+            }
+
+            // AC-1.10.1: Find or create contact by RECIPIENT phone (not sender)
+            $contactService = new ContactService($this->organizationId);
+            $result = $contactService->findOrCreateFromWebhook($recipientPhone, null);
+            $contact = $result['contact'];
+            $isNewContact = $result['isNew'];
+
+            // Build metadata for the chat (reuse existing method)
+            $metadata = $this->buildMessageMetadata($echo, $messageType);
+
+            // AC-1.10.2: Create chat record with type='outbound' (different from inbound)
+            try {
+                $chat = Chat::create([
+                    'organization_id' => $this->organizationId,
+                    'contact_id' => $contact->id,
+                    'wam_id' => $wamId,
+                    'type' => 'outbound',
+                    'metadata' => json_encode($metadata),
+                    'status' => 'sent',
+                    'is_read' => 1, // Outbound messages are considered "read"
+                    'created_at' => now(),
+                ]);
+            } catch (\Throwable $chatException) {
+                $this->logSmbEchoFailure($echo, 'chat_create_failed', $chatException);
+                throw $chatException;
+            }
+
+            // AC-1.10.4: Create ChatLog entry for chat thread view
+            ChatLog::create([
+                'contact_id' => $contact->id,
+                'entity_type' => 'chat',
+                'entity_id' => $chat->id,
+                'created_at' => now(),
             ]);
 
-            return;
-        }
-
-        // AC-1.10.6: Idempotency check - prevent duplicate chat creation
-        if ($this->isDuplicateMessage($wamId)) {
-            Log::channel('webhook')->info('Duplicate SMB echo skipped', [
+            Log::channel('webhook')->info('SMB echo chat created', [
                 'organization_id' => $this->organizationId,
+                'chat_id' => $chat->id,
+                'contact_id' => $contact->id,
                 'wam_id' => $wamId,
+                'message_type' => $messageType,
             ]);
 
-            return;
-        }
+            // AC-1.10.3: Dispatch DownloadWebhookMediaJob for media messages
+            if ($this->hasMedia($echo, $messageType)) {
+                $mediaData = $this->extractMediaData($echo, $messageType);
+                DownloadWebhookMediaJob::dispatch(
+                    $chat->id,
+                    $contact->id,
+                    $this->organizationId,
+                    $mediaData
+                )->onQueue('webhook-high');
 
-        // AC-1.10.1: Find or create contact by RECIPIENT phone (not sender)
-        $contactService = new ContactService($this->organizationId);
-        $result = $contactService->findOrCreateFromWebhook($recipientPhone, null);
-        $contact = $result['contact'];
-        $isNewContact = $result['isNew'];
+                Log::channel('webhook')->info('DownloadWebhookMediaJob dispatched for SMB echo', [
+                    'chat_id' => $chat->id,
+                    'media_type' => $messageType,
+                ]);
+            }
 
-        // Build metadata for the chat (reuse existing method)
-        $metadata = $this->buildMessageMetadata($echo, $messageType);
-
-        // AC-1.10.2: Create chat record with type='outbound' (different from inbound)
-        $chat = Chat::create([
-            'organization_id' => $this->organizationId,
-            'contact_id' => $contact->id,
-            'wam_id' => $wamId,
-            'type' => 'outbound',
-            'metadata' => json_encode($metadata),
-            'status' => 'sent',
-            'is_read' => 1, // Outbound messages are considered "read"
-            'created_at' => now(),
-        ]);
-
-        // AC-1.10.4: Create ChatLog entry for chat thread view
-        ChatLog::create([
-            'contact_id' => $contact->id,
-            'entity_type' => 'chat',
-            'entity_id' => $chat->id,
-            'created_at' => now(),
-        ]);
-
-        Log::channel('webhook')->info('SMB echo chat created', [
-            'organization_id' => $this->organizationId,
-            'chat_id' => $chat->id,
-            'contact_id' => $contact->id,
-            'wam_id' => $wamId,
-            'message_type' => $messageType,
-        ]);
-
-        // AC-1.10.3: Dispatch DownloadWebhookMediaJob for media messages
-        if ($this->hasMedia($echo, $messageType)) {
-            $mediaData = $this->extractMediaData($echo, $messageType);
-            DownloadWebhookMediaJob::dispatch(
+            // AC-1.10.5: Dispatch ProcessWebhookNotificationsJob for real-time UI updates
+            // Pass raw WhatsApp payload for backward-compatible external webhooks
+            ProcessWebhookNotificationsJob::dispatch(
                 $chat->id,
                 $contact->id,
                 $this->organizationId,
-                $mediaData
+                $isNewContact,
+                $this->payload
             )->onQueue('webhook-high');
 
-            Log::channel('webhook')->info('DownloadWebhookMediaJob dispatched for SMB echo', [
+            Log::channel('webhook')->info('ProcessWebhookNotificationsJob dispatched for SMB echo', [
                 'chat_id' => $chat->id,
-                'media_type' => $messageType,
+                'contact_id' => $contact->id,
             ]);
+        } catch (\Throwable $exception) {
+            $this->logSmbEchoFailure($echo, 'exception', $exception);
+
+            throw $exception;
+        }
+    }
+
+    /**
+     * Log SMB message echo failures to a dedicated channel.
+     *
+     * @param  array  $echo
+     * @param  string  $reason
+     * @param  \Throwable|null  $exception
+     */
+    protected function logSmbEchoFailure(array $echo, string $reason, ?\Throwable $exception = null): void
+    {
+        $context = [
+            'organization_id' => $this->organizationId,
+            'reason' => $reason,
+            'wam_id' => $echo['id'] ?? null,
+            'payload' => $echo,
+        ];
+
+        if ($exception) {
+            $context['exception'] = $exception->getMessage();
+            $context['trace'] = $exception->getTraceAsString();
         }
 
-        // AC-1.10.5: Dispatch ProcessWebhookNotificationsJob for real-time UI updates
-        // Pass raw WhatsApp payload for backward-compatible external webhooks
-        ProcessWebhookNotificationsJob::dispatch(
-            $chat->id,
-            $contact->id,
-            $this->organizationId,
-            $isNewContact,
-            $this->payload
-        )->onQueue('webhook-high');
-
-        Log::channel('webhook')->info('ProcessWebhookNotificationsJob dispatched for SMB echo', [
-            'chat_id' => $chat->id,
-            'contact_id' => $contact->id,
-        ]);
+        Log::channel('smb_message_echoes')->error('SMB echo not persisted', $context);
     }
 
     /**
@@ -1042,9 +1081,9 @@ class ProcessWebhookJob implements ShouldQueue
             })
             ->first();
 
-             if ($contact && $contact->trashed()) {
-                    $contact->restore();
-                }
+        if ($contact && $contact->trashed()) {
+            $contact->restore();
+        }
 
         $result = [
             'phone' => $formattedPhone,

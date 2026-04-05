@@ -134,6 +134,13 @@ return [
             'days' => 14, // keep logs for 14 days, adjust as needed
         ],
 
+        'smb_message_echoes' => [
+            'driver' => 'single',
+            'path' => storage_path('logs/smb-message-echoes.log'),
+            'level' => 'debug',
+            'days' => 14,
+        ],
+
         'campaign' => [
             'driver' => 'daily',
             'path' => storage_path('logs/campaign.log'),

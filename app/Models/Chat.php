@@ -11,6 +11,18 @@ class Chat extends Model {
     use HasFactory;
     use HasUuid;
 
+    protected $fillable = [
+        'contact_id',
+        'user_id',
+        'type',
+        'wam_id',
+        'organization_id',
+        'status',
+        'media_id',
+        'metadata',
+        'is_read',
+        'created_at'
+            ];
     protected $guarded = [];
     public $timestamps = false;
 

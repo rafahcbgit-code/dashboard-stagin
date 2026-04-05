@@ -7,6 +7,8 @@ use App\Models\Chat;
 use App\Models\Contact;
 use App\Models\ContactGroup;
 use App\Models\Setting;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
 class ContactService
@@ -68,23 +70,86 @@ class ContactService
         $firstName = $nameParts[0] ?? $normalizedPhone;
         $lastName = $nameParts[1] ?? '';
 
-        $contact = Contact::create([
-            'organization_id' => $this->organizationId,
-            'phone' => $normalizedPhone,
-            'first_name' => $firstName,
-            'last_name' => $lastName,
-            'is_subscribed' => 1,
-            'bot_enable' => 1,
-            'created_by' => 0, // System created
-            'created_at' => now(),
-            'updated_at' => now(),
+        $isNew = true;
+
+        try {
+            $contact = Contact::create([
+                'organization_id' => $this->organizationId,
+                'phone' => $normalizedPhone,
+                'first_name' => $firstName,
+                'last_name' => $lastName,
+                'is_subscribed' => 1,
+                'bot_enable' => 1,
+                'created_by' => 0, // System created
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        } catch (QueryException $exception) {
+            $contact = $this->reconcileDuplicateContact($exception, $normalizedPhone, $phone);
+
+            if (! $contact) {
+                throw $exception;
+            }
+
+            $isNew = false;
+        }
+
+        if ($isNew) {
+            $cleanContact = $contact->makeHidden(['id', 'organization_id', 'created_by']);
+            WebhookHelper::triggerWebhookEvent('contact.created', $cleanContact, $this->organizationId);
+        }
+
+        return ['contact' => $contact, 'isNew' => $isNew];
+    }
+
+    protected function reconcileDuplicateContact(QueryException $exception, ?string $normalizedPhone, string $rawPhone): ?Contact
+    {
+        if (! $this->isDuplicatePhoneConstraint($exception)) {
+            return null;
+        }
+
+        $candidates = array_filter([
+            $normalizedPhone,
+            '+' . $rawPhone,
+            $rawPhone,
         ]);
 
-        // Trigger webhook for new contact
-        $cleanContact = $contact->makeHidden(['id', 'organization_id', 'created_by']);
-        WebhookHelper::triggerWebhookEvent('contact.created', $cleanContact, $this->organizationId);
+        $contact = Contact::withTrashed()
+            ->where('organization_id', $this->organizationId)
+            ->whereIn('phone', $candidates)
+            ->orderBy('id')
+            ->first();
 
-        return ['contact' => $contact, 'isNew' => true];
+        if (! $contact) {
+            Log::channel('webhook')->error('Duplicate contact constraint hit without recovery', [
+                'organization_id' => $this->organizationId,
+                'phone' => $rawPhone,
+                'normalized_phone' => $normalizedPhone,
+                'exception' => $exception->getMessage(),
+            ]);
+
+            return null;
+        }
+
+        if ($contact->trashed()) {
+            $contact->restore();
+        }
+
+        Log::channel('webhook')->warning('Recovered contact after duplicate phone constraint', [
+            'organization_id' => $this->organizationId,
+            'contact_id' => $contact->id,
+            'phone' => $rawPhone,
+            'normalized_phone' => $normalizedPhone,
+            'exception' => $exception->getMessage(),
+        ]);
+
+        return $contact;
+    }
+
+    protected function isDuplicatePhoneConstraint(QueryException $exception): bool
+    {
+        return $exception->getCode() === '23000'
+            && str_contains($exception->getMessage(), 'idx_contacts_org_phone_unique');
     }
 
     public function store(object $request, $uuid = null)
