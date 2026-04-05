@@ -1,17 +1,24 @@
 <?php
 
 namespace App\Models;
+
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Helpers\DateTimeHelper;
 use App\Models\Chat;
-use App\Models\ChatTicket;
 use App\Models\ChatNote;
 use Carbon\Carbon;
 
-class ChatLog extends Model {
+class ChatLog extends Model
+{
     use HasFactory;
 
+    protected $fillable = [
+        'entity_type',
+        'entity_id',
+        'created_at',
+        'contact_id'
+    ];
     protected $guarded = [];
     public $timestamps = false;
 
