@@ -1097,6 +1097,10 @@ class ProcessWebhookJob implements ShouldQueue
                 $result = $this->handleStateSyncCreate($contact, $formattedPhone, $firstName, $fullName);
                 break;
 
+            case 'add':
+                $result = $this->handleStateSyncCreate($contact, $formattedPhone, $firstName, $fullName);
+                break;
+
             case 'update':
                 $result = $this->handleStateSyncUpdate($contact, $firstName, $formattedPhone);
                 break;

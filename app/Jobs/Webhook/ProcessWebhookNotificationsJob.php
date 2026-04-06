@@ -68,12 +68,20 @@ class ProcessWebhookNotificationsJob implements ShouldQueue
      * The number of times the job may be attempted.
      * Set to 1 for fire-and-forget pattern (no retries).
      */
-    public int $tries = 1;
+    public int $tries = 2;
 
     /**
      * The number of seconds the job can run before timing out.
      */
-    public int $timeout = 30;
+    public int $timeout = 60;
+
+    /**
+     * Calculate the number of seconds to wait before retrying the job.
+     */
+    public function backoff(): array
+    {
+        return [30, 60];
+    }
 
     /**
      * Performance warning threshold in seconds.
