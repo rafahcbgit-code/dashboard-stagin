@@ -11,6 +11,8 @@ use Modules\Webhook\Requests\StoreWebhook;
 use Modules\Webhook\Requests\UpdateWebhook;
 use Modules\Webhook\Resources\WebhookResource;
 use Inertia\Inertia;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 
 class MainController extends BaseController
 {
@@ -393,18 +395,29 @@ class MainController extends BaseController
     {
         // Use GuzzleHttp or Laravel HTTP client to send the request
         try {
-            $response = \Http::withOptions([
-                'curl' => [
-                    CURLOPT_SSL_VERIFYPEER => true,
-                    CURLOPT_SSL_VERIFYHOST => 2,
-                    CURLOPT_PROTOCOLS => CURLPROTO_HTTPS,
-                ],
-            ])->post($url, $payload);
+            $response = Http::timeout(10)
+                ->connectTimeout(5)
+                ->retry(3, 1000, function (\Exception $exception, $request) {
+                    return $exception instanceof \Illuminate\Http\Client\ConnectionException;
+                })
+                ->withOptions([
+                    'curl' => [
+                        CURLOPT_SSL_VERIFYPEER => true,
+                        CURLOPT_SSL_VERIFYHOST => 2,
+                        CURLOPT_PROTOCOLS => CURLPROTO_HTTPS,
+                    ],
+                ])->post($url, $payload);
             
             return $response;
+        } catch (\Illuminate\Http\Client\ConnectionException $e) {
+            Log::error('Webhook endpoint timed out completely after retries.', [
+                'url' => $url,
+                'error' => $e->getMessage()
+            ]);
+            return response()->json(['error' => 'Notification failed due to timeout'], 500);
         } catch (\Exception $e) {
             // Log the error or handle it as needed
-            //\Log::error('Webhook notification error: ' . $e->getMessage());
+            Log::error('Webhook notification error: ' . $e->getMessage());
             return response()->json(['error' => 'Notification failed'], 500);
         }
     }
