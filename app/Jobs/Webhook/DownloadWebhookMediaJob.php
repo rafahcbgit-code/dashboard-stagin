@@ -122,14 +122,25 @@ class DownloadWebhookMediaJob implements ShouldQueue
         // Step 1: Get organization and access token (AC-1.3.1)
         $organization = Organization::find($this->organizationId);
         if (! $organization) {
-            throw new \RuntimeException("Organization not found: {$this->organizationId}");
+            Log::channel('webhook')->warning("DownloadWebhookMediaJob: Organization not found", [
+                'organization_id' => $this->organizationId,
+                'chat_id' => $this->chatId,
+            ]);
+            $this->delete();
+            return;
         }
 
         $metadata = json_decode($organization->metadata);
         $accessToken = $metadata->whatsapp->access_token ?? null;
 
         if (! $accessToken) {
-            throw new \RuntimeException("WhatsApp access token not configured for organization: {$this->organizationId}");
+            Log::channel('webhook')->warning("DownloadWebhookMediaJob: WhatsApp access token not configured", [
+                'organization_id' => $this->organizationId,
+                'chat_id' => $this->chatId,
+                'media_id' => $mediaId,
+            ]);
+            $this->delete();
+            return;
         }
 
         // Step 2: Get media URL from WhatsApp Graph API (AC-1.3.1)
