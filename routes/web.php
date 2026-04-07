@@ -1,6 +1,7 @@
 ﻿<?php
 
 use App\Http\Controllers\Admin\SallaAppInstallationController;
+use App\Http\Controllers\Zid\ZidAuthController;
 use App\Models\Language;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
 use Illuminate\Support\Facades\File;
@@ -30,6 +31,8 @@ Route::post('/shopify/webhooks/checkouts-created', [ShopifyWebhookController::cl
 Route::post('/shopify/webhooks/customers/data_request', [PrivacyWebhookController::class, 'handle']);
 Route::post('/shopify/webhooks/customers/redact', [PrivacyWebhookController::class, 'handle']);
 Route::post('/shopify/webhooks/shop/redact', [PrivacyWebhookController::class, 'handle']);
+
+Route::get('/zid/auth/callback', [ZidAuthController::class, 'handleCallback'])->name('zid.callback');
 
 Route::post('/webhook/{organization}', [App\Http\Controllers\WebhookController::class, 'handlePostRequest'])
     ->whereNumber('organization');
@@ -167,6 +170,10 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::get('/subscription/coupon/remove/{id}', [App\Http\Controllers\User\SubscriptionController::class, 'removeCoupon']);
             });
 
+            Route::get('/zid/connect', [ZidAuthController::class, 'redirectToProvider'])->name('zid.connect');
+
+
+
             Route::group(['middleware' => ['check.organization', 'isTrial']], function () {
                 Route::get('/chats/{uuid?}', [App\Http\Controllers\User\ChatController::class, 'index']);
                 Route::get('/chats/{id}/media', [App\Http\Controllers\User\ChatController::class, 'getMedia']);
@@ -203,7 +210,9 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::get('/settings/salla/automations/communication-whatsapp-send/webhook-fields', [App\Http\Controllers\User\SallaAutomationController::class, 'webhookFieldsCommunicationWhatsappSend'])->name('salla.automations.communication_whatsapp_send.fields');
                 Route::post('/settings/salla/automations/communication-whatsapp-send', [App\Http\Controllers\User\SallaAutomationController::class, 'updateCommunicationWhatsappSend'])->name('salla.automations.communication_whatsapp_send.update');
                 Route::get('/settings/salla/message-logs', [App\Http\Controllers\User\SallaMessageLogController::class, 'index'])->name('salla.logs.index');
-               
+
+                Route::delete('/settings/zid/connection', [ZidAuthController::class, 'disconnect'])->name('zid.disconnect');
+
                 Route::get('/settings/shopify/automations', [App\Http\Controllers\User\ShopifyAutomationController::class, 'index'])->name('shopify.automations.index');
                 Route::get('/settings/shopify/automations/template/{templateId}/variables', [App\Http\Controllers\User\ShopifyAutomationController::class, 'templateVariables'])->whereNumber('templateId');
                 Route::get('/settings/shopify/automations/order-created/webhook-fields', [App\Http\Controllers\User\ShopifyAutomationController::class, 'webhookFields'])->name('shopify.automations.order_created.fields');
@@ -216,7 +225,7 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::post('/settings/shopify/automations/orders-fulfilled/notification', [App\Http\Controllers\User\ShopifyAutomationController::class, 'updateOrderFulfilledNotification'])->name('shopify.automations.orders_fulfilled.notification.update');
 
                 Route::post('/settings/salla/customer-sync', [App\Http\Controllers\Salla\CustomerSyncController::class, 'sync'])->name('salla.customer.sync');
-             
+
                 Route::get('/settings/salla/message-logs/export', [App\Http\Controllers\User\SallaMessageLogController::class, 'export'])->name('salla.logs.export');
                 Route::get('/salla-auth', [App\Http\Controllers\Salla\SallaAuthController::class, 'storeAuth']);
                 Route::get('/salla/public/auth/callback', [App\Http\Controllers\Salla\SallaAuthController::class, 'callback']);
@@ -417,7 +426,3 @@ Route::prefix('admin')->middleware(['auth:admin'])->group(function () {
     Route::post('/webhook-failures/{id}/retry', [App\Http\Controllers\Admin\WebhookFailureController::class, 'retry']);
     Route::delete('/webhook-failures/{id}', [App\Http\Controllers\Admin\WebhookFailureController::class, 'destroy']);
 });
-
-
-
-

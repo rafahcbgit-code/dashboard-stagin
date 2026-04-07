@@ -33,6 +33,13 @@
                                             </svg>
                                         </div>
                                     </Link>
+                                    <div class="mb-6">
+                                        <ZidIntegrationCard
+                                            :connection="props.zidConnection"
+                                            :connect-url="props.zidConnectUrl"
+                                            :disconnect-url="props.zidDisconnectUrl"
+                                        />
+                                    </div>
                                     <div class="border rounded-lg p-4 mb-6 hover:shadow-md transition-shadow">
                                         <div class="flex justify-between items-center mb-2">
                                             <div>
@@ -109,6 +116,7 @@
 import { ref, defineAsyncComponent } from 'vue';
 import { Link } from '@inertiajs/vue3';
 import SettingLayout from "./../Layout.vue";
+import ZidIntegrationCard from "../ZidIntegrationCard.vue";
 
 const props = defineProps({
     modules: {
@@ -124,6 +132,18 @@ const props = defineProps({
         default: true
     },
     currentPlanName: {
+        type: String,
+        default: ''
+    },
+    zidConnection: {
+        type: Object,
+        default: null
+    },
+    zidConnectUrl: {
+        type: String,
+        default: ''
+    },
+    zidDisconnectUrl: {
         type: String,
         default: ''
     }

@@ -15,8 +15,8 @@ use App\Models\Template;
 use App\Models\Subscription;
 use App\Services\ContactFieldService;
 use App\Services\WhatsappService;
+use App\Models\IntegrationConnection;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\URL;
 use Inertia\Inertia;
 use Validator;
 
@@ -59,6 +59,21 @@ class PluginController extends BaseController
             });
             $data['shopifyAccessAllowed'] = $shopifyAccessAllowed;
             $data['currentPlanName'] = $currentPlanName;
+            $connection = IntegrationConnection::where('organization_id', $organizationId)
+                ->where('platform', config('zid.platform'))
+                ->first();
+
+            $data['zidConnection'] = $connection ? [
+                'id' => $connection->id,
+                'store_id' => $connection->store_id,
+                'store_name' => $connection->store_name,
+                'connection_status' => $connection->connection_status,
+                'token_expires_at' => $connection->token_expires_at?->toDateTimeString(),
+                'connected_at' => $connection->connected_at?->toDateTimeString(),
+            ] : null;
+
+            $data['zidConnectUrl'] = route('zid.connect');
+            $data['zidDisconnectUrl'] = route('zid.disconnect');
             
             return Inertia::render('User/Settings/Plugins/Index', $data);
         }
