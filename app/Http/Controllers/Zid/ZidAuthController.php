@@ -17,12 +17,12 @@ class ZidAuthController extends Controller
     public function redirectToProvider()
     {
         $organizationId = session()->get('current_organization');
-      $data = [
-    'organization_id' => $organizationId,
-    'random' => Str::random(20),
-];
+        $data = [
+            'organization_id' => $organizationId,
+            'random' => Str::random(20),
+        ];
 
-$state = encrypt(json_encode($data));
+        $state = encrypt(json_encode($data));
         $queries = http_build_query([
             'client_id' => config('zid.client_id'),
             'redirect_uri' => config('zid.redirect_uri'),
@@ -34,180 +34,147 @@ $state = encrypt(json_encode($data));
 
         return redirect(config('zid.auth_url') . '?' . $queries);
     }
-    /*public function redirectToProvider(Request $request)
-    {
-        Log::info('Zid OAuth start from redirectToProvider');
-        $organizationId = session()->get('current_organization');
-        if (!$organizationId) {
-            return redirect('/settings/plugins')->with('error', __('Unable to determine your workspace. Please reload the page and try again.'));
-        }
-
-        $clientId = config('zid.client_id');
-        Log::info('clientId', ['clientId' => $clientId]);
-
-        $redirectUri = config('zid.redirect_uri');
-        Log::info('redirectUri', ['redirectUri' => $redirectUri]);
-
-        $scopes = $this->normalizeScopes(config('zid.scopes'));
-
-        $state = Str::random(40);
-        session()->put('zid_oauth_state', $state);
-
-        if (empty($clientId) || empty($redirectUri)) {
-            Log::critical('Zid OAuth: missing configuration');
-
-            return redirect('/settings/plugins')->with('error', __('Zid integration is not configured yet.'));
-        }
-
-
-        $params = [
-            'client_id' => $clientId,
-            'redirect_uri' => $redirectUri,
-            'response_type' => 'code'
-        ];
-
-        if (!empty($scopes)) {
-            $params['scope'] = implode(' ', $scopes);
-        }
-
-        $params['state'] = $state;
-
-        $queries = http_build_query($params);
-
-        Log::info('Zid OAuth end from redirectToProvider');
-        return redirect(self::OAUTH_URL . 'oauth/authorize?' . $queries);
-    }*/
-
+   
     public function handleCallback(Request $request)
-{
-    Log::info('Zid Callback START', [
-        'full_url' => $request->fullUrl(),
-        'params' => $request->all(),
-    ]);
-
-    // في حال المستخدم رفض التفويض
-    if ($request->filled('error')) {
-        Log::warning('Zid OAuth: authorization denied', [
-            'error' => $request->input('error')
+    {
+        Log::info('Zid Callback START', [
+            'full_url' => $request->fullUrl(),
+            'params' => $request->all(),
         ]);
 
-        return redirect('/settings/plugins')
-            ->with('error', __('Authorization was denied or cancelled.'));
-    }
+        // في حال المستخدم رفض التفويض
+        if ($request->filled('error')) {
+            Log::warning('Zid OAuth: authorization denied', [
+                'error' => $request->input('error')
+            ]);
 
-    /**
-     * ✅ استخراج organization_id من state المشفّر
-     */
-    try {
-        $decoded = json_decode(decrypt($request->state), true);
-        $organizationId = $decoded['organization_id'] ?? null;
-
-        if (!$organizationId) {
-            throw new \Exception('Missing organization_id in state');
+            return redirect('/settings/plugins')
+                ->with('error', __('Authorization was denied or cancelled.'));
         }
 
-    } catch (\Throwable $e) {
-        Log::warning('Zid Callback: Invalid state', [
-            'state' => $request->state,
-            'error' => $e->getMessage(),
+        /**
+         * ✅ استخراج organization_id من state المشفّر
+         */
+        try {
+            $decoded = json_decode(decrypt($request->state), true);
+            $organizationId = $decoded['organization_id'] ?? null;
+
+            if (!$organizationId) {
+                throw new \Exception('Missing organization_id in state');
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Zid Callback: Invalid state', [
+                'state' => $request->state,
+                'error' => $e->getMessage(),
+            ]);
+
+            return redirect('/settings/plugins')
+                ->with('error', __('Invalid or expired Zid session.'));
+        }
+
+        $code = $request->input('code');
+
+        if (!$code) {
+            Log::warning('Zid Callback: Missing code');
+
+            return redirect('/settings/plugins')
+                ->with('error', __('Missing authorization code.'));
+        }
+
+        Log::info('Zid Callback: Code received', ['code' => $code]);
+
+        /**
+         * ✅ جلب التوكن
+         */
+        $tokenResponse = $this->exchangeCodeForToken($code);
+
+        if (!$tokenResponse['success']) {
+            Log::error('Zid Callback: Token exchange failed', [
+                'response' => $tokenResponse
+            ]);
+
+            return redirect('/settings/plugins')
+                ->with('error', $tokenResponse['message']);
+        }
+
+        $payload = $tokenResponse['payload'];
+
+        Log::info('Zid Callback: Token received', [
+            'payload' => $payload
         ]);
 
-        return redirect('/settings/plugins')
-            ->with('error', __('Invalid or expired Zid session.'));
-    }
+        $authorizationToken = data_get($payload, 'Authorization') ?? data_get($payload, 'authorization');
+        $managerToken       = data_get($payload, 'access_token');
+        $refreshToken       = data_get($payload, 'refresh_token');
+        $expiresIn          = data_get($payload, 'expires_in');
 
-    $code = $request->input('code');
+        if (!$authorizationToken || !$managerToken || !is_numeric($expiresIn)) {
+            Log::error('Zid OAuth: token payload missing required fields', [
+                'payload' => $payload,
+            ]);
 
-    if (!$code) {
-        Log::warning('Zid Callback: Missing code');
+            return redirect('/settings/plugins')
+                ->with('error', __('Failed to read Zid tokens.'));
+        }
 
-        return redirect('/settings/plugins')
-            ->with('error', __('Missing authorization code.'));
-    }
+        /**
+         * ✅ جلب بيانات المتجر
+         */
+        $profile = $this->fetchManagerProfile($authorizationToken, $managerToken);
 
-    Log::info('Zid Callback: Code received', ['code' => $code]);
-
-    /**
-     * ✅ جلب التوكن
-     */
-    $tokenResponse = $this->exchangeCodeForToken($code);
-
-    if (!$tokenResponse['success']) {
-        Log::error('Zid Callback: Token exchange failed', [
-            'response' => $tokenResponse
+        Log::info('Zid Callback: Profile fetched', [
+            'profile' => $profile
         ]);
 
-        return redirect('/settings/plugins')
-            ->with('error', $tokenResponse['message']);
-    }
+        //$storeId = data_get($profile, 'store.id') ?? data_get($profile, 'store_id');
+        $storeName = data_get($profile, 'store.name.en') ??
+            data_get($profile, 'store.name') ??
+            data_get($profile, 'store_name');
 
-    $payload = $tokenResponse['payload'];
+        try {
+            $subscriptionStoreId = $this->fetchSubscriptionStoreId($authorizationToken, $managerToken);
+            if (is_string($subscriptionStoreId) && $subscriptionStoreId !== '') {
+                $storeId = $subscriptionStoreId;
+            }
+        } catch (\Throwable $exception) {
+            Log::warning('Zid Callback: unable to fetch subscription store_id', [
+                'exception' => $exception->getMessage(),
+            ]);
+        }
 
-    Log::info('Zid Callback: Token received', [
-        'payload' => $payload
-    ]);
+        if (!is_string($storeId) || $storeId === '') {
+            $storeId = (string) Str::uuid();
+        }
 
-    $authorizationToken = data_get($payload, 'Authorization') ?? data_get($payload, 'authorization');
-    $managerToken       = data_get($payload, 'access_token');
-    $refreshToken       = data_get($payload, 'refresh_token');
-    $expiresIn          = data_get($payload, 'expires_in');
+        /**
+         * ✅ حفظ الاتصال
+         */
+        $connection = IntegrationConnection::updateOrCreate(
+            [
+                'organization_id' => $organizationId,
+                'platform' => config('zid.platform'),
+            ],
+            [
+                'user_id' => Auth::id(),
+                'store_id' => $storeId,
+                'store_name' => $storeName ?? "store",
+                'authorization_token' => $authorizationToken,
+                'manager_token' => $managerToken,
+                'refresh_token' => $refreshToken,
+                'token_expires_at' => now()->addSeconds((int) $expiresIn),
+                'connection_status' => 'connected',
+                'connected_at' => now(),
+                'disconnected_at' => null,
+            ]
+        );
 
-    if (!$authorizationToken || !$managerToken || !is_numeric($expiresIn)) {
-        Log::error('Zid OAuth: token payload missing required fields', [
-            'payload' => $payload,
-        ]);
-
-        return redirect('/settings/plugins')
-            ->with('error', __('Failed to read Zid tokens.'));
-    }
-
-    /**
-     * ✅ جلب بيانات المتجر
-     */
-    $profile = $this->fetchManagerProfile($authorizationToken, $managerToken);
-
-    Log::info('Zid Callback: Profile fetched', [
-        'profile' => $profile
-    ]);
-
-    $storeId = data_get($profile, 'store.id') ?? data_get($profile, 'store_id');
-    $storeName = data_get($profile, 'store.name.en') ??
-        data_get($profile, 'store.name') ??
-        data_get($profile, 'store_name');
-
-    if (!is_string($storeId) || $storeId === '') {
-        $storeId = (string) Str::uuid();
-    }
-
-    /**
-     * ✅ حفظ الاتصال
-     */
-    IntegrationConnection::updateOrCreate(
-        [
+        Log::info('Zid Callback SUCCESS - Connection stored', [
             'organization_id' => $organizationId,
-            'platform' => config('zid.platform'),
-        ],
-        [
-            'user_id' => Auth::id(),
-            'store_id' => $storeId,
-            'store_name' => $storeName ?? "store",
-            'authorization_token' => $authorizationToken,
-            'manager_token' => $managerToken,
-            'refresh_token' => $refreshToken,
-            'token_expires_at' => now()->addSeconds((int) $expiresIn),
-            'connection_status' => 'connected',
-            'connected_at' => now(),
-            'disconnected_at' => null,
-        ]
-    );
+        ]);
 
-    Log::info('Zid Callback SUCCESS - Connection stored', [
-        'organization_id' => $organizationId,
-    ]);
-
-    return redirect('/settings/plugins')
-        ->with('success', __('Successfully connected to your Zid store.'));
-}
+        return redirect('/settings/plugins')
+            ->with('success', __('Successfully connected to your Zid store.'));
+    }
 
     public static function getTokensFromZidByCode(string $oauthCode): array
     {
@@ -321,6 +288,37 @@ $state = encrypt(json_encode($data));
         return $response->json('data', []);
     }
 
+    private function fetchSubscriptionStoreId(string $authorizationToken, string $managerToken): ?string
+    {
+        $appId = config('zid.client_id');
+
+        $response = Http::acceptJson()
+            ->withHeaders([
+                'Authorization' => 'Bearer ' . $authorizationToken,
+                'X-Manager-Token' => $managerToken,
+            ])
+            ->timeout(20)
+            ->connectTimeout(10)
+            ->retry(2, 250, null, false)
+            ->get('https://api.zid.sa/v1/market/app/subscription', [
+                'app_id' => $appId,
+            ]);
+
+        if (! $response->successful()) {
+            throw new \RuntimeException('Failed to fetch Zid subscription store_id.');
+        }
+
+        $data = $response->json();
+
+        $subscriptionStoreId = data_get($data, 'subscription.store_id');
+
+        if (! $subscriptionStoreId) {
+            return null;
+        }
+
+        return (string) $subscriptionStoreId;
+    }
+
     private function normalizeScopes(mixed $scope): array
     {
         if (is_array($scope)) {
@@ -348,4 +346,3 @@ $state = encrypt(json_encode($data));
         ]);
     }
 }
-

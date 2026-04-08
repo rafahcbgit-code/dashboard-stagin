@@ -33,11 +33,17 @@
                                             </svg>
                                         </div>
                                     </Link>
-                                    <div class="mb-6">
+                                    <div class="mb-6 space-y-6">
                                         <ZidIntegrationCard
                                             :connection="props.zidConnection"
                                             :connect-url="props.zidConnectUrl"
                                             :disconnect-url="props.zidDisconnectUrl"
+                                        />
+                                        <ZidSubscriptionManager
+                                            :events="props.zidSubscriptionEvents"
+                                            :statuses="props.zidSubscriptionStatus"
+                                            :toggle-url="props.zidSubscriptionToggleUrl"
+                                            :is-connected="Boolean(props.zidConnection)"
                                         />
                                     </div>
                                     <div class="border rounded-lg p-4 mb-6 hover:shadow-md transition-shadow">
@@ -117,6 +123,7 @@ import { ref, defineAsyncComponent } from 'vue';
 import { Link } from '@inertiajs/vue3';
 import SettingLayout from "./../Layout.vue";
 import ZidIntegrationCard from "../ZidIntegrationCard.vue";
+import ZidSubscriptionManager from "../ZidSubscriptionManager.vue";
 
 const props = defineProps({
     modules: {
@@ -138,6 +145,18 @@ const props = defineProps({
     zidConnection: {
         type: Object,
         default: null
+    },
+    zidSubscriptionEvents: {
+        type: Object,
+        default: () => ({})
+    },
+    zidSubscriptionStatus: {
+        type: Object,
+        default: () => ({})
+    },
+    zidSubscriptionToggleUrl: {
+        type: String,
+        default: ''
     },
     zidConnectUrl: {
         type: String,

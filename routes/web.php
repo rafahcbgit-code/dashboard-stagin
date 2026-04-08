@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Admin\SallaAppInstallationController;
 use App\Http\Controllers\Zid\ZidAuthController;
+use App\Http\Controllers\Zid\ZidSubscriptionController;
 use App\Models\Language;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
 use Illuminate\Support\Facades\File;
@@ -10,6 +11,7 @@ use Illuminate\Support\Facades\Http;
 use App\Http\Controllers\ShopifyIntegratin\ShopifyAuthController;
 use App\Http\Controllers\ShopifyIntegratin\ShopifyWebhookController;
 use App\Http\Controllers\ShopifyIntegratin\PrivacyWebhookController;
+use App\Http\Controllers\Zid\ZidWebhookController;
 /*
 |--------------------------------------------------------------------------
 | Web Routes
@@ -32,7 +34,11 @@ Route::post('/shopify/webhooks/customers/data_request', [PrivacyWebhookControlle
 Route::post('/shopify/webhooks/customers/redact', [PrivacyWebhookController::class, 'handle']);
 Route::post('/shopify/webhooks/shop/redact', [PrivacyWebhookController::class, 'handle']);
 
-Route::get('/zid/auth/callback', [ZidAuthController::class, 'handleCallback'])->name('zid.callback');
+Route::post('zid/webhooks', [ZidWebhookController::class, 'handle']);
+
+Route::middleware(['web'])->group(function () {
+    Route::get('/zid/auth/callback', [ZidAuthController::class, 'handleCallback'])->name('zid.callback');
+});
 
 Route::post('/webhook/{organization}', [App\Http\Controllers\WebhookController::class, 'handlePostRequest'])
     ->whereNumber('organization');
@@ -211,6 +217,9 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::post('/settings/salla/automations/communication-whatsapp-send', [App\Http\Controllers\User\SallaAutomationController::class, 'updateCommunicationWhatsappSend'])->name('salla.automations.communication_whatsapp_send.update');
                 Route::get('/settings/salla/message-logs', [App\Http\Controllers\User\SallaMessageLogController::class, 'index'])->name('salla.logs.index');
 
+                Route::get('/zid/connect', [ZidAuthController::class, 'redirectToProvider'])->name('zid.connect');
+                Route::get('/zid/callback', [ZidAuthController::class, 'handleCallback'])->name('zid.callback');
+                Route::post('/settings/zid/subscriptions', [ZidSubscriptionController::class, 'update'])->name('zid.subscriptions.update');
                 Route::delete('/settings/zid/connection', [ZidAuthController::class, 'disconnect'])->name('zid.disconnect');
 
                 Route::get('/settings/shopify/automations', [App\Http\Controllers\User\ShopifyAutomationController::class, 'index'])->name('shopify.automations.index');

@@ -137,6 +137,8 @@ const buttonLabel = computed(() =>
 );
 
 const handleConnect = () => {
+console.log('connectUrl:', props.connectUrl);
+    console.log('current url:', window.location.href);
     if (!props.connectUrl) {
         return;
     }

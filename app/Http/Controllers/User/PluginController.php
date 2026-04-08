@@ -13,6 +13,7 @@ use App\Models\Organization;
 use App\Models\Setting;
 use App\Models\Template;
 use App\Models\Subscription;
+use App\Models\ZidWebhookSubscription;
 use App\Services\ContactFieldService;
 use App\Services\WhatsappService;
 use App\Models\IntegrationConnection;
@@ -74,6 +75,41 @@ class PluginController extends BaseController
 
             $data['zidConnectUrl'] = route('zid.connect');
             $data['zidDisconnectUrl'] = route('zid.disconnect');
+            $eventConfig = config('zid.webhook_events', []);
+            $events = collect($eventConfig)->mapWithKeys(function ($meta, $name) {
+                $details = $this->getZidEventMetadata()[$name] ?? [];
+                return [
+                    $name => array_merge($meta, [
+                        'label' => $details['label'] ?? $name,
+                        'description' => $details['description'] ?? '',
+                    ]),
+                ];
+            })->toArray();
+            $eventStatuses = [];
+
+            if ($connection) {
+                $subscriptions = ZidWebhookSubscription::where('store_id', $connection->store_id)->get()->keyBy('event_name');
+
+                foreach ($events as $eventName => $meta) {
+                    /** @var ZidWebhookSubscription|null $sub */
+                    $sub = $subscriptions->get($eventName);
+                    $eventStatuses[$eventName] = [
+                        'enabled' => $sub ? $sub->status === 'active' : false,
+                        'condition_count' => $sub ? count($sub->conditions_json ?? []) : 0,
+                    ];
+                }
+            } else {
+                foreach ($events as $eventName => $meta) {
+                    $eventStatuses[$eventName] = [
+                        'enabled' => false,
+                        'condition_count' => 0,
+                    ];
+                }
+            }
+
+            $data['zidSubscriptionEvents'] = $events;
+            $data['zidSubscriptionStatus'] = $eventStatuses;
+            $data['zidSubscriptionToggleUrl'] = route('zid.subscriptions.update');
             
             return Inertia::render('User/Settings/Plugins/Index', $data);
         }
@@ -110,5 +146,27 @@ class PluginController extends BaseController
         }
 
         return response()->download($pluginPath, $name . '.zip');
+    }
+
+    private function getZidEventMetadata(): array
+    {
+        return [
+            'order.create' => [
+                'label' => __('New Order Created'),
+                'description' => __('Fires when a new order is submitted on Zid.'),
+            ],
+            'order.status.update' => [
+                'label' => __('Order Status Updated'),
+                'description' => __('Fires when Zid changes an order status.'),
+            ],
+            'cart.abandoned' => [
+                'label' => __('Abandoned Cart'),
+                'description' => __('Fires when a shopper leaves checkout without submitting.'),
+            ],
+            'customer.login' => [
+                'label' => __('Customer Login'),
+                'description' => __('Fires when a customer logs into their Zid account.'),
+            ],
+        ];
     }
 }

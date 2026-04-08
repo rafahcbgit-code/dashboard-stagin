@@ -21,4 +21,17 @@ return [
     'manager_profile_url' => env('ZID_MANAGER_PROFILE_URL', 'https://api.zid.sa/v1/managers/account/profile'),
     'scopes' => env('ZID_SCOPES', 'read write'),
     'platform' => 'zid',
+    'webhook_target' => env('ZID_WEBHOOK_TARGET', env('APP_URL') . '/zid/webhooks'),
+    'webhook_events' => [
+        'order.create' => ['supports_conditions' => true],
+        'order.status.update' => ['supports_conditions' => true],
+        'abandoned.card' => ['supports_conditions' => false],
+        'customer.login' => ['supports_conditions' => false],
+    ],
+    'webhook_condition_keys' => [
+        'delivery_option_id',
+        'status',
+        'payment_method',
+    ],
+    'webhook_conditions' => [],
 ];
