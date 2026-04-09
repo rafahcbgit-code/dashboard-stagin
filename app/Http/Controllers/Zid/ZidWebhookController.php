@@ -3,23 +3,68 @@
 namespace App\Http\Controllers\Zid;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\Zid\ProcessZidWebhookDeliveryJob;
+use App\Models\IntegrationConnection;
+use App\Models\ZidWebhookDelivery;
 use App\Models\ZidWebhookSubscription;
+use Illuminate\Database\QueryException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Response;
 
 class ZidWebhookController extends Controller
 {
     public function handle(Request $request)
     {
-        $payload = $request->all();
+        $rawBody = (string) $request->getContent();
+        $payloadHash = hash('sha256', $rawBody);
+        $payload = json_decode($rawBody, true);
+
+        if (!is_array($payload)) {
+            Log::warning('Zid webhook received invalid JSON', [
+                'payload_hash' => $payloadHash,
+                'headers' => $request->headers->all(),
+            ]);
+
+            return Response::json(['status' => 'ignored'], 200);
+        }
+
+        [$storeId, $connection] = $this->resolveConnection($payload);
+
+        $event = $request->header('webhook-event') ?? data_get($payload, 'event');
+
         Log::info('Zid webhook received', [
-            'event' => $payload['event'] ?? null,
+            'event' => $event,
             'webhook_id' => $payload['webhook_id'] ?? null,
-            'store_id' => data_get($payload, 'store.id'),
+            'store_id' => $storeId,
         ]);
 
-        $subscription = ZidWebhookSubscription::where('store_id', data_get($payload, 'store.id'))
-            ->where('event_name', $payload['event'] ?? '')
+        try {
+            $delivery = ZidWebhookDelivery::create([
+                'store_id' => $storeId,
+                'integration_connection_id' => $connection?->id,
+                'organization_id' => $connection?->organization_id,
+                'event' => is_scalar($event) ? trim((string) $event) : null,
+                'payload' => $payload,
+                'headers' => $request->headers->all(),
+                'payload_hash' => $payloadHash,
+                'status' => 'pending',
+                'attempts' => 0,
+            ]);
+        } catch (QueryException $exception) {
+            Log::info('Zid webhook delivery duplicate detected', [
+                'payload_hash' => $payloadHash,
+                'store_id' => $storeId,
+                'event' => $event,
+            ]);
+
+            return Response::json(['status' => 'ok'], 200);
+        }
+
+        ProcessZidWebhookDeliveryJob::dispatch($delivery->id);
+
+        $subscription = ZidWebhookSubscription::where('store_id', $storeId)
+            ->where('event_name', is_scalar($event) ? trim((string) $event) : '')
             ->first();
 
         if ($subscription) {
@@ -28,6 +73,24 @@ class ZidWebhookController extends Controller
             Log::warning('Zid webhook received for unknown subscription', $payload);
         }
 
-        return response()->json(['status' => 'ok']);
+        return Response::json(['status' => 'ok']);
+    }
+
+    private function resolveConnection(array $payload): array
+    {
+        $storeId = data_get($payload, 'store_id')
+            ?? data_get($payload, 'store.id')
+            ?? data_get($payload, 'data.store_id');
+
+        $storeId = is_scalar($storeId) ? trim((string) $storeId) : '';
+
+        $connection = null;
+        if ($storeId !== '') {
+            $connection = IntegrationConnection::where('platform', config('zid.platform'))
+                ->where('store_id', $storeId)
+                ->first();
+        }
+
+        return [$storeId, $connection];
     }
 }

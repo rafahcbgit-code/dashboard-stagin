@@ -34,7 +34,9 @@ Route::post('/shopify/webhooks/customers/data_request', [PrivacyWebhookControlle
 Route::post('/shopify/webhooks/customers/redact', [PrivacyWebhookController::class, 'handle']);
 Route::post('/shopify/webhooks/shop/redact', [PrivacyWebhookController::class, 'handle']);
 
-Route::post('zid/webhooks', [ZidWebhookController::class, 'handle']);
+Route::post('zid/webhooks', [ZidWebhookController::class, 'handle'])
+    ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class]);
+
 
 Route::middleware(['web'])->group(function () {
     Route::get('/zid/auth/callback', [ZidAuthController::class, 'handleCallback'])->name('zid.callback');
@@ -216,6 +218,10 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::get('/settings/salla/automations/communication-whatsapp-send/webhook-fields', [App\Http\Controllers\User\SallaAutomationController::class, 'webhookFieldsCommunicationWhatsappSend'])->name('salla.automations.communication_whatsapp_send.fields');
                 Route::post('/settings/salla/automations/communication-whatsapp-send', [App\Http\Controllers\User\SallaAutomationController::class, 'updateCommunicationWhatsappSend'])->name('salla.automations.communication_whatsapp_send.update');
                 Route::get('/settings/salla/message-logs', [App\Http\Controllers\User\SallaMessageLogController::class, 'index'])->name('salla.logs.index');
+                Route::get('/settings/zid/automations', [App\Http\Controllers\User\ZidAutomationController::class, 'index'])->name('zid.automations.index');
+                Route::get('/settings/zid/automations/template/{templateId}/variables', [App\Http\Controllers\User\ZidAutomationController::class, 'templateVariables'])->whereNumber('templateId');
+                Route::get('/settings/zid/automations/customer-login/webhook-fields', [App\Http\Controllers\User\ZidAutomationController::class, 'webhookFieldsCustomerLogin'])->name('zid.automations.customer_login.fields');
+                Route::post('/settings/zid/automations/customer-login', [App\Http\Controllers\User\ZidAutomationController::class, 'updateCustomerLogin'])->name('zid.automations.customer_login.update');
 
                 Route::get('/zid/connect', [ZidAuthController::class, 'redirectToProvider'])->name('zid.connect');
                 Route::get('/zid/callback', [ZidAuthController::class, 'handleCallback'])->name('zid.callback');

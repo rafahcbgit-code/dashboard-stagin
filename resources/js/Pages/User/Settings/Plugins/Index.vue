@@ -47,6 +47,18 @@
                                         />
                                     </div>
                                     <div class="border rounded-lg p-4 mb-6 hover:shadow-md transition-shadow">
+                                        <div class="flex items-center justify-between">
+                                            <div>
+                                                <div class="font-semibold text-base">{{ $t('Zid Automations') }}</div>
+                                                <div class="text-sm text-slate-500">{{ $t('Send templated WhatsApp messages based on Zid webhook events.') }}</div>
+                                            </div>
+                                            <Link href="/settings/zid/automations"
+                                                class="text-sm font-semibold text-blue-600 hover:text-blue-800">
+                                                {{ $t('Configure') }}
+                                            </Link>
+                                        </div>
+                                    </div>
+                                    <div class="border rounded-lg p-4 mb-6 hover:shadow-md transition-shadow">
                                         <div class="flex justify-between items-center mb-2">
                                             <div>
                                                 <div class="font-semibold text-base">{{ $t('Shopify Integration') }}</div>

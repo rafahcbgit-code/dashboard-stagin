@@ -21,6 +21,7 @@ $providers = [
     App\Providers\TelescopeServiceProvider::class,
     App\Providers\RecaptchaServiceProvider::class,
     App\Providers\SallaServiceProvider::class,
+    App\Providers\ZidServiceProvider::class,
     Mews\Purifier\PurifierServiceProvider::class,
 ];
 
