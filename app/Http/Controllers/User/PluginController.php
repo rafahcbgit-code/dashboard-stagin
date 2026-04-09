@@ -159,7 +159,7 @@ class PluginController extends BaseController
                 'label' => __('Order Status Updated'),
                 'description' => __('Fires when Zid changes an order status.'),
             ],
-            'cart.abandoned' => [
+            'abandoned_cart.created' => [
                 'label' => __('Abandoned Cart'),
                 'description' => __('Fires when a shopper leaves checkout without submitting.'),
             ],

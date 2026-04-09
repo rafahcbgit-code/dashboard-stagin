@@ -25,7 +25,7 @@ return [
     'webhook_events' => [
         'order.create' => ['supports_conditions' => true],
         'order.status.update' => ['supports_conditions' => true],
-        'abandoned.card' => ['supports_conditions' => false],
+        'abandoned_cart.created' => ['supports_conditions' => false],
         'customer.login' => ['supports_conditions' => false],
     ],
     'webhook_condition_keys' => [
