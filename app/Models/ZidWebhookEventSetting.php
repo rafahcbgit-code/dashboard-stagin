@@ -13,6 +13,7 @@ class ZidWebhookEventSetting extends Model
 
     protected $casts = [
         'enabled' => 'boolean',
+        'send_delay_hours' => 'integer',
     ];
 
     public function organization()

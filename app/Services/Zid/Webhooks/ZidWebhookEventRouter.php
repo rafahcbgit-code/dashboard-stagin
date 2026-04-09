@@ -2,6 +2,7 @@
 
 namespace App\Services\Zid\Webhooks;
 
+use App\Services\Zid\Webhooks\Handlers\AbandonedCartHandler;
 use App\Services\Zid\Webhooks\Handlers\CustomerLoginHandler;
 use App\Services\Zid\Webhooks\Handlers\OrderCreatedHandler;
 
@@ -10,6 +11,7 @@ class ZidWebhookEventRouter
     private array $map = [
         'customer.login' => CustomerLoginHandler::class,
         'order.create' => OrderCreatedHandler::class,
+        'abandoned_cart.created' => AbandonedCartHandler::class,
     ];
 
     public function resolve(?string $event): ?ZidWebhookEventHandlerInterface
