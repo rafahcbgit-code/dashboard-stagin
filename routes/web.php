@@ -222,6 +222,8 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::get('/settings/zid/automations/template/{templateId}/variables', [App\Http\Controllers\User\ZidAutomationController::class, 'templateVariables'])->whereNumber('templateId');
                 Route::get('/settings/zid/automations/customer-login/webhook-fields', [App\Http\Controllers\User\ZidAutomationController::class, 'webhookFieldsCustomerLogin'])->name('zid.automations.customer_login.fields');
                 Route::post('/settings/zid/automations/customer-login', [App\Http\Controllers\User\ZidAutomationController::class, 'updateCustomerLogin'])->name('zid.automations.customer_login.update');
+                Route::get('/settings/zid/automations/order-created/webhook-fields', [App\Http\Controllers\User\ZidAutomationController::class, 'webhookFieldsOrderCreated'])->name('zid.automations.order_created.fields');
+                Route::post('/settings/zid/automations/order-created', [App\Http\Controllers\User\ZidAutomationController::class, 'updateOrderCreated'])->name('zid.automations.order_created.update');
 
                 Route::get('/zid/connect', [ZidAuthController::class, 'redirectToProvider'])->name('zid.connect');
                 Route::get('/zid/callback', [ZidAuthController::class, 'handleCallback'])->name('zid.callback');

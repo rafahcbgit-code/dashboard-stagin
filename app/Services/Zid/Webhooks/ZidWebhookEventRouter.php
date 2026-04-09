@@ -3,11 +3,13 @@
 namespace App\Services\Zid\Webhooks;
 
 use App\Services\Zid\Webhooks\Handlers\CustomerLoginHandler;
+use App\Services\Zid\Webhooks\Handlers\OrderCreatedHandler;
 
 class ZidWebhookEventRouter
 {
     private array $map = [
         'customer.login' => CustomerLoginHandler::class,
+        'order.create' => OrderCreatedHandler::class,
     ];
 
     public function resolve(?string $event): ?ZidWebhookEventHandlerInterface
