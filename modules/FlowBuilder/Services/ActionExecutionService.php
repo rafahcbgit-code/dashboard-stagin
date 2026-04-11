@@ -16,9 +16,13 @@ class ActionExecutionService
     private $organizationId;
     private $organization;
 
-    public function __construct($organizationId)
+    private $metaPayload;
+
+    public function __construct($organizationId, $metaPayload = null)
     {
         $this->organizationId = $organizationId;
+        $this->metaPayload = $metaPayload;
+        
         $this->organization = Organization::find($organizationId);
         $this->initializeWhatsappService();
     }
@@ -323,7 +327,7 @@ class ActionExecutionService
 
         try {
             $response = Http::timeout(30)->send($method, $url, [
-                'json' => $payload,
+                'json' => $this->metaPayload,
             ]);
 
             if ($response->successful()) {

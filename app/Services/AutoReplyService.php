@@ -25,9 +25,14 @@ class AutoReplyService
 {
     protected $workingHoursService;
 
-    public function __construct()
+    public $metaPayload ;
+
+    public function __construct($metaPayload = null)
     {
         $this->workingHoursService = new WorkingHoursService();
+        $this->metaPayload = $metaPayload;
+
+        logger($this->metaPayload);
     }
 
     public function getRows(object $request)
@@ -131,7 +136,7 @@ class AutoReplyService
 
         if (File::exists($modulePath)) {
             if (class_exists(\Modules\FlowBuilder\Services\FlowExecutionService::class)) {
-                $query = new \Modules\FlowBuilder\Services\FlowExecutionService($organizationId);
+                $query = new \Modules\FlowBuilder\Services\FlowExecutionService($organizationId, $this->metaPayload);
                 $activeFlow = $query->hasActiveFlow($chat);
             }
         }
@@ -273,7 +278,7 @@ class AutoReplyService
         $receivedMessage = " " . $text;
 
         if (file_exists(base_path('modules/FlowBuilder/Services/FlowExecutionService.php'))) {
-            $query = new \Modules\FlowBuilder\Services\FlowExecutionService($organizationId);
+            $query = new \Modules\FlowBuilder\Services\FlowExecutionService($organizationId, $this->metaPayload);
             return $query->executeFlow($chat, $isNewContact, $receivedMessage);
         }
     }
