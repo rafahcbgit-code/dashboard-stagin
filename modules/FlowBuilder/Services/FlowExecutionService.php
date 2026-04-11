@@ -19,9 +19,12 @@ class FlowExecutionService
     private $whatsappService;
     private $organizationId;
 
-    public function __construct($organizationId)
+    private $metaPayload;
+
+    public function __construct($organizationId, $metaPayload = null)
     {
         $this->organizationId = $organizationId;
+        $this->metaPayload = $metaPayload;
         $this->initializeWhatsappService();
     }
 
@@ -473,7 +476,7 @@ class FlowExecutionService
         $actionType = str_replace('-', '_', $actionType);
 
         // Initialize action execution service
-        $actionService = new ActionExecutionService($this->organizationId);
+        $actionService = new ActionExecutionService($this->organizationId, $this->metaPayload);
 
         // Execute the action
         $result = $actionService->executeAction($actionType, $config, $contact, $message, $flowData, $contactId);
