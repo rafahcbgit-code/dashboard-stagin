@@ -33,6 +33,49 @@
                                             </svg>
                                         </div>
                                     </Link>
+                                    <div class="mb-6">
+                                        <div class="border rounded-lg bg-white p-4 hover:shadow-md transition-shadow">
+                                            <div class="flex items-start justify-between gap-6">
+                                                <div class="max-w-[28rem] space-y-2">
+                                                    <h3 class="text-lg font-semibold text-gray-900">{{ $t('Zid Integration') }}</h3>
+                                                    <p class="text-sm text-slate-500">
+                                                        {{ $t('Connect your Zid store, manage subscriptions, and access automations from one place.') }}
+                                                    </p>
+                                                    <div v-if="props.zidConnection" class="text-sm text-slate-600 space-y-1">
+                                                        <div>
+                                                            <span class="font-semibold text-slate-800">{{ $t('Store') }}:</span>
+                                                            <span>{{ props.zidConnection.store_name || $t('Unnamed Zid Store') }}</span>
+                                                        </div>
+                                                        <div>
+                                                            <span class="font-semibold text-slate-800">{{ $t('Store ID') }}:</span>
+                                                            <span>{{ props.zidConnection.store_id }}</span>
+                                                        </div>
+                                                    </div>
+                                                    <div v-else class="text-sm text-slate-600">
+                                                        {{ $t('A Zid store is not connected yet. Click the arrow to continue the secure authorization.') }}
+                                                    </div>
+                                                </div>
+                                                <div class="flex items-center gap-3">
+                                                    <span
+                                                        class="inline-flex items-center gap-2 text-xs font-semibold uppercase tracking-wide rounded-full bg-slate-100 px-3 py-1"
+                                                    >
+                                                        <span :class="zidStatusPillClass" class="text-xs font-semibold leading-none">
+                                                            •
+                                                        </span>
+                                                        {{ zidStatusLabel }}
+                                                    </span>
+                                                    <Link
+                                                        :href="props.zidSettingsUrl"
+                                                        class="inline-flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-500 hover:border-slate-300 hover:text-slate-700 transition-colors"
+                                                    >
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 256 256" fill="none" stroke="currentColor" stroke-width="12" stroke-linecap="round" stroke-linejoin="round">
+                                                            <path d="M92 48l72 80-72 80" />
+                                                        </svg>
+                                                    </Link>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
                                     <div class="border rounded-lg p-4 mb-6 hover:shadow-md transition-shadow">
                                         <div class="flex justify-between items-center mb-2">
                                             <div>
@@ -106,8 +149,9 @@
 </template>
 
 <script setup>
-import { ref, defineAsyncComponent } from 'vue';
+import { ref, computed, defineAsyncComponent } from 'vue';
 import { Link } from '@inertiajs/vue3';
+import { useI18n } from 'vue-i18n';
 import SettingLayout from "./../Layout.vue";
 
 const props = defineProps({
@@ -126,10 +170,67 @@ const props = defineProps({
     currentPlanName: {
         type: String,
         default: ''
+    },
+    zidConnection: {
+        type: Object,
+        default: null
+    },
+    zidSubscriptionEvents: {
+        type: Object,
+        default: () => ({})
+    },
+    zidSubscriptionStatus: {
+        type: Object,
+        default: () => ({})
+    },
+    zidSubscriptionToggleUrl: {
+        type: String,
+        default: ''
+    },
+    zidConnectUrl: {
+        type: String,
+        default: ''
+    },
+    zidDisconnectUrl: {
+        type: String,
+        default: ''
+    },
+    zidAccessAllowed: {
+        type: Boolean,
+        default: true
+    },
+    zidSettingsUrl: {
+        type: String,
+        default: ''
     }
 });
 const shopDomain = ref('');
 const shopError = ref('');
+const { t } = useI18n();
+
+const isZidConnected = computed(() => props.zidConnection && props.zidConnection.connection_status === 'connected');
+const zidStatusLabel = computed(() => {
+    if (isZidConnected.value) {
+        return t('Connected');
+    }
+
+    if (props.zidConnection && props.zidConnection.connection_status === 'disconnected') {
+        return t('Disconnected');
+    }
+
+    return t('Not Connected');
+});
+const zidStatusPillClass = computed(() => {
+    if (isZidConnected.value) {
+        return 'text-emerald-600';
+    }
+
+    if (props.zidConnection && props.zidConnection.connection_status === 'disconnected') {
+        return 'text-rose-600';
+    }
+
+    return 'text-slate-500';
+});
 
 const connectShopify = () => {
     if (!props.shopifyAccessAllowed) {

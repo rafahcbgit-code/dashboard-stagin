@@ -8,6 +8,7 @@ use App\Models\OutboundMessageAttempt;
 use App\Models\SallaWebhookDelivery;
 use App\Models\ShopifyWebhookDelivery;
 use App\Models\Template;
+use App\Models\ZidWebhookDelivery;
 use Illuminate\Support\Arr;
 
 class OutboundMessageLogger
@@ -47,6 +48,41 @@ class OutboundMessageLogger
         );
 
         // Reserve an attempt number by incrementing the counter.
+        $message->increment('attempts');
+        $message->refresh();
+
+        return [$message, (int) ($message->attempts ?? 1)];
+    }
+
+    public function beginZidTemplateSend(
+        ZidWebhookDelivery $delivery,
+        string $automationKey,
+        Contact $contact,
+        Template $template,
+        array $context = []
+    ): array {
+        $message = OutboundMessage::updateOrCreate(
+            [
+                'organization_id' => (int) $delivery->organization_id,
+                'source' => 'zid',
+                'source_delivery_id' => $delivery->id,
+                'automation_key' => $automationKey,
+            ],
+            [
+                'source_event' => $delivery->event,
+                'contact_id' => $contact->id,
+                'recipient_e164' => $contact->phone ?? null,
+                'template_id' => $template->id,
+                'template_name' => $template->name ?? null,
+                'template_uuid' => $template->uuid ?? null,
+                'channel' => 'whatsapp',
+                'provider' => 'chat_service',
+                'status' => 'processing',
+                'context' => $context ?: null,
+                'last_error_message' => null,
+            ]
+        );
+
         $message->increment('attempts');
         $message->refresh();
 

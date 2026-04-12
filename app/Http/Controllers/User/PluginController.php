@@ -13,10 +13,11 @@ use App\Models\Organization;
 use App\Models\Setting;
 use App\Models\Template;
 use App\Models\Subscription;
+use App\Models\ZidWebhookSubscription;
 use App\Services\ContactFieldService;
 use App\Services\WhatsappService;
+use App\Models\IntegrationConnection;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\URL;
 use Inertia\Inertia;
 use Validator;
 
@@ -32,10 +33,17 @@ class PluginController extends BaseController
             $currentPlanName = $plan?->name ?? null;
             $shopifyAccessAllowed = true;
 
+            $planMetadata = [];
             if ($plan && $plan->metadata) {
                 $planMetadata = json_decode($plan->metadata, true) ?? [];
                 if (array_key_exists('shopify_integration_enabled', $planMetadata)) {
                     $shopifyAccessAllowed = (bool) $planMetadata['shopify_integration_enabled'];
+                }
+            }
+            $zidAccessAllowed = true;
+            if ($plan && $plan->metadata) {
+                if (array_key_exists('zid_integration_enabled', $planMetadata)) {
+                    $zidAccessAllowed = (bool) $planMetadata['zid_integration_enabled'];
                 }
             }
 
@@ -59,9 +67,92 @@ class PluginController extends BaseController
             });
             $data['shopifyAccessAllowed'] = $shopifyAccessAllowed;
             $data['currentPlanName'] = $currentPlanName;
+            $zidContext = $this->buildZidIntegrationContext($organizationId);
+            $data = array_merge($data, $zidContext);
+            $data['zidSettingsUrl'] = route('settings.zid');
             
             return Inertia::render('User/Settings/Plugins/Index', $data);
         }
+    }
+
+    public function zidSettings(Request $request)
+    {
+        $organizationId = session()->get('current_organization');
+        $context = $this->buildZidIntegrationContext($organizationId);
+        $context['modules'] = Addon::get();
+        $context['zidAutomationsUrl'] = route('zid.automations.index');
+
+        return Inertia::render('User/Settings/ZidIntegrationOverview', $context);
+    }
+
+    private function buildZidIntegrationContext(int $organizationId): array
+    {
+        $subscription = Subscription::with('plan')->where('organization_id', $organizationId)->first();
+        $planMetadata = [];
+        $zidAccessAllowed = true;
+
+        if ($subscription && $subscription->plan && $subscription->plan->metadata) {
+            $planMetadata = json_decode($subscription->plan->metadata, true) ?? [];
+            if (array_key_exists('zid_integration_enabled', $planMetadata)) {
+                $zidAccessAllowed = (bool) $planMetadata['zid_integration_enabled'];
+            }
+        }
+
+        $connection = IntegrationConnection::where('organization_id', $organizationId)
+            ->where('platform', config('zid.platform'))
+            ->first();
+
+        $connectionPayload = $connection ? [
+            'id' => $connection->id,
+            'store_id' => $connection->store_id,
+            'store_name' => $connection->store_name,
+            'connection_status' => $connection->connection_status,
+            'token_expires_at' => $connection->token_expires_at?->toDateTimeString(),
+            'connected_at' => $connection->connected_at?->toDateTimeString(),
+        ] : null;
+
+        $eventConfig = config('zid.webhook_events', []);
+        $events = collect($eventConfig)->mapWithKeys(function ($meta, $name) {
+            $details = $this->getZidEventMetadata()[$name] ?? [];
+            return [
+                $name => array_merge($meta, [
+                    'label' => $details['label'] ?? $name,
+                    'description' => $details['description'] ?? '',
+                ]),
+            ];
+        })->toArray();
+
+        $eventStatuses = [];
+
+        if ($connection) {
+            $subscriptions = ZidWebhookSubscription::where('store_id', $connection->store_id)->get()->keyBy('event_name');
+
+            foreach ($events as $eventName => $meta) {
+                /** @var ZidWebhookSubscription|null $sub */
+                $sub = $subscriptions->get($eventName);
+                $eventStatuses[$eventName] = [
+                    'enabled' => $sub ? $sub->status === 'active' : false,
+                    'condition_count' => $sub ? count($sub->conditions_json ?? []) : 0,
+                ];
+            }
+        } else {
+            foreach ($events as $eventName => $meta) {
+                $eventStatuses[$eventName] = [
+                    'enabled' => false,
+                    'condition_count' => 0,
+                ];
+            }
+        }
+
+        return [
+            'zidConnection' => $connectionPayload,
+            'zidConnectUrl' => route('zid.connect'),
+            'zidDisconnectUrl' => route('zid.disconnect'),
+            'zidSubscriptionEvents' => $events,
+            'zidSubscriptionStatus' => $eventStatuses,
+            'zidSubscriptionToggleUrl' => route('zid.subscriptions.update'),
+            'zidAccessAllowed' => $zidAccessAllowed,
+        ];
     }
 
     public function download($name)
@@ -95,5 +186,27 @@ class PluginController extends BaseController
         }
 
         return response()->download($pluginPath, $name . '.zip');
+    }
+
+    private function getZidEventMetadata(): array
+    {
+        return [
+            'order.create' => [
+                'label' => __('New Order Created'),
+                'description' => __('Fires when a new order is submitted on Zid.'),
+            ],
+            'order.status.update' => [
+                'label' => __('Order Status Updated'),
+                'description' => __('Fires when Zid changes an order status.'),
+            ],
+            'abandoned_cart.created' => [
+                'label' => __('Abandoned Cart'),
+                'description' => __('Fires when a shopper leaves checkout without submitting.'),
+            ],
+            'customer.login' => [
+                'label' => __('Customer Login'),
+                'description' => __('Fires when a customer logs into their Zid account.'),
+            ],
+        ];
     }
 }
