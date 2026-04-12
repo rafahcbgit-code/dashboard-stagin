@@ -46,7 +46,7 @@
         <div class="flex flex-wrap gap-3">
             <button
                 type="button"
-                :disabled="isConnecting"
+                :disabled="isConnecting || !isConnectAllowed"
                 @click="handleConnect"
                 class="inline-flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
                 :class="isConnected ? 'bg-amber-600 hover:bg-amber-700' : 'bg-blue-600 hover:bg-blue-700'"
@@ -60,6 +60,9 @@
                 </svg>
                 {{ buttonLabel }}
             </button>
+            <p v-if="!isConnectAllowed" class="text-xs text-rose-600 mt-2">
+                {{ $t('Zid integration is disabled for your current plan. Enable it from the admin settings to connect.') }}
+            </p>
 
             <button
                 v-if="isConnected"
@@ -92,6 +95,10 @@ const props = defineProps({
     disconnectUrl: {
         type: String,
         required: true,
+    },
+    canConnect: {
+        type: Boolean,
+        default: true,
     },
 });
 
@@ -135,9 +142,13 @@ const statePillClass = computed(() => {
 const buttonLabel = computed(() =>
     isConnected.value ? t('Reconnect with Zid') : t('Connect with Zid')
 );
+const isConnectAllowed = computed(() => props.canConnect);
 
 const handleConnect = () => {
-console.log('connectUrl:', props.connectUrl);
+    if (!isConnectAllowed.value) {
+        return;
+    }
+    console.log('connectUrl:', props.connectUrl);
     console.log('current url:', window.location.href);
     if (!props.connectUrl) {
         return;

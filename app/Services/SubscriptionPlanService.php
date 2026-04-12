@@ -49,6 +49,9 @@ class SubscriptionPlanService
         $shopifyIntegrationEnabled = $request->has('shopify_integration_enabled')
             ? (bool) $request->input('shopify_integration_enabled')
             : false;
+        $zidIntegrationEnabled = $request->has('zid_integration_enabled')
+            ? (bool) $request->input('zid_integration_enabled')
+            : true;
 
         $newSubscriptionPlan = SubscriptionPlan::create([
             'name' => $request->input('name'),
@@ -66,7 +69,8 @@ class SubscriptionPlanService
                 'ai_audio_response_limit' => $request->input('ai_audio_response_limit'),
                 'addons' => $request->input('addons', []),
                 'salla_integration_enabled' => $sallaIntegrationEnabled,
-                'shopify_integration_enabled' => $shopifyIntegrationEnabled
+                'shopify_integration_enabled' => $shopifyIntegrationEnabled,
+                'zid_integration_enabled' => $zidIntegrationEnabled
             ]),
         ]);
 
@@ -109,6 +113,9 @@ class SubscriptionPlanService
         $metadata['shopify_integration_enabled'] = $request->has('shopify_integration_enabled')
             ? (bool) $request->input('shopify_integration_enabled')
             : ($metadata['shopify_integration_enabled'] ?? false);
+        $metadata['zid_integration_enabled'] = $request->has('zid_integration_enabled')
+            ? (bool) $request->input('zid_integration_enabled')
+            : ($metadata['zid_integration_enabled'] ?? true);
 
         $plan->name = $request->input('name');
         $plan->price = $request->input('price');

@@ -33,10 +33,17 @@ class PluginController extends BaseController
             $currentPlanName = $plan?->name ?? null;
             $shopifyAccessAllowed = true;
 
+            $planMetadata = [];
             if ($plan && $plan->metadata) {
                 $planMetadata = json_decode($plan->metadata, true) ?? [];
                 if (array_key_exists('shopify_integration_enabled', $planMetadata)) {
                     $shopifyAccessAllowed = (bool) $planMetadata['shopify_integration_enabled'];
+                }
+            }
+            $zidAccessAllowed = true;
+            if ($plan && $plan->metadata) {
+                if (array_key_exists('zid_integration_enabled', $planMetadata)) {
+                    $zidAccessAllowed = (bool) $planMetadata['zid_integration_enabled'];
                 }
             }
 
@@ -80,6 +87,17 @@ class PluginController extends BaseController
 
     private function buildZidIntegrationContext(int $organizationId): array
     {
+        $subscription = Subscription::with('plan')->where('organization_id', $organizationId)->first();
+        $planMetadata = [];
+        $zidAccessAllowed = true;
+
+        if ($subscription && $subscription->plan && $subscription->plan->metadata) {
+            $planMetadata = json_decode($subscription->plan->metadata, true) ?? [];
+            if (array_key_exists('zid_integration_enabled', $planMetadata)) {
+                $zidAccessAllowed = (bool) $planMetadata['zid_integration_enabled'];
+            }
+        }
+
         $connection = IntegrationConnection::where('organization_id', $organizationId)
             ->where('platform', config('zid.platform'))
             ->first();
@@ -133,6 +151,7 @@ class PluginController extends BaseController
             'zidSubscriptionEvents' => $events,
             'zidSubscriptionStatus' => $eventStatuses,
             'zidSubscriptionToggleUrl' => route('zid.subscriptions.update'),
+            'zidAccessAllowed' => $zidAccessAllowed,
         ];
     }
 

@@ -195,6 +195,10 @@ const props = defineProps({
         type: String,
         default: ''
     },
+    zidAccessAllowed: {
+        type: Boolean,
+        default: true
+    },
     zidSettingsUrl: {
         type: String,
         default: ''

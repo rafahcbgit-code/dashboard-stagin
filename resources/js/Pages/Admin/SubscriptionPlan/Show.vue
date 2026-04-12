@@ -101,6 +101,17 @@
                         </div>
                     </div>
                 </div>
+                <div class="sm:flex py-5 border-b">
+                    <div class="hidden sm:block w-[40%] mb-1">
+                        <h1 class="text-sm text-gray-500 tracking-[0px]">{{ $t('Zid Integration') }}</h1>
+                        <p class="text-xs text-slate-700">{{ $t('Only plans with this enabled can connect to Zid.') }}</p>
+                    </div>
+                    <div class="sm:w-[60%]">
+                        <div class="sm:w-[80%]">
+                            <FormToggleSwitch v-model="form.zid_integration_enabled"/>
+                        </div>
+                    </div>
+                </div>
                 <div v-if="props.enable_ai_billing == 1 && form.addons['AI Assistant']" class="sm:flex py-5 border-b">
                     <div class="hidden sm:block w-[40%] mb-1">
                         <h1 class="text-sm text-gray-500 tracking-[0px]">{{ $t('AI Assistant Usage Limit') }}</h1>
@@ -193,6 +204,9 @@
     shopify_integration_enabled: props.plan
         ? (getDetail(props.plan?.metadata, 'shopify_integration_enabled') ?? true)
         : false,
+    zid_integration_enabled: props.plan
+        ? (getDetail(props.plan?.metadata, 'zid_integration_enabled') ?? true)
+        : true,
 })
 
     const statusOptions = ref([

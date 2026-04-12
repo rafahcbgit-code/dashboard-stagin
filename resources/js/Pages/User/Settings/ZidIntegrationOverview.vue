@@ -21,6 +21,9 @@
                             </span>
                         </div>
                     </div>
+                    <div v-if="!props.zidAccessAllowed" class="bg-rose-50 border border-rose-200 text-rose-800 rounded-lg px-4 py-3 text-sm">
+                        {{ $t('Zid integration is currently disabled for your plan. Enable it from the admin portal to connect a store.') }}
+                    </div>
 
                     <div class="space-y-6">
                         <section class="bg-white border border-slate-200 rounded-lg p-6 space-y-4">
@@ -34,6 +37,7 @@
                                 :connection="props.zidConnection"
                                 :connect-url="props.zidConnectUrl"
                                 :disconnect-url="props.zidDisconnectUrl"
+                                :can-connect="props.zidAccessAllowed"
                             />
                         </section>
 
@@ -117,6 +121,10 @@ const props = defineProps({
     zidAutomationsUrl: {
         type: String,
         default: ''
+    },
+    zidAccessAllowed: {
+        type: Boolean,
+        default: true
     }
 });
 
