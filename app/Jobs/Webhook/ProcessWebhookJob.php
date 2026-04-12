@@ -405,7 +405,8 @@ class ProcessWebhookJob implements ShouldQueue
             try {
                 // Initialize required services
                 $workingHoursService = new WorkingHoursService();
-                $autoReplyService    = new AutoReplyService();
+                
+                $autoReplyService    = new AutoReplyService($this->payload);
 
                 // Send greeting message and check if it was sent
                 $greetingSent = $autoReplyService->sendGrettingMessage($chat);
