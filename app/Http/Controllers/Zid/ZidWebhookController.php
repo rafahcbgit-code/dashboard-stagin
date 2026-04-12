@@ -28,10 +28,10 @@ class ZidWebhookController extends Controller
 
             return Response::json(['status' => 'ignored'], 200);
         }
-
-        [$storeId, $connection] = $this->resolveConnection($payload);
-
+        
         $event = $request->header('webhook-event') ?? data_get($payload, 'event');
+
+        [$storeId, $connection] = $this->resolveConnection($payload, $event);
 
         Log::channel('zid')->info('Zid webhook received', [
             'event' => $event,
@@ -76,7 +76,7 @@ class ZidWebhookController extends Controller
         return Response::json(['status' => 'ok']);
     }
 
-    private function resolveConnection(array $payload): array
+    private function resolveConnection(array $payload, ?string $event): array
     {
         $storeId = data_get($payload, 'store_id')
             ?? data_get($payload, 'store.id')
@@ -86,12 +86,16 @@ class ZidWebhookController extends Controller
 
         $connection = null;
         if ($storeId !== '') {
-            $connection = IntegrationConnection::where('platform', config('zid.platform'))
-                ->where('store_id', $storeId)
-                ->first();
+            $query = IntegrationConnection::where('platform', config('zid.platform'));
+            if ($event === 'abandoned_cart.created') {
+                $connection = (clone $query)->where('store_uuid', $storeId)->first();
+            }
+
+            if (! $connection) {
+                $connection = $query->where('store_id', $storeId)->first();
+            }
         }
 
         return [$storeId, $connection];
     }
 }
-
