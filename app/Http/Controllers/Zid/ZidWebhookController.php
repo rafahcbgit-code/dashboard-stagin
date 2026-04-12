@@ -21,7 +21,7 @@ class ZidWebhookController extends Controller
         $payload = json_decode($rawBody, true);
 
         if (!is_array($payload)) {
-            Log::warning('Zid webhook received invalid JSON', [
+            Log::channel('zid')->warning('Zid webhook received invalid JSON', [
                 'payload_hash' => $payloadHash,
                 'headers' => $request->headers->all(),
             ]);
@@ -33,7 +33,7 @@ class ZidWebhookController extends Controller
 
         $event = $request->header('webhook-event') ?? data_get($payload, 'event');
 
-        Log::info('Zid webhook received', [
+        Log::channel('zid')->info('Zid webhook received', [
             'event' => $event,
             'webhook_id' => $payload['webhook_id'] ?? null,
             'store_id' => $storeId,
@@ -52,7 +52,7 @@ class ZidWebhookController extends Controller
                 'attempts' => 0,
             ]);
         } catch (QueryException $exception) {
-            Log::info('Zid webhook delivery duplicate detected', [
+            Log::channel('zid')->info('Zid webhook delivery duplicate detected', [
                 'payload_hash' => $payloadHash,
                 'store_id' => $storeId,
                 'event' => $event,
@@ -70,7 +70,7 @@ class ZidWebhookController extends Controller
         if ($subscription) {
             $subscription->touch();
         } else {
-            Log::warning('Zid webhook received for unknown subscription', $payload);
+            Log::channel('zid')->warning('Zid webhook received for unknown subscription', $payload);
         }
 
         return Response::json(['status' => 'ok']);
@@ -94,3 +94,4 @@ class ZidWebhookController extends Controller
         return [$storeId, $connection];
     }
 }
+

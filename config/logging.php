@@ -134,6 +134,14 @@ return [
             'days' => 14, // keep logs for 14 days, adjust as needed
         ],
 
+        'zid' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/zid.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'days' => 14,
+            'replace_placeholders' => true,
+        ],
+
         'smb_message_echoes' => [
             'driver' => 'single',
             'path' => storage_path('logs/smb-message-echoes.log'),

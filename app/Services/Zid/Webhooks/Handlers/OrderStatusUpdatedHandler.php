@@ -168,7 +168,7 @@ class OrderStatusUpdatedHandler implements ZidWebhookEventHandlerInterface
             'sent_chat_id' => is_numeric($sentChatId) ? (int) $sentChatId : null,
         ]);
 
-        Log::info('Zid order.status.update automation: message sent', [
+        Log::channel('zid')->info('Zid order.status.update automation: message sent', [
             'delivery_id' => $delivery->id,
             'organization_id' => $delivery->organization_id,
             'status_slug' => $statusSlug,
@@ -254,3 +254,4 @@ class OrderStatusUpdatedHandler implements ZidWebhookEventHandlerInterface
         return $out === '' ? null : $out;
     }
 }
+

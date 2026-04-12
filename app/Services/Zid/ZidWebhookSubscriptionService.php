@@ -111,7 +111,7 @@ class ZidWebhookSubscriptionService
             ])->timeout(20)
                 ->post('https://api.zid.sa/v1/managers/webhooks', $payload);
         } catch (\Throwable $exception) {
-            Log::error('Zid webhook creation failed (network)', [
+            Log::channel('zid')->error('Zid webhook creation failed (network)', [
                 'event' => $payload['event'] ?? null,
                 'exception' => get_class($exception),
                 'message' => $exception->getMessage(),
@@ -120,7 +120,7 @@ class ZidWebhookSubscriptionService
         }
 
         if (! $response->successful()) {
-            Log::error('Zid webhook creation failed (API response)', [
+            Log::channel('zid')->error('Zid webhook creation failed (API response)', [
                 'status' => $response->status(),
                 'body' => $response->body(),
                 'event' => $payload['event'] ?? null,
@@ -142,7 +142,7 @@ class ZidWebhookSubscriptionService
             ])->timeout(20)
                 ->delete($url);
         } catch (\Throwable $exception) {
-            Log::error('Zid webhook deletion failed (network)', [
+            Log::channel('zid')->error('Zid webhook deletion failed (network)', [
                 'original_id' => $originalId,
                 'message' => $exception->getMessage(),
             ]);
@@ -150,7 +150,7 @@ class ZidWebhookSubscriptionService
         }
 
         if (! $response->successful()) {
-            Log::warning('Zid webhook deletion returned non-success status', [
+            Log::channel('zid')->warning('Zid webhook deletion returned non-success status', [
                 'status' => $response->status(),
                 'body' => $response->body(),
                 'original_id' => $originalId,
@@ -163,3 +163,4 @@ class ZidWebhookSubscriptionService
         return $storeId . '::' . $event;
     }
 }
+

@@ -30,26 +30,28 @@ class ZidAuthController extends Controller
             'state' => $state,
         ]);
 
-        Log::info('Zid OAuth start from redirectToProvider', ['organization_id' => $organizationId]);
+        Log::channel('zid')->info('Zid OAuth start from redirectToProvider', ['organization_id' => $organizationId]);
 
         return redirect(config('zid.auth_url') . '?' . $queries);
     }
    
     public function handleCallback(Request $request)
     {
-        Log::info('Zid Callback START', [
+        Log::channel('zid')->info('Zid Callback START', [
             'full_url' => $request->fullUrl(),
             'params' => $request->all(),
         ]);
 
         // في حال المستخدم رفض التفويض
         if ($request->filled('error')) {
-            Log::warning('Zid OAuth: authorization denied', [
+            Log::channel('zid')->warning('Zid OAuth: authorization denied', [
                 'error' => $request->input('error')
             ]);
 
-            return redirect('/settings/plugins')
-                ->with('error', __('Authorization was denied or cancelled.'));
+            return response()->json([
+                'success' => false,
+                'message' => __('Authorization was denied or cancelled.')
+            ], 403);
         }
 
         /**
@@ -63,25 +65,29 @@ class ZidAuthController extends Controller
                 throw new \Exception('Missing organization_id in state');
             }
         } catch (\Throwable $e) {
-            Log::warning('Zid Callback: Invalid state', [
+            Log::channel('zid')->warning('Zid Callback: Invalid state', [
                 'state' => $request->state,
                 'error' => $e->getMessage(),
             ]);
 
-            return redirect('/settings/plugins')
-                ->with('error', __('Invalid or expired Zid session.'));
+            return response()->json([
+                'success' => false,
+                'message' => __('Invalid or expired Zid session.')
+            ], 400);
         }
 
         $code = $request->input('code');
 
         if (!$code) {
-            Log::warning('Zid Callback: Missing code');
+            Log::channel('zid')->warning('Zid Callback: Missing code');
 
-            return redirect('/settings/plugins')
-                ->with('error', __('Missing authorization code.'));
+            return response()->json([
+                'success' => false,
+                'message' => __('Missing authorization code.')
+            ], 400);
         }
 
-        Log::info('Zid Callback: Code received', ['code' => $code]);
+        Log::channel('zid')->info('Zid Callback: Code received', ['code' => $code]);
 
         /**
          * ✅ جلب التوكن
@@ -89,17 +95,19 @@ class ZidAuthController extends Controller
         $tokenResponse = $this->exchangeCodeForToken($code);
 
         if (!$tokenResponse['success']) {
-            Log::error('Zid Callback: Token exchange failed', [
+            Log::channel('zid')->error('Zid Callback: Token exchange failed', [
                 'response' => $tokenResponse
             ]);
 
-            return redirect('/settings/plugins')
-                ->with('error', $tokenResponse['message']);
+            return response()->json([
+                'success' => false,
+                'message' => $tokenResponse['message']
+            ], 400);
         }
 
         $payload = $tokenResponse['payload'];
 
-        Log::info('Zid Callback: Token received', [
+        Log::channel('zid')->info('Zid Callback: Token received', [
             'payload' => $payload
         ]);
 
@@ -108,13 +116,22 @@ class ZidAuthController extends Controller
         $refreshToken       = data_get($payload, 'refresh_token');
         $expiresIn          = data_get($payload, 'expires_in');
 
+
+         Log::channel('zid')->error('Zid OAuth: authorizationToken', [
+                'authorizationToken' => $authorizationToken,
+                'managerToken' => $managerToken
+            ]);
+
+
         if (!$authorizationToken || !$managerToken || !is_numeric($expiresIn)) {
-            Log::error('Zid OAuth: token payload missing required fields', [
+            Log::channel('zid')->error('Zid OAuth: token payload missing required fields', [
                 'payload' => $payload,
             ]);
 
-            return redirect('/settings/plugins')
-                ->with('error', __('Failed to read Zid tokens.'));
+            return response()->json([
+                'success' => false,
+                'message' => __('Failed to read Zid tokens.')
+            ], 400);
         }
 
         /**
@@ -122,15 +139,8 @@ class ZidAuthController extends Controller
          */
         $profile = $this->fetchManagerProfile($authorizationToken, $managerToken);
 
-        Log::info('Zid Callback: Profile fetched', [
-            'profile' => $profile
-        ]);
 
-        $storeId = data_get($profile, 'store.id') ?? data_get($profile, 'store_id') ?? null;
-     
-       $storeName = data_get($profile, 'store.name.en') ??
-            data_get($profile, 'store.name') ??
-            data_get($profile, 'store_name');
+       
 
         if (!is_string($storeId) || $storeId === '') {
             $storeId = (string) Str::uuid();
@@ -157,12 +167,20 @@ class ZidAuthController extends Controller
             ]
         );
 
-        Log::info('Zid Callback SUCCESS - Connection stored', [
+        Log::channel('zid')->info('Zid Callback SUCCESS - Connection stored', [
             'organization_id' => $organizationId,
+            'connection info' => $connection
         ]);
 
-        return redirect('/settings/plugins')
-            ->with('success', __('Successfully connected to your Zid store.'));
+        return response()->json([
+            'success' => true,
+            'message' => __('Successfully connected to your Zid store.'),
+            'connection' => [
+                'organization_id' => $connection->organization_id,
+                'store_id' => $connection->store_id,
+                'store_name' => $connection->store_name,
+            ],
+        ]);
     }
 
     public static function getTokensFromZidByCode(string $oauthCode): array
@@ -215,7 +233,7 @@ class ZidAuthController extends Controller
                     'redirect_uri' => config('zid.redirect_uri'),
                 ]);
         } catch (\Throwable $exception) {
-            Log::error('Zid OAuth: token request failed', [
+            Log::channel('zid')->error('Zid OAuth: token request failed', [
                 'exception' => get_class($exception),
                 'message' => $exception->getMessage(),
             ]);
@@ -227,7 +245,7 @@ class ZidAuthController extends Controller
         }
 
         if (! $response->successful()) {
-            Log::error('Zid OAuth: token endpoint returned error', [
+            Log::channel('zid')->error('Zid OAuth: token endpoint returned error', [
                 'status' => $response->status(),
                 'body' => $response->body(),
             ]);
@@ -237,6 +255,12 @@ class ZidAuthController extends Controller
                 'message' => __('Failed to retrieve Zid tokens.'),
             ];
         }
+
+
+        Log::channel('zid')->error('Zid OAuth: token request correct', [
+                'message' => $response->json(),
+            
+            ]);
 
         return [
             'success' => true,
@@ -256,8 +280,14 @@ class ZidAuthController extends Controller
                 ->connectTimeout(10)
                 ->retry(2, 250, null, false)
                 ->get(config('zid.manager_profile_url'));
+
+
+                 Log::channel('zid')->warning('from fetchManagerProfile function', [
+                
+                'fetchManagerProfile is ' => $response->json(),
+            ]);
         } catch (\Throwable $exception) {
-            Log::warning('Zid OAuth: failed to fetch store profile', [
+            Log::channel('zid')->warning('Zid OAuth: failed to fetch store profile', [
                 'exception' => get_class($exception),
                 'message' => $exception->getMessage(),
             ]);
@@ -266,7 +296,7 @@ class ZidAuthController extends Controller
         }
 
         if (! $response->successful()) {
-            Log::warning('Zid OAuth: store profile request failed', [
+            Log::channel('zid')->warning('Zid OAuth: store profile request failed', [
                 'status' => $response->status(),
                 'body' => $response->body(),
             ]);
@@ -274,7 +304,15 @@ class ZidAuthController extends Controller
             return [];
         }
 
-        return $response->json('data', []);
+        $payload = $response->json('data', []);
+        $store = data_get($payload, 'store', []);
+
+        return array_merge($payload ?? [], [
+            'store_id' => data_get($store, 'id'),
+            'store_name' => data_get($store, 'username'),
+            'store_uuid' => data_get($store, 'uuid'),
+            'store' => $store,
+        ]);
     }
 
     private function fetchSubscriptionStoreId(string $authorizationToken, string $managerToken): ?string
@@ -329,7 +367,7 @@ class ZidAuthController extends Controller
 
     public function webhooks(Request $request)
     {
-        Log::info('Zid Webhook received', [
+        Log::channel('zid')->info('Zid Webhook received', [
             'headers' => $request->headers->all(),
             'payload' => $request->all(),
         ]);

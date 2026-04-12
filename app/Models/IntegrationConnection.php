@@ -28,8 +28,7 @@ class IntegrationConnection extends Model
     ];
 
     protected $hidden = [
-        'authorization_token',
-        'manager_token',
+        
         'refresh_token',
     ];
 

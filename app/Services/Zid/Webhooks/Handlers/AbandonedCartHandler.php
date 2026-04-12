@@ -74,7 +74,7 @@ class AbandonedCartHandler implements ZidWebhookEventHandlerInterface
 
                 ProcessZidWebhookDeliveryJob::dispatch($delivery->id)->delay($sendAt);
 
-                Log::info('Zid abandoned_cart.created automation: scheduled', [
+                Log::channel('zid')->info('Zid abandoned_cart.created automation: scheduled', [
                     'delivery_id' => $delivery->id,
                     'organization_id' => $delivery->organization_id,
                     'send_at' => $sendAt->toDateTimeString(),
@@ -176,7 +176,7 @@ class AbandonedCartHandler implements ZidWebhookEventHandlerInterface
             'sent_chat_id' => is_numeric($sentChatId) ? (int) $sentChatId : null,
         ]);
 
-        Log::info('Zid abandoned_cart.created automation: message sent', [
+        Log::channel('zid')->info('Zid abandoned_cart.created automation: message sent', [
             'delivery_id' => $delivery->id,
             'organization_id' => $delivery->organization_id,
             'contact_id' => $contact->id,
@@ -271,3 +271,4 @@ class AbandonedCartHandler implements ZidWebhookEventHandlerInterface
         return $out === '' ? null : $out;
     }
 }
+

@@ -147,7 +147,7 @@ class CustomerLoginHandler implements ZidWebhookEventHandlerInterface
             'sent_chat_id' => is_numeric($sentChatId) ? (int) $sentChatId : null,
         ]);
 
-        Log::info('Zid customer.login automation: message sent', [
+        Log::channel('zid')->info('Zid customer.login automation: message sent', [
             'delivery_id' => $delivery->id,
             'organization_id' => $delivery->organization_id,
             'contact_id' => $contact->id,
@@ -222,3 +222,4 @@ class CustomerLoginHandler implements ZidWebhookEventHandlerInterface
         return $out === '' ? null : $out;
     }
 }
+

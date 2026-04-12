@@ -148,7 +148,7 @@ class OrderCreatedHandler implements ZidWebhookEventHandlerInterface
             'sent_chat_id' => is_numeric($sentChatId) ? (int) $sentChatId : null,
         ]);
 
-        Log::info('Zid order.create automation: message sent', [
+        Log::channel('zid')->info('Zid order.create automation: message sent', [
             'delivery_id' => $delivery->id,
             'organization_id' => $delivery->organization_id,
             'contact_id' => $contact->id,
@@ -223,3 +223,4 @@ class OrderCreatedHandler implements ZidWebhookEventHandlerInterface
         return $out === '' ? null : $out;
     }
 }
+

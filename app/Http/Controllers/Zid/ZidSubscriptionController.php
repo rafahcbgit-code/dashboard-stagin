@@ -48,7 +48,7 @@ class ZidSubscriptionController extends Controller
                 }
             }
         } catch (\Throwable $exception) {
-            Log::error('Failed to toggle Zid subscription', [
+            Log::channel('zid')->error('Failed to toggle Zid subscription', [
                 'event' => $event,
                 'enabled' => $enabled,
                 'exception' => $exception->getMessage(),
@@ -60,3 +60,4 @@ class ZidSubscriptionController extends Controller
         return back()->with('success', __('Subscription updated successfully.'));
     }
 }
+

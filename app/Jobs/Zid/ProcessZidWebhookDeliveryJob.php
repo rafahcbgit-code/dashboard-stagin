@@ -38,7 +38,7 @@ class ProcessZidWebhookDeliveryJob implements ShouldQueue
     {
         $delivery = ZidWebhookDelivery::find($this->deliveryId);
         if (!$delivery) {
-            Log::warning('Zid webhook processing: delivery not found', [
+            Log::channel('zid')->warning('Zid webhook processing: delivery not found', [
                 'delivery_id' => $this->deliveryId,
             ]);
             return;
@@ -59,7 +59,7 @@ class ProcessZidWebhookDeliveryJob implements ShouldQueue
 
         $handler = $router->resolve($delivery->event);
         if (!$handler) {
-            Log::info('Zid webhook processing: no handler for event', [
+            Log::channel('zid')->info('Zid webhook processing: no handler for event', [
                 'delivery_id' => $delivery->id,
                 'event' => $delivery->event,
             ]);
@@ -83,7 +83,7 @@ class ProcessZidWebhookDeliveryJob implements ShouldQueue
                 ]);
             }
         } catch (Throwable $e) {
-            Log::error('Zid webhook processing failed', [
+            Log::channel('zid')->error('Zid webhook processing failed', [
                 'delivery_id' => $delivery->id,
                 'event' => $delivery->event,
                 'store_id' => $delivery->store_id,
@@ -104,3 +104,4 @@ class ProcessZidWebhookDeliveryJob implements ShouldQueue
         }
     }
 }
+
