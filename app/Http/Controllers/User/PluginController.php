@@ -60,59 +60,80 @@ class PluginController extends BaseController
             });
             $data['shopifyAccessAllowed'] = $shopifyAccessAllowed;
             $data['currentPlanName'] = $currentPlanName;
-            $connection = IntegrationConnection::where('organization_id', $organizationId)
-                ->where('platform', config('zid.platform'))
-                ->first();
-
-            $data['zidConnection'] = $connection ? [
-                'id' => $connection->id,
-                'store_id' => $connection->store_id,
-                'store_name' => $connection->store_name,
-                'connection_status' => $connection->connection_status,
-                'token_expires_at' => $connection->token_expires_at?->toDateTimeString(),
-                'connected_at' => $connection->connected_at?->toDateTimeString(),
-            ] : null;
-
-            $data['zidConnectUrl'] = route('zid.connect');
-            $data['zidDisconnectUrl'] = route('zid.disconnect');
-            $eventConfig = config('zid.webhook_events', []);
-            $events = collect($eventConfig)->mapWithKeys(function ($meta, $name) {
-                $details = $this->getZidEventMetadata()[$name] ?? [];
-                return [
-                    $name => array_merge($meta, [
-                        'label' => $details['label'] ?? $name,
-                        'description' => $details['description'] ?? '',
-                    ]),
-                ];
-            })->toArray();
-            $eventStatuses = [];
-
-            if ($connection) {
-                $subscriptions = ZidWebhookSubscription::where('store_id', $connection->store_id)->get()->keyBy('event_name');
-
-                foreach ($events as $eventName => $meta) {
-                    /** @var ZidWebhookSubscription|null $sub */
-                    $sub = $subscriptions->get($eventName);
-                    $eventStatuses[$eventName] = [
-                        'enabled' => $sub ? $sub->status === 'active' : false,
-                        'condition_count' => $sub ? count($sub->conditions_json ?? []) : 0,
-                    ];
-                }
-            } else {
-                foreach ($events as $eventName => $meta) {
-                    $eventStatuses[$eventName] = [
-                        'enabled' => false,
-                        'condition_count' => 0,
-                    ];
-                }
-            }
-
-            $data['zidSubscriptionEvents'] = $events;
-            $data['zidSubscriptionStatus'] = $eventStatuses;
-            $data['zidSubscriptionToggleUrl'] = route('zid.subscriptions.update');
+            $zidContext = $this->buildZidIntegrationContext($organizationId);
+            $data = array_merge($data, $zidContext);
+            $data['zidSettingsUrl'] = route('settings.zid');
             
             return Inertia::render('User/Settings/Plugins/Index', $data);
         }
+    }
+
+    public function zidSettings(Request $request)
+    {
+        $organizationId = session()->get('current_organization');
+        $context = $this->buildZidIntegrationContext($organizationId);
+        $context['modules'] = Addon::get();
+        $context['zidAutomationsUrl'] = route('zid.automations.index');
+
+        return Inertia::render('User/Settings/ZidIntegrationOverview', $context);
+    }
+
+    private function buildZidIntegrationContext(int $organizationId): array
+    {
+        $connection = IntegrationConnection::where('organization_id', $organizationId)
+            ->where('platform', config('zid.platform'))
+            ->first();
+
+        $connectionPayload = $connection ? [
+            'id' => $connection->id,
+            'store_id' => $connection->store_id,
+            'store_name' => $connection->store_name,
+            'connection_status' => $connection->connection_status,
+            'token_expires_at' => $connection->token_expires_at?->toDateTimeString(),
+            'connected_at' => $connection->connected_at?->toDateTimeString(),
+        ] : null;
+
+        $eventConfig = config('zid.webhook_events', []);
+        $events = collect($eventConfig)->mapWithKeys(function ($meta, $name) {
+            $details = $this->getZidEventMetadata()[$name] ?? [];
+            return [
+                $name => array_merge($meta, [
+                    'label' => $details['label'] ?? $name,
+                    'description' => $details['description'] ?? '',
+                ]),
+            ];
+        })->toArray();
+
+        $eventStatuses = [];
+
+        if ($connection) {
+            $subscriptions = ZidWebhookSubscription::where('store_id', $connection->store_id)->get()->keyBy('event_name');
+
+            foreach ($events as $eventName => $meta) {
+                /** @var ZidWebhookSubscription|null $sub */
+                $sub = $subscriptions->get($eventName);
+                $eventStatuses[$eventName] = [
+                    'enabled' => $sub ? $sub->status === 'active' : false,
+                    'condition_count' => $sub ? count($sub->conditions_json ?? []) : 0,
+                ];
+            }
+        } else {
+            foreach ($events as $eventName => $meta) {
+                $eventStatuses[$eventName] = [
+                    'enabled' => false,
+                    'condition_count' => 0,
+                ];
+            }
+        }
+
+        return [
+            'zidConnection' => $connectionPayload,
+            'zidConnectUrl' => route('zid.connect'),
+            'zidDisconnectUrl' => route('zid.disconnect'),
+            'zidSubscriptionEvents' => $events,
+            'zidSubscriptionStatus' => $eventStatuses,
+            'zidSubscriptionToggleUrl' => route('zid.subscriptions.update'),
+        ];
     }
 
     public function download($name)

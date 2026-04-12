@@ -14,7 +14,6 @@ class IntegrationConnection extends Model
 
     protected $fillable = [
         'organization_id',
-        'user_id',
         'platform',
         'store_id',
         'store_name',

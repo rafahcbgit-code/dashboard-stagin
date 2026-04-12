@@ -4,13 +4,19 @@
             <div class="flex justify-between mb-6">
                 <div>
                     <h1 class="text-xl mb-1">{{ $t('Zid Automations') }}</h1>
-                    <p class="flex items-center text-sm leading-6 text-gray-600">
-                        <span class="ltr:ml-1 rtl:mr-1 mt-1">{{ $t('Send automated WhatsApp templates when a Zid customer logs in.') }}</span>
-                    </p>
+                    
                 </div>
             </div>
 
             <div class="bg-white border border-slate-200 rounded-lg p-6">
+                <div class="flex justify-between items-center mb-4">
+                    <div>
+                        <h2 class="text-lg font-semibold text-gray-900">{{ $t('Customer Login') }}</h2>
+                        <p class="text-sm text-gray-500">
+                            {{ $t('Send a templated WhatsApp message when a customer logs in through Zid.') }}
+                        </p>
+                    </div>
+                </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                     <div>
                         <label class="block text-sm leading-6 text-gray-900 mb-2">{{ $t('Template') }}</label>
@@ -119,7 +125,7 @@
                         <BaseListbox v-model="orderForm.template_id" :options="props.templates" :placeholder="$t('Select template')" />
                         <div v-if="orderErrors.template_id" class="form-error text-[#b91c1c] text-xs mt-1">{{ orderErrors.template_id }}</div>
                     </div>
-                    <div>
+                    <!-- <div>
                         <label class="block text-sm leading-6 text-gray-900 mb-2">{{ $t('Recipient phone payload path') }}</label>
                         <input
                             v-model="orderForm.recipient_phone_payload_path"
@@ -131,7 +137,7 @@
                         <div v-if="orderErrors.recipient_phone_payload_path" class="form-error text-[#b91c1c] text-xs mt-1">
                             {{ orderErrors.recipient_phone_payload_path }}
                         </div>
-                    </div>
+                    </div> -->
                 </div>
 
                 <div class="mt-6 flex items-center justify-between">
@@ -360,7 +366,7 @@
                         <BaseListbox v-model="abandonedForm.template_id" :options="props.templates" :placeholder="$t('Select template')" />
                         <div v-if="abandonedErrors.template_id" class="form-error text-[#b91c1c] text-xs mt-1">{{ abandonedErrors.template_id }}</div>
                     </div>
-                    <div>
+                    <!-- <div>
                         <FormInput
                             v-model="abandonedForm.recipient_phone_payload_path"
                             :name="$t('Recipient phone payload path')"
@@ -371,7 +377,7 @@
                         <p class="text-xs text-gray-500 mt-1">
                             {{ $t('Example: customer_mobile or customer_mobile_country+customer_mobile') }}
                         </p>
-                    </div>
+                    </div> -->
                 </div>
 
                 <div class="mt-6 grid grid-cols-1 md:grid-cols-2 gap-6">

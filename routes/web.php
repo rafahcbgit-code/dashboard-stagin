@@ -323,6 +323,7 @@ Route::middleware(['auth:user'])->group(function () {
 
                     Route::get('/settings/whatsapp', [App\Http\Controllers\User\SettingController::class, 'viewWhatsappSettings']);
                     Route::get('/settings/plugins', [App\Http\Controllers\User\PluginController::class, 'index'])->name('settings.plugins');
+                    Route::get('/settings/zid', [App\Http\Controllers\User\PluginController::class, 'zidSettings'])->name('settings.zid');
                     Route::get('/plugin/download/{name}', [App\Http\Controllers\User\PluginController::class, 'download'])->name('plugin.download');
                     Route::get('/settings/whatsapp/refresh', [App\Http\Controllers\User\SettingController::class, 'refreshWhatsappData']);
                     Route::post('/settings/whatsapp/token', [App\Http\Controllers\User\SettingController::class, 'updateToken']);

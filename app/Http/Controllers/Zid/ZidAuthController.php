@@ -126,21 +126,11 @@ class ZidAuthController extends Controller
             'profile' => $profile
         ]);
 
-        //$storeId = data_get($profile, 'store.id') ?? data_get($profile, 'store_id');
-        $storeName = data_get($profile, 'store.name.en') ??
+        $storeId = data_get($profile, 'store.id') ?? data_get($profile, 'store_id') ?? null;
+     
+       $storeName = data_get($profile, 'store.name.en') ??
             data_get($profile, 'store.name') ??
             data_get($profile, 'store_name');
-
-        try {
-            $subscriptionStoreId = $this->fetchSubscriptionStoreId($authorizationToken, $managerToken);
-            if (is_string($subscriptionStoreId) && $subscriptionStoreId !== '') {
-                $storeId = $subscriptionStoreId;
-            }
-        } catch (\Throwable $exception) {
-            Log::warning('Zid Callback: unable to fetch subscription store_id', [
-                'exception' => $exception->getMessage(),
-            ]);
-        }
 
         if (!is_string($storeId) || $storeId === '') {
             $storeId = (string) Str::uuid();
@@ -155,7 +145,6 @@ class ZidAuthController extends Controller
                 'platform' => config('zid.platform'),
             ],
             [
-                'user_id' => Auth::id(),
                 'store_id' => $storeId,
                 'store_name' => $storeName ?? "store",
                 'authorization_token' => $authorizationToken,

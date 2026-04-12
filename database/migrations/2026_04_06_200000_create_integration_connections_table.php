@@ -14,7 +14,6 @@ return new class extends Migration
         Schema::create('integration_connections', function (Blueprint $table) {
             $table->id();
             $table->unsignedBigInteger('organization_id');
-            $table->unsignedBigInteger('user_id')->nullable();
             $table->string('platform', 64);
             $table->string('store_id');
             $table->string('store_name')->nullable();
@@ -33,10 +32,6 @@ return new class extends Migration
                 ->on('organizations')
                 ->cascadeOnDelete();
 
-            $table->foreign('user_id')
-                ->references('id')
-                ->on('users')
-                ->nullOnDelete();
 
             $table->unique(['organization_id', 'platform']);
         });
