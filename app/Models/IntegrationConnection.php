@@ -16,6 +16,7 @@ class IntegrationConnection extends Model
         'organization_id',
         'platform',
         'store_id',
+        'store_uuid',
         'store_name',
         'authorization_token',
         'manager_token',

@@ -34,7 +34,7 @@ class ZidAuthController extends Controller
 
         return redirect(config('zid.auth_url') . '?' . $queries);
     }
-   
+
     public function handleCallback(Request $request)
     {
         Log::channel('zid')->info('Zid Callback START', [
@@ -117,10 +117,10 @@ class ZidAuthController extends Controller
         $expiresIn          = data_get($payload, 'expires_in');
 
 
-         Log::channel('zid')->error('Zid OAuth: authorizationToken', [
-                'authorizationToken' => $authorizationToken,
-                'managerToken' => $managerToken
-            ]);
+        Log::channel('zid')->error('Zid OAuth: authorizationToken', [
+            'authorizationToken' => $authorizationToken,
+            'managerToken' => $managerToken
+        ]);
 
 
         if (!$authorizationToken || !$managerToken || !is_numeric($expiresIn)) {
@@ -138,13 +138,9 @@ class ZidAuthController extends Controller
          * ✅ جلب بيانات المتجر
          */
         $profile = $this->fetchManagerProfile($authorizationToken, $managerToken);
-
-
-       
-
-        if (!is_string($storeId) || $storeId === '') {
-            $storeId = (string) Str::uuid();
-        }
+        $storeId = data_get($profile, 'user.store.id') ?? null;
+        $storeName = data_get($profile, 'user.store.username') ?? 'store';
+        $storeUuid = data_get($profile, 'user.store.uuid') ?? 'uuid';
 
         /**
          * ✅ حفظ الاتصال
@@ -156,6 +152,7 @@ class ZidAuthController extends Controller
             ],
             [
                 'store_id' => $storeId,
+                'store_uuid' => $storeUuid,
                 'store_name' => $storeName ?? "store",
                 'authorization_token' => $authorizationToken,
                 'manager_token' => $managerToken,
@@ -258,9 +255,9 @@ class ZidAuthController extends Controller
 
 
         Log::channel('zid')->error('Zid OAuth: token request correct', [
-                'message' => $response->json(),
-            
-            ]);
+            'message' => $response->json(),
+
+        ]);
 
         return [
             'success' => true,
@@ -282,8 +279,8 @@ class ZidAuthController extends Controller
                 ->get(config('zid.manager_profile_url'));
 
 
-                 Log::channel('zid')->warning('from fetchManagerProfile function', [
-                
+            Log::channel('zid')->warning('from fetchManagerProfile function', [
+
                 'fetchManagerProfile is ' => $response->json(),
             ]);
         } catch (\Throwable $exception) {
@@ -304,15 +301,7 @@ class ZidAuthController extends Controller
             return [];
         }
 
-        $payload = $response->json('data', []);
-        $store = data_get($payload, 'store', []);
-
-        return array_merge($payload ?? [], [
-            'store_id' => data_get($store, 'id'),
-            'store_name' => data_get($store, 'username'),
-            'store_uuid' => data_get($store, 'uuid'),
-            'store' => $store,
-        ]);
+        return $response->json();
     }
 
     private function fetchSubscriptionStoreId(string $authorizationToken, string $managerToken): ?string

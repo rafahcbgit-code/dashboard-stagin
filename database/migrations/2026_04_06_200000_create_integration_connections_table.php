@@ -16,6 +16,7 @@ return new class extends Migration
             $table->unsignedBigInteger('organization_id');
             $table->string('platform', 64);
             $table->string('store_id');
+            $table->string('store_uuid')->nullable();
             $table->string('store_name')->nullable();
             $table->text('authorization_token')->nullable();
             $table->text('manager_token')->nullable();
