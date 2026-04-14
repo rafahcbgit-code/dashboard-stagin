@@ -83,7 +83,12 @@ class WooCommerceIntegrationController extends BaseController
         }
 
         $data = $request->validate([
-            'topic' => ['required', 'string', Rule::in(['order.created', 'action.woocommerce_order_status_changed', 'action.woocommerce_add_to_cart'])],
+            'topic' => ['required', 'string', Rule::in([
+                'order.created',
+                'order.updated',
+                'action.woocommerce_order_status_changed',
+                'action.woocommerce_add_to_cart',
+            ])],
         ]);
 
         try {

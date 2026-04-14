@@ -130,6 +130,7 @@ class WooCommerceIntegrationService
             'order.created' => 'Order Created Hook',
             'action.woocommerce_order_status_changed' => 'Order Status Changed Hook',
             'action.woocommerce_add_to_cart' => 'Add to Cart Listener',
+            'order.updated' => 'Order Updated Hook',
             default => 'WooCommerce Hook',
         };
     }

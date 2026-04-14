@@ -85,6 +85,7 @@ class PluginController extends BaseController
                 ->map(function ($item) {
                     return $item->toArray();
                 });
+            $data['woocommerceAutomationsUrl'] = route('woocommerce.automations.index');
             
             return Inertia::render('User/Settings/Plugins/Index', $data);
         }

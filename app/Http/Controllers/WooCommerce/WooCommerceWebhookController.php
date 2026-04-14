@@ -3,11 +3,11 @@
 namespace App\Http\Controllers\WooCommerce;
 
 use App\Http\Controllers\Controller;
+use App\Jobs\WooCommerce\ProcessWooCommerceWebhookDeliveryJob;
 use App\Models\WooCommerceWebhookSubscription;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Str;
 
 class WooCommerceWebhookController extends Controller
 {
@@ -84,6 +84,16 @@ class WooCommerceWebhookController extends Controller
             'organization_id' => $subscription->organization_id,
             'subscription_id' => $subscription->id,
         ]);
+
+        ProcessWooCommerceWebhookDeliveryJob::dispatch(
+            $rawBody,
+            $request->headers->all(),
+            $webhookId,
+            $topic ?? $subscription->topic,
+            $subscription->organization_id,
+            $subscription->integration_id,
+            $subscription->id
+        );
 
         return response()->json(['status' => 'ok'], 200);
     }

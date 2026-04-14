@@ -16,5 +16,8 @@ class VerifyCsrfToken extends Middleware
         'shopify/webhooks/*',
         'api/webhooks/privacy/*',
         'zid/webhooks',
+        'woocommerce/webhooks',
+        'webhooks/orders',
+        'webhooks/status-change',
     ];
 }

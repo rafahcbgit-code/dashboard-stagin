@@ -103,6 +103,13 @@
                     <span v-if="testLoading">{{ t('Testing...') }}</span>
                     <span v-else>{{ t('Test connection') }}</span>
                 </button>
+                <Link
+                    v-if="automationsUrl"
+                    :href="automationsUrl"
+                    class="inline-flex items-center gap-2 rounded-md border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:border-slate-300 hover:text-slate-800"
+                >
+                    {{ t('Open automations') }}
+                </Link>
                 <div class="text-xs space-y-1">
                     <p v-if="testMessage" class="text-emerald-600">{{ testMessage }}</p>
                     <p v-if="testError" class="text-rose-600">{{ testError }}</p>
@@ -155,13 +162,14 @@
 <script setup>
 import axios from 'axios';
 import { computed, ref, watch } from 'vue';
-import { useForm, usePage } from '@inertiajs/vue3';
+import { Link, useForm, usePage } from '@inertiajs/vue3';
 import { useI18n } from 'vue-i18n';
 import FormInput from '@/Components/FormInput.vue';
 
 const { t } = useI18n();
 const page = usePage();
 const integration = computed(() => page.props.woocommerceIntegration ?? null);
+const automationsUrl = computed(() => page.props.woocommerceAutomationsUrl ?? '');
 
 const showForm = ref(false);
 const form = useForm({
@@ -229,6 +237,11 @@ const TOPICS = [
         key: 'action.woocommerce_add_to_cart',
         label: t('Add to Cart'),
         description: t('Fires when a customer adds a product to the cart.'),
+    },
+    {
+        key: 'order.updated',
+        label: t('Order Updated'),
+        description: t('Fires when an order is updated in WooCommerce.'),
     },
 ];
 
