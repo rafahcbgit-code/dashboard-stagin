@@ -25,6 +25,22 @@
                         {{ $t('Zid integration is currently disabled for your plan. Enable it from the admin portal to connect a store.') }}
                     </div>
 
+                    <div class="flex flex-wrap gap-3 mb-4">
+                        <Link
+                            :href="props.zidAutomationsUrl"
+                            class="group flex h-24 w-[220px] flex-col items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-center text-sm font-semibold text-slate-700 shadow-sm transition hover:border-blue-500 hover:text-blue-600"
+                        >
+                            <span class="text-xs uppercase tracking-[0.2em] text-slate-400 group-hover:text-blue-500">{{ $t('Automations') }}</span>
+                            <span class="text-lg">{{ $t('Configure') }}</span>
+                        </Link>
+                        <Link
+                            href="/settings/zid/message-logs"
+                            class="group flex h-24 w-[220px] flex-col items-center justify-center gap-2 rounded-2xl border border-slate-200 bg-white px-4 text-center text-sm font-semibold text-slate-700 shadow-sm transition hover:border-slate-400 hover:text-slate-900"
+                        >
+                            <span class="text-xs uppercase tracking-[0.2em] text-slate-400 group-hover:text-slate-800">{{ $t('Logs') }}</span>
+                            <span class="text-lg">{{ $t('Message Logs') }}</span>
+                        </Link>
+                    </div>
                     <div class="space-y-6">
                         <section class="bg-white border border-slate-200 rounded-lg p-6 space-y-4">
                             <div class="flex items-center justify-between">
@@ -58,7 +74,7 @@
                             />
                         </section>
 
-                        <section class="bg-white border border-slate-200 rounded-lg p-6 space-y-4">
+                        <!-- <section class="bg-white border border-slate-200 rounded-lg p-6 space-y-4">
                             <div class="flex items-center justify-between">
                                 <div>
                                     <h2 class="text-lg font-semibold text-gray-900">{{ $t('Automations') }}</h2>
@@ -66,14 +82,22 @@
                                         {{ $t('Send templated WhatsApp messages for Zid events and review delivery history.') }}
                                     </p>
                                 </div>
-                                <Link
-                                    :href="props.zidAutomationsUrl"
-                                    class="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-800"
-                                >
-                                    {{ $t('Configure') }}
-                                </Link>
+                                <div class="flex items-center gap-3">
+                                    <Link
+                                        :href="props.zidAutomationsUrl"
+                                        class="inline-flex items-center gap-2 text-sm font-semibold text-blue-600 hover:text-blue-800"
+                                    >
+                                        {{ $t('Configure') }}
+                                    </Link>
+                                    <Link
+                                        href="/settings/zid/message-logs"
+                                        class="inline-flex items-center gap-2 text-sm font-semibold text-slate-600 hover:text-slate-800"
+                                    >
+                                        {{ $t('Message Logs') }}
+                                    </Link>
+                                </div>
                             </div>
-                        </section>
+                        </section> -->
                     </div>
                 </div>
             </div>
