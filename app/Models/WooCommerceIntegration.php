@@ -18,6 +18,11 @@ class WooCommerceIntegration extends Model
         'consumer_key',
         'consumer_secret',
         'domain_link',
+        'webhook_secret',
+    ];
+
+    protected $casts = [
+        'webhook_secret' => 'encrypted',
     ];
 
     public function organization()

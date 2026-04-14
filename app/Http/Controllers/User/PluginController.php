@@ -16,6 +16,7 @@ use App\Models\Subscription;
 use App\Models\ZidWebhookSubscription;
 use App\Services\ContactFieldService;
 use App\Services\WhatsappService;
+use App\Models\WooCommerceWebhookSubscription;
 use App\Services\WooCommerce\WooCommerceIntegrationService;
 use App\Models\IntegrationConnection;
 use Illuminate\Http\Request;
@@ -77,6 +78,13 @@ class PluginController extends BaseController
             $data = array_merge($data, $zidContext);
             $data['zidSettingsUrl'] = route('settings.zid');
             $data['woocommerceIntegration'] = $this->wooCommerceIntegrationService->getForOrganization($organizationId);
+            $data['woocommerceWebhookSecret'] = optional($data['woocommerceIntegration'])->webhook_secret;
+            $data['woocommerceWebhookDeliveryUrl'] = config('woocommerce.webhook_delivery_url');
+            $data['woocommerceWebhookSubscriptions'] = WooCommerceWebhookSubscription::where('organization_id', $organizationId)
+                ->get(['topic', 'status', 'webhook_id'])
+                ->map(function ($item) {
+                    return $item->toArray();
+                });
             
             return Inertia::render('User/Settings/Plugins/Index', $data);
         }

@@ -12,6 +12,7 @@ use App\Http\Controllers\ShopifyIntegratin\ShopifyAuthController;
 use App\Http\Controllers\ShopifyIntegratin\ShopifyWebhookController;
 use App\Http\Controllers\ShopifyIntegratin\PrivacyWebhookController;
 use App\Http\Controllers\User\WooCommerceIntegrationController;
+use App\Http\Controllers\WooCommerce\WooCommerceWebhookController;
 use App\Http\Controllers\Zid\ZidWebhookController;
 /*
 |--------------------------------------------------------------------------
@@ -36,6 +37,11 @@ Route::post('/shopify/webhooks/checkouts-created', [ShopifyWebhookController::cl
 Route::post('/shopify/webhooks/customers/data_request', [PrivacyWebhookController::class, 'handle']);
 Route::post('/shopify/webhooks/customers/redact', [PrivacyWebhookController::class, 'handle']);
 Route::post('/shopify/webhooks/shop/redact', [PrivacyWebhookController::class, 'handle']);
+
+Route::post('/woocommerce/webhooks', [WooCommerceWebhookController::class, 'handle'])
+    ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class]);
+Route::post('/webhooks/status-change', [WooCommerceWebhookController::class, 'handle'])
+    ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class]);
 
 Route::post('zid/webhooks', [ZidWebhookController::class, 'handle'])
     ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class]);
@@ -328,6 +334,10 @@ Route::middleware(['auth:user'])->group(function () {
                     Route::get('/settings/plugins', [App\Http\Controllers\User\PluginController::class, 'index'])->name('settings.plugins');
                     Route::post('/settings/plugins/woocommerce', [WooCommerceIntegrationController::class, 'store'])->name('settings.plugins.woocommerce.store');
                     Route::post('/settings/plugins/woocommerce/test', [WooCommerceIntegrationController::class, 'testConnection'])->name('settings.plugins.woocommerce.test');
+                    Route::post('/settings/plugins/woocommerce/subscriptions', [WooCommerceIntegrationController::class, 'createSubscription'])->name('settings.plugins.woocommerce.subscription.create');
+                    Route::delete('/settings/plugins/woocommerce/subscriptions/{topic}', [WooCommerceIntegrationController::class, 'deleteSubscription'])
+                        ->where('topic', 'order\\.created|action\\.woocommerce_order_status_changed|action\\.woocommerce_add_to_cart')
+                        ->name('settings.plugins.woocommerce.subscription.delete');
                     Route::get('/settings/zid', [App\Http\Controllers\User\PluginController::class, 'zidSettings'])->name('settings.zid');
                     Route::get('/plugin/download/{name}', [App\Http\Controllers\User\PluginController::class, 'download'])->name('plugin.download');
                     Route::get('/settings/whatsapp/refresh', [App\Http\Controllers\User\SettingController::class, 'refreshWhatsappData']);

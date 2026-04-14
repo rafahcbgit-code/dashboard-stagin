@@ -73,7 +73,7 @@
             </div>
         </transition>
 
-        <div v-if="integration" class="space-y-4">
+        <div v-if="integration" class="space-y-6">
             <div class="rounded-2xl border border-slate-100 bg-white p-4 text-sm text-slate-600 shadow-sm">
                 <div class="space-y-2">
                     <div class="flex flex-col gap-1">
@@ -108,6 +108,43 @@
                     <p v-if="testError" class="text-rose-600">{{ testError }}</p>
                 </div>
             </div>
+            <div class="space-y-4 rounded-2xl border border-slate-100 bg-white p-4 text-sm text-slate-600 shadow-sm">
+                <div class="flex items-center justify-between">
+                    <div>
+                        <p class="text-base font-semibold text-slate-900">{{ t('Subscriptions') }}</p>
+                        <p class="text-xs text-slate-500">{{ t('Enable or disable the events you want to receive.') }}</p>
+                    </div>
+                </div>
+                <div class="space-y-3">
+                    <div
+                        v-for="topic in TOPICS"
+                        :key="topic.key"
+                        class="flex flex-col gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:flex-row sm:items-center sm:justify-between"
+                    >
+                        <div class="space-y-1">
+                            <p class="text-sm font-semibold text-slate-800">{{ topic.label }}</p>
+                            <p class="text-xs text-slate-500">{{ topic.description }}</p>
+                            <p class="text-[11px] text-slate-400">{{ topic.key }}</p>
+                        </div>
+                        <button
+                            type="button"
+                            class="inline-flex items-center gap-2 rounded-md px-4 py-2 text-xs font-semibold transition disabled:cursor-not-allowed disabled:opacity-60"
+                            :class="isTopicActive(topic.key) ? 'border border-rose-200 bg-rose-50 text-rose-700 hover:border-rose-300' : 'border border-emerald-200 bg-emerald-50 text-emerald-700 hover:border-emerald-300'"
+                            :disabled="toggleLoading[topic.key]"
+                            @click="toggleTopic(topic.key)"
+                        >
+                            <svg v-if="toggleLoading[topic.key]" xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3">
+                                <path d="M12 2a10 10 0 0 0 0 20" stroke-linecap="round" />
+                            </svg>
+                            <span v-else>{{ isTopicActive(topic.key) ? t('Disable') : t('Enable') }}</span>
+                        </button>
+                    </div>
+                </div>
+                <div class="text-xs space-y-1">
+                    <p v-if="toggleMessage" class="text-emerald-600">{{ toggleMessage }}</p>
+                    <p v-if="toggleError" class="text-rose-600">{{ toggleError }}</p>
+                </div>
+            </div>
         </div>
         <div v-else class="rounded-2xl border border-dashed border-slate-200 bg-white/80 p-4 text-xs text-slate-500">
             {{ t('No WooCommerce credentials have been saved yet. Open the form to connect your store.') }}
@@ -127,7 +164,6 @@ const page = usePage();
 const integration = computed(() => page.props.woocommerceIntegration ?? null);
 
 const showForm = ref(false);
-
 const form = useForm({
     consumer_key: '',
     consumer_secret: '',
@@ -178,9 +214,52 @@ const formattedUpdatedAt = computed(() => {
     }
 });
 
+const TOPICS = [
+    {
+        key: 'order.created',
+        label: t('Order Created'),
+        description: t('Fires when a new order is placed in WooCommerce.'),
+    },
+    {
+        key: 'action.woocommerce_order_status_changed',
+        label: t('Order Status Changed'),
+        description: t('Fires when an order status changes (processing -> completed, etc).'),
+    },
+    {
+        key: 'action.woocommerce_add_to_cart',
+        label: t('Add to Cart'),
+        description: t('Fires when a customer adds a product to the cart.'),
+    },
+];
+
+const subscriptionMap = ref({});
+const toggleLoading = ref({});
+const toggleMessage = ref(null);
+const toggleError = ref(null);
 const testLoading = ref(false);
 const testMessage = ref(null);
 const testError = ref(null);
+
+const setSubscriptionMap = () => {
+    const map = {};
+    const subscriptions = page.props.woocommerceWebhookSubscriptions ?? [];
+    subscriptions.forEach((subscription) => {
+        map[subscription.topic] = subscription;
+    });
+    subscriptionMap.value = map;
+};
+
+setSubscriptionMap();
+
+watch(
+    () => page.props.woocommerceWebhookSubscriptions,
+    () => {
+        setSubscriptionMap();
+    },
+    { deep: true }
+);
+
+const isTopicActive = (topic) => subscriptionMap.value[topic]?.status === 'active';
 
 const testConnection = async () => {
     if (!integration.value) {
@@ -201,4 +280,42 @@ const testConnection = async () => {
         testLoading.value = false;
     }
 };
+
+const toggleTopic = async (topic) => {
+    if (!integration.value) {
+        toggleError.value = t('Save your WooCommerce credentials before managing subscriptions.');
+        return;
+    }
+
+    toggleLoading.value = { ...toggleLoading.value, [topic]: true };
+    toggleMessage.value = null;
+    toggleError.value = null;
+
+    try {
+        if (isTopicActive(topic)) {
+            await axios.delete(`/settings/plugins/woocommerce/subscriptions/${encodeURIComponent(topic)}`);
+            const updated = { ...subscriptionMap.value };
+            delete updated[topic];
+            subscriptionMap.value = updated;
+            toggleMessage.value = t('Subscription disabled for {topic}.', { topic });
+        } else {
+            const response = await axios.post('/settings/plugins/woocommerce/subscriptions', { topic });
+            const payload = response.data.subscription ?? { topic, status: 'active' };
+            subscriptionMap.value = {
+                ...subscriptionMap.value,
+                [topic]: payload,
+            };
+            toggleMessage.value = response.data.message ?? t('Subscription enabled for {topic}.', { topic });
+        }
+    } catch (error) {
+        toggleError.value =
+            error.response?.data?.reason ??
+            error.response?.data?.message ??
+            error.message ??
+            t('Unable to update subscription.');
+    } finally {
+        toggleLoading.value = { ...toggleLoading.value, [topic]: false };
+    }
+};
 </script>
+
