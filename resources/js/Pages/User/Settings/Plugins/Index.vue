@@ -117,6 +117,9 @@
                                             {{ $t('Configure Shopify Automations') }}
                                         </Link>
                                     </div>
+                                    <div class="mb-6">
+                                        <WooCommerceIntegration />
+                                    </div>
                                     <div v-if="plugins.length === 0" class="text-center py-12">
                                         <div class="mx-auto w-24 h-24 text-gray-300 mb-4">
                                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -153,6 +156,7 @@ import { ref, computed, defineAsyncComponent } from 'vue';
 import { Link } from '@inertiajs/vue3';
 import { useI18n } from 'vue-i18n';
 import SettingLayout from "./../Layout.vue";
+import WooCommerceIntegration from './WooCommerceIntegrationCard.vue';
 
 const props = defineProps({
     modules: {

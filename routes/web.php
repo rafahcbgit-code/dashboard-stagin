@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Http;
 use App\Http\Controllers\ShopifyIntegratin\ShopifyAuthController;
 use App\Http\Controllers\ShopifyIntegratin\ShopifyWebhookController;
 use App\Http\Controllers\ShopifyIntegratin\PrivacyWebhookController;
+use App\Http\Controllers\User\WooCommerceIntegrationController;
 use App\Http\Controllers\Zid\ZidWebhookController;
 /*
 |--------------------------------------------------------------------------
@@ -22,6 +23,8 @@ use App\Http\Controllers\Zid\ZidWebhookController;
 | be assigned to the "web" middleware group. Make something great!
 |
 */
+
+
 
 Route::get('/new-install', [ShopifyAuthController::class, 'install']);
 Route::get('/shopify/callback', [ShopifyAuthController::class, 'callback']);
@@ -323,6 +326,8 @@ Route::middleware(['auth:user'])->group(function () {
 
                     Route::get('/settings/whatsapp', [App\Http\Controllers\User\SettingController::class, 'viewWhatsappSettings']);
                     Route::get('/settings/plugins', [App\Http\Controllers\User\PluginController::class, 'index'])->name('settings.plugins');
+                    Route::post('/settings/plugins/woocommerce', [WooCommerceIntegrationController::class, 'store'])->name('settings.plugins.woocommerce.store');
+                    Route::post('/settings/plugins/woocommerce/test', [WooCommerceIntegrationController::class, 'testConnection'])->name('settings.plugins.woocommerce.test');
                     Route::get('/settings/zid', [App\Http\Controllers\User\PluginController::class, 'zidSettings'])->name('settings.zid');
                     Route::get('/plugin/download/{name}', [App\Http\Controllers\User\PluginController::class, 'download'])->name('plugin.download');
                     Route::get('/settings/whatsapp/refresh', [App\Http\Controllers\User\SettingController::class, 'refreshWhatsappData']);
