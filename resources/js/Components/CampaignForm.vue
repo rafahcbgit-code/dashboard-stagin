@@ -1097,6 +1097,7 @@ onMounted(() => {
         <div v-else>
           <WhatsappTemplate
             :parameters="form"
+            :placeholder="false"
             :visible="form.template ? true : false"
           />
         </div>
