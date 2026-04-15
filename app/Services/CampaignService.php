@@ -9,6 +9,7 @@ use App\Models\ChatMedia;
 use App\Models\Contact;
 use App\Models\ContactGroup;
 use App\Models\Organization;
+use App\Models\Subscription;
 use App\Models\Setting;
 use App\Models\Template;
 use App\Traits\TemplateTrait;
@@ -63,6 +64,30 @@ class CampaignService
                     ['groupCount' => $selectedCount, 'limit' => $tierLimit]
                 ),
             ]);
+        }
+
+        // Trial accounts can only send up to remaining campaign messages.
+        $trialSubscription = Subscription::where('organization_id', $organizationId)
+            ->where('status', 'trial')
+            ->where('valid_until', '>', now())
+            ->orderByDesc('id')
+            ->first();
+
+        if ($trialSubscription) {
+            $campaignMessagesLimit = Campaign::campaignMessagesLimit();
+
+            if ($campaignMessagesLimit !== -1) {
+                $overallDelivered = Campaign::overallDeliveryCountForOrg($organizationId);
+                $remainingMessages = max(0, $campaignMessagesLimit - $overallDelivered);
+
+                if ($selectedCount > $remainingMessages) {
+                    throw ValidationException::withMessages([
+                        'contacts' => __('You can send campaign messages to only :remaining contacts.', [
+                            'remaining' => $remainingMessages,
+                        ]),
+                    ]);
+                }
+            }
         }
 
         $template = Template::where('uuid', $request->template)->first();
