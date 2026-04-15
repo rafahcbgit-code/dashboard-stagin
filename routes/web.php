@@ -260,6 +260,8 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::get('/settings/woocommerce/automations/template/{templateId}/variables', [WooCommerceAutomationController::class, 'templateVariables'])->whereNumber('templateId');
                 Route::get('/settings/woocommerce/automations/order-created/webhook-fields', [WooCommerceAutomationController::class, 'webhookFields'])->name('woocommerce.automations.order_created.fields');
                 Route::post('/settings/woocommerce/automations/order-created', [WooCommerceAutomationController::class, 'updateOrderCreated'])->name('woocommerce.automations.order_created.update');
+                Route::get('/settings/woocommerce/automations/add-to-cart/webhook-fields', [WooCommerceAutomationController::class, 'webhookFieldsAddToCart'])->name('woocommerce.automations.add_to_cart.fields');
+                Route::post('/settings/woocommerce/automations/add-to-cart', [WooCommerceAutomationController::class, 'updateAddToCart'])->name('woocommerce.automations.add_to_cart.update');
                 Route::get('/settings/woocommerce/automations/order-updated/{status}/config', [WooCommerceAutomationController::class, 'orderUpdatedStatusConfig'])
                     ->where('status', 'pending|processing|on-hold|completed|cancelled|refunded|failed')
                     ->name('woocommerce.automations.order_updated.config');

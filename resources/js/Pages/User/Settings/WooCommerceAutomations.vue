@@ -115,6 +115,116 @@
             <div class="bg-white border border-slate-200 rounded-lg p-6 mt-6">
                 <div class="flex items-start justify-between gap-6">
                     <div class="flex-1">
+                        <h2 class="text-lg font-medium">{{ $t('Abandoned Cart (Add to Cart)') }}</h2>
+                        <p class="text-sm text-gray-600">{{ $t('Send a template message when a customer adds products to cart.') }}</p>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="text-sm text-gray-700">{{ addToCartForm.enabled ? $t('Enabled') : $t('Disabled') }}</span>
+                        <FormToggleSwitch v-model="addToCartForm.enabled" />
+                    </div>
+                </div>
+
+                <div class="mt-6 grid grid-cols-1 md:grid-cols-3 gap-6">
+                    <div>
+                        <label class="block text-sm leading-6 text-gray-900 mb-2">{{ $t('Template') }}</label>
+                        <BaseListbox v-model="addToCartForm.template_id" :options="templates" :placeholder="$t('Select template')" />
+                        <div v-if="addToCartErrors.template_id" class="form-error text-[#b91c1c] text-xs mt-1">{{ addToCartErrors.template_id }}</div>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm leading-6 text-gray-900 mb-2">{{ $t('Recipient phone path') }}</label>
+                        <input
+                            type="text"
+                            class="w-full border rounded-md px-3 py-2 focus:ring-1 focus:ring-primary focus:border-primary outline-none"
+                            v-model="addToCartForm.recipient_phone_payload_path"
+                        />
+                        <div v-if="addToCartErrors.recipient_phone_payload_path" class="form-error text-[#b91c1c] text-xs mt-1">
+                            {{ addToCartErrors.recipient_phone_payload_path }}
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1">{{ $t('Example: chatberry_add_to_cart.customer.billing.phone') }}</p>
+                    </div>
+
+                    <div>
+                        <label class="block text-sm leading-6 text-gray-900 mb-2">{{ $t('Send after (hours)') }}</label>
+                        <input
+                            type="number"
+                            min="0"
+                            max="720"
+                            class="w-full border rounded-md px-3 py-2 focus:ring-1 focus:ring-primary focus:border-primary outline-none"
+                            v-model.number="addToCartForm.delay_hours"
+                        />
+                        <div v-if="addToCartErrors.delay_hours" class="form-error text-[#b91c1c] text-xs mt-1">
+                            {{ addToCartErrors.delay_hours }}
+                        </div>
+                        <p class="text-xs text-gray-500 mt-1">{{ $t('0 means immediate send. Recommended for abandoned-cart flow: 1-24 hours.') }}</p>
+                    </div>
+                </div>
+
+                <div class="mt-6 flex items-center justify-between">
+                    <h3 class="text-sm font-medium text-gray-900">{{ $t('Variable Mapping') }}</h3>
+                    <button type="button"
+                        class="inline-flex items-center gap-2 px-3 py-2 bg-slate-100 hover:bg-slate-200 text-sm rounded-md"
+                        :disabled="addToCartLoadingFields"
+                        @click="refreshAddToCartWebhookFields">
+                        <span v-if="addToCartLoadingFields">{{ $t('Refreshing...') }}</span>
+                        <span v-else>{{ $t('Refresh webhook fields') }}</span>
+                    </button>
+                </div>
+
+                <div v-if="addToCartTemplateVariablesLocal.length === 0" class="mt-4 text-sm text-gray-600">
+                    {{ $t('Select a template to configure variable mapping.') }}
+                </div>
+
+                <div v-else class="mt-4 overflow-x-auto">
+                    <table class="min-w-full text-sm">
+                        <thead>
+                            <tr class="text-left text-gray-600">
+                                <th class="py-2 pr-4">{{ $t('Template variable') }}</th>
+                                <th class="py-2 pr-4">{{ $t('Webhook field') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr v-for="variable in addToCartTemplateVariablesLocal" :key="variable.key" class="border-t">
+                                <td class="py-3 pr-4">
+                                    <div class="font-medium text-gray-900">{{ variable.key }}</div>
+                                    <div class="text-xs text-gray-500">{{ variable.placeholder }}</div>
+                                </td>
+                                <td class="py-3 pr-4">
+                                    <select v-model="addToCartMappingsLocal[variable.key]"
+                                        class="block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm">
+                                        <option value="">{{ $t('Select field') }}</option>
+                                        <option v-for="field in addToCartWebhookFieldsLocal" :key="field.path" :value="field.path">
+                                            {{ fieldLabel(field) }}
+                                        </option>
+                                    </select>
+                                    <div v-if="addToCartErrors[`mappings.${variable.key}`]" class="form-error text-[#b91c1c] text-xs mt-1">
+                                        {{ addToCartErrors[`mappings.${variable.key}`] }}
+                                    </div>
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div v-if="addToCartWebhookFieldsLocal.length === 0" class="mt-3 text-xs text-gray-500">
+                        {{ $t('No add-to-cart payload recorded yet. Trigger action.woocommerce_add_to_cart to inspect fields.') }}
+                    </div>
+                </div>
+
+                <div class="mt-6 flex items-center gap-3">
+                    <button type="button"
+                        class="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm rounded-md hover:shadow-md disabled:opacity-50"
+                        :disabled="addToCartSaving"
+                        @click="saveAddToCart">
+                        <span v-if="addToCartSaving">{{ $t('Saving...') }}</span>
+                        <span v-else>{{ $t('Save') }}</span>
+                    </button>
+                    <div v-if="addToCartSuccessMessage" class="text-sm text-green-700">{{ addToCartSuccessMessage }}</div>
+                    <div v-if="addToCartErrorMessage" class="text-sm text-red-700">{{ addToCartErrorMessage }}</div>
+                </div>
+            </div>
+
+            <div class="bg-white border border-slate-200 rounded-lg p-6 mt-6">
+                <div class="flex items-start justify-between gap-6">
+                    <div class="flex-1">
                         <h2 class="text-lg font-medium">{{ $t('Order Updated') }}</h2>
                         <p class="text-sm text-gray-600">{{ $t('Send a template message when a WooCommerce order is updated') }}</p>
                     </div>
@@ -253,6 +363,22 @@ const props = defineProps({
         type: Object,
         default: () => ({})
     },
+    addToCartSetting: {
+        type: Object,
+        default: () => ({ enabled: false, template_id: null, recipient_phone_payload_path: 'chatberry_add_to_cart.customer.billing.phone', delay_hours: 0 })
+    },
+    addToCartTemplateVariables: {
+        type: Array,
+        default: () => []
+    },
+    addToCartWebhookFields: {
+        type: Array,
+        default: () => []
+    },
+    addToCartMappings: {
+        type: Object,
+        default: () => ({})
+    },
     orderUpdatedStatuses: {
         type: Array,
         default: () => ['pending', 'processing', 'on-hold', 'completed', 'cancelled', 'refunded', 'failed']
@@ -282,6 +408,26 @@ for (const variable of templateVariablesLocal.value ?? []) {
         mappingsLocal[variable.key] = '';
     }
 }
+
+const addToCartForm = reactive({
+    enabled: !!props.addToCartSetting.enabled,
+    template_id: props.addToCartSetting.template_id ?? null,
+    recipient_phone_payload_path: props.addToCartSetting.recipient_phone_payload_path ?? 'chatberry_add_to_cart.customer.billing.phone',
+    delay_hours: Number.isFinite(Number(props.addToCartSetting.delay_hours)) ? Number(props.addToCartSetting.delay_hours) : 0,
+});
+const addToCartTemplateVariablesLocal = ref(props.addToCartTemplateVariables ?? []);
+const addToCartWebhookFieldsLocal = ref(props.addToCartWebhookFields ?? []);
+const addToCartMappingsLocal = reactive({ ...(props.addToCartMappings ?? {}) });
+for (const variable of addToCartTemplateVariablesLocal.value ?? []) {
+    if (!(variable.key in addToCartMappingsLocal)) {
+        addToCartMappingsLocal[variable.key] = '';
+    }
+}
+const addToCartSaving = ref(false);
+const addToCartSuccessMessage = ref('');
+const addToCartErrorMessage = ref('');
+const addToCartLoadingFields = ref(false);
+const addToCartErrors = reactive({});
 
 const selectedOrderUpdatedStatus = ref(configuredOrderUpdatedStatus ?? orderUpdatedStatuses[0] ?? 'completed');
 const updatedForm = reactive({
@@ -369,6 +515,21 @@ const loadTemplateVariables = async (templateId) => {
     }
 };
 
+const loadAddToCartTemplateVariables = async (templateId) => {
+    if (!templateId) {
+        addToCartTemplateVariablesLocal.value = [];
+        return;
+    }
+
+    addToCartTemplateVariablesLocal.value = await fetchTemplateVariables(templateId);
+
+    for (const variable of addToCartTemplateVariablesLocal.value) {
+        if (!(variable.key in addToCartMappingsLocal)) {
+            addToCartMappingsLocal[variable.key] = '';
+        }
+    }
+};
+
 const loadUpdatedTemplateVariables = async (templateId) => {
     if (!templateId) {
         updatedTemplateVariablesLocal.value = [];
@@ -415,6 +576,13 @@ watch(() => form.template_id, async (newId) => {
     await loadTemplateVariables(newId);
 });
 
+watch(() => addToCartForm.template_id, async (newId, oldId) => {
+    if (newId === oldId) {
+        return;
+    }
+    await loadAddToCartTemplateVariables(newId);
+});
+
 watch(() => selectedOrderUpdatedStatus.value, async (status) => {
     if (!status) {
         return;
@@ -436,6 +604,16 @@ const refreshWebhookFields = async () => {
         webhookFieldsLocal.value = res?.data?.data?.fields ?? [];
     } finally {
         loadingFields.value = false;
+    }
+};
+
+const refreshAddToCartWebhookFields = async () => {
+    addToCartLoadingFields.value = true;
+    try {
+        const res = await axios.get('/settings/woocommerce/automations/add-to-cart/webhook-fields');
+        addToCartWebhookFieldsLocal.value = res?.data?.data?.fields ?? [];
+    } finally {
+        addToCartLoadingFields.value = false;
     }
 };
 
@@ -494,6 +672,51 @@ const save = async () => {
         }
     } finally {
         saving.value = false;
+    }
+};
+
+const saveAddToCart = async () => {
+    addToCartSaving.value = true;
+    addToCartSuccessMessage.value = '';
+    addToCartErrorMessage.value = '';
+    Object.keys(addToCartErrors).forEach((k) => delete addToCartErrors[k]);
+
+    const mappingsArray = (addToCartTemplateVariablesLocal.value ?? []).map(v => ({
+        template_variable: v.key,
+        payload_path: addToCartMappingsLocal[v.key] ?? '',
+    }));
+
+    try {
+        await axios.post('/settings/woocommerce/automations/add-to-cart', {
+            enabled: addToCartForm.enabled,
+            template_id: addToCartForm.template_id,
+            recipient_phone_payload_path: addToCartForm.recipient_phone_payload_path,
+            delay_hours: addToCartForm.delay_hours ?? 0,
+            mappings: mappingsArray,
+        });
+
+        addToCartSuccessMessage.value = 'Saved';
+    } catch (e) {
+        addToCartErrorMessage.value = e?.response?.data?.message ?? 'Failed to save';
+
+        const serverErrors = e?.response?.data?.errors ?? null;
+        if (serverErrors && typeof serverErrors === 'object') {
+            for (const [key, value] of Object.entries(serverErrors)) {
+                const match = String(key).match(/^mappings\.(\d+)\.(payload_path|template_variable)$/);
+                if (match) {
+                    const idx = parseInt(match[1], 10);
+                    const varKey = mappingsArray[idx]?.template_variable;
+                    if (varKey) {
+                        addToCartErrors[`mappings.${varKey}`] = Array.isArray(value) ? value[0] : value;
+                        continue;
+                    }
+                }
+
+                addToCartErrors[key] = Array.isArray(value) ? value[0] : value;
+            }
+        }
+    } finally {
+        addToCartSaving.value = false;
     }
 };
 

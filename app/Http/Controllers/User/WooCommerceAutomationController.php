@@ -7,6 +7,7 @@ use App\Models\Template;
 use App\Models\WooCommerceWebhookDelivery;
 use App\Models\WooCommerceWebhookEventSetting;
 use App\Services\Salla\Webhooks\WhatsAppTemplateVariableExtractor;
+use App\Services\WooCommerce\Webhooks\Schemas\WooCommerceAddToCartFieldSchema;
 use App\Services\WooCommerce\Webhooks\Schemas\WooCommerceOrderCreatedFieldSchema;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -25,6 +26,7 @@ class WooCommerceAutomationController extends BaseController
 
     public function index(
         WooCommerceOrderCreatedFieldSchema $schema,
+        WooCommerceAddToCartFieldSchema $addToCartSchema,
         WhatsAppTemplateVariableExtractor $extractor
     ) {
         $organizationId = (int) session()->get('current_organization');
@@ -75,6 +77,42 @@ class WooCommerceAutomationController extends BaseController
         }
 
         $statusConfigs = $this->buildOrderUpdatedStatusConfigs($organizationId);
+        $addToCartSetting = WooCommerceWebhookEventSetting::with('mappings')
+            ->where('organization_id', $organizationId)
+            ->where('event', 'action.woocommerce_add_to_cart')
+            ->first();
+
+        $addToCartSelectedTemplate = null;
+        if ($addToCartSetting?->template_id) {
+            $addToCartSelectedTemplate = Template::where('id', $addToCartSetting->template_id)
+                ->where('organization_id', $organizationId)
+                ->where('status', 'APPROVED')
+                ->whereNull('deleted_at')
+                ->first();
+        }
+
+        $addToCartTemplateVariables = $addToCartSelectedTemplate ? $extractor->extract($addToCartSelectedTemplate) : [];
+
+        $lastAddToCartDelivery = WooCommerceWebhookDelivery::where('organization_id', $organizationId)
+            ->where('topic', 'action.woocommerce_add_to_cart')
+            ->latest('id')
+            ->first();
+
+        $addToCartWebhookFields = collect($addToCartSchema->fields())
+            ->map(function (array $field) use ($lastAddToCartDelivery) {
+                $payload = $this->normalizeStoredPayload($lastAddToCartDelivery?->payload ?? []);
+                $field['sample'] = $lastAddToCartDelivery ? data_get($payload, $field['path']) : null;
+                return $field;
+            })
+            ->values()
+            ->all();
+
+        $addToCartMappings = [];
+        if ($addToCartSetting) {
+            foreach ($addToCartSetting->mappings as $mapping) {
+                $addToCartMappings[$mapping->template_variable] = $mapping->payload_path;
+            }
+        }
 
         return Inertia::render('User/Settings/WooCommerceAutomations', [
             'title' => __('WooCommerce Automations'),
@@ -89,6 +127,15 @@ class WooCommerceAutomationController extends BaseController
             'mappings' => $mappings,
             'orderUpdatedStatuses' => self::ORDER_UPDATED_STATUSES,
             'orderUpdatedStatusConfigs' => $statusConfigs,
+            'addToCartSetting' => [
+                'enabled' => (bool) ($addToCartSetting?->enabled ?? false),
+                'template_id' => $addToCartSetting?->template_id,
+                'recipient_phone_payload_path' => $addToCartSetting?->recipient_phone_payload_path ?? 'chatberry_add_to_cart.customer.billing.phone',
+                'delay_hours' => (int) ($addToCartSetting?->delay_hours ?? 0),
+            ],
+            'addToCartTemplateVariables' => $addToCartTemplateVariables,
+            'addToCartWebhookFields' => $addToCartWebhookFields,
+            'addToCartMappings' => $addToCartMappings,
         ]);
     }
 
@@ -150,6 +197,40 @@ class WooCommerceAutomationController extends BaseController
             ->latest('id')
             ->first();
 
+        if (!$lastDelivery) {
+            $lastDelivery = WooCommerceWebhookDelivery::where('organization_id', $organizationId)
+                ->where('topic', 'action.woocommerce_order_status_changed')
+                ->whereJsonContains('payload->status', $status)
+                ->latest('id')
+                ->first();
+        }
+
+        $fields = collect($schema->fields())
+            ->map(function (array $field) use ($lastDelivery) {
+                $payload = $this->normalizeStoredPayload($lastDelivery?->payload ?? []);
+                $field['sample'] = $lastDelivery ? data_get($payload, $field['path']) : null;
+                return $field;
+            })
+            ->values()
+            ->all();
+
+        return response()->json([
+            'success' => true,
+            'data' => [
+                'fields' => $fields,
+            ],
+        ]);
+    }
+
+    public function webhookFieldsAddToCart(WooCommerceAddToCartFieldSchema $schema)
+    {
+        $organizationId = (int) session()->get('current_organization');
+
+        $lastDelivery = WooCommerceWebhookDelivery::where('organization_id', $organizationId)
+            ->where('topic', 'action.woocommerce_add_to_cart')
+            ->latest('id')
+            ->first();
+
         $fields = collect($schema->fields())
             ->map(function (array $field) use ($lastDelivery) {
                 $payload = $this->normalizeStoredPayload($lastDelivery?->payload ?? []);
@@ -200,6 +281,14 @@ class WooCommerceAutomationController extends BaseController
             ->whereJsonContains('payload->status', $status)
             ->latest('id')
             ->first();
+
+        if (!$lastDelivery) {
+            $lastDelivery = WooCommerceWebhookDelivery::where('organization_id', $organizationId)
+                ->where('topic', 'action.woocommerce_order_status_changed')
+                ->whereJsonContains('payload->status', $status)
+                ->latest('id')
+                ->first();
+        }
 
         $fields = collect($schema->fields())
             ->map(function (array $field) use ($lastDelivery) {
@@ -370,6 +459,84 @@ class WooCommerceAutomationController extends BaseController
                 'enabled' => (bool) $validated['enabled'],
                 'template_id' => $templateId,
                 'recipient_phone_payload_path' => $validated['recipient_phone_payload_path'] ?? null,
+            ]
+        );
+
+        $setting->mappings()->delete();
+
+        foreach ($mappings as $mapping) {
+            $setting->mappings()->create([
+                'template_variable' => $mapping['template_variable'],
+                'payload_path' => $mapping['payload_path'],
+                'transform' => $mapping['transform'] ?? null,
+                'default_value' => $mapping['default_value'] ?? null,
+            ]);
+        }
+
+        return response()->json([
+            'success' => true,
+        ]);
+    }
+
+    public function updateAddToCart(Request $request, WhatsAppTemplateVariableExtractor $extractor)
+    {
+        $organizationId = (int) session()->get('current_organization');
+
+        $validated = $request->validate([
+            'enabled' => ['required', 'boolean'],
+            'template_id' => ['nullable', 'integer'],
+            'recipient_phone_payload_path' => ['nullable', 'string', 'max:512'],
+            'delay_hours' => ['nullable', 'integer', 'min:0', 'max:720'],
+            'mappings' => ['array'],
+            'mappings.*.template_variable' => ['required', 'string', 'max:191'],
+            'mappings.*.payload_path' => ['required', 'string', 'max:512'],
+            'mappings.*.transform' => ['nullable', 'string', 'max:64'],
+            'mappings.*.default_value' => ['nullable', 'string', 'max:255'],
+        ]);
+
+        $templateId = $validated['template_id'] ?? null;
+        $template = null;
+        if ($templateId) {
+            $template = Template::where('id', $templateId)
+                ->where('organization_id', $organizationId)
+                ->where('status', 'APPROVED')
+                ->whereNull('deleted_at')
+                ->firstOrFail();
+        }
+
+        $requiredKeys = [];
+        if ($template) {
+            $requiredKeys = array_values(array_unique(array_map(
+                static fn (array $v) => $v['key'],
+                $extractor->extract($template)
+            )));
+        }
+
+        $mappings = $validated['mappings'] ?? [];
+        $mappingKeySet = [];
+        foreach ($mappings as $mapping) {
+            $mappingKeySet[$mapping['template_variable']] = true;
+        }
+
+        foreach ($requiredKeys as $key) {
+            if (!isset($mappingKeySet[$key])) {
+                return response()->json([
+                    'success' => false,
+                    'message' => __('Missing mapping for :key', ['key' => $key]),
+                ], 422);
+            }
+        }
+
+        $setting = WooCommerceWebhookEventSetting::updateOrCreate(
+            [
+                'organization_id' => $organizationId,
+                'event' => 'action.woocommerce_add_to_cart',
+            ],
+            [
+                'enabled' => (bool) $validated['enabled'],
+                'template_id' => $templateId,
+                'recipient_phone_payload_path' => $validated['recipient_phone_payload_path'] ?? null,
+                'delay_hours' => (int) ($validated['delay_hours'] ?? 0),
             ]
         );
 

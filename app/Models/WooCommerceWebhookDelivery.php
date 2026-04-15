@@ -16,6 +16,7 @@ class WooCommerceWebhookDelivery extends Model
         'payload' => 'array',
         'headers' => 'array',
         'processed_at' => 'datetime',
+        'scheduled_for' => 'datetime',
     ];
 
     public function organization()
