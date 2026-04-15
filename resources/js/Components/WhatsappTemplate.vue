@@ -73,14 +73,12 @@
     <div v-if="visible" class="mr-auto rounded-lg rounded-tl-none my-[0.1em] p-1 text-sm bg-white flex flex-col relative speech-bubble-left max-w-[25em]">
         <div v-if="parameters.header.format != null && parameters.header.format != 'TEXT'">
             <div v-if="placeholder == true" class="bg-[#ccd0d5] mb-4 flex justify-center rounded py-8">
-                <div v-if="parameters.header.format === 'IMAGE'" class="w-full min-h-[170px] rounded-md bg-gradient-to-b from-slate-200 to-slate-300 border border-slate-300 flex flex-col items-center justify-center text-slate-600">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 24 24" fill="none" class="opacity-80">
-                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                        <circle cx="9" cy="9" r="2" stroke="currentColor" stroke-width="1.8"/>
-                        <path d="m21 3l-8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                        <path d="M15 3h6v6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                <div v-if="parameters.header.format === 'IMAGE'" class="w-full h-[165px] rounded bg-[#b9bec6] flex items-center justify-center">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="76" height="76" viewBox="0 0 24 24" fill="none" class="text-white/90">
+                        <rect x="3.25" y="3.25" width="17.5" height="17.5" rx="4" stroke="currentColor" stroke-width="1.5"/>
+                        <circle cx="9" cy="9" r="1.7" fill="currentColor"/>
+                        <path d="M6.5 16l4.1-4.1c.3-.3.79-.3 1.09 0L14 14.2l1.9-1.9c.3-.3.79-.3 1.09 0L19 14.3V17H6.5z" fill="currentColor"/>
                     </svg>
-                    <span class="text-xs mt-2">{{ $t('No image selected') }}</span>
                 </div>
                 <div v-if="parameters.header.format === 'VIDEO'" class="w-full min-h-[170px] rounded-md bg-gradient-to-b from-slate-200 to-slate-300 border border-slate-300 flex flex-col items-center justify-center text-slate-600">
                     <svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 24 24" fill="none" class="opacity-80">
@@ -100,14 +98,12 @@
                         class="rounded-md flex justify-center items-center z-1 w-full h-full"
                         @error="imageLoadFailed = true"
                     />
-                    <div v-else class="w-full min-h-[170px] rounded-md bg-gradient-to-b from-slate-200 to-slate-300 border border-slate-300 flex flex-col items-center justify-center text-slate-600">
-                        <svg xmlns="http://www.w3.org/2000/svg" width="34" height="34" viewBox="0 0 24 24" fill="none" class="opacity-80">
-                            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7a2 2 0 0 1 2-2h4" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                            <circle cx="9" cy="9" r="2" stroke="currentColor" stroke-width="1.8"/>
-                            <path d="m21 3l-8 8" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
-                            <path d="M15 3h6v6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+                    <div v-else class="w-full h-[165px] rounded bg-[#b9bec6] flex items-center justify-center">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="76" height="76" viewBox="0 0 24 24" fill="none" class="text-white/90">
+                            <rect x="3.25" y="3.25" width="17.5" height="17.5" rx="4" stroke="currentColor" stroke-width="1.5"/>
+                            <circle cx="9" cy="9" r="1.7" fill="currentColor"/>
+                            <path d="M6.5 16l4.1-4.1c.3-.3.79-.3 1.09 0L14 14.2l1.9-1.9c.3-.3.79-.3 1.09 0L19 14.3V17H6.5z" fill="currentColor"/>
                         </svg>
-                        <span class="text-xs mt-2">{{ $t('No image selected') }}</span>
                     </div>
                 </div>
                 <template v-if="parameters.header.format === 'VIDEO'">
