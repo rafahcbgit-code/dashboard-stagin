@@ -229,6 +229,7 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::get('/settings/salla/automations/communication-whatsapp-send/webhook-fields', [App\Http\Controllers\User\SallaAutomationController::class, 'webhookFieldsCommunicationWhatsappSend'])->name('salla.automations.communication_whatsapp_send.fields');
                 Route::post('/settings/salla/automations/communication-whatsapp-send', [App\Http\Controllers\User\SallaAutomationController::class, 'updateCommunicationWhatsappSend'])->name('salla.automations.communication_whatsapp_send.update');
                 Route::get('/settings/salla/message-logs', [App\Http\Controllers\User\SallaMessageLogController::class, 'index'])->name('salla.logs.index');
+                Route::get('/settings/zid/message-logs', [App\Http\Controllers\User\ZidMessageLogController::class, 'index'])->name('zid.logs.index');
                 Route::get('/settings/zid/automations', [App\Http\Controllers\User\ZidAutomationController::class, 'index'])->name('zid.automations.index');
                 Route::get('/settings/zid/automations/template/{templateId}/variables', [App\Http\Controllers\User\ZidAutomationController::class, 'templateVariables'])->whereNumber('templateId');
                 Route::get('/settings/zid/automations/customer-login/webhook-fields', [App\Http\Controllers\User\ZidAutomationController::class, 'webhookFieldsCustomerLogin'])->name('zid.automations.customer_login.fields');
@@ -277,6 +278,7 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::post('/settings/salla/customer-sync', [App\Http\Controllers\Salla\CustomerSyncController::class, 'sync'])->name('salla.customer.sync');
 
                 Route::get('/settings/salla/message-logs/export', [App\Http\Controllers\User\SallaMessageLogController::class, 'export'])->name('salla.logs.export');
+                Route::get('/settings/zid/message-logs/export', [App\Http\Controllers\User\ZidMessageLogController::class, 'export'])->name('zid.logs.export');
                 Route::get('/salla-auth', [App\Http\Controllers\Salla\SallaAuthController::class, 'storeAuth']);
                 Route::get('/salla/public/auth/callback', [App\Http\Controllers\Salla\SallaAuthController::class, 'callback']);
                 Route::get('/reports/agent', [App\Http\Controllers\User\ReportController::class, 'agentReports'])->name('reports.agent');

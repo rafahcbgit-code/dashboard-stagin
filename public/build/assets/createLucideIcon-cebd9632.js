@@ -1,4 +1,8 @@
+<<<<<<<< HEAD:public/build/assets/createLucideIcon-cebd9632.js
 import{L as a}from"./app-93e86eb1.js";/**
+========
+import{L as a}from"./app-f84c7462.js";/**
+>>>>>>>> 99cccc055067f7aae9305646be643d7d54a988b4:public/build/assets/createLucideIcon-fbec41e6.js
  * @license lucide-vue-next v0.454.0 - ISC
  *
  * This source code is licensed under the ISC license.

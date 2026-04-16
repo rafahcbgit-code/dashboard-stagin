@@ -1,1 +1,5 @@
+<<<<<<<< HEAD:public/build/assets/Label-773c5d21.js
 import{V as o}from"./index-cc59584c.js";import{c as r}from"./utils-3f044a58.js";import{D as c,f as l,g as n,E as p,u as t,o as f,B as m}from"./app-93e86eb1.js";const h=c({__name:"Label",props:{for:{},asChild:{type:Boolean},as:{},class:{}},setup(a){const s=a;return(e,i)=>(f(),l(t(o),p(s,{class:t(r)("block text-sm tracking-tight text-left",s.class)}),{default:n(()=>[m(e.$slots,"default")]),_:3},16,["class"]))}});export{h as default};
+========
+import{V as o}from"./index-d454e8f4.js";import{c as r}from"./utils-3f044a58.js";import{D as c,f as l,g as n,E as p,u as t,o as f,B as m}from"./app-f84c7462.js";const h=c({__name:"Label",props:{for:{},asChild:{type:Boolean},as:{},class:{}},setup(a){const s=a;return(e,i)=>(f(),l(t(o),p(s,{class:t(r)("block text-sm tracking-tight text-left",s.class)}),{default:n(()=>[m(e.$slots,"default")]),_:3},16,["class"]))}});export{h as default};
+>>>>>>>> 99cccc055067f7aae9305646be643d7d54a988b4:public/build/assets/Label-1ea37aec.js

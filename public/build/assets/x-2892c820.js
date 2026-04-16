@@ -1,4 +1,8 @@
+<<<<<<<< HEAD:public/build/assets/x-2892c820.js
 import{c}from"./createLucideIcon-cebd9632.js";/**
+========
+import{c}from"./createLucideIcon-fbec41e6.js";/**
+>>>>>>>> 99cccc055067f7aae9305646be643d7d54a988b4:public/build/assets/x-33f044c4.js
  * @license lucide-vue-next v0.454.0 - ISC
  *
  * This source code is licensed under the ISC license.

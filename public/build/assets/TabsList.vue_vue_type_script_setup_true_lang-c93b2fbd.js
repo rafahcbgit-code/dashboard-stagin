@@ -1,0 +1,5 @@
+<<<<<<<< HEAD:public/build/assets/TabsList.vue_vue_type_script_setup_true_lang-3b4bed8f.js
+import{a7 as a}from"./index-cc59584c.js";import{D as r,f as t,g as l,E as n,u as p,o as c,B as f}from"./app-93e86eb1.js";const _=r({__name:"TabsList",props:{loop:{type:Boolean},asChild:{type:Boolean},as:{},class:{}},setup(s){const e=s;return(o,m)=>(c(),t(p(a),n(e,{class:"flex w-full border-b"}),{default:l(()=>[f(o.$slots,"default")]),_:3},16))}});export{_};
+========
+import{a7 as a}from"./index-d454e8f4.js";import{D as r,f as t,g as l,E as n,u as p,o as c,B as f}from"./app-f84c7462.js";const _=r({__name:"TabsList",props:{loop:{type:Boolean},asChild:{type:Boolean},as:{},class:{}},setup(s){const e=s;return(o,m)=>(c(),t(p(a),n(e,{class:"flex w-full border-b"}),{default:l(()=>[f(o.$slots,"default")]),_:3},16))}});export{_};
+>>>>>>>> 99cccc055067f7aae9305646be643d7d54a988b4:public/build/assets/TabsList.vue_vue_type_script_setup_true_lang-c93b2fbd.js

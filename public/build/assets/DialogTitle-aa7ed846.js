@@ -1,1 +1,5 @@
+<<<<<<<< HEAD:public/build/assets/DialogTitle-aa7ed846.js
 import{B as a}from"./index-cc59584c.js";import{c as r}from"./utils-3f044a58.js";import{D as n,f as l,g as c,E as i,u as e,o as p,B as f}from"./app-93e86eb1.js";const B=n({__name:"DialogTitle",props:{asChild:{type:Boolean},as:{},class:{}},setup(o){const s=o;return(t,m)=>(p(),l(e(a),i(s,{class:e(r)("text-lg text-foreground font-semibold leading-none tracking-tight",s.class)}),{default:c(()=>[f(t.$slots,"default")]),_:3},16,["class"]))}});export{B as default};
+========
+import{B as a}from"./index-d454e8f4.js";import{c as r}from"./utils-3f044a58.js";import{D as n,f as l,g as c,E as i,u as e,o as p,B as f}from"./app-f84c7462.js";const B=n({__name:"DialogTitle",props:{asChild:{type:Boolean},as:{},class:{}},setup(o){const s=o;return(t,m)=>(p(),l(e(a),i(s,{class:e(r)("text-lg text-foreground font-semibold leading-none tracking-tight",s.class)}),{default:c(()=>[f(t.$slots,"default")]),_:3},16,["class"]))}});export{B as default};
+>>>>>>>> 99cccc055067f7aae9305646be643d7d54a988b4:public/build/assets/DialogTitle-4c916bef.js

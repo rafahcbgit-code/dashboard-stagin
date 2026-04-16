@@ -1,1 +1,5 @@
+<<<<<<<< HEAD:public/build/assets/Tabs.vue_vue_type_script_setup_true_lang-669897fb.js
 import{S as r,a5 as n}from"./index-cc59584c.js";import{D as i,f as p,g as l,aa as d,ab as m,u as a,o as u,B as c}from"./app-93e86eb1.js";const h=i({__name:"Tabs",props:{defaultValue:{},orientation:{},dir:{},activationMode:{},modelValue:{},asChild:{type:Boolean},as:{}},emits:["update:modelValue"],setup(e,{emit:o}){const s=r(e,o);return(t,B)=>(u(),p(a(n),d(m(a(s))),{default:l(()=>[c(t.$slots,"default")]),_:3},16))}});export{h as _};
+========
+import{S as r,a5 as n}from"./index-d454e8f4.js";import{D as i,f as p,g as l,aa as d,ab as m,u as a,o as u,B as c}from"./app-f84c7462.js";const h=i({__name:"Tabs",props:{defaultValue:{},orientation:{},dir:{},activationMode:{},modelValue:{},asChild:{type:Boolean},as:{}},emits:["update:modelValue"],setup(e,{emit:o}){const s=r(e,o);return(t,B)=>(u(),p(a(n),d(m(a(s))),{default:l(()=>[c(t.$slots,"default")]),_:3},16))}});export{h as _};
+>>>>>>>> 99cccc055067f7aae9305646be643d7d54a988b4:public/build/assets/Tabs.vue_vue_type_script_setup_true_lang-bbeed896.js

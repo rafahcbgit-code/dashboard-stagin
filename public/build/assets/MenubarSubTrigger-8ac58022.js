@@ -1,4 +1,8 @@
+<<<<<<<< HEAD:public/build/assets/MenubarSubTrigger-8ac58022.js
 import{i as s}from"./index-cc59584c.js";import{c as n}from"./utils-3f044a58.js";import{c as r}from"./createLucideIcon-cebd9632.js";import{D as c,f as l,g as p,E as u,u as e,o as i,B as d,j as m}from"./app-93e86eb1.js";/**
+========
+import{i as s}from"./index-d454e8f4.js";import{c as n}from"./utils-3f044a58.js";import{c as r}from"./createLucideIcon-fbec41e6.js";import{D as c,f as l,g as p,E as u,u as e,o as i,B as d,j as m}from"./app-f84c7462.js";/**
+>>>>>>>> 99cccc055067f7aae9305646be643d7d54a988b4:public/build/assets/MenubarSubTrigger-8324b83d.js
  * @license lucide-vue-next v0.454.0 - ISC
  *
  * This source code is licensed under the ISC license.

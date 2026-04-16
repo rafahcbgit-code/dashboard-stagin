@@ -391,12 +391,39 @@
                     <!-- Standard template preview -->
                     <div v-if="templateType !== 'carousel'">
                     <div class="mr-auto rounded-lg rounded-tl-none my-1 p-1 text-sm bg-white flex flex-col relative speech-bubble-left w-[25em]">
-                        <div v-if="form.header.format != 'TEXT'" class="mb-4 bg-[#ccd0d5] flex justify-center py-8 rounded">
-                            <img v-if="form.header.format === 'IMAGE'" :src="'/images/image-placeholder.png'">
-                            <img v-if="form.header.format === 'VIDEO'" :src="'/images/video-placeholder.png'">
-                            <img v-if="form.header.format === 'DOCUMENT'" :src="'/images/document-placeholder.png'">
+                        <div v-if="form.header.format != 'TEXT'" class="mb-4 rounded overflow-hidden">
+                            <template v-if="form.header.format === 'IMAGE'">
+                                <img
+                                    v-if="currentHeaderPreviewUrl && !imagePreviewFailed"
+                                    :src="currentHeaderPreviewUrl"
+                                    alt="Header image preview"
+                                    class="w-full max-h-[260px] object-cover"
+                                    @error="imagePreviewFailed = true"
+                                >
+                                <div v-else class="bg-[#ccd0d5] flex justify-center py-8 rounded">
+                                    <img :src="'/images/image-placeholder.png'">
+                                </div>
+                            </template>
+                            <template v-else-if="form.header.format === 'VIDEO'">
+                                <video
+                                    v-if="currentHeaderPreviewUrl && !videoPreviewFailed"
+                                    controls
+                                    class="w-full max-h-[260px]"
+                                    @error="videoPreviewFailed = true"
+                                >
+                                    <source :src="currentHeaderPreviewUrl" type="video/mp4">
+                                </video>
+                                <div v-else class="bg-[#ccd0d5] flex justify-center py-8 rounded">
+                                    <img :src="'/images/video-placeholder.png'">
+                                </div>
+                            </template>
+                            <template v-else-if="form.header.format === 'DOCUMENT'">
+                                <div class="bg-[#ccd0d5] flex justify-center py-8 rounded">
+                                    <img :src="'/images/document-placeholder.png'">
+                                </div>
+                            </template>
                         </div>
-                        <h2 v-else class="text-gray-700 text-sm mb-1 px-2 normal-case whitespace-pre-wrap">{{ form.header.text }}</h2>
+                        <h2 v-else class="text-gray-700 text-sm font-bold mb-1 px-2 normal-case whitespace-pre-wrap">{{ form.header.text }}</h2>
                         <p v-if="form.category != 'AUTHENTICATION'" class="px-2 normal-case whitespace-pre-wrap" v-html="formattedMessage"></p>
                         <p v-else class="px-2 normal-case whitespace-pre-wrap" v-html="form.body.add_security_recommendation === true ? '{{1}} is your verification code. For your security, do not share this code.' : '{{1}} is your verification code.'"></p>
                         <div class="text-[#8c8c8c] mt-1 px-2">
@@ -527,6 +554,13 @@
     const footerCharacterCount = ref('0');
     const isLoading = ref(false);
     const imageUrl = ref(null);
+    const headerPreviewUrls = ref({
+        IMAGE: null,
+        VIDEO: null,
+        DOCUMENT: null,
+    });
+    const imagePreviewFailed = ref(false);
+    const videoPreviewFailed = ref(false);
     const isModalOpen = ref(false);
     const error = ref(null);
     const bodyExamples = ref([]);
@@ -618,6 +652,12 @@
     });
 
     const headerType = ref('text');
+
+    const currentHeaderPreviewUrl = computed(() => {
+        const currentFormat = form.value.header?.format;
+        if (!currentFormat) return null;
+        return headerPreviewUrls.value[currentFormat] || null;
+    });
     const langOptions = ref(props.languages);
     const categoryOptions = ref([
         { value: 'UTILITY', label: 'Utility' },
@@ -656,16 +696,31 @@
 
     const handleFileUpload = (event) => {
         const file = event.target.files[0];
+        if (!file) return;
+
+        const currentFormat = form.value.header?.format;
         const reader = new FileReader();
         reader.onload = (e) => {
             imageUrl.value = e.target.result;
+            if (currentFormat && headerPreviewUrls.value[currentFormat] !== undefined) {
+                headerPreviewUrls.value[currentFormat] = e.target.result;
+            }
             form.value.header.example = file; // Update header example with the uploaded image
+            imagePreviewFailed.value = false;
+            videoPreviewFailed.value = false;
         };
         reader.readAsDataURL(file);
     };
 
     const removeFile = () => {
         form.value.header.example = '';
+        const currentFormat = form.value.header?.format;
+        if (currentFormat && headerPreviewUrls.value[currentFormat] !== undefined) {
+            headerPreviewUrls.value[currentFormat] = null;
+        }
+        imageUrl.value = null;
+        imagePreviewFailed.value = false;
+        videoPreviewFailed.value = false;
     };
 
     const addUnderscore = (event) => {
@@ -1083,4 +1138,12 @@
     watch(form, () => {
         isFormValid.value;
     });
+
+    watch(
+        [() => form.value.header?.format, currentHeaderPreviewUrl],
+        () => {
+            imagePreviewFailed.value = false;
+            videoPreviewFailed.value = false;
+        }
+    );
 </script>
