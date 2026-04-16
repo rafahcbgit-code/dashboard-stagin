@@ -1,1 +1,0 @@
-import{c as s}from"./index-094bd501.js";import{d as r,e as t,P as n,Q as l,q as p,ai as c,aj as i,M as d}from"./vue-dbd0f6ee.js";const _=r({__name:"DialogClose",props:{asChild:{type:Boolean},as:{}},setup(a){const e=a;return(o,f)=>(t(),n(d(s),c(i(e)),{default:l(()=>[p(o.$slots,"default")]),_:3},16))}});export{_ as default};

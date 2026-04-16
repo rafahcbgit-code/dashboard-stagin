@@ -1,1 +1,0 @@
-import{b as o}from"./index-094bd501.js";import{d as r,e as t,P as n,Q as p,q as l,ai as i,aj as c,M as d}from"./vue-dbd0f6ee.js";const _=r({__name:"CollapsibleTrigger",props:{asChild:{type:Boolean},as:{}},setup(a){const e=a;return(s,f)=>(t(),n(d(o),i(c(e)),{default:p(()=>[l(s.$slots,"default")]),_:3},16))}});export{_ as default};

@@ -1,1 +1,0 @@
-import{ad as r}from"./index-094bd501.js";import{d as s,e as t,P as n,Q as i,q as p,ai as c,aj as d,M as l}from"./vue-dbd0f6ee.js";const _=s({__name:"ToastProvider",props:{label:{},duration:{},swipeDirection:{},swipeThreshold:{}},setup(e){const a=e;return(o,m)=>(t(),n(l(r),c(d(a)),{default:i(()=>[p(o.$slots,"default")]),_:3},16))}});export{_};

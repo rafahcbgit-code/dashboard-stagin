@@ -1,1 +1,0 @@
-import{c as e}from"./utils-3f044a58.js";import{d as s,e as t,f as r,q as o,j as n,M as c}from"./vue-dbd0f6ee.js";const f=s({__name:"MenubarShortcut",setup(l){return(a,m)=>(t(),r("span",{class:n(c(e)("text-xxs ml-auto tracking-widest opacity-50",a.$attrs.class??""))},[o(a.$slots,"default")],2))}});export{f as default};
