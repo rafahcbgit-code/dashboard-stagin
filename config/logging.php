@@ -162,6 +162,14 @@ return [
             'level' => 'debug',
             'days' => 7,
         ],
+
+        'woocommerce' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/woocommerce.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'days' => 14,
+            'replace_placeholders' => true,
+        ],
     ],
 
 ];

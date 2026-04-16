@@ -16,6 +16,8 @@ use App\Models\Subscription;
 use App\Models\ZidWebhookSubscription;
 use App\Services\ContactFieldService;
 use App\Services\WhatsappService;
+use App\Models\WooCommerceWebhookSubscription;
+use App\Services\WooCommerce\WooCommerceIntegrationService;
 use App\Models\IntegrationConnection;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -23,6 +25,11 @@ use Validator;
 
 class PluginController extends BaseController
 {
+    public function __construct(
+        private WooCommerceIntegrationService $wooCommerceIntegrationService
+    ) {
+    }
+
     public function index(Request $request){
         if ($request->isMethod('get')) {
             $organizationId = session()->get('current_organization');
@@ -70,6 +77,15 @@ class PluginController extends BaseController
             $zidContext = $this->buildZidIntegrationContext($organizationId);
             $data = array_merge($data, $zidContext);
             $data['zidSettingsUrl'] = route('settings.zid');
+            $data['woocommerceIntegration'] = $this->wooCommerceIntegrationService->getForOrganization($organizationId);
+            $data['woocommerceWebhookSecret'] = optional($data['woocommerceIntegration'])->webhook_secret;
+            $data['woocommerceWebhookDeliveryUrl'] = config('woocommerce.webhook_delivery_url');
+            $data['woocommerceWebhookSubscriptions'] = WooCommerceWebhookSubscription::where('organization_id', $organizationId)
+                ->get(['topic', 'status', 'webhook_id'])
+                ->map(function ($item) {
+                    return $item->toArray();
+                });
+            $data['woocommerceAutomationsUrl'] = route('woocommerce.automations.index');
             
             return Inertia::render('User/Settings/Plugins/Index', $data);
         }
@@ -83,6 +99,21 @@ class PluginController extends BaseController
         $context['zidAutomationsUrl'] = route('zid.automations.index');
 
         return Inertia::render('User/Settings/ZidIntegrationOverview', $context);
+    }
+
+    public function wooCommerceSettings(Request $request)
+    {
+        $organizationId = (int) session()->get('current_organization');
+
+        return Inertia::render('User/Settings/WooCommerceIntegrationOverview', [
+            'title' => __('WooCommerce Integration'),
+            'modules' => Addon::get(),
+            'woocommerceIntegration' => $this->wooCommerceIntegrationService->getForOrganization($organizationId),
+            'woocommerceWebhookSubscriptions' => WooCommerceWebhookSubscription::where('organization_id', $organizationId)
+                ->get(['topic', 'status', 'webhook_id'])
+                ->map(fn ($item) => $item->toArray()),
+            'woocommerceAutomationsUrl' => route('woocommerce.automations.index'),
+        ]);
     }
 
     private function buildZidIntegrationContext(int $organizationId): array

@@ -2,6 +2,8 @@
 
 namespace App\Providers;
 
+use App\Services\WooCommerce\Contracts\WooCommerceIntegrationRepositoryInterface;
+use App\Services\WooCommerce\Repositories\Eloquent\WooCommerceIntegrationRepository;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
 use Laravel\Telescope\TelescopeServiceProvider;
@@ -14,6 +16,11 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
+        $this->app->bind(
+            WooCommerceIntegrationRepositoryInterface::class,
+            WooCommerceIntegrationRepository::class
+        );
+
         if ($this->app->environment('local')) {
             $this->app->register(TelescopeServiceProvider::class);
         }

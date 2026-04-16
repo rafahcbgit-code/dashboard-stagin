@@ -11,6 +11,9 @@ use Illuminate\Support\Facades\Http;
 use App\Http\Controllers\ShopifyIntegratin\ShopifyAuthController;
 use App\Http\Controllers\ShopifyIntegratin\ShopifyWebhookController;
 use App\Http\Controllers\ShopifyIntegratin\PrivacyWebhookController;
+use App\Http\Controllers\User\WooCommerceAutomationController;
+use App\Http\Controllers\User\WooCommerceIntegrationController;
+use App\Http\Controllers\WooCommerce\WooCommerceWebhookController;
 use App\Http\Controllers\Zid\ZidWebhookController;
 /*
 |--------------------------------------------------------------------------
@@ -23,6 +26,8 @@ use App\Http\Controllers\Zid\ZidWebhookController;
 |
 */
 
+
+
 Route::get('/new-install', [ShopifyAuthController::class, 'install']);
 Route::get('/shopify/callback', [ShopifyAuthController::class, 'callback']);
 Route::get('/shopify/install/success', [ShopifyAuthController::class, 'installSuccess'])->name('shopify.install.success');
@@ -33,6 +38,12 @@ Route::post('/shopify/webhooks/checkouts-created', [ShopifyWebhookController::cl
 Route::post('/shopify/webhooks/customers/data_request', [PrivacyWebhookController::class, 'handle']);
 Route::post('/shopify/webhooks/customers/redact', [PrivacyWebhookController::class, 'handle']);
 Route::post('/shopify/webhooks/shop/redact', [PrivacyWebhookController::class, 'handle']);
+
+Route::post('/woocommerce/webhooks', [WooCommerceWebhookController::class, 'handle'])
+    ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class]);
+
+    Route::post('/webhooks/status-change', [WooCommerceWebhookController::class, 'handle'])
+    ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class]);
 
 Route::post('zid/webhooks', [ZidWebhookController::class, 'handle'])
     ->withoutMiddleware([\App\Http\Middleware\VerifyCsrfToken::class]);
@@ -246,6 +257,24 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::get('/settings/shopify/automations/orders-fulfilled/notification/webhook-fields', [App\Http\Controllers\User\ShopifyAutomationController::class, 'webhookFieldsOrderFulfilledNotification'])->name('shopify.automations.orders_fulfilled.notification.fields');
                 Route::post('/settings/shopify/automations/orders-fulfilled/notification', [App\Http\Controllers\User\ShopifyAutomationController::class, 'updateOrderFulfilledNotification'])->name('shopify.automations.orders_fulfilled.notification.update');
 
+                Route::get('/settings/woocommerce/automations', [WooCommerceAutomationController::class, 'index'])->name('woocommerce.automations.index');
+                Route::get('/settings/woocommerce/automations/template/{templateId}/variables', [WooCommerceAutomationController::class, 'templateVariables'])->whereNumber('templateId');
+                Route::get('/settings/woocommerce/automations/order-created/webhook-fields', [WooCommerceAutomationController::class, 'webhookFields'])->name('woocommerce.automations.order_created.fields');
+                Route::post('/settings/woocommerce/automations/order-created', [WooCommerceAutomationController::class, 'updateOrderCreated'])->name('woocommerce.automations.order_created.update');
+                Route::get('/settings/woocommerce/automations/add-to-cart/webhook-fields', [WooCommerceAutomationController::class, 'webhookFieldsAddToCart'])->name('woocommerce.automations.add_to_cart.fields');
+                Route::post('/settings/woocommerce/automations/add-to-cart', [WooCommerceAutomationController::class, 'updateAddToCart'])->name('woocommerce.automations.add_to_cart.update');
+                Route::get('/settings/woocommerce/automations/order-updated/{status}/config', [WooCommerceAutomationController::class, 'orderUpdatedStatusConfig'])
+                    ->where('status', 'pending|processing|on-hold|completed|cancelled|refunded|failed')
+                    ->name('woocommerce.automations.order_updated.config');
+                Route::get('/settings/woocommerce/automations/order-updated/{status}/webhook-fields', [WooCommerceAutomationController::class, 'webhookFieldsOrderUpdated'])
+                    ->where('status', 'pending|processing|on-hold|completed|cancelled|refunded|failed')
+                    ->name('woocommerce.automations.order_updated.fields');
+                Route::post('/settings/woocommerce/automations/order-updated/{status}', [WooCommerceAutomationController::class, 'updateOrderUpdated'])
+                    ->where('status', 'pending|processing|on-hold|completed|cancelled|refunded|failed')
+                    ->name('woocommerce.automations.order_updated.update');
+                Route::get('/settings/woocommerce/message-logs', [App\Http\Controllers\User\WooCommerceMessageLogController::class, 'index'])->name('woocommerce.logs.index');
+                Route::get('/settings/woocommerce/message-logs/export', [App\Http\Controllers\User\WooCommerceMessageLogController::class, 'export'])->name('woocommerce.logs.export');
+
                 Route::post('/settings/salla/customer-sync', [App\Http\Controllers\Salla\CustomerSyncController::class, 'sync'])->name('salla.customer.sync');
 
                 Route::get('/settings/salla/message-logs/export', [App\Http\Controllers\User\SallaMessageLogController::class, 'export'])->name('salla.logs.export');
@@ -325,6 +354,13 @@ Route::middleware(['auth:user'])->group(function () {
 
                     Route::get('/settings/whatsapp', [App\Http\Controllers\User\SettingController::class, 'viewWhatsappSettings']);
                     Route::get('/settings/plugins', [App\Http\Controllers\User\PluginController::class, 'index'])->name('settings.plugins');
+                    Route::post('/settings/plugins/woocommerce', [WooCommerceIntegrationController::class, 'store'])->name('settings.plugins.woocommerce.store');
+                    Route::post('/settings/plugins/woocommerce/test', [WooCommerceIntegrationController::class, 'testConnection'])->name('settings.plugins.woocommerce.test');
+                    Route::post('/settings/plugins/woocommerce/subscriptions', [WooCommerceIntegrationController::class, 'createSubscription'])->name('settings.plugins.woocommerce.subscription.create');
+                    Route::delete('/settings/plugins/woocommerce/subscriptions/{topic}', [WooCommerceIntegrationController::class, 'deleteSubscription'])
+                        ->where('topic', 'order\\.created|order\\.updated|action\\.woocommerce_order_status_changed|action\\.woocommerce_add_to_cart')
+                        ->name('settings.plugins.woocommerce.subscription.delete');
+                    Route::get('/settings/woocommerce', [App\Http\Controllers\User\PluginController::class, 'wooCommerceSettings'])->name('settings.woocommerce');
                     Route::get('/settings/zid', [App\Http\Controllers\User\PluginController::class, 'zidSettings'])->name('settings.zid');
                     Route::get('/plugin/download/{name}', [App\Http\Controllers\User\PluginController::class, 'download'])->name('plugin.download');
                     Route::get('/settings/whatsapp/refresh', [App\Http\Controllers\User\SettingController::class, 'refreshWhatsappData']);
