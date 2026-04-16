@@ -1,5 +1,0 @@
-<<<<<<<< HEAD:public/build/assets/CollapsibleTrigger-e41e0314.js
-import{b as s}from"./index-cc59584c.js";import{D as r,f as t,g as n,aa as p,ab as l,u as i,o as c,B as f}from"./app-93e86eb1.js";const _=r({__name:"CollapsibleTrigger",props:{asChild:{type:Boolean},as:{}},setup(a){const e=a;return(o,u)=>(c(),t(i(s),p(l(e)),{default:n(()=>[f(o.$slots,"default")]),_:3},16))}});export{_ as default};
-========
-import{b as s}from"./index-d454e8f4.js";import{D as r,f as t,g as n,aa as p,ab as l,u as i,o as c,B as f}from"./app-f84c7462.js";const _=r({__name:"CollapsibleTrigger",props:{asChild:{type:Boolean},as:{}},setup(a){const e=a;return(o,u)=>(c(),t(i(s),p(l(e)),{default:n(()=>[f(o.$slots,"default")]),_:3},16))}});export{_ as default};
->>>>>>>> 99cccc055067f7aae9305646be643d7d54a988b4:public/build/assets/CollapsibleTrigger-d1aa1a57.js

@@ -1,5 +1,0 @@
-<<<<<<<< HEAD:public/build/assets/ToastTitle.vue_vue_type_script_setup_true_lang-32c0dd45.js
-import{ae as t}from"./index-cc59584c.js";import{c as r}from"./utils-3f044a58.js";import{D as n,f as c,g as l,E as p,u as a,o as m,B as f}from"./app-93e86eb1.js";const B=n({__name:"ToastTitle",props:{asChild:{type:Boolean},as:{},class:{}},setup(e){const s=e;return(o,i)=>(m(),c(a(t),p(s,{class:a(r)("text-sm font-semibold",s.class)}),{default:l(()=>[f(o.$slots,"default")]),_:3},16,["class"]))}});export{B as _};
-========
-import{ae as t}from"./index-d454e8f4.js";import{c as r}from"./utils-3f044a58.js";import{D as n,f as c,g as l,E as p,u as a,o as m,B as f}from"./app-f84c7462.js";const B=n({__name:"ToastTitle",props:{asChild:{type:Boolean},as:{},class:{}},setup(e){const s=e;return(o,i)=>(m(),c(a(t),p(s,{class:a(r)("text-sm font-semibold",s.class)}),{default:l(()=>[f(o.$slots,"default")]),_:3},16,["class"]))}});export{B as _};
->>>>>>>> 99cccc055067f7aae9305646be643d7d54a988b4:public/build/assets/ToastTitle.vue_vue_type_script_setup_true_lang-34abdaea.js

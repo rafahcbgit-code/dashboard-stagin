@@ -1,5 +1,0 @@
-<<<<<<<< HEAD:public/build/assets/ToastDescription.vue_vue_type_script_setup_true_lang-f9d6da01.js
-import{ac as t}from"./index-cc59584c.js";import{c as r}from"./utils-3f044a58.js";import{D as c,f as n,g as p,E as l,u as a,o as m,B as i}from"./app-93e86eb1.js";const B=c({__name:"ToastDescription",props:{asChild:{type:Boolean},as:{},class:{}},setup(o){const s=o;return(e,f)=>(m(),n(a(t),l({class:a(r)("text-sm opacity-90",s.class)},s),{default:p(()=>[i(e.$slots,"default")]),_:3},16,["class"]))}});export{B as _};
-========
-import{ac as t}from"./index-d454e8f4.js";import{c as r}from"./utils-3f044a58.js";import{D as c,f as n,g as p,E as l,u as a,o as m,B as i}from"./app-f84c7462.js";const B=c({__name:"ToastDescription",props:{asChild:{type:Boolean},as:{},class:{}},setup(o){const s=o;return(e,f)=>(m(),n(a(t),l({class:a(r)("text-sm opacity-90",s.class)},s),{default:p(()=>[i(e.$slots,"default")]),_:3},16,["class"]))}});export{B as _};
->>>>>>>> 99cccc055067f7aae9305646be643d7d54a988b4:public/build/assets/ToastDescription.vue_vue_type_script_setup_true_lang-6a1be177.js
