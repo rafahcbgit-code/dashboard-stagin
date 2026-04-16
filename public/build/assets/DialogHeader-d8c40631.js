@@ -1,0 +1,1 @@
+import{c as t}from"./utils-3f044a58.js";import{d as o,e as r,f as l,q as c,j as n,M as f}from"./vue-dbd0f6ee.js";const i=o({__name:"DialogHeader",props:{class:{}},setup(e){const s=e;return(a,p)=>(r(),l("div",{class:n(f(t)("flex flex-col space-y-2 text-center sm:text-left",s.class))},[c(a.$slots,"default")],2))}});export{i as default};

@@ -1,0 +1,1 @@
+import{x as t}from"./index-094bd501.js";import{d as o,e as r,P as n,Q as p,q as l,ai as c,aj as i,M as m}from"./vue-dbd0f6ee.js";const _=o({__name:"SelectItemText",props:{asChild:{type:Boolean},as:{}},setup(e){const a=e;return(s,d)=>(r(),n(m(t),c(i(a)),{default:p(()=>[l(s.$slots,"default")]),_:3},16))}});export{_ as default};

@@ -1,0 +1,1 @@
+import{w as s}from"./index-094bd501.js";import{d as r,e as t,P as n,Q as p,q as i,ai as l,aj as c,M as d}from"./vue-dbd0f6ee.js";const _=r({__name:"PopoverTrigger",props:{asChild:{type:Boolean},as:{}},setup(e){const a=e;return(o,f)=>(t(),n(d(s),l(c(a)),{default:p(()=>[i(o.$slots,"default")]),_:3},16))}});export{_ as default};

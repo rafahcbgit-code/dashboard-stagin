@@ -1,0 +1,1 @@
+import{h as o}from"./index-094bd501.js";import{c as n}from"./utils-3f044a58.js";import{d as t,e as p,P as c,_ as m,M as s}from"./vue-dbd0f6ee.js";const _=t({__name:"MenubarSeparator",props:{asChild:{type:Boolean},as:{}},setup(a){const e=a;return(r,l)=>(p(),c(s(o),m({class:s(n)("-mx-1 my-1 h-px bg-secondary",r.$attrs.class??"")},e),null,16,["class"]))}});export{_ as default};
