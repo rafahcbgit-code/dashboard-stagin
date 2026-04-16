@@ -117,7 +117,7 @@
                                             {{ $t('Configure Shopify Automations') }}
                                         </Link>
                                     </div>
-                                    <Link href="/settings/woocommerce" class="flex justify-between border rounded-lg p-4 mb-6 hover:shadow-md transition-shadow">
+                                    <Link v-if="props.woocommerceAccessAllowed" href="/settings/woocommerce" class="flex justify-between border rounded-lg p-4 mb-6 hover:shadow-md transition-shadow">
                                         <div class="flex items-center gap-3">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="currentColor">
                                                 <path d="M4 5a2 2 0 0 1 2-2h12.5A3.5 3.5 0 0 1 22 6.5v9A3.5 3.5 0 0 1 18.5 19H10l-4 3v-3H6a2 2 0 0 1-2-2V5Zm2 0v12h1.2l.8-.6 2.7-2 .4-.3h9.4A1.5 1.5 0 0 0 20 15.5v-9A1.5 1.5 0 0 0 18.5 5H6Z" />
@@ -130,6 +130,10 @@
                                             </svg>
                                         </div>
                                     </Link>
+                                    <div v-else class="border rounded-lg p-4 mb-6 bg-slate-50 text-sm text-slate-600">
+                                        <div class="font-semibold text-slate-800 mb-1">{{ $t('WooCommerce Integration') }}</div>
+                                        <div>{{ $t('WooCommerce integration is disabled for your current subscription plan.') }}</div>
+                                    </div>
                                     <div v-if="plugins.length === 0" class="text-center py-12">
                                         <div class="mx-auto w-24 h-24 text-gray-300 mb-4">
                                             <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke-width="1.5" stroke="currentColor">
@@ -215,6 +219,10 @@ const props = defineProps({
     zidSettingsUrl: {
         type: String,
         default: ''
+    },
+    woocommerceAccessAllowed: {
+        type: Boolean,
+        default: true
     }
 });
 const shopDomain = ref('');

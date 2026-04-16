@@ -33,6 +33,7 @@ class StoreSubscriptionPlan extends FormRequest
             'salla_integration_enabled' => 'sometimes|boolean',
             'shopify_integration_enabled' => 'sometimes|boolean',
             'zid_integration_enabled' => 'sometimes|boolean',
+            'woocommerce_integration_enabled' => 'sometimes|boolean',
         ];
 
         return $rules;
