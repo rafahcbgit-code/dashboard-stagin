@@ -1,0 +1,1 @@
+import{M as s}from"./index-094bd501.js";import{d as r,e as t,P as l,Q as n,q as p,ai as c,aj as d,M as i}from"./vue-dbd0f6ee.js";const _=r({__name:"SelectValue",props:{placeholder:{},asChild:{type:Boolean},as:{}},setup(e){const a=e;return(o,u)=>(t(),l(i(s),c(d(a)),{default:n(()=>[p(o.$slots,"default")]),_:3},16))}});export{_ as default};

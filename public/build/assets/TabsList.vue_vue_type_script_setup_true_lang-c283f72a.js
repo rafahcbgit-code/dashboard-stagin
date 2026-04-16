@@ -1,0 +1,1 @@
+import{a7 as a}from"./index-094bd501.js";import{d as r,e as t,P as l,Q as n,q as p,_ as c,M as f}from"./vue-dbd0f6ee.js";const i=r({__name:"TabsList",props:{loop:{type:Boolean},asChild:{type:Boolean},as:{},class:{}},setup(e){const s=e;return(o,m)=>(t(),l(f(a),c(s,{class:"flex w-full border-b"}),{default:n(()=>[p(o.$slots,"default")]),_:3},16))}});export{i as _};

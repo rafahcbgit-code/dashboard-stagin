@@ -9,6 +9,7 @@ use App\Services\WooCommerce\DTOs\WooCommerceCredentials;
 use App\Services\WooCommerce\WooCommerceIntegrationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use App\Models\Subscription;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\Rule;
@@ -27,6 +28,9 @@ class WooCommerceIntegrationController extends BaseController
     {
         $organizationId = session()->get('current_organization');
         $user = $request->user();
+        if (!$this->hasWooCommerceAccess((int) $organizationId)) {
+            abort(403, __('WooCommerce integration is not available for your current plan.'));
+        }
 
         if (!$organizationId || !$user) {
             abort(403, __('Organization context is missing'));
@@ -44,6 +48,11 @@ class WooCommerceIntegrationController extends BaseController
     public function testConnection(Request $request): JsonResponse
     {
         $organizationId = session()->get('current_organization');
+        if (!$this->hasWooCommerceAccess((int) $organizationId)) {
+            return response()->json([
+                'message' => __('WooCommerce integration is not available for your current plan.'),
+            ], 403);
+        }
         $integration = $this->integrationService->getForOrganization($organizationId);
 
         if (!$integration) {
@@ -74,6 +83,11 @@ class WooCommerceIntegrationController extends BaseController
     public function createSubscription(Request $request): JsonResponse
     {
         $organizationId = session()->get('current_organization');
+        if (!$this->hasWooCommerceAccess((int) $organizationId)) {
+            return response()->json([
+                'message' => __('WooCommerce integration is not available for your current plan.'),
+            ], 403);
+        }
         $integration = $this->integrationService->getForOrganization($organizationId);
 
         if (!$integration) {
@@ -136,6 +150,11 @@ class WooCommerceIntegrationController extends BaseController
     public function deleteSubscription(Request $request, string $topic): JsonResponse
     {
         $organizationId = session()->get('current_organization');
+        if (!$this->hasWooCommerceAccess((int) $organizationId)) {
+            return response()->json([
+                'message' => __('WooCommerce integration is not available for your current plan.'),
+            ], 403);
+        }
         $integration = $this->integrationService->getForOrganization($organizationId);
 
         if (!$integration) {
@@ -173,5 +192,12 @@ class WooCommerceIntegrationController extends BaseController
                 'reason' => $exception->getMessage(),
             ], 422);
         }
+    }
+
+    private function hasWooCommerceAccess(int $organizationId): bool
+    {
+        $subscription = Subscription::with('plan')->where('organization_id', $organizationId)->first();
+        $metadata = json_decode($subscription?->plan?->metadata ?? '{}', true) ?? [];
+        return (bool) ($metadata['woocommerce_integration_enabled'] ?? true);
     }
 }

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\User;
 
 use App\Http\Controllers\Controller as BaseController;
+use App\Models\Subscription;
 use App\Models\Template;
 use App\Models\WooCommerceWebhookDelivery;
 use App\Models\WooCommerceWebhookEventSetting;
@@ -30,6 +31,7 @@ class WooCommerceAutomationController extends BaseController
         WhatsAppTemplateVariableExtractor $extractor
     ) {
         $organizationId = (int) session()->get('current_organization');
+        $this->ensureWooCommerceAccess($organizationId);
 
         $setting = WooCommerceWebhookEventSetting::with('mappings')
             ->where('organization_id', $organizationId)
@@ -142,6 +144,7 @@ class WooCommerceAutomationController extends BaseController
     public function templateVariables(int $templateId, WhatsAppTemplateVariableExtractor $extractor)
     {
         $organizationId = (int) session()->get('current_organization');
+        $this->ensureWooCommerceAccess($organizationId);
 
         $template = Template::where('id', $templateId)
             ->where('organization_id', $organizationId)
@@ -160,6 +163,7 @@ class WooCommerceAutomationController extends BaseController
     public function webhookFields(WooCommerceOrderCreatedFieldSchema $schema)
     {
         $organizationId = (int) session()->get('current_organization');
+        $this->ensureWooCommerceAccess($organizationId);
 
         $lastDelivery = WooCommerceWebhookDelivery::where('organization_id', $organizationId)
             ->where('topic', 'order.created')
@@ -190,6 +194,7 @@ class WooCommerceAutomationController extends BaseController
         }
 
         $organizationId = (int) session()->get('current_organization');
+        $this->ensureWooCommerceAccess($organizationId);
 
         $lastDelivery = WooCommerceWebhookDelivery::where('organization_id', $organizationId)
             ->where('topic', 'order.updated')
@@ -225,6 +230,7 @@ class WooCommerceAutomationController extends BaseController
     public function webhookFieldsAddToCart(WooCommerceAddToCartFieldSchema $schema)
     {
         $organizationId = (int) session()->get('current_organization');
+        $this->ensureWooCommerceAccess($organizationId);
 
         $lastDelivery = WooCommerceWebhookDelivery::where('organization_id', $organizationId)
             ->where('topic', 'action.woocommerce_add_to_cart')
@@ -258,6 +264,7 @@ class WooCommerceAutomationController extends BaseController
         }
 
         $organizationId = (int) session()->get('current_organization');
+        $this->ensureWooCommerceAccess($organizationId);
         $eventKey = $this->orderUpdatedEventKey($status);
 
         $setting = WooCommerceWebhookEventSetting::with('mappings')
@@ -325,6 +332,7 @@ class WooCommerceAutomationController extends BaseController
     public function updateOrderCreated(Request $request, WhatsAppTemplateVariableExtractor $extractor)
     {
         $organizationId = (int) session()->get('current_organization');
+        $this->ensureWooCommerceAccess($organizationId);
 
         $validated = $request->validate([
             'enabled' => ['required', 'boolean'],
@@ -405,6 +413,7 @@ class WooCommerceAutomationController extends BaseController
         }
 
         $organizationId = (int) session()->get('current_organization');
+        $this->ensureWooCommerceAccess($organizationId);
 
         $validated = $request->validate([
             'enabled' => ['required', 'boolean'],
@@ -490,6 +499,7 @@ class WooCommerceAutomationController extends BaseController
     public function updateAddToCart(Request $request, WhatsAppTemplateVariableExtractor $extractor)
     {
         $organizationId = (int) session()->get('current_organization');
+        $this->ensureWooCommerceAccess($organizationId);
 
         $validated = $request->validate([
             'enabled' => ['required', 'boolean'],
@@ -599,5 +609,14 @@ class WooCommerceAutomationController extends BaseController
         }
 
         return $result;
+    }
+
+    private function ensureWooCommerceAccess(int $organizationId): void
+    {
+        $subscription = Subscription::with('plan')->where('organization_id', $organizationId)->first();
+        $metadata = json_decode($subscription?->plan?->metadata ?? '{}', true) ?? [];
+        if (!(bool) ($metadata['woocommerce_integration_enabled'] ?? true)) {
+            abort(403, __('WooCommerce integration is not available for your current plan.'));
+        }
     }
 }

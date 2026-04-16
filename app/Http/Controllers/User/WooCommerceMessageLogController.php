@@ -5,6 +5,7 @@ namespace App\Http\Controllers\User;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\OutboundMessageResource;
 use App\Models\OutboundMessage;
+use App\Models\Subscription;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -14,6 +15,7 @@ class WooCommerceMessageLogController extends Controller
     public function index(Request $request)
     {
         $organizationId = (int) session()->get('current_organization');
+        $this->ensureWooCommerceAccess($organizationId);
 
         $status = $request->query('status');
         $event = $request->query('event');
@@ -76,6 +78,7 @@ class WooCommerceMessageLogController extends Controller
     public function export(Request $request)
     {
         $organizationId = (int) session()->get('current_organization');
+        $this->ensureWooCommerceAccess($organizationId);
 
         $query = OutboundMessage::where('organization_id', $organizationId)
             ->where('source', 'woocommerce')
@@ -138,5 +141,13 @@ class WooCommerceMessageLogController extends Controller
 
         return response()->stream($callback, 200, $headers);
     }
-}
 
+    private function ensureWooCommerceAccess(int $organizationId): void
+    {
+        $subscription = Subscription::with('plan')->where('organization_id', $organizationId)->first();
+        $metadata = json_decode($subscription?->plan?->metadata ?? '{}', true) ?? [];
+        if (!(bool) ($metadata['woocommerce_integration_enabled'] ?? true)) {
+            abort(403, __('WooCommerce integration is not available for your current plan.'));
+        }
+    }
+}

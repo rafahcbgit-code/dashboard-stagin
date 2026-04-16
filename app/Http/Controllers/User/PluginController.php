@@ -48,9 +48,13 @@ class PluginController extends BaseController
                 }
             }
             $zidAccessAllowed = true;
+            $woocommerceAccessAllowed = true;
             if ($plan && $plan->metadata) {
                 if (array_key_exists('zid_integration_enabled', $planMetadata)) {
                     $zidAccessAllowed = (bool) $planMetadata['zid_integration_enabled'];
+                }
+                if (array_key_exists('woocommerce_integration_enabled', $planMetadata)) {
+                    $woocommerceAccessAllowed = (bool) $planMetadata['woocommerce_integration_enabled'];
                 }
             }
 
@@ -77,15 +81,22 @@ class PluginController extends BaseController
             $zidContext = $this->buildZidIntegrationContext($organizationId);
             $data = array_merge($data, $zidContext);
             $data['zidSettingsUrl'] = route('settings.zid');
-            $data['woocommerceIntegration'] = $this->wooCommerceIntegrationService->getForOrganization($organizationId);
-            $data['woocommerceWebhookSecret'] = optional($data['woocommerceIntegration'])->webhook_secret;
+            $data['woocommerceAccessAllowed'] = $woocommerceAccessAllowed;
+            $data['woocommerceIntegration'] = $woocommerceAccessAllowed
+                ? $this->wooCommerceIntegrationService->getForOrganization($organizationId)
+                : null;
+            $data['woocommerceWebhookSecret'] = $woocommerceAccessAllowed
+                ? optional($data['woocommerceIntegration'])->webhook_secret
+                : null;
             $data['woocommerceWebhookDeliveryUrl'] = config('woocommerce.webhook_delivery_url');
-            $data['woocommerceWebhookSubscriptions'] = WooCommerceWebhookSubscription::where('organization_id', $organizationId)
-                ->get(['topic', 'status', 'webhook_id'])
-                ->map(function ($item) {
-                    return $item->toArray();
-                });
-            $data['woocommerceAutomationsUrl'] = route('woocommerce.automations.index');
+            $data['woocommerceWebhookSubscriptions'] = $woocommerceAccessAllowed
+                ? WooCommerceWebhookSubscription::where('organization_id', $organizationId)
+                    ->get(['topic', 'status', 'webhook_id'])
+                    ->map(function ($item) {
+                        return $item->toArray();
+                    })
+                : [];
+            $data['woocommerceAutomationsUrl'] = $woocommerceAccessAllowed ? route('woocommerce.automations.index') : null;
             
             return Inertia::render('User/Settings/Plugins/Index', $data);
         }
@@ -104,6 +115,12 @@ class PluginController extends BaseController
     public function wooCommerceSettings(Request $request)
     {
         $organizationId = (int) session()->get('current_organization');
+        if (!$this->hasWooCommerceAccess($organizationId)) {
+            return redirect()->route('settings.plugins')->with('status', [
+                'type' => 'error',
+                'message' => __('WooCommerce integration is not available for your current plan.'),
+            ]);
+        }
 
         return Inertia::render('User/Settings/WooCommerceIntegrationOverview', [
             'title' => __('WooCommerce Integration'),
@@ -114,6 +131,13 @@ class PluginController extends BaseController
                 ->map(fn ($item) => $item->toArray()),
             'woocommerceAutomationsUrl' => route('woocommerce.automations.index'),
         ]);
+    }
+
+    private function hasWooCommerceAccess(int $organizationId): bool
+    {
+        $subscription = Subscription::with('plan')->where('organization_id', $organizationId)->first();
+        $metadata = json_decode($subscription?->plan?->metadata ?? '{}', true) ?? [];
+        return (bool) ($metadata['woocommerce_integration_enabled'] ?? true);
     }
 
     private function buildZidIntegrationContext(int $organizationId): array

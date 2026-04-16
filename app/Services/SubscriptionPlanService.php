@@ -52,6 +52,9 @@ class SubscriptionPlanService
         $zidIntegrationEnabled = $request->has('zid_integration_enabled')
             ? (bool) $request->input('zid_integration_enabled')
             : true;
+        $woocommerceIntegrationEnabled = $request->has('woocommerce_integration_enabled')
+            ? (bool) $request->input('woocommerce_integration_enabled')
+            : true;
 
         $newSubscriptionPlan = SubscriptionPlan::create([
             'name' => $request->input('name'),
@@ -70,7 +73,8 @@ class SubscriptionPlanService
                 'addons' => $request->input('addons', []),
                 'salla_integration_enabled' => $sallaIntegrationEnabled,
                 'shopify_integration_enabled' => $shopifyIntegrationEnabled,
-                'zid_integration_enabled' => $zidIntegrationEnabled
+                'zid_integration_enabled' => $zidIntegrationEnabled,
+                'woocommerce_integration_enabled' => $woocommerceIntegrationEnabled
             ]),
         ]);
 
@@ -116,6 +120,9 @@ class SubscriptionPlanService
         $metadata['zid_integration_enabled'] = $request->has('zid_integration_enabled')
             ? (bool) $request->input('zid_integration_enabled')
             : ($metadata['zid_integration_enabled'] ?? true);
+        $metadata['woocommerce_integration_enabled'] = $request->has('woocommerce_integration_enabled')
+            ? (bool) $request->input('woocommerce_integration_enabled')
+            : ($metadata['woocommerce_integration_enabled'] ?? true);
 
         $plan->name = $request->input('name');
         $plan->price = $request->input('price');
