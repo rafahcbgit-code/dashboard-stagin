@@ -101,6 +101,21 @@ class PluginController extends BaseController
         return Inertia::render('User/Settings/ZidIntegrationOverview', $context);
     }
 
+    public function wooCommerceSettings(Request $request)
+    {
+        $organizationId = (int) session()->get('current_organization');
+
+        return Inertia::render('User/Settings/WooCommerceIntegrationOverview', [
+            'title' => __('WooCommerce Integration'),
+            'modules' => Addon::get(),
+            'woocommerceIntegration' => $this->wooCommerceIntegrationService->getForOrganization($organizationId),
+            'woocommerceWebhookSubscriptions' => WooCommerceWebhookSubscription::where('organization_id', $organizationId)
+                ->get(['topic', 'status', 'webhook_id'])
+                ->map(fn ($item) => $item->toArray()),
+            'woocommerceAutomationsUrl' => route('woocommerce.automations.index'),
+        ]);
+    }
+
     private function buildZidIntegrationContext(int $organizationId): array
     {
         $subscription = Subscription::with('plan')->where('organization_id', $organizationId)->first();

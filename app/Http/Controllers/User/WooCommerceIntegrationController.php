@@ -59,7 +59,7 @@ class WooCommerceIntegrationController extends BaseController
                 'message' => __('WooCommerce connection succeeded.'),
             ]);
         } catch (\Throwable $exception) {
-            Log::warning('WooCommerce test connection failed', [
+            Log::channel('woocommerce')->warning('WooCommerce test connection failed', [
                 'organization_id' => $organizationId,
                 'error' => $exception->getMessage(),
             ]);
@@ -121,7 +121,7 @@ class WooCommerceIntegrationController extends BaseController
                 ],
             ]);
         } catch (\Throwable $exception) {
-            Log::warning('WooCommerce subscription creation failed', [
+            Log::channel('woocommerce')->warning('WooCommerce subscription creation failed', [
                 'organization_id' => $organizationId,
                 'error' => $exception->getMessage(),
             ]);
@@ -162,7 +162,7 @@ class WooCommerceIntegrationController extends BaseController
                 'message' => __('WooCommerce subscription deleted successfully.'),
             ]);
         } catch (\Throwable $exception) {
-            Log::warning('WooCommerce subscription deletion failed', [
+            Log::channel('woocommerce')->warning('WooCommerce subscription deletion failed', [
                 'organization_id' => $organizationId,
                 'topic' => $topic,
                 'error' => $exception->getMessage(),

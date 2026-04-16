@@ -54,7 +54,7 @@ class ProcessWooCommerceWebhookDeliveryJob implements ShouldQueue
 
         if ($existing) {
             $existing->increment('attempts');
-            Log::info('WooCommerce webhook duplicate ignored', [
+            Log::channel('woocommerce')->info('WooCommerce webhook duplicate ignored', [
                 'payload_hash' => $payloadHash,
                 'webhook_id' => $this->webhookId,
                 'organization_id' => $this->organizationId,
@@ -78,7 +78,7 @@ class ProcessWooCommerceWebhookDeliveryJob implements ShouldQueue
         ]);
 
         if (!$stored) {
-            Log::warning('WooCommerce webhook could not be stored', [
+            Log::channel('woocommerce')->warning('WooCommerce webhook could not be stored', [
                 'payload_hash' => $payloadHash,
                 'webhook_id' => $this->webhookId,
             ]);
@@ -100,7 +100,7 @@ class ProcessWooCommerceWebhookDeliveryJob implements ShouldQueue
 
         HandleWooCommerceWebhookDeliveryJob::dispatch($stored->id);
 
-        Log::info('WooCommerce webhook stored', [
+        Log::channel('woocommerce')->info('WooCommerce webhook stored', [
             'webhook_id' => $this->webhookId,
             'topic' => $this->topic,
             'organization_id' => $this->organizationId,

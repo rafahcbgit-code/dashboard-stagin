@@ -12,9 +12,14 @@
                         <span class="ltr:ml-1 rtl:mr-1 mt-1">{{ $t('Automate WhatsApp replies for WooCommerce webhooks') }}</span>
                     </p>
                 </div>
-                <Link href="/settings/plugins" class="px-3 py-2 rounded-md bg-white shadow-sm text-sm text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50">
-                    {{ $t('Back to Plugins') }}
-                </Link>
+                <div class="flex items-center gap-2">
+                    <a href="/settings/woocommerce/message-logs" class="px-3 py-2 rounded-md bg-white shadow-sm text-sm text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50">
+                        {{ $t('Message Logs') }}
+                    </a>
+                    <Link href="/settings/plugins" class="px-3 py-2 rounded-md bg-white shadow-sm text-sm text-gray-900 ring-1 ring-inset ring-gray-300 hover:bg-gray-50">
+                        {{ $t('Back to Plugins') }}
+                    </Link>
+                </div>
             </div>
 
             <div class="bg-white border border-slate-200 rounded-lg p-6">
@@ -36,7 +41,7 @@
                         <div v-if="errors.template_id" class="form-error text-[#b91c1c] text-xs mt-1">{{ errors.template_id }}</div>
                     </div>
 
-                    <div>
+                    <!-- <div>
                         <label class="block text-sm leading-6 text-gray-900 mb-2">{{ $t('Recipient phone path') }}</label>
                         <input
                             type="text"
@@ -47,7 +52,7 @@
                             {{ errors.recipient_phone_payload_path }}
                         </div>
                         <p class="text-xs text-gray-500 mt-1">{{ $t('Example: billing.phone or shipping.phone') }}</p>
-                    </div>
+                    </div> -->
                 </div>
 
                 <div class="mt-6 flex items-center justify-between">
@@ -131,7 +136,7 @@
                         <div v-if="addToCartErrors.template_id" class="form-error text-[#b91c1c] text-xs mt-1">{{ addToCartErrors.template_id }}</div>
                     </div>
 
-                    <div>
+                    <!-- <div>
                         <label class="block text-sm leading-6 text-gray-900 mb-2">{{ $t('Recipient phone path') }}</label>
                         <input
                             type="text"
@@ -142,7 +147,7 @@
                             {{ addToCartErrors.recipient_phone_payload_path }}
                         </div>
                         <p class="text-xs text-gray-500 mt-1">{{ $t('Example: chatberry_add_to_cart.customer.billing.phone') }}</p>
-                    </div>
+                    </div> -->
 
                     <div>
                         <label class="block text-sm leading-6 text-gray-900 mb-2">{{ $t('Send after (hours)') }}</label>
@@ -234,6 +239,50 @@
                     </div>
                 </div>
 
+                <div class="mt-6 grid grid-cols-1 md:grid-cols-4 gap-3 border border-slate-200 rounded-lg p-3 bg-slate-50">
+                    <div>
+                        <label class="block text-sm leading-6 text-gray-900 mb-1">{{ $t('Rule Status') }}</label>
+                        <select
+                            v-model="ruleForm.status"
+                            class="w-full border rounded-md px-3 py-2 focus:ring-1 focus:ring-primary focus:border-primary outline-none"
+                        >
+                            <option v-for="status in orderUpdatedStatuses" :key="status" :value="status">
+                                {{ status }}
+                            </option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="block text-sm leading-6 text-gray-900 mb-1">{{ $t('Rule Template') }}</label>
+                        <BaseListbox v-model="ruleForm.template_id" :options="templates" :placeholder="$t('Select template')" />
+                    </div>
+                    <div class="md:col-span-2 flex items-end gap-2">
+                        <button
+                            type="button"
+                            class="inline-flex items-center gap-2 px-4 py-2 bg-primary text-white text-sm rounded-md hover:shadow-md disabled:opacity-50"
+                            :disabled="ruleSaving || !ruleForm.status"
+                            @click="saveOrderUpdatedRule"
+                        >
+                            <span v-if="ruleSaving">{{ $t('Saving...') }}</span>
+                            <span v-else>{{ $t('Add/Update Rule') }}</span>
+                        </button>
+                        <span v-if="ruleMessage" class="text-xs text-emerald-700">{{ ruleMessage }}</span>
+                        <span v-if="ruleError" class="text-xs text-rose-700">{{ ruleError }}</span>
+                    </div>
+                </div>
+
+                <div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-2">
+                    <div
+                        v-for="status in orderUpdatedStatuses"
+                        :key="`rule-${status}`"
+                        class="flex items-center justify-between border rounded-md px-3 py-2 text-sm"
+                    >
+                        <span class="font-medium">{{ status }}</span>
+                        <span class="text-xs text-slate-600">
+                            {{ orderUpdatedStatusTemplateName(status) }}
+                        </span>
+                    </div>
+                </div>
+
                 <div class="mt-6 grid grid-cols-1 md:grid-cols-3 gap-6">
                     <div>
                         <label class="block text-sm leading-6 text-gray-900 mb-2">{{ $t('Order status') }}</label>
@@ -254,7 +303,7 @@
                         <div v-if="updatedErrors.template_id" class="form-error text-[#b91c1c] text-xs mt-1">{{ updatedErrors.template_id }}</div>
                     </div>
 
-                    <div>
+                    <!-- <div>
                         <label class="block text-sm leading-6 text-gray-900 mb-2">{{ $t('Recipient phone path') }}</label>
                         <input
                             type="text"
@@ -265,7 +314,7 @@
                             {{ updatedErrors.recipient_phone_payload_path }}
                         </div>
                         <p class="text-xs text-gray-500 mt-1">{{ $t('Example: billing.phone or shipping.phone') }}</p>
-                    </div>
+                    </div> -->
                 </div>
 
                 <div class="mt-6 flex items-center justify-between">
@@ -393,6 +442,7 @@ const configuredOrderUpdatedStatus = orderUpdatedStatuses.find((status) => {
     const config = props.orderUpdatedStatusConfigs?.[status];
     return !!config?.enabled;
 });
+const statusConfigsLocal = reactive({ ...(props.orderUpdatedStatusConfigs ?? {}) });
 
 const form = reactive({
     enabled: !!props.setting.enabled,
@@ -430,6 +480,15 @@ const addToCartLoadingFields = ref(false);
 const addToCartErrors = reactive({});
 
 const selectedOrderUpdatedStatus = ref(configuredOrderUpdatedStatus ?? orderUpdatedStatuses[0] ?? 'completed');
+const ruleForm = reactive({
+    status: configuredOrderUpdatedStatus ?? orderUpdatedStatuses[0] ?? 'completed',
+    template_id: null,
+});
+const ruleSaving = ref(false);
+const ruleMessage = ref('');
+const ruleError = ref('');
+ruleForm.template_id = statusConfigsLocal?.[ruleForm.status]?.template_id ?? null;
+
 const updatedForm = reactive({
     enabled: false,
     template_id: null,
@@ -483,6 +542,15 @@ const fieldLabel = (field) => {
     const sampleText = stringifySample(sample);
 
     return sampleText ? `${label} - ${sampleText}` : label;
+};
+
+const orderUpdatedStatusTemplateName = (status) => {
+    const config = statusConfigsLocal?.[status];
+    if (!config?.enabled || !config?.template_id) {
+        return 'Not configured';
+    }
+    const template = (props.templates ?? []).find((t) => Number(t.value) === Number(config.template_id));
+    return template?.label ?? `Template #${config.template_id}`;
 };
 
 const fetchTemplateVariables = async (templateId) => {
@@ -565,6 +633,15 @@ const applyUpdatedConfig = (payload) => {
             updatedMappingsLocal[variable.key] = '';
         }
     }
+
+    if (selectedOrderUpdatedStatus.value) {
+        statusConfigsLocal[selectedOrderUpdatedStatus.value] = {
+            ...(statusConfigsLocal[selectedOrderUpdatedStatus.value] ?? {}),
+            enabled: !!updatedForm.enabled,
+            template_id: updatedForm.template_id ?? null,
+            recipient_phone_payload_path: updatedForm.recipient_phone_payload_path ?? 'billing.phone',
+        };
+    }
 };
 
 const loadOrderUpdatedStatusConfig = async (status) => {
@@ -587,8 +664,20 @@ watch(() => selectedOrderUpdatedStatus.value, async (status) => {
     if (!status) {
         return;
     }
+    ruleForm.status = status;
     await loadOrderUpdatedStatusConfig(status);
 }, { immediate: true });
+
+watch(() => ruleForm.status, async (status) => {
+    if (!status) {
+        return;
+    }
+    if (selectedOrderUpdatedStatus.value !== status) {
+        selectedOrderUpdatedStatus.value = status;
+        await loadOrderUpdatedStatusConfig(status);
+    }
+    ruleForm.template_id = statusConfigsLocal?.[status]?.template_id ?? null;
+});
 
 watch(() => updatedForm.template_id, async (newId, oldId) => {
     if (newId === oldId) {
@@ -596,6 +685,41 @@ watch(() => updatedForm.template_id, async (newId, oldId) => {
     }
     await loadUpdatedTemplateVariables(newId);
 });
+
+const saveOrderUpdatedRule = async () => {
+    if (!ruleForm.status) {
+        return;
+    }
+
+    ruleSaving.value = true;
+    ruleMessage.value = '';
+    ruleError.value = '';
+
+    try {
+        const currentConfig = statusConfigsLocal?.[ruleForm.status] ?? {};
+        await axios.post(`/settings/woocommerce/automations/order-updated/${encodeURIComponent(ruleForm.status)}`, {
+            enabled: true,
+            template_id: ruleForm.template_id,
+            recipient_phone_payload_path: currentConfig.recipient_phone_payload_path ?? 'billing.phone',
+            quick_rule: true,
+            mappings: [],
+        });
+
+        statusConfigsLocal[ruleForm.status] = {
+            ...(statusConfigsLocal[ruleForm.status] ?? {}),
+            enabled: true,
+            template_id: ruleForm.template_id,
+        };
+
+        selectedOrderUpdatedStatus.value = ruleForm.status;
+        await loadOrderUpdatedStatusConfig(ruleForm.status);
+        ruleMessage.value = 'Rule saved';
+    } catch (e) {
+        ruleError.value = e?.response?.data?.message ?? 'Failed to save rule';
+    } finally {
+        ruleSaving.value = false;
+    }
+};
 
 const refreshWebhookFields = async () => {
     loadingFields.value = true;

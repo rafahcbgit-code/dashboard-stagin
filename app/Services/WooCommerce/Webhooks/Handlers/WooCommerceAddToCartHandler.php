@@ -82,7 +82,7 @@ class WooCommerceAddToCartHandler implements WooCommerceWebhookEventHandlerInter
 
             HandleWooCommerceWebhookDeliveryJob::dispatch($delivery->id)->delay($sendAt);
 
-            Log::info('WooCommerce add_to_cart automation: scheduled', [
+            Log::channel('woocommerce')->info('WooCommerce add_to_cart automation: scheduled', [
                 'delivery_id' => $delivery->id,
                 'organization_id' => $delivery->organization_id,
                 'send_at' => $sendAt->toDateTimeString(),
@@ -193,7 +193,7 @@ class WooCommerceAddToCartHandler implements WooCommerceWebhookEventHandlerInter
             'error' => null,
         ]);
 
-        Log::info('WooCommerce add_to_cart automation: message sent', [
+        Log::channel('woocommerce')->info('WooCommerce add_to_cart automation: message sent', [
             'delivery_id' => $delivery->id,
             'organization_id' => $delivery->organization_id,
             'contact_id' => $contact->id,

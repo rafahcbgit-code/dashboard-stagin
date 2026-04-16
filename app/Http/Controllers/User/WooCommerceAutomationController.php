@@ -410,6 +410,7 @@ class WooCommerceAutomationController extends BaseController
             'enabled' => ['required', 'boolean'],
             'template_id' => ['nullable', 'integer'],
             'recipient_phone_payload_path' => ['nullable', 'string', 'max:512'],
+            'quick_rule' => ['nullable', 'boolean'],
             'mappings' => ['array'],
             'mappings.*.template_variable' => ['required', 'string', 'max:191'],
             'mappings.*.payload_path' => ['required', 'string', 'max:512'],
@@ -425,6 +426,26 @@ class WooCommerceAutomationController extends BaseController
                 ->where('status', 'APPROVED')
                 ->whereNull('deleted_at')
                 ->firstOrFail();
+        }
+
+        $quickRule = (bool) ($validated['quick_rule'] ?? false);
+
+        $setting = WooCommerceWebhookEventSetting::updateOrCreate(
+            [
+                'organization_id' => $organizationId,
+                'event' => $this->orderUpdatedEventKey($status),
+            ],
+            [
+                'enabled' => (bool) $validated['enabled'],
+                'template_id' => $templateId,
+                'recipient_phone_payload_path' => $validated['recipient_phone_payload_path'] ?? null,
+            ]
+        );
+
+        if ($quickRule) {
+            return response()->json([
+                'success' => true,
+            ]);
         }
 
         $requiredKeys = [];
@@ -449,18 +470,6 @@ class WooCommerceAutomationController extends BaseController
                 ], 422);
             }
         }
-
-        $setting = WooCommerceWebhookEventSetting::updateOrCreate(
-            [
-                'organization_id' => $organizationId,
-                'event' => $this->orderUpdatedEventKey($status),
-            ],
-            [
-                'enabled' => (bool) $validated['enabled'],
-                'template_id' => $templateId,
-                'recipient_phone_payload_path' => $validated['recipient_phone_payload_path'] ?? null,
-            ]
-        );
 
         $setting->mappings()->delete();
 

@@ -212,7 +212,7 @@ class WooCommerceOrderUpdatedHandler implements WooCommerceWebhookEventHandlerIn
         $state->last_seen_at = now();
         $state->save();
 
-        Log::info('WooCommerce order.updated automation: message sent', [
+        Log::channel('woocommerce')->info('WooCommerce order.updated automation: message sent', [
             'delivery_id' => $delivery->id,
             'organization_id' => $delivery->organization_id,
             'contact_id' => $contact->id,

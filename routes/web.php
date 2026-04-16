@@ -271,6 +271,8 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::post('/settings/woocommerce/automations/order-updated/{status}', [WooCommerceAutomationController::class, 'updateOrderUpdated'])
                     ->where('status', 'pending|processing|on-hold|completed|cancelled|refunded|failed')
                     ->name('woocommerce.automations.order_updated.update');
+                Route::get('/settings/woocommerce/message-logs', [App\Http\Controllers\User\WooCommerceMessageLogController::class, 'index'])->name('woocommerce.logs.index');
+                Route::get('/settings/woocommerce/message-logs/export', [App\Http\Controllers\User\WooCommerceMessageLogController::class, 'export'])->name('woocommerce.logs.export');
 
                 Route::post('/settings/salla/customer-sync', [App\Http\Controllers\Salla\CustomerSyncController::class, 'sync'])->name('salla.customer.sync');
 
@@ -356,6 +358,7 @@ Route::middleware(['auth:user'])->group(function () {
                     Route::delete('/settings/plugins/woocommerce/subscriptions/{topic}', [WooCommerceIntegrationController::class, 'deleteSubscription'])
                         ->where('topic', 'order\\.created|order\\.updated|action\\.woocommerce_order_status_changed|action\\.woocommerce_add_to_cart')
                         ->name('settings.plugins.woocommerce.subscription.delete');
+                    Route::get('/settings/woocommerce', [App\Http\Controllers\User\PluginController::class, 'wooCommerceSettings'])->name('settings.woocommerce');
                     Route::get('/settings/zid', [App\Http\Controllers\User\PluginController::class, 'zidSettings'])->name('settings.zid');
                     Route::get('/plugin/download/{name}', [App\Http\Controllers\User\PluginController::class, 'download'])->name('plugin.download');
                     Route::get('/settings/whatsapp/refresh', [App\Http\Controllers\User\SettingController::class, 'refreshWhatsappData']);

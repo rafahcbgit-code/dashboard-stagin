@@ -142,7 +142,7 @@ class WooCommerceIntegrationService
         string $method,
         array $extra = []
     ): void {
-        Log::info('WooCommerce request', [
+        Log::channel('woocommerce')->info('WooCommerce request', [
             'organization_id' => $integration->organization_id,
             'context' => $context,
             'method' => $method,
@@ -159,7 +159,7 @@ class WooCommerceIntegrationService
         string $context,
         $response
     ): void {
-        Log::info('WooCommerce response', [
+        Log::channel('woocommerce')->info('WooCommerce response', [
             'organization_id' => $integration->organization_id,
             'context' => $context,
             'url' => $url,

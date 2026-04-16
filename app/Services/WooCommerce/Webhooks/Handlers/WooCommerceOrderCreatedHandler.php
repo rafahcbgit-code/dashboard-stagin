@@ -165,7 +165,7 @@ class WooCommerceOrderCreatedHandler implements WooCommerceWebhookEventHandlerIn
             );
         }
 
-        Log::info('WooCommerce order.created automation: message sent', [
+        Log::channel('woocommerce')->info('WooCommerce order.created automation: message sent', [
             'delivery_id' => $delivery->id,
             'organization_id' => $delivery->organization_id,
             'contact_id' => $contact->id,

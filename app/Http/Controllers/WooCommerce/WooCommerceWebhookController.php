@@ -18,7 +18,7 @@ class WooCommerceWebhookController extends Controller
         $topic = $request->header('x-wc-webhook-topic');
         $signature = $request->header('x-wc-webhook-signature');
 
-        Log::info('WooCommerce webhook raw request', [
+        Log::channel('woocommerce')->info('WooCommerce webhook raw request', [
             'webhook_id' => $webhookId,
             'topic' => $topic,
             'headers' => $request->headers->all(),
@@ -26,7 +26,7 @@ class WooCommerceWebhookController extends Controller
         ]);
 
         if (!$webhookId) {
-            Log::warning('WooCommerce webhook missing webhook id', [
+            Log::channel('woocommerce')->warning('WooCommerce webhook missing webhook id', [
                 'topic' => $topic,
                 'headers' => $request->headers->all(),
             ]);
@@ -37,7 +37,7 @@ class WooCommerceWebhookController extends Controller
         $subscription = WooCommerceWebhookSubscription::where('webhook_id', $webhookId)->first();
 
         if (!$subscription || !$subscription->is_active) {
-            Log::warning('WooCommerce webhook ignored (subscription not found/inactive)', [
+            Log::channel('woocommerce')->warning('WooCommerce webhook ignored (subscription not found/inactive)', [
                 'webhook_id' => $webhookId,
                 'topic' => $topic,
             ]);
@@ -47,7 +47,7 @@ class WooCommerceWebhookController extends Controller
 
         $integration = $subscription->integration;
         if (!$integration || !$integration->webhook_secret) {
-            Log::warning('WooCommerce webhook ignored (missing integration secret)', [
+            Log::channel('woocommerce')->warning('WooCommerce webhook ignored (missing integration secret)', [
                 'webhook_id' => $webhookId,
                 'topic' => $topic,
                 'subscription_id' => $subscription->id,
@@ -60,7 +60,7 @@ class WooCommerceWebhookController extends Controller
 
         /*$expectedSignature = base64_encode(hash_hmac('sha256', $rawBody, $integration->webhook_secret, true));
         if (!$signature || !hash_equals($expectedSignature, $signature)) {
-            Log::warning('WooCommerce webhook signature mismatch', [
+            Log::channel('woocommerce')->warning('WooCommerce webhook signature mismatch', [
                 'webhook_id' => $webhookId,
                 'topic' => $topic,
                 'expected' => Str::limit($expectedSignature, 16, '...'),
@@ -71,14 +71,14 @@ class WooCommerceWebhookController extends Controller
         }*/
 
         if ($topic && $subscription->topic && $subscription->topic !== $topic) {
-            Log::warning('WooCommerce webhook topic mismatch', [
+            Log::channel('woocommerce')->warning('WooCommerce webhook topic mismatch', [
                 'webhook_id' => $webhookId,
                 'received_topic' => $topic,
                 'expected_topic' => $subscription->topic,
             ]);
         }
 
-        Log::info('WooCommerce webhook received', [
+        Log::channel('woocommerce')->info('WooCommerce webhook received', [
             'webhook_id' => $webhookId,
             'topic' => $topic,
             'organization_id' => $subscription->organization_id,

@@ -76,7 +76,7 @@ class HandleWooCommerceWebhookDeliveryJob implements ShouldQueue
                 ]);
             }
         } catch (Throwable $e) {
-            Log::error('WooCommerce webhook processing failed', [
+            Log::channel('woocommerce')->error('WooCommerce webhook processing failed', [
                 'delivery_id' => $delivery->id,
                 'organization_id' => $delivery->organization_id,
                 'error' => $e->getMessage(),
