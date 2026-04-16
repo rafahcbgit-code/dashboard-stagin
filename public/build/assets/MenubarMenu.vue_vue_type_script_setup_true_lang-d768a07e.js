@@ -1,1 +1,0 @@
-import{G as s}from"./index-094bd501.js";import{d as o,e as t,P as n,Q as p,q as u,ai as c,aj as i,M as l}from"./vue-dbd0f6ee.js";const d=o({__name:"MenubarMenu",props:{value:{}},setup(e){const a=e;return(r,m)=>(t(),n(l(s),c(i(a)),{default:p(()=>[u(r.$slots,"default")]),_:3},16))}});export{d as _};
