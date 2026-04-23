@@ -40,6 +40,10 @@ class WooCommerceOrderCreatedFieldSchema
                 'path' => 'billing.first_name',
             ],
             [
+                'label' => 'Billing Address 1',
+                'path' => 'billing.address_1',
+            ],
+            [
                 'label' => 'Billing City',
                 'path' => 'billing.city',
             ],
