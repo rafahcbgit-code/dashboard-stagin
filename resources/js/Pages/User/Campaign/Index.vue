@@ -32,7 +32,7 @@
                 </div>
             </div>
 
-            <div class="flex flex-wrap items-center gap-2 mt-4">
+            <div v-if="!props.trial" class="flex flex-wrap items-center gap-2 mt-4">
                 <div class="relative">
                     <select
                         v-model="selectedRange"
@@ -105,7 +105,7 @@
                 </button>
             </div>
 
-            <div class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 my-6">
+            <div v-if="!props.trial" class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 my-6">
                 <div v-for="metric in campaignMetrics" :key="metric.key" class="bg-gray-100 p-4 rounded">
                     <div class="flex items-center justify-between">
                         <h2 class="text-2xl font-bold text-slate-800">{{ metric.value.toLocaleString() }}</h2>
