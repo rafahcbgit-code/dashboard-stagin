@@ -284,6 +284,8 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::get('/reports/agent', [App\Http\Controllers\User\ReportController::class, 'agentReports'])->name('reports.agent');
                 Route::get('/reports/general', [App\Http\Controllers\User\ReportController::class, 'index'])->name('reports.general');
                 Route::get('/reports/label-count', [App\Http\Controllers\User\ReportController::class, 'countContactsByLabel']);
+                Route::get('/reports/campaign-analytics', [App\Http\Controllers\User\ReportController::class, 'campaignAnalytics'])->name('reports.campaign-analytics');
+                Route::get('/reports/campaign-analytics/export', [App\Http\Controllers\User\ReportController::class, 'exportCampaignAnalytics'])->name('reports.campaign-analytics.export');
 
                 Route::get('/tickets/{status}', [App\Http\Controllers\User\ChatTicketController::class, 'index']);
                 Route::put('/tickets/{uuid}/update', [App\Http\Controllers\User\ChatTicketController::class, 'update']);
@@ -312,6 +314,7 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::get('/campaigns/{uuid?}', [App\Http\Controllers\User\CampaignController::class, 'index'])->name('campaigns');
                 Route::post('/campaigns', [App\Http\Controllers\User\CampaignController::class, 'store']);
                 Route::get('/campaigns/export/{uuid?}', [App\Http\Controllers\User\CampaignController::class, 'export']);
+                Route::get('/campaigns/reports/export-statuses', [App\Http\Controllers\User\CampaignController::class, 'exportCampaignStatuses'])->name('campaigns.export-statuses');
                 Route::delete('/campaigns/{uuid?}', [App\Http\Controllers\User\CampaignController::class, 'delete']);
                 Route::post('/campaigns/{uuid}/cancel', [App\Http\Controllers\User\CampaignController::class, 'cancel'])->name('campaigns.cancel');
 
