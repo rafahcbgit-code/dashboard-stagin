@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('woocommerce_integrations', function (Blueprint $table) {
-            $table->string('webhook_secret')->nullable()->after('domain_link');
+            $table->text('webhook_secret')->nullable()->after('domain_link');
         });
     }
 
