@@ -28,12 +28,24 @@ class WooCommerceOrderCreatedFieldSchema
                 'path' => 'total',
             ],
             [
+                'label' => 'Total Tax',
+                'path' => 'total_tax',
+            ],
+            [
                 'label' => 'Customer ID',
                 'path' => 'customer_id',
             ],
             [
                 'label' => 'Billing First Name',
                 'path' => 'billing.first_name',
+            ],
+            [
+                'label' => 'Billing City',
+                'path' => 'billing.city',
+            ],
+            [
+                'label' => 'Billing Country',
+                'path' => 'billing.country',
             ],
             [
                 'label' => 'Billing Last Name',
