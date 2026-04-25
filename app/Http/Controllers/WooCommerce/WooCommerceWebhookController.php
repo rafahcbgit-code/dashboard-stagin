@@ -17,10 +17,13 @@ class WooCommerceWebhookController extends Controller
         $webhookId = $request->header('x-wc-webhook-id');
         $topic = $request->header('x-wc-webhook-topic');
         $signature = $request->header('x-wc-webhook-signature');
+        $source = $request->header('x-wc-webhook-source');
+        $sourceHost = $this->normalizeHost($source);
 
         Log::channel('woocommerce')->info('WooCommerce webhook raw request', [
             'webhook_id' => $webhookId,
             'topic' => $topic,
+            'source' => $source,
             'headers' => $request->headers->all(),
             'body' => $rawBody,
         ]);
@@ -34,12 +37,28 @@ class WooCommerceWebhookController extends Controller
             return response()->json(['status' => 'ignored'], 200);
         }
 
-        $subscription = WooCommerceWebhookSubscription::where('webhook_id', $webhookId)->first();
+        $subscriptions = WooCommerceWebhookSubscription::with('integration')
+            ->where('webhook_id', $webhookId)
+            ->where('is_active', true)
+            ->get();
 
-        if (!$subscription || !$subscription->is_active) {
+        $subscription = $subscriptions->first(function (WooCommerceWebhookSubscription $item) use ($sourceHost) {
+            $domainHost = $this->normalizeHost($item->integration?->domain_link);
+            return $sourceHost !== null && $domainHost !== null && $sourceHost === $domainHost;
+        });
+
+        if (!$subscription) {
             Log::channel('woocommerce')->warning('WooCommerce webhook ignored (subscription not found/inactive)', [
                 'webhook_id' => $webhookId,
                 'topic' => $topic,
+                'source' => $source,
+                'source_host' => $sourceHost,
+                'candidate_count' => $subscriptions->count(),
+                'candidate_hosts' => $subscriptions
+                    ->map(fn (WooCommerceWebhookSubscription $item) => $this->normalizeHost($item->integration?->domain_link))
+                    ->filter()
+                    ->values()
+                    ->all(),
             ]);
 
             return response()->json(['status' => 'ignored'], 200);
@@ -96,5 +115,25 @@ class WooCommerceWebhookController extends Controller
         );
 
         return response()->json(['status' => 'ok'], 200);
+    }
+
+    private function normalizeHost(?string $url): ?string
+    {
+        if (!is_string($url) || trim($url) === '') {
+            return null;
+        }
+
+        $trimmed = trim($url);
+        $host = parse_url($trimmed, PHP_URL_HOST);
+
+        if (!is_string($host) || $host === '') {
+            $host = parse_url('https://' . ltrim($trimmed, '/'), PHP_URL_HOST);
+        }
+
+        if (!is_string($host) || $host === '') {
+            return null;
+        }
+
+        return mb_strtolower($host);
     }
 }
