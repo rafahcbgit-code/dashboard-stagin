@@ -268,4 +268,60 @@ class ContactController extends Controller
             ], 500);
         }
     }
+
+    /**
+     * Toggle block status for contact
+     * PUT /api/v1/contacts/{contact_uuid}/block
+     *
+     * Request body:
+     * - enabled: boolean (required)
+     */
+    public function toggleBlock(Request $request, $contactUuid)
+    {
+        try {
+            $organizationId = $request->organization_id;
+
+            $validator = Validator::make($request->all(), [
+                'enabled' => 'required|boolean',
+            ]);
+
+            if ($validator->fails()) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Validation error',
+                    'errors' => $validator->errors(),
+                ], 422);
+            }
+
+            $contact = Contact::where('uuid', $contactUuid)
+                ->where('organization_id', $organizationId)
+                ->whereNull('deleted_at')
+                ->first();
+
+            if (! $contact) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Contact not found',
+                ], 404);
+            }
+
+            $contact->is_blocked = $request->input('enabled') ? 1 : 0;
+            $contact->updated_at = now();
+            $contact->save();
+
+            return response()->json([
+                'success' => true,
+                'message' => 'Block status updated successfully',
+                'data' => [
+                    'is_blocked' => (bool) $contact->is_blocked,
+                ],
+            ], 200);
+        } catch (\Exception $e) {
+            return response()->json([
+                'success' => false,
+                'message' => 'Failed to update block status',
+                'error' => $e->getMessage(),
+            ], 500);
+        }
+    }
 }

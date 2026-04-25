@@ -109,6 +109,7 @@ class ApiController extends Controller
         }
 
         try {
+            $request->merge(['contact_source' => 'api']);
             $contactService = new ContactService($request->organization);
             $contact = $contactService->store($request, $uuid);
 
@@ -505,6 +506,7 @@ class ApiController extends Controller
             $contact->last_name = $request->last_name;
             $contact->email = $request->email;
             $contact->phone = $phone;
+            $contact->contact_source = 'api';
             $contact->created_by = 0;
             $contact->save();
         }
@@ -589,6 +591,7 @@ class ApiController extends Controller
             $contact->last_name = $request->last_name;
             $contact->email = $request->email;
             $contact->phone = $phone;
+            $contact->contact_source = 'api';
             $contact->created_by = 0;
             $contact->save();
         }
@@ -668,6 +671,7 @@ class ApiController extends Controller
             $contact->last_name = $request->last_name;
             $contact->email = $request->email;
             $contact->phone = $phone;
+            $contact->contact_source = 'api';
             $contact->created_by = 0;
             $contact->save();
         }

@@ -1,5 +1,6 @@
 <script setup>
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import axios from 'axios';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import debounce from 'lodash/debounce';
 import Modal from '@/Components/Modal.vue';
@@ -26,7 +27,9 @@ const query = reactive({
     search: props.filters?.search ?? '',
     group_id: props.filters?.group_id ?? '',
     label_id: props.filters?.label_id ?? '',
+    country: props.filters?.country ?? '',
     subscription_status: props.filters?.subscription_status ?? '',
+    blocked_status: props.filters?.blocked_status ?? '',
     no_group: props.filters?.no_group === '1' || props.filters?.no_group === true,
     no_label: props.filters?.no_label === '1' || props.filters?.no_label === true,
     created_from: props.filters?.created_from ?? '',
@@ -37,6 +40,7 @@ const query = reactive({
 });
 
 const isFilterModalOpen = ref(false);
+const isGroupsModalOpen = ref(false);
 const isColumnsMenuOpen = ref(false);
 const columnsMenuRef = ref(null);
 const selectedIds = ref([]);
@@ -46,6 +50,11 @@ const bulkForm = reactive({
     label_ids: [],
     subscription_status: '1',
 });
+const groups = ref([]);
+const createGroupForm = reactive({ name: '' });
+const isCreatingGroup = ref(false);
+const createGroupError = ref('');
+const deletingGroupUuid = ref('');
 
 const defaultColumns = {
     name: true,
@@ -54,6 +63,7 @@ const defaultColumns = {
     groups: true,
     labels: true,
     subscription: true,
+    contact_source: true,
     country: true,
     custom_attributes: true,
     created_at: true,
@@ -85,6 +95,14 @@ watch(columns, (value) => {
 
     localStorage.setItem('advanced-contact-columns', JSON.stringify(value));
 }, { deep: true });
+
+watch(
+    () => props.contactGroups,
+    (value) => {
+        groups.value = Array.isArray(value) ? [...value] : [];
+    },
+    { immediate: true }
+);
 
 const loadSelectedIds = () => {
     if (typeof window === 'undefined') {
@@ -128,6 +146,7 @@ const runFilterRequest = (extra = {}) => {
         group_id: query.group_id || undefined,
         label_id: query.label_id || undefined,
         subscription_status: query.subscription_status || undefined,
+        blocked_status: query.blocked_status || undefined,
         country: query.country || undefined,
         no_group: query.no_group ? 1 : undefined,
         no_label: query.no_label ? 1 : undefined,
@@ -175,6 +194,7 @@ const clearFilters = () => {
         group_id: '',
         label_id: '',
         subscription_status: '',
+        blocked_status: '',
         country: '',
         no_group: false,
         no_label: false,
@@ -201,6 +221,115 @@ const applyFilters = () => {
     query.page = 1;
     runFilterRequest({ page: undefined });
     isFilterModalOpen.value = false;
+};
+
+const applyGroupFilter = (groupId = '') => {
+    query.group_id = groupId ? String(groupId) : '';
+    query.page = 1;
+    runFilterRequest({ page: undefined });
+    isGroupsModalOpen.value = false;
+};
+
+const createGroup = async () => {
+    createGroupError.value = '';
+    const name = (createGroupForm.name || '').trim();
+
+    if (!name) {
+        createGroupError.value = 'Group name is required.';
+        return;
+    }
+
+    isCreatingGroup.value = true;
+
+    try {
+        const response = await axios.post('/contact-groups', { name }, {
+            headers: {
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        });
+        const payload = response?.data ?? {};
+        const newGroup = payload?.data?.data
+            || payload?.data
+            || payload?.group
+            || payload?.contact_group
+            || null;
+        const newGroupId = newGroup?.id ?? newGroup?.attributes?.id ?? null;
+        const newGroupUuid = newGroup?.uuid ?? newGroup?.attributes?.uuid ?? null;
+        const newGroupName = newGroup?.name ?? newGroup?.attributes?.name ?? name;
+
+        createGroupForm.name = '';
+
+        if (newGroupId) {
+            if (!groups.value.some((group) => Number(group.id) === Number(newGroupId))) {
+                groups.value.unshift({
+                    id: newGroupId,
+                    uuid: newGroupUuid,
+                    name: newGroupName,
+                });
+            }
+
+            applyGroupFilter(newGroupId);
+        } else if (payload?.success === true || response?.status === 200 || response?.status === 201) {
+            // Fallback: creation succeeded but API returned an unexpected shape.
+            query.page = 1;
+            runFilterRequest({ page: undefined });
+            isGroupsModalOpen.value = false;
+        } else {
+            throw new Error('Failed to create group.');
+        }
+    } catch (error) {
+        const errors = error?.response?.data?.errors;
+        const firstError = errors && typeof errors === 'object'
+            ? Object.values(errors).flat()[0]
+            : null;
+        const rawResponse = error?.response?.data;
+        const statusCode = error?.response?.status;
+
+        createGroupError.value = firstError
+            || error?.response?.data?.message
+            || error?.message
+            || (statusCode ? `Request failed (${statusCode}).` : null)
+            || (typeof rawResponse === 'string' && rawResponse.trim() ? 'Unexpected server response.' : null)
+            || 'Failed to create group.';
+    } finally {
+        isCreatingGroup.value = false;
+    }
+};
+
+const deleteGroup = async (group) => {
+    if (!group?.uuid) {
+        return;
+    }
+
+    if (!confirm(`Delete group "${group.name}"?`)) {
+        return;
+    }
+
+    createGroupError.value = '';
+    deletingGroupUuid.value = String(group.uuid);
+
+    try {
+        await axios.delete(`/contact-groups/${group.uuid}`, {
+            headers: {
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        });
+
+        groups.value = groups.value.filter((item) => String(item.uuid) !== String(group.uuid));
+        bulkForm.group_ids = bulkForm.group_ids.filter((id) => Number(id) !== Number(group.id));
+
+        if (String(query.group_id) === String(group.id)) {
+            query.group_id = '';
+            query.page = 1;
+            runFilterRequest({ page: undefined });
+        }
+    } catch (error) {
+        createGroupError.value = error?.response?.data?.message || 'Failed to delete group.';
+    } finally {
+        deletingGroupUuid.value = '';
+    }
 };
 
 const parseAddress = (contact) => {
@@ -286,6 +415,10 @@ const runExport = () => {
     window.open(`/contacts/export?${params.toString()}`, '_blank');
 };
 
+const runExportAll = () => {
+    window.open('/contacts/export?scope=all', '_blank');
+};
+
 const toggleColumnsMenu = () => {
     isColumnsMenuOpen.value = !isColumnsMenuOpen.value;
 };
@@ -324,6 +457,8 @@ onBeforeUnmount(() => {
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
                     <Link href="/contacts/add" class="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white">{{ $t('Add Contact') }}</Link>
+                    <button type="button" class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700" @click="runExportAll">{{ $t('Export All') }}</button>
+                    <button type="button" class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700" @click="isGroupsModalOpen = true">{{ $t('Groups') }}</button>
                     <button type="button" class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700" @click="isFilterModalOpen = true">{{ $t('Advanced Filters') }}</button>
                 </div>
             </div>
@@ -338,6 +473,7 @@ onBeforeUnmount(() => {
                         <label class="mb-2 flex items-center gap-2 text-sm text-slate-700"><input v-model="columns.groups" type="checkbox"> {{ $t('Groups') }}</label>
                         <label class="mb-2 flex items-center gap-2 text-sm text-slate-700"><input v-model="columns.labels" type="checkbox"> {{ $t('Labels') }}</label>
                         <label class="mb-2 flex items-center gap-2 text-sm text-slate-700"><input v-model="columns.subscription" type="checkbox"> {{ $t('Subscription') }}</label>
+                        <label class="mb-2 flex items-center gap-2 text-sm text-slate-700"><input v-model="columns.contact_source" type="checkbox"> {{ $t('Contact Source') }}</label>
                         <label class="mb-2 flex items-center gap-2 text-sm text-slate-700"><input v-model="columns.country" type="checkbox"> {{ $t('Country') }}</label>
                         <label class="mb-2 flex items-center gap-2 text-sm text-slate-700"><input v-model="columns.custom_attributes" type="checkbox"> {{ $t('Custom Attributes') }}</label>
                         <label class="flex items-center gap-2 text-sm text-slate-700"><input v-model="columns.created_at" type="checkbox"> {{ $t('Created At') }}</label>
@@ -355,7 +491,7 @@ onBeforeUnmount(() => {
             <button type="button" class="rounded-md bg-white px-3 py-1.5 text-sm text-slate-700 ring-1 ring-slate-200" @click="bulkActionModal = 'add_label'">{{ $t('Add Labels') }}</button>
             <button type="button" class="rounded-md bg-white px-3 py-1.5 text-sm text-slate-700 ring-1 ring-slate-200" @click="bulkActionModal = 'remove_label'">{{ $t('Remove Labels') }}</button>
             <button type="button" class="rounded-md bg-white px-3 py-1.5 text-sm text-slate-700 ring-1 ring-slate-200" @click="bulkActionModal = 'change_subscription_status'">{{ $t('Change Subscription') }}</button>
-            <button type="button" class="rounded-md bg-white px-3 py-1.5 text-sm text-slate-700 ring-1 ring-slate-200" @click="runExport">{{ $t('Export') }}</button>
+            <button type="button" class="rounded-md bg-white px-3 py-1.5 text-sm text-slate-700 ring-1 ring-slate-200" @click="runExport">{{ $t('Export Selected') }}</button>
         </div>
 
         <div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
@@ -372,6 +508,7 @@ onBeforeUnmount(() => {
                             <th v-if="columns.groups" class="px-4 py-3">{{ $t('Groups') }}</th>
                             <th v-if="columns.labels" class="px-4 py-3">{{ $t('Labels') }}</th>
                             <th v-if="columns.subscription" class="px-4 py-3">{{ $t('Subscription') }}</th>
+                            <th v-if="columns.contact_source" class="px-4 py-3">{{ $t('Contact Source') }}</th>
                             <th v-if="columns.country" class="px-4 py-3">{{ $t('Country') }}</th>
                             <th v-if="columns.custom_attributes" class="px-4 py-3">{{ $t('Custom Attributes') }}</th>
                             <th v-if="columns.created_at" class="px-4 py-3">{{ $t('Created At') }}</th>
@@ -392,6 +529,11 @@ onBeforeUnmount(() => {
                             <td v-if="columns.subscription" class="px-4 py-3">
                                 <span class="rounded-full px-2 py-1 text-xs" :class="contact.is_subscribed ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'">
                                     {{ contact.is_subscribed ? $t('Subscribed') : $t('Unsubscribed') }}
+                                </span>
+                            </td>
+                            <td v-if="columns.contact_source" class="px-4 py-3">
+                                <span class="rounded-full px-2 py-1 text-xs bg-slate-100 text-slate-700">
+                                    {{ contact.contact_source || 'platform' }}
                                 </span>
                             </td>
                             <td v-if="columns.country" class="px-4 py-3">{{ parseAddress(contact).country || '-' }}</td>
@@ -419,7 +561,7 @@ onBeforeUnmount(() => {
             <label class="text-xs font-medium text-slate-500">{{ $t('Group') }}</label>
             <select v-model="query.group_id" class="rounded-md border border-slate-300 px-3 py-2 text-sm">
                 <option value="">{{ $t('All Groups') }}</option>
-                <option v-for="group in contactGroups" :key="group.id" :value="group.id">{{ group.name }}</option>
+                <option v-for="group in groups" :key="group.id" :value="group.id">{{ group.name }}</option>
             </select>
 
             <label class="text-xs font-medium text-slate-500">{{ $t('Subscription Status') }}</label>
@@ -427,6 +569,13 @@ onBeforeUnmount(() => {
                 <option value="">{{ $t('All Statuses') }}</option>
                 <option value="1">{{ $t('Subscribed') }}</option>
                 <option value="0">{{ $t('Unsubscribed') }}</option>
+            </select>
+
+            <label class="text-xs font-medium text-slate-500">{{ $t('Block Status') }}</label>
+            <select v-model="query.blocked_status" class="rounded-md border border-slate-300 px-3 py-2 text-sm">
+                <option value="">{{ $t('All') }}</option>
+                <option value="1">{{ $t('Blocked') }}</option>
+                <option value="0">{{ $t('Not blocked') }}</option>
             </select>
 
             <label class="text-xs font-medium text-slate-500">{{ $t('Label') }}</label>
@@ -471,12 +620,68 @@ onBeforeUnmount(() => {
         </div>
     </Modal>
 
+    <Modal :label="$t('Groups')" :isOpen="isGroupsModalOpen" :closeBtn="true" @close="isGroupsModalOpen = false">
+        <div class="space-y-2 pt-4">
+            <div class="rounded-md border border-slate-200 p-3">
+                <label class="mb-1 block text-xs font-medium text-slate-500">{{ $t('New Group Name') }}</label>
+                <div class="flex gap-2">
+                    <input
+                        v-model="createGroupForm.name"
+                        type="text"
+                        class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm"
+                        :placeholder="$t('Enter group name')"
+                        @keyup.enter="createGroup"
+                    >
+                    <button
+                        type="button"
+                        class="whitespace-nowrap rounded-md bg-primary px-3 py-2 text-sm text-white disabled:cursor-not-allowed disabled:opacity-60"
+                        :disabled="isCreatingGroup"
+                        @click="createGroup"
+                    >
+                        {{ isCreatingGroup ? $t('Saving...') : $t('Add Group') }}
+                    </button>
+                </div>
+                <p v-if="createGroupError" class="mt-2 text-xs text-rose-600">{{ createGroupError }}</p>
+            </div>
+
+            <button
+                type="button"
+                class="flex w-full items-center justify-between rounded-md border px-3 py-2 text-sm"
+                :class="query.group_id ? 'border-slate-300 text-slate-700' : 'border-primary bg-primary/5 text-primary'"
+                @click="applyGroupFilter('')"
+            >
+                <span>{{ $t('All Groups') }}</span>
+                <span v-if="!query.group_id" class="text-xs">{{ $t('Selected') }}</span>
+            </button>
+
+            <div
+                v-for="group in groups"
+                :key="group.id"
+                class="flex w-full items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm"
+                :class="String(query.group_id) === String(group.id) ? 'border-primary bg-primary/5 text-primary' : 'border-slate-300 text-slate-700'"
+            >
+                <button type="button" class="min-w-0 flex-1 text-left" @click="applyGroupFilter(group.id)">
+                    <span class="truncate">{{ group.name }}</span>
+                    <span v-if="String(query.group_id) === String(group.id)" class="ml-2 text-xs">{{ $t('Selected') }}</span>
+                </button>
+                <button
+                    type="button"
+                    class="rounded-md border border-rose-200 px-2 py-1 text-xs text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
+                    :disabled="deletingGroupUuid === String(group.uuid)"
+                    @click="deleteGroup(group)"
+                >
+                    {{ deletingGroupUuid === String(group.uuid) ? $t('Deleting...') : $t('Delete') }}
+                </button>
+            </div>
+        </div>
+    </Modal>
+
     <Modal :label="$t('Bulk Action')" :isOpen="!!bulkActionModal" :closeBtn="true" @close="bulkActionModal = ''">
         <div class="grid gap-3 pt-4">
             <template v-if="bulkActionModal === 'add_group' || bulkActionModal === 'remove_group'">
                 <label class="text-xs font-medium text-slate-500">{{ $t('Select Groups') }}</label>
                 <select v-model="bulkForm.group_ids" class="rounded-md border border-slate-300 px-3 py-2 text-sm" multiple>
-                    <option v-for="group in contactGroups" :key="group.id" :value="group.id">{{ group.name }}</option>
+                    <option v-for="group in groups" :key="group.id" :value="group.id">{{ group.name }}</option>
                 </select>
             </template>
 

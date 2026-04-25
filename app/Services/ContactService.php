@@ -78,6 +78,7 @@ class ContactService
                 'phone' => $normalizedPhone,
                 'first_name' => $firstName,
                 'last_name' => $lastName,
+                'contact_source' => 'whatsapp',
                 'is_subscribed' => 1,
                 'bot_enable' => 1,
                 'created_by' => 0, // System created
@@ -202,6 +203,12 @@ class ContactService
             $contact->organization_id = $this->organizationId;
             $contact->created_by = auth()->user() ? auth()->user()->id : 0;
             $contact->created_at = now();
+            if (empty($contact->contact_source)) {
+                $source = method_exists($request, 'input')
+                    ? $request->input('contact_source', 'platform')
+                    : ($request->contact_source ?? 'platform');
+                $contact->contact_source = $source ?: 'platform';
+            }
         }
 
         $address = json_encode([

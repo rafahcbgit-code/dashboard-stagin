@@ -610,6 +610,12 @@ class ChatService
             return $result;
         }
 
+        if ((bool) ($contact->is_blocked ?? false)) {
+            $result->success = false;
+            $result->message = 'Contact is blocked.';
+            return $result;
+        }
+
         $flow = \Modules\MetaFlows\Models\MetaFlow::where('uuid', $request->meta_flow_uuid)
             ->where('organization_id', $this->organizationId)
             ->first();

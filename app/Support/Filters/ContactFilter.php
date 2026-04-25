@@ -37,6 +37,7 @@ class ContactFilter
         $labelIds = $this->toIntArray($request->query('label_id', $request->query('labels', [])));
         $country = trim((string) $request->query('country', ''));
         $subscriptionStatus = $request->query('subscription_status');
+        $blockedStatus = $request->query('blocked_status');
         $noGroup = $this->toBool($request->query('no_group', false));
         $noLabel = $this->toBool($request->query('no_label', false));
 
@@ -78,6 +79,17 @@ class ContactFilter
                 $query->where('contacts.is_subscribed', 1);
             } elseif (in_array((string) $subscriptionStatus, ['unsubscribed', '0'], true)) {
                 $query->where('contacts.is_subscribed', 0);
+            }
+        }
+
+        if ($blockedStatus !== null && $blockedStatus !== '') {
+            if (in_array((string) $blockedStatus, ['blocked', '1'], true)) {
+                $query->where('contacts.is_blocked', 1);
+            } elseif (in_array((string) $blockedStatus, ['not_blocked', '0'], true)) {
+                $query->where(function (Builder $builder) {
+                    $builder->where('contacts.is_blocked', 0)
+                        ->orWhereNull('contacts.is_blocked');
+                });
             }
         }
 

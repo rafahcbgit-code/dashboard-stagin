@@ -529,6 +529,7 @@ class ContactController extends BaseController
     {
         $organizationId = $this->getCurrentOrganizationId();
         $ids = collect($request->query('ids', []))->map(fn ($id) => (int) $id)->filter()->values();
+        $scope = (string) $request->query('scope', 'filtered');
 
         $query = Contact::query()
             ->with(['contactGroups:id,name', 'labels:id,title'])
@@ -548,7 +549,7 @@ class ContactController extends BaseController
 
         if ($ids->isNotEmpty()) {
             $query->whereIn('id', $ids->all());
-        } else {
+        } elseif ($scope !== 'all') {
             $query = (new ContactFilter())->apply($query, $request);
         }
 
@@ -562,6 +563,10 @@ class ContactController extends BaseController
         $headers = [
             'Content-Type' => 'text/csv; charset=UTF-8',
         ];
+
+        $fileName = $scope === 'all'
+            ? 'contacts-all-export.csv'
+            : ($ids->isNotEmpty() ? 'contacts-selected-export.csv' : 'contacts-export.csv');
 
         return response()->streamDownload(function () use ($query, $contactFields) {
             $handle = fopen('php://output', 'w');
@@ -603,7 +608,7 @@ class ContactController extends BaseController
             });
 
             fclose($handle);
-        }, 'contacts-export.csv', $headers);
+        }, $fileName, $headers);
     }
 
     private function getLocationSettings()
@@ -701,6 +706,31 @@ class ContactController extends BaseController
         ]);
     }
 
+    public function toggleBlock(Request $request, $uuid)
+    {
+        $organizationId = $this->getCurrentOrganizationId();
+
+        $validated = $request->validate([
+            'is_blocked' => 'required|boolean',
+        ]);
+
+        $contact = Contact::where('uuid', $uuid)
+            ->where('organization_id', $organizationId)
+            ->whereNull('deleted_at')
+            ->firstOrFail();
+
+        $contact->is_blocked = $validated['is_blocked'];
+        $contact->updated_at = now();
+        $contact->save();
+
+        return back()->with('status', [
+            'type' => 'success',
+            'message' => $validated['is_blocked']
+                ? __('Contact blocked successfully.')
+                : __('Contact unblocked successfully.'),
+        ]);
+    }
+
     public function chatViewDetails(Request $request)
     {
         $organizationId = $this->getCurrentOrganizationId();
@@ -727,6 +757,7 @@ class ContactController extends BaseController
                 'organization_id' => $organizationId,
                 'phone'           => $phone,
                 'first_name'            => $validated['name'] ?? 'Unknown Contact',
+                'contact_source' => 'platform',
                 'is_subscribed' => 1,
                 'last_name' => null,
                 'email' => null,

@@ -308,11 +308,13 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::post('/contact-groups/import', [App\Http\Controllers\User\ContactGroupController::class, 'import']);
                 Route::post('/contact-groups/{uuid}', [App\Http\Controllers\User\ContactGroupController::class, 'update']);
                 Route::delete('/contact-groups', [App\Http\Controllers\User\ContactGroupController::class, 'delete']);
+                Route::delete('/contact-groups/{uuid}', [App\Http\Controllers\User\ContactGroupController::class, 'deleteSingle'])->name('contact-groups.delete-single');
 
                 Route::put('/contacts/{uuid}/labels', [App\Http\Controllers\User\ContactController::class, 'updateLabels'])->name('contacts.labels.update');
                 Route::get('/contacts/{uuid}/labels', [App\Http\Controllers\User\ContactController::class, 'getLabels']);
 
                 Route::put('/contacts/{uuid}/bot-toggle', [App\Http\Controllers\User\ContactController::class, 'toggleBot'])->name('contacts.bot.toggle');
+                Route::put('/contacts/{uuid}/block-toggle', [App\Http\Controllers\User\ContactController::class, 'toggleBlock'])->name('contacts.block.toggle');
 
                 Route::get('/campaigns/{uuid?}', [App\Http\Controllers\User\CampaignController::class, 'index'])->name('campaigns');
                 Route::post('/campaigns', [App\Http\Controllers\User\CampaignController::class, 'store']);

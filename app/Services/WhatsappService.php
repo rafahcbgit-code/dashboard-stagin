@@ -66,6 +66,15 @@ class WhatsappService
     public function sendMessage($contactUuId, $messageContent, $userId = NULL, $type="text", $buttons = [], $header = [], $footer = null, $buttonLabel = null)
     {
         $contact = Contact::where('uuid', $contactUuId)->first();
+
+        if (! $contact) {
+            return $this->buildErrorResponse('Contact not found');
+        }
+
+        if ((bool) ($contact->is_blocked ?? false)) {
+            return $this->buildBlockedContactResponse($contact);
+        }
+
         $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}/messages";
         
         $headers = $this->setHeaders();
@@ -173,6 +182,15 @@ class WhatsappService
     public function sendTemplateMessage($contactUuId, $templateContent, $userId = NULL, $campaignId = NULL, $mediaId = NULL)
     {
         $contact = Contact::where('uuid', $contactUuId)->first();
+
+        if (! $contact) {
+            return $this->buildErrorResponse('Contact not found');
+        }
+
+        if ((bool) ($contact->is_blocked ?? false)) {
+            return $this->buildBlockedContactResponse($contact);
+        }
+
         $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}/messages";
         
         $headers = $this->setHeaders();
@@ -974,6 +992,15 @@ class WhatsappService
     public function sendMedia($contactUuId, $mediaType, $mediaFileName, $mediaFilePath, $mediaUrl, $location, $caption = NULL, $transcription = NULL)
     {
         $contact = Contact::where('uuid', $contactUuId)->first();
+
+        if (! $contact) {
+            return $this->buildErrorResponse('Contact not found');
+        }
+
+        if ((bool) ($contact->is_blocked ?? false)) {
+            return $this->buildBlockedContactResponse($contact);
+        }
+
         $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}/messages";
         
         $headers = $this->setHeaders();
@@ -1101,6 +1128,32 @@ class WhatsappService
             Log::error('Error fetching headers: ' . $e->getMessage());
             return null;
         }
+    }
+
+    private function buildBlockedContactResponse(Contact $contact): \stdClass
+    {
+        Log::info('Outbound message prevented for blocked contact', [
+            'organization_id' => $contact->organization_id,
+            'contact_id' => $contact->id,
+            'contact_uuid' => $contact->uuid,
+        ]);
+
+        return $this->buildErrorResponse('Contact is blocked', 403, 'CONTACT_BLOCKED');
+    }
+
+    private function buildErrorResponse(string $message, int $statusCode = 422, ?string $code = null): \stdClass
+    {
+        $response = new \stdClass();
+        $response->success = false;
+        $response->message = $message;
+        $response->status_code = $statusCode;
+        $response->data = new \stdClass();
+        $response->data->error = [
+            'code' => $code,
+            'message' => $message,
+        ];
+
+        return $response;
     }
 
     function formatMediaResponse($wamId, $mediaUrl, $mediaType, $contentType, $transcription = null){
