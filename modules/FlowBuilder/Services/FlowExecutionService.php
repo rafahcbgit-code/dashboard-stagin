@@ -20,6 +20,8 @@ class FlowExecutionService
     private int $organizationId;
     private $metaPayload;
 
+    private int $logNodesProcessed = 0;
+
     public function __construct(int $organizationId, $metaPayload = null)
     {
         $this->organizationId = $organizationId;
@@ -85,6 +87,13 @@ class FlowExecutionService
     public function startFlow(int $flowId, $chat): bool
     {
         try {
+            Log::info('FlowExecution::startFlow called', [
+                'flow_id' => $flowId,
+                'chat_id' => $chat->id ?? null,
+                'contact_id' => $chat->contact_id ?? null,
+                'org_id' => $chat->organization_id ?? null,
+            ]);
+
             $flow = Flow::where('id', $flowId)
                 ->where('organization_id', $chat->organization_id)
                 ->where('status', 'active')
@@ -94,8 +103,21 @@ class FlowExecutionService
                 Log::warning('FlowExecution::startFlow - flow not found or inactive', [
                     'flow_id' => $flowId,
                     'org_id' => $chat->organization_id,
+                    'searched_org_id' => $chat->organization_id ?? 'NULL',
                 ]);
-                return false;
+
+                // Fallback: try finding flow without org check (in case org_id is missing on chat)
+                $flowFallback = Flow::where('id', $flowId)->where('status', 'active')->first();
+                if ($flowFallback) {
+                    Log::info('FlowExecution::startFlow - found flow without org filter, using it', [
+                        'flow_id' => $flowFallback->id,
+                        'flow_org_id' => $flowFallback->organization_id,
+                        'chat_org_id' => $chat->organization_id ?? 'NULL',
+                    ]);
+                    $flow = $flowFallback;
+                } else {
+                    return false;
+                }
             }
 
             // Clear any existing flow state for this contact
@@ -104,20 +126,41 @@ class FlowExecutionService
             $parser = new FlowMetadataParser($flow->metadata);
             $startNodeId = $parser->getStartNodeId();
 
+            Log::info('FlowExecution::startFlow - parsed metadata', [
+                'flow_id' => $flow->id,
+                'start_node_id' => $startNodeId ?? 'NULL',
+            ]);
+
             $flowData = FlowUserData::create([
                 'contact_id' => $chat->contact_id,
                 'flow_id' => $flow->id,
-                'current_step' => $startNodeId ?? 1,
+                'current_step' => $startNodeId ?? '1',
+            ]);
+
+            Log::info('FlowExecution::startFlow - FlowUserData created', [
+                'flow_data_id' => $flowData->id,
+                'contact_id' => $flowData->contact_id,
+                'flow_id' => $flowData->flow_id,
+                'current_step' => $flowData->current_step,
             ]);
 
             $message = $this->extractMessageText($chat);
+            Log::info('FlowExecution::startFlow - starting processFlow', [
+                'message' => $message,
+            ]);
+
             $result = $this->processFlow($chat, $flowData, strtolower(trim($message)));
+
+            Log::info('FlowExecution::startFlow - processFlow result', [
+                'result' => is_string($result) ? $result : ($result === false ? 'false' : 'true'),
+            ]);
 
             return $result !== false;
         } catch (\Throwable $e) {
             Log::error('FlowExecution::startFlow failed', [
                 'flow_id' => $flowId,
                 'error' => $e->getMessage(),
+                'trace' => $e->getTraceAsString(),
             ]);
             return false;
         }
@@ -186,19 +229,39 @@ class FlowExecutionService
     {
         $flow = Flow::find($flowData->flow_id);
         if (!$flow || empty($flow->metadata)) {
+            Log::warning('FlowExecution::processFlow - flow not found or empty metadata', [
+                'flow_id' => $flowData->flow_id,
+            ]);
             return false;
         }
 
         $contact = Contact::find($chat->contact_id);
         if (!$contact) {
+            Log::warning('FlowExecution::processFlow - contact not found', [
+                'contact_id' => $chat->contact_id,
+            ]);
             return false;
         }
 
         $parser = new FlowMetadataParser($flow->metadata);
-        $visited = []; // Track visited nodes to prevent infinite loops
+        $visited = [];
         $maxSteps = 50;
 
         $currentNodeId = (string) $flowData->current_step;
+
+        Log::info('FlowExecution::processFlow starting', [
+            'flow_id' => $flow->id,
+            'contact_id' => $chat->contact_id,
+            'current_step' => $currentNodeId,
+            'message' => $message,
+        ]);
+
+        $this->logNodesProcessed = 0;
+            'flow_id' => $flow->id,
+            'contact_id' => $chat->contact_id,
+            'current_step' => $currentNodeId,
+            'message' => $message,
+        ]);
 
         for ($i = 0; $i < $maxSteps; $i++) {
             // Cycle detection
@@ -211,22 +274,34 @@ class FlowExecutionService
 
             $node = $parser->getNodeById($currentNodeId);
             if (!$node) {
-                Log::info("FlowExecution: node {$currentNodeId} not found, ending flow");
+                Log::info("FlowExecution: node {$currentNodeId} not found in flow, ending flow", [
+                    'available_nodes' => array_keys($parser->nodeMap ?? []),
+                ]);
                 $this->endFlow($chat->contact_id);
                 return false;
             }
 
             $nodeType = $node['type'] ?? null;
+            $this->logNodesProcessed++;
+            Log::info("FlowExecution: processing node", [
+                'step' => $i,
+                'node_id' => $currentNodeId,
+                'node_type' => $nodeType,
+            ]);
 
             // Start node: skip over it to the first real node
             if ($nodeType === 'start') {
                 $nextNode = $parser->getNextNode($currentNodeId);
                 if (!$nextNode) {
+                    Log::warning('FlowExecution: start node has no outgoing edge', [
+                        'node_id' => $currentNodeId,
+                    ]);
                     $this->endFlow($chat->contact_id);
                     return false;
                 }
                 $currentNodeId = (string) $nextNode['id'];
                 $this->updateStep($chat->contact_id, $currentNodeId);
+                Log::info('FlowExecution: start node → next node', ['next_id' => $currentNodeId]);
                 continue;
             }
 
@@ -261,6 +336,10 @@ class FlowExecutionService
 
             // Message node: send and stop (wait for user response)
             $sent = $this->sendNodeMessage($node, $contact);
+            Log::info('FlowExecution: message node send result', [
+                'node_id' => $currentNodeId,
+                'sent' => $sent ? 'true' : 'false',
+            ]);
             if ($sent) {
                 $this->advanceToNextStep($parser, $currentNodeId, $chat->contact_id);
             } else {
@@ -349,7 +428,19 @@ class FlowExecutionService
         $fields = \Arr::get($node, 'data.metadata.fields', []);
         $type = $fields['type'] ?? null;
 
+        Log::info('FlowExecution::sendNodeMessage', [
+            'node_id' => $node['id'] ?? 'unknown',
+            'node_type' => $node['type'] ?? 'unknown',
+            'message_type' => $type,
+            'contact_uuid' => $contact->uuid,
+            'has_body' => !empty($fields['body']),
+        ]);
+
         if (!$type) {
+            Log::warning('FlowExecution::sendNodeMessage - no message type found', [
+                'node_id' => $node['id'] ?? 'unknown',
+                'fields_keys' => array_keys($fields),
+            ]);
             return false;
         }
 
@@ -460,13 +551,11 @@ class FlowExecutionService
 
         if ($nextNode && isset($nextNode['id'])) {
             $this->updateStep($contactId, (string) $nextNode['id']);
-
-            // Log the message in flow_logs
-            $flowData = FlowUserData::where('contact_id', $contactId)->first();
-            if ($flowData) {
-                FlowLog::create(['flow_id' => $flowData->flow_id]);
-            }
         } else {
+            Log::info('FlowExecution: flow completed naturally (no more nodes)', [
+                'contact_id' => $contactId,
+                'last_node' => $currentNodeId,
+            ]);
             $this->endFlow($contactId);
         }
     }
@@ -476,8 +565,18 @@ class FlowExecutionService
         FlowUserData::where('contact_id', $contactId)->update(['current_step' => $step]);
     }
 
-    private function endFlow(int $contactId): void
+    private function endFlow(int $contactId, string $reason = 'completed'): void
     {
+        $flowData = FlowUserData::where('contact_id', $contactId)->first();
+        if ($flowData) {
+            FlowLog::create([
+                'flow_id' => $flowData->flow_id,
+                'contact_id' => $contactId,
+                'organization_id' => $this->organizationId,
+                'status' => $reason,
+                'nodes_processed' => $this->logNodesProcessed,
+            ]);
+        }
         FlowUserData::where('contact_id', $contactId)->delete();
     }
 
