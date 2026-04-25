@@ -227,6 +227,7 @@ public function campaign(Request $request)
             $metadataArray['tickets']['assigned_to_specific_agents'] = $request->auto_robinhood ?? false;
             $metadataArray['tickets']['reassign_reopened_chats'] = $request->reassign_reopened_chats;
             $metadataArray['tickets']['allow_agents_to_view_all_chats'] = $request->allow_agents_to_view_all_chats;
+            $metadataArray['tickets']['mask_agent_phone_numbers'] = $request->mask_agent_phone_numbers ?? false;
             $metadataArray['tickets']['selected_agents'] = $request->selected_agents;
 
             $updatedMetadataJson = json_encode($metadataArray);

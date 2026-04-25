@@ -23,6 +23,13 @@ class ContactResource extends JsonResource
             ->whereNull('deleted_at')
             ->where('is_read', 0)
             ->count();
+
+        if (method_exists($this->resource, 'shouldMaskPhoneForCurrentViewer')
+            && $this->resource->shouldMaskPhoneForCurrentViewer()) {
+            $maskedPhone = $this->resource->getMaskedPhoneForCurrentViewer();
+            $data['phone'] = $maskedPhone;
+            $data['formatted_phone_number'] = $maskedPhone;
+        }
         
         return $data;
     }

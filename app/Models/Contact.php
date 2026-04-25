@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Propaganistas\LaravelPhone\PhoneNumber;
 use Illuminate\Database\Eloquent\SoftDeletes;
+use Illuminate\Support\Facades\Auth;
 
 class Contact extends Model
 {
@@ -19,6 +20,8 @@ class Contact extends Model
     protected $appends = ['full_name', 'formatted_phone_number'];
     protected $dates = ['deleted_at'];
     public $timestamps = false;
+    protected static array $phoneMaskingEnabledCache = [];
+    protected static array $viewerRoleCache = [];
 
     public function getCreatedAtAttribute($value)
     {
@@ -303,10 +306,77 @@ class Contact extends Model
     {
         // Use the phone() helper function to format the phone number to international format
         try {
-            return phone($this->phone)->formatInternational();
+            $formatted = phone($this->phone)->formatInternational();
         } catch (\Exception $e) {
-            return $this->phone;
+            $formatted = $this->phone;
         }
+
+        if ($this->shouldMaskPhoneForCurrentViewer()) {
+            return $this->getMaskedPhoneForCurrentViewer();
+        }
+
+        return $formatted;
+    }
+
+    public function shouldMaskPhoneForCurrentViewer(): bool
+    {
+        $viewer = Auth::user() ?? Auth::guard('sanctum')->user();
+        if (! $viewer) {
+            return false;
+        }
+
+        $organizationId = (int) ($this->organization_id ?? 0);
+        if ($organizationId <= 0) {
+            return false;
+        }
+
+        if (! array_key_exists($organizationId, self::$phoneMaskingEnabledCache)) {
+            $metadata = Organization::where('id', $organizationId)->value('metadata');
+            $decoded = is_string($metadata) ? json_decode($metadata, true) : [];
+            self::$phoneMaskingEnabledCache[$organizationId] = (bool) ($decoded['tickets']['mask_agent_phone_numbers'] ?? false);
+        }
+
+        if (! self::$phoneMaskingEnabledCache[$organizationId]) {
+            return false;
+        }
+
+        $roleKey = $organizationId . ':' . $viewer->id;
+        if (! array_key_exists($roleKey, self::$viewerRoleCache)) {
+            self::$viewerRoleCache[$roleKey] = Team::query()
+                ->where('organization_id', $organizationId)
+                ->where('user_id', $viewer->id)
+                ->whereNull('deleted_at')
+                ->value('role');
+        }
+
+        return self::$viewerRoleCache[$roleKey] === 'agent';
+    }
+
+    public function getMaskedPhoneForCurrentViewer(): string
+    {
+        return $this->maskPhoneKeepingFirst3Last2((string) ($this->phone ?? ''));
+    }
+
+    private function maskPhoneKeepingFirst3Last2(string $phone): string
+    {
+        $hasPlus = str_starts_with(trim($phone), '+');
+        $digits = preg_replace('/\D+/', '', $phone) ?? '';
+
+        if ($digits === '') {
+            return $phone;
+        }
+
+        $length = strlen($digits);
+        if ($length <= 5) {
+            $masked = substr($digits, 0, 1) . str_repeat('*', max($length - 1, 1));
+            return $hasPlus ? '+' . $masked : $masked;
+        }
+
+        $masked = substr($digits, 0, 3)
+            . str_repeat('*', $length - 5)
+            . substr($digits, -2);
+
+        return $hasPlus ? '+' . $masked : $masked;
     }
 
     protected function decodeUnicodeBytes($value)

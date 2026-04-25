@@ -109,7 +109,7 @@ class ContactController extends BaseController
             'rows' => ContactResource::collection($contacts),
             'rowCount' => $rowCount,
             'filteredCount' => $contacts->total(),
-            'contact' => $contact,
+            'contact' => $contact ? ContactResource::make($contact)->resolve() : null,
             'fields' => $contactFields,
             'contactGroups' => $contactGroups,
             'labels' => $labels,

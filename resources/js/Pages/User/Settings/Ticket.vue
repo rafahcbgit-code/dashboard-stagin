@@ -203,6 +203,31 @@
                         </div>
                     </div>
 
+                    <!-- Mask phone numbers for agents -->
+                    <div v-if="form.active" class="bg-white border border-slate-200 rounded-lg pt-2 text-sm mb-4 px-4">
+                        <div class="w-full py-2 mb-4 mt-2">
+                            <div class="flex w-full items-start gap-4">
+                                <div class="flex-1 text-md">
+                                    <h4 class="text-[16px] leading-relaxed">
+                                        {{ $t('Mask phone numbers for agents') }}
+                                    </h4>
+                                    <div class="mb-1 text-slate-500 mt-1">
+                                        {{ $t('When enabled, agents can only see the first 3 and last 2 digits of phone numbers.') }}
+                                    </div>
+                                </div>
+                                <div class="flex-shrink-0">
+                                    <div class="w-12 h-6 flex items-center bg-gray-300 rounded-full p-1 cursor-pointer transition-colors duration-300"
+                                        :class="{ 'bg-primary': form.mask_agent_phone_numbers }"
+                                        @click="toggleState4">
+                                        <div class="bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out"
+                                            :class="{ 'ltr:translate-x-6 rtl:translate-x-[-24px]': form.mask_agent_phone_numbers }">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
             </div>
         </div>
@@ -230,6 +255,7 @@ const form = useForm({
     auto_robinhood: settings.value?.tickets?.assigned_to_specific_agents ?? false,
     reassign_reopened_chats: settings.value?.tickets?.reassign_reopened_chats ?? false,
     allow_agents_to_view_all_chats: settings.value?.tickets?.allow_agents_to_view_all_chats ?? false,
+    mask_agent_phone_numbers: settings.value?.tickets?.mask_agent_phone_numbers ?? false,
     selected_agents: (() => {
         const agentsArray = Array.isArray(props.agents) ? props.agents : Object.values(props.agents);
         const validAgentIds = agentsArray.map(a => Number(a.id));
@@ -275,6 +301,7 @@ const toggleState2 = () => {
     submitForm();
 }
 const toggleState3 = () => { form.allow_agents_to_view_all_chats = !form.allow_agents_to_view_all_chats; submitForm(); }
+const toggleState4 = () => { form.mask_agent_phone_numbers = !form.mask_agent_phone_numbers; submitForm(); }
 
 const submitForm = async () => {
     console.log('SUBMITTING POST TO SERVER:', form.data());
