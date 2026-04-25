@@ -243,8 +243,34 @@ class ContactService
         }
 
         if ($request->group) {
-            $groupUuids = array_map('trim', $request->group);
-            $groupIds = ContactGroup::whereIn('uuid', $groupUuids)->pluck('id')->toArray();
+            $normalizedGroups = collect($request->group)
+                ->map(function ($item) {
+                    if (is_string($item) || is_numeric($item)) {
+                        return trim((string) $item);
+                    }
+
+                    if (is_array($item)) {
+                        if (isset($item['value'])) {
+                            return trim((string) $item['value']);
+                        }
+
+                        if (isset($item['uuid'])) {
+                            return trim((string) $item['uuid']);
+                        }
+
+                        if (isset($item['id'])) {
+                            return trim((string) $item['id']);
+                        }
+                    }
+
+                    return null;
+                })
+                ->filter(fn ($value) => !is_null($value) && $value !== '')
+                ->values();
+
+            $groupIdsByUuid = ContactGroup::whereIn('uuid', $normalizedGroups->all())->pluck('id')->toArray();
+            $groupIdsById = ContactGroup::whereIn('id', $normalizedGroups->filter(fn ($value) => ctype_digit($value))->all())->pluck('id')->toArray();
+            $groupIds = array_values(array_unique(array_merge($groupIdsByUuid, $groupIdsById)));
             $contact->contactGroups()->sync($groupIds);
         }
 

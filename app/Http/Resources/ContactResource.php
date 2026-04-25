@@ -18,7 +18,7 @@ class ContactResource extends JsonResource
     {
         $data = parent::toArray($request);
 
-        $data['unread_messages'] = $this->chats()
+        $data['unread_messages'] = $this->unread_messages_count ?? $this->chats()
             ->where('type', 'inbound')
             ->whereNull('deleted_at')
             ->where('is_read', 0)

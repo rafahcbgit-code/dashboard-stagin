@@ -1,80 +1,57 @@
 <template>
     <AppLayout>
-        <div class="md:bg-inherit bg-white md:flex md:flex-grow capitalize">
-            <div class="md:w-[30%] flex-col h-full bg-white border-r border-l md:flex" :class="$page.url === '/contacts/add' || contact ? 'hidden' : ''">
-                <div class="px-4 pt-4">
-                    <div class="flex justify-between mt-2">
-                        <div class="flex space-s-1 text-xl">
-                            <h2>{{ $t('Contacts') }}</h2>
-                            <span class="text-slate-500">{{ props.rowCount }}</span>
-                        </div>
-                        <div class="flex space-s-2 items-center">
-                            <Link href="/contacts/add" title="Add Contact">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24"><g fill="currentColor" fill-rule="evenodd" clip-rule="evenodd"><path d="M2 12C2 6.477 6.477 2 12 2s10 4.477 10 10s-4.477 10-10 10S2 17.523 2 12Zm10-8a8 8 0 1 0 0 16a8 8 0 0 0 0-16Z"/><path d="M13 7a1 1 0 1 0-2 0v4H7a1 1 0 1 0 0 2h4v4a1 1 0 1 0 2 0v-4h4a1 1 0 1 0 0-2h-4V7Z"/></g></svg>
-                            </Link>
-                        </div>
-                    </div>
-                </div>
-                <ContactTable :rows="props.rows" :filters="props.filters" :role="props.role" :type="'contact'" @callback="handleContact"/>
+        <div class="p-4 md:p-6">
+            <div v-if="isAddMode || editContact" class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <ContactForm :contactGroups="contactGroups" :contact="contact" :fields="fields" :locationSettings="locationSettings" />
             </div>
-            <div class="md:w-[70%] bg-cover md:h-[100vh] md:overflow-y-hidden">
-                <div v-if="contact">
-                    <ContactInfo v-if="!editContact" class="pt-20" :contact="contact" :fields="props.fields" :locationSettings="locationSettings"/>
-                    <ContactForm v-else :contactGroups="props.contactGroups" :contact="props.contact" :fields="props.fields" :locationSettings="locationSettings" />
-                </div>
-                <div v-else>
-                    <div v-if="$page.url === '/contacts/add'">
-                        <ContactForm :contactGroups="props.contactGroups" :contact="props.contact" :fields="props.fields" :locationSettings="locationSettings" />
-                    </div>
-                    <div v-else>
-                        <div class="md:flex justify-center pt-20 hidden">
-                            <div class="border pt-20 py-10 w-[30em] rounded-xl bg-white">
-                                <h2 class="text-center text-2xl text-slate-500 mb-6">{{ $t('Select contact') }}</h2>
-                                <div class="flex justify-center">
-                                    <div class="border-r border-slate-500 h-10"></div>
-                                </div>
-                                <h2 class="text-center text-slate-600">{{ $t('Or') }}</h2>
-                                <div class="flex justify-center">
-                                    <div class="border-r border-slate-500 h-10"></div>
-                                </div>  
-                                <div class="flex justify-center space-s-4 mt-6">
-                                    <Link href="/contacts/add" class="bg-primary rounded-lg text-sm text-white p-2 px-8 text-center">{{ $t('Add contact') }}</Link>
-                                    
-                                    <button 
-                                        v-if="props.role !== 'agent'" 
-                                        @click="isOpenModal = true" 
-                                        class="bg-primary rounded-lg text-sm text-white p-2 px-8 text-center"
-                                    >
-                                        {{ $t('Bulk upload') }}
-                                    </button>
-                                </div>
-                            </div>
-                        </div>
-                    </div>
+
+            <div v-else-if="isDetailMode" class="space-y-4">
+                <Link href="/contacts" class="inline-flex items-center rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700">
+                    {{ $t('Back to contacts') }}
+                </Link>
+                <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <ContactInfo :contact="contact" :fields="fields" :locationSettings="locationSettings" />
                 </div>
             </div>
+
+            <AdvancedContactTable
+                v-else
+                :rows="rows"
+                :filters="filters"
+                :rowCount="rowCount"
+                :filteredCount="filteredCount"
+                :contactGroups="contactGroups"
+                :labels="labels"
+                :fields="fields"
+                :role="role"
+            />
         </div>
     </AppLayout>
-
-    <ContactImportModal :type="'contact'" v-model:modelValue="isOpenModal"/>
 </template>
+
 <script setup>
-    import AppLayout from "./../Layout/App.vue";
-    import { ref } from 'vue';
-    import { Link } from "@inertiajs/vue3";
-    import ContactForm from '@/Components/ContactComponents/CreateForm.vue';
-    import ContactImportModal from '@/Components/ContactImportModal.vue';
-    import ContactInfo from '@/Components/ContactInfo.vue';
-    import ContactTable from '@/Components/Tables/ContactTable.vue';
-    import { router } from '@inertiajs/vue3';
+import { computed } from 'vue';
+import { Link, usePage } from '@inertiajs/vue3';
+import AppLayout from './../Layout/App.vue';
+import ContactForm from '@/Components/ContactComponents/CreateForm.vue';
+import ContactInfo from '@/Components/ContactInfo.vue';
+import AdvancedContactTable from '@/Components/ContactManagement/AdvancedContactTable.vue';
 
-    const props = defineProps({ rows: Object, filters: Object, rowCount: Number, contactGroups: Object, contact: Object, editContact: Boolean, fields: Object, locationSettings: String, flash: Object, role: String});
-    const isOpenModal = ref(false);
+const props = defineProps({
+    rows: Object,
+    filters: Object,
+    rowCount: Number,
+    filteredCount: Number,
+    contactGroups: Array,
+    labels: Array,
+    contact: Object,
+    editContact: Boolean,
+    fields: Array,
+    locationSettings: String,
+    role: String,
+});
 
-    const handleContact = (value) => {
-        router.visit('/contacts', {
-            method: 'get',
-            data: value,
-        })
-    }
+const page = usePage();
+const isAddMode = computed(() => page.url.startsWith('/contacts/add'));
+const isDetailMode = computed(() => !isAddMode.value && !props.editContact && !!props.contact && !!props.filters?.id);
 </script>
