@@ -328,6 +328,38 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::put('/automation/basic/{uuid}', [App\Http\Controllers\User\CannedReplyController::class, 'update'])->name('cannedReply.update');
                 Route::delete('/automation/basic/{uuid}', [App\Http\Controllers\User\CannedReplyController::class, 'delete'])->name('cannedReply.destroy');
 
+                // Trigger Groups
+                Route::get('/automation/triggers', [App\Http\Controllers\User\TriggerGroupController::class, 'index'])->name('triggers.index');
+                Route::post('/automation/triggers', [App\Http\Controllers\User\TriggerGroupController::class, 'store'])->name('triggers.store');
+                Route::put('/automation/triggers/{uuid}', [App\Http\Controllers\User\TriggerGroupController::class, 'update'])->name('triggers.update');
+                Route::delete('/automation/triggers/{uuid}', [App\Http\Controllers\User\TriggerGroupController::class, 'destroy'])->name('triggers.destroy');
+                Route::post('/automation/triggers/reorder', [App\Http\Controllers\User\TriggerGroupController::class, 'reorder'])->name('triggers.reorder');
+                Route::post('/automation/triggers/{uuid}/toggle', [App\Http\Controllers\User\TriggerGroupController::class, 'toggle'])->name('triggers.toggle');
+                Route::post('/automation/triggers/{uuid}/link', [App\Http\Controllers\User\TriggerGroupController::class, 'linkFlow'])->name('triggers.linkFlow');
+
+                // Knowledge Base
+                Route::get('/automation/knowledge-base', [App\Http\Controllers\User\AiKnowledgeBaseController::class, 'index'])->name('knowledge-base.index');
+                Route::post('/automation/knowledge-base', [App\Http\Controllers\User\AiKnowledgeBaseController::class, 'store'])->name('knowledge-base.store');
+                Route::put('/automation/knowledge-base/{uuid}', [App\Http\Controllers\User\AiKnowledgeBaseController::class, 'update'])->name('knowledge-base.update');
+                Route::delete('/automation/knowledge-base/{uuid}', [App\Http\Controllers\User\AiKnowledgeBaseController::class, 'destroy'])->name('knowledge-base.destroy');
+                Route::post('/automation/knowledge-base/{uuid}/toggle', [App\Http\Controllers\User\AiKnowledgeBaseController::class, 'toggle'])->name('knowledge-base.toggle');
+
+                // Bot Settings
+                Route::get('/automation/bot-settings', [App\Http\Controllers\User\BotSettingsController::class, 'index'])->name('bot-settings.index');
+                Route::put('/automation/bot-settings', [App\Http\Controllers\User\BotSettingsController::class, 'update'])->name('bot-settings.update');
+
+                // AI Settings
+                Route::get('/automation/ai-settings', [App\Http\Controllers\User\AiSettingsController::class, 'index'])->name('ai-settings.index');
+                Route::put('/automation/ai-settings', [App\Http\Controllers\User\AiSettingsController::class, 'update'])->name('ai-settings.update');
+
+                // Escalation Instructions
+                Route::get('/automation/escalation', [App\Http\Controllers\User\AiEscalationInstructionController::class, 'index'])->name('escalation.index');
+                Route::post('/automation/escalation', [App\Http\Controllers\User\AiEscalationInstructionController::class, 'store'])->name('escalation.store');
+                Route::put('/automation/escalation/{uuid}', [App\Http\Controllers\User\AiEscalationInstructionController::class, 'update'])->name('escalation.update');
+                Route::delete('/automation/escalation/{uuid}', [App\Http\Controllers\User\AiEscalationInstructionController::class, 'destroy'])->name('escalation.destroy');
+                Route::post('/automation/escalation/reorder', [App\Http\Controllers\User\AiEscalationInstructionController::class, 'reorder'])->name('escalation.reorder');
+                Route::post('/automation/escalation/{uuid}/toggle', [App\Http\Controllers\User\AiEscalationInstructionController::class, 'toggle'])->name('escalation.toggle');
+
                 Route::resource('pre-created-replies', App\Http\Controllers\User\PreCreatedReplyController::class)->parameters([
                     'pre-created-replies' => 'uuid',
                 ]);

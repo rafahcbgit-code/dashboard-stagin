@@ -22,11 +22,7 @@ class FlowValidator
             // Validate based on node type
             switch ($node['type']) {
                 case 'start':
-                    if (isset($data['type']) && $data['type'] == 'keywords') {
-                        if (empty($data['keywords'])) {
-                            $errors['keywords'] = 'Keywords field is required and cannot be empty.';
-                        }
-                    }
+                    // Start node validation — triggers are now managed via TriggerGroups
                     break;
 
                 case 'text':

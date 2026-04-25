@@ -20,13 +20,43 @@
                                 <span>{{ $t('Basic Replies') }}</span>
                             </Link>
                         </li>
+                        <li v-if="fbmodule" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-1 truncate cursor-pointer" :class="$page.url.startsWith('/automation/triggers') ? 'bg-slate-50 text-black' : ''">
+                            <Link rel="noopener noreferrer" href="/automation/triggers" class="flex items-center p-2 space-s-3 rounded-md">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2 12h3m14 0h3M12 2v3m0 14v3m-6.364-3.636l2.121-2.121m8.486-8.486l2.121-2.121M5.636 5.636l2.121 2.121m8.486 8.486l2.121 2.121"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>
+                                <div class="overflow-hidden text-ellipsis">{{ $t('Triggers') }}</div>
+                            </Link>
+                        </li>
+                        <li v-if="fbmodule" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-1 truncate cursor-pointer" :class="$page.url.startsWith('/automation/knowledge-base') ? 'bg-slate-50 text-black' : ''">
+                            <Link rel="noopener noreferrer" href="/automation/knowledge-base" class="flex items-center p-2 space-s-3 rounded-md">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7h8m-8 4h8m-8 4h5"/></svg>
+                                <div class="overflow-hidden text-ellipsis">{{ $t('Knowledge Base') }}</div>
+                            </Link>
+                        </li>
+                        <li v-if="fbmodule" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-1 truncate cursor-pointer" :class="$page.url.startsWith('/automation/bot-settings') ? 'bg-slate-50 text-black' : ''">
+                            <Link rel="noopener noreferrer" href="/automation/bot-settings" class="flex items-center p-2 space-s-3 rounded-md">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2 2 6.477 2 12s4.477 10 10 10z"/><path d="M12 8v4"/><path d="M12 16h.01"/></svg>
+                                <div class="overflow-hidden text-ellipsis">{{ $t('Bot Settings') }}</div>
+                            </Link>
+                        </li>
+                        <li v-if="fbmodule" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-1 truncate cursor-pointer" :class="$page.url.startsWith('/automation/escalation') ? 'bg-slate-50 text-black' : ''">
+                            <Link rel="noopener noreferrer" href="/automation/escalation" class="flex items-center p-2 space-s-3 rounded-md">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M7 2l5 5-5 5"/><path d="M12 7H9a5 5 0 0 0-5 5v2"/><path d="M17 2l5 5-5 5"/></svg>
+                                <div class="overflow-hidden text-ellipsis">{{ $t('Escalation') }}</div>
+                            </Link>
+                        </li>
                         <li v-if="fbmodule" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-1 truncate cursor-pointer" :class="$page.url.startsWith('/automation/flows') ? 'bg-slate-50 text-black' : ''">
                             <Link rel="noopener noreferrer" href="/automation/flows" class="flex items-center p-2 space-s-3 rounded-md">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M3 5c0-1.414 0-2.121.44-2.56C3.878 2 4.585 2 6 2s2.121 0 2.56.44C9 2.878 9 3.585 9 5s0 2.121-.44 2.56C8.122 8 7.415 8 6 8s-2.121 0-2.56-.44C3 7.122 3 6.415 3 5m0 14c0-1.414 0-2.121.44-2.56C3.878 16 4.585 16 6 16s2.121 0 2.56.44C9 16.878 9 17.585 9 19s0 2.121-.44 2.56C8.122 22 7.415 22 6 22s-2.121 0-2.56-.44C3 21.122 3 20.415 3 19M15 7c0-1.414 0-2.121.44-2.56C15.878 4 16.585 4 18 4s2.121 0 2.56.44C21 4.878 21 5.585 21 7s0 2.121-.44 2.56c-.439.44-1.146.44-2.56.44s-2.121 0-2.56-.44C15 9.122 15 8.415 15 7m-9 9V8m12 2a3 3 0 0 1-3 3H9a3 3 0 0 0-3 3" color="currentColor"/></svg>
                                 <div class="overflow-hidden text-ellipsis">{{ $t('Automations') }}</div>
                             </Link>
                         </li>
-                        <li v-if="aimodule" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-1 truncate cursor-pointer" :class="$page.url.startsWith('/automation/ai') ? 'bg-slate-50 text-black' : ''">
+                        <li v-if="fbmodule" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-1 truncate cursor-pointer" :class="$page.url === '/automation/ai-settings' ? 'bg-slate-50 text-black' : ''">
+                            <Link rel="noopener noreferrer" href="/automation/ai-settings" class="flex items-center p-2 space-s-3 rounded-md">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446A9 9 0 1 1 12 3z"/><path d="M17 4a2 2 0 0 0 2 2a2 2 0 0 0-2 2a2 2 0 0 0-2-2a2 2 0 0 0 2-2"/></svg>
+                                <div class="overflow-hidden text-ellipsis">{{ $t('AI Settings') }}</div>
+                            </Link>
+                        </li>
+                        <li v-if="fbmodule" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-1 truncate cursor-pointer" :class="$page.url.startsWith('/automation/ai') && $page.url !== '/automation/ai-settings' ? 'bg-slate-50 text-black' : ''">
                             <Link rel="noopener noreferrer" href="/automation/ai" class="flex items-center p-2 space-s-3 rounded-md">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 14 14"><g fill="none" stroke="black" stroke-linecap="round" stroke-linejoin="round"><path d="M6.022 4.347a18.452 18.452 0 0 0-1.93 1.686C1.248 8.877-.192 12.046.874 13.113c1.066 1.066 4.236-.375 7.079-3.218a18.452 18.452 0 0 0 1.686-1.931"/><path d="M9.639 7.964c1.677 2.226 2.36 4.32 1.532 5.148c-1.067 1.067-4.236-.374-7.08-3.217C1.249 7.05-.191 3.882.875 2.815c.828-.827 2.922-.144 5.148 1.532"/><path d="M5.522 7.964a.5.5 0 1 0 1 0a.5.5 0 0 0-1 0m2.51-4.354c-.315-.055-.315-.506 0-.56a2.843 2.843 0 0 0 2.29-2.193L10.34.77c.068-.31.51-.312.58-.003l.024.101a2.858 2.858 0 0 0 2.296 2.18c.316.055.316.509 0 .563a2.858 2.858 0 0 0-2.296 2.18l-.024.101c-.07.31-.512.308-.58-.002l-.02-.087A2.843 2.843 0 0 0 8.03 3.61Z"/></g></svg>
                                 <div class="overflow-hidden text-ellipsis">{{ $t('AI Reply Assistant') }}</div>
