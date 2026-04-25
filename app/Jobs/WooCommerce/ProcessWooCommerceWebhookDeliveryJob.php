@@ -6,6 +6,7 @@ use App\Jobs\WooCommerce\HandleWooCommerceWebhookDeliveryJob;
 use App\Models\WooCommerceIntegration;
 use App\Models\WooCommerceWebhookDelivery;
 use App\Services\WooCommerce\Webhooks\WooCommerceAddToCartContextEnricher;
+use App\Services\WooCommerce\Webhooks\WooCommerceOrderItemsSummaryFormatter;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -32,7 +33,10 @@ class ProcessWooCommerceWebhookDeliveryJob implements ShouldQueue
     ) {
     }
 
-    public function handle(WooCommerceAddToCartContextEnricher $addToCartContextEnricher): void
+    public function handle(
+        WooCommerceAddToCartContextEnricher $addToCartContextEnricher,
+        WooCommerceOrderItemsSummaryFormatter $orderItemsSummaryFormatter
+    ): void
     {
         $payload = json_decode($this->rawBody, true) ?? [];
 
@@ -46,6 +50,11 @@ class ProcessWooCommerceWebhookDeliveryJob implements ShouldQueue
             $integration = WooCommerceIntegration::find($this->integrationId);
             $payload['chatberry_add_to_cart'] = $addToCartContextEnricher->enrich($payload, $headers, $integration);
         }
+
+        if (in_array(($this->topic ?? ''), ['order.created', 'order.updated', 'action.woocommerce_order_status_changed'], true)) {
+            $payload['chatberry_order']['products_summary'] = $orderItemsSummaryFormatter->build($payload);
+        }
+
         $dedupeKey = $this->buildDedupeKey($payload);
 
         $existing = WooCommerceWebhookDelivery::where('payload_hash', $payloadHash)

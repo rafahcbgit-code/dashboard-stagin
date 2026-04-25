@@ -68,20 +68,44 @@ class WooCommerceOrderCreatedFieldSchema
                 'path' => 'shipping.phone',
             ],
             [
+                'label' => 'Shipping First Name',
+                'path' => 'shipping.first_name',
+            ],
+            [
+                'label' => 'Shipping Last Name',
+                'path' => 'shipping.last_name',
+            ],
+            [
+                'label' => 'Shipping Address 1',
+                'path' => 'shipping.address_1',
+            ],
+            [
+                'label' => 'Shipping Address 2',
+                'path' => 'shipping.address_2',
+            ],
+            [
+                'label' => 'Shipping City',
+                'path' => 'shipping.city',
+            ],
+            [
+                'label' => 'Shipping State',
+                'path' => 'shipping.state',
+            ],
+            [
+                'label' => 'Shipping Postcode',
+                'path' => 'shipping.postcode',
+            ],
+            [
+                'label' => 'Shipping Country',
+                'path' => 'shipping.country',
+            ],
+            [
                 'label' => 'Payment URL',
                 'path' => 'payment_url',
             ],
             [
-                'label' => 'First Item Name',
-                'path' => 'line_items.0.name',
-            ],
-            [
-                'label' => 'First Item Quantity',
-                'path' => 'line_items.0.quantity',
-            ],
-            [
-                'label' => 'First Item Total',
-                'path' => 'line_items.0.total',
+                'label' => 'All Items Summary',
+                'path' => 'chatberry_order.products_summary',
             ],
             [
                 'label' => 'Order Created At',

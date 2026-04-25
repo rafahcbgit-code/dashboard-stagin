@@ -13,6 +13,7 @@ use App\Services\Salla\Webhooks\Exceptions\SallaWebhookNonRetryableException;
 use App\Services\Salla\Webhooks\TemplateParameterBuilder;
 use App\Services\Salla\Webhooks\SallaWebhookMessageSenderInterface;
 use App\Services\WooCommerce\Webhooks\WooCommerceWebhookEventHandlerInterface;
+use App\Services\WooCommerce\Webhooks\WooCommerceOrderItemsSummaryFormatter;
 use Illuminate\Support\Facades\Log;
 
 class WooCommerceOrderUpdatedHandler implements WooCommerceWebhookEventHandlerInterface
@@ -20,7 +21,8 @@ class WooCommerceOrderUpdatedHandler implements WooCommerceWebhookEventHandlerIn
     public function __construct(
         private readonly TemplateParameterBuilder $parameterBuilder,
         private readonly SallaWebhookMessageSenderInterface $messageSender,
-        private readonly OutboundMessageLogger $outboundLogger
+        private readonly OutboundMessageLogger $outboundLogger,
+        private readonly WooCommerceOrderItemsSummaryFormatter $orderItemsSummaryFormatter
     ) {
     }
 
@@ -36,6 +38,9 @@ class WooCommerceOrderUpdatedHandler implements WooCommerceWebhookEventHandlerIn
         }
 
         $payload = $delivery->payload ?? [];
+        if (!is_scalar(data_get($payload, 'chatberry_order.products_summary'))) {
+            $payload['chatberry_order']['products_summary'] = $this->orderItemsSummaryFormatter->build($payload);
+        }
         $orderId = data_get($payload, 'id');
         $currentStatus = is_scalar(data_get($payload, 'status'))
             ? mb_strtolower(trim((string) data_get($payload, 'status')))

@@ -255,6 +255,9 @@ class TemplateParameterBuilder
 
         $rawTransform = data_get($mapping, 'transform');
         $transform = is_scalar($rawTransform) ? strtolower(trim((string) $rawTransform)) : null;
+        if (!$transform && $payloadPath === 'chatberry_order.products_summary') {
+            $transform = 'multiline';
+        }
 
         return $this->applyTransform($value, $transform);
     }
@@ -278,9 +281,14 @@ class TemplateParameterBuilder
             'number' => is_numeric($string) ? (string) (0 + $string) : $string,
             'money' => is_numeric($string) ? number_format((float) $string, 2, '.', '') : $string,
             'phone_e164' => PhoneService::getE164Format($string) ?? $string,
+            'multiline' => $this->ensureMultiLine($string),
             'single_line' => $this->ensureSingleLine($string),
             default => $string,
         };
+
+        if ($transform === 'multiline') {
+            return $transformed;
+        }
 
         return $this->ensureSingleLine($transformed);
     }
@@ -290,5 +298,23 @@ class TemplateParameterBuilder
         $singleLine = preg_replace('/[\r\n\t]+/', ' ', $value);
         $singleLine = preg_replace('/ {2,}/', ' ', $singleLine);
         return trim($singleLine);
+    }
+
+    private function ensureMultiLine(string $value): string
+    {
+        $normalized = str_replace(["\r\n", "\r"], "\n", $value);
+        $lines = explode("\n", $normalized);
+        $cleanLines = [];
+
+        foreach ($lines as $line) {
+            $line = preg_replace('/\t+/', ' ', $line);
+            $line = preg_replace('/ {2,}/', ' ', $line);
+            $line = trim((string) $line);
+            if ($line !== '') {
+                $cleanLines[] = $line;
+            }
+        }
+
+        return implode("\n", $cleanLines);
     }
 }
