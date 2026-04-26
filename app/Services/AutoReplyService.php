@@ -207,7 +207,7 @@ class AutoReplyService
             }
 
             // Use the response sequence from metadata or fallback to default
-            $response_sequence = $metadataArray['automation']['response_sequence'] ?? ['Basic Replies', 'Automated Flows', 'AI Reply Assistant'];
+            $response_sequence = $metadataArray['automation']['response_sequence'] ?? ['Basic Replies', 'Automated Flows'];
         }
 
         // Define mapping of sequence items to functions
