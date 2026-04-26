@@ -64,6 +64,9 @@ class Kernel extends ConsoleKernel
         $schedule->command('queue:prune-batches --hours=48 --unfinished=72')
             ->daily();
 
+        $schedule->command('contacts:cleanup-import-batches --hours=48')
+            ->daily();
+
         $schedule->command('model:prune', [
             '--model' => [\App\Models\CampaignLog::class],
             '--hours' => 72,

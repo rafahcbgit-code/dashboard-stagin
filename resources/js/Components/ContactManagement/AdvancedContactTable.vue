@@ -4,6 +4,7 @@ import axios from 'axios';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import debounce from 'lodash/debounce';
 import Modal from '@/Components/Modal.vue';
+import ContactImportWizardModal from '@/Components/ContactManagement/ContactImportWizardModal.vue';
 
 const props = defineProps({
     rows: { type: Object, required: true },
@@ -42,6 +43,7 @@ const query = reactive({
 const isFilterModalOpen = ref(false);
 const isGroupsModalOpen = ref(false);
 const isColumnsMenuOpen = ref(false);
+const isImportWizardOpen = ref(false);
 const columnsMenuRef = ref(null);
 const selectedIds = ref([]);
 const bulkActionModal = ref('');
@@ -445,6 +447,10 @@ onMounted(() => {
 onBeforeUnmount(() => {
     document.removeEventListener('click', handleOutsideClick);
 });
+
+const onImportCompleted = () => {
+    runFilterRequest();
+};
 </script>
 
 <template>
@@ -457,6 +463,7 @@ onBeforeUnmount(() => {
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
                     <Link href="/contacts/add" class="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white">{{ $t('Add Contact') }}</Link>
+                    <button type="button" class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700" @click="isImportWizardOpen = true">{{ $t('Import') }}</button>
                     <button type="button" class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700" @click="runExportAll">{{ $t('Export All') }}</button>
                     <button type="button" class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700" @click="isGroupsModalOpen = true">{{ $t('Groups') }}</button>
                     <button type="button" class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700" @click="isFilterModalOpen = true">{{ $t('Advanced Filters') }}</button>
@@ -703,4 +710,12 @@ onBeforeUnmount(() => {
             <button type="button" class="mt-2 rounded-md bg-primary px-3 py-2 text-sm text-white" @click="runBulkAction">{{ $t('Apply Action') }}</button>
         </div>
     </Modal>
+
+    <ContactImportWizardModal
+        v-model="isImportWizardOpen"
+        :contactGroups="groups"
+        :fields="fields"
+        :countries="contactConstants.countries"
+        @completed="onImportCompleted"
+    />
 </template>

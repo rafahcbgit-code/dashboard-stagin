@@ -295,6 +295,15 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::post('/contacts/bulk-delete', [App\Http\Controllers\User\ContactController::class, 'bulkDelete'])->name('contacts.bulk-delete');
                 Route::post('/contacts/bulk-update-attribute', [App\Http\Controllers\User\ContactController::class, 'bulkUpdateAttribute'])->name('contacts.bulk-update-attribute');
                 Route::get('/contacts/export', [App\Http\Controllers\User\ContactController::class, 'export'])->name('contacts.bulk-export');
+                Route::post('/contacts/import/preview', [App\Http\Controllers\User\ContactImportController::class, 'preview'])->name('contacts.import.preview');
+                Route::post('/contacts/import/{batchUuid}/mapping', [App\Http\Controllers\User\ContactImportController::class, 'map'])->name('contacts.import.mapping');
+                Route::post('/contacts/import/{batchUuid}/normalize', [App\Http\Controllers\User\ContactImportController::class, 'normalize'])->name('contacts.import.normalize');
+                Route::get('/contacts/import/{batchUuid}/rows', [App\Http\Controllers\User\ContactImportController::class, 'rows'])->name('contacts.import.rows');
+                Route::patch('/contacts/import/{batchUuid}/rows/{rowId}', [App\Http\Controllers\User\ContactImportController::class, 'updateRow'])->name('contacts.import.rows.update');
+                Route::delete('/contacts/import/{batchUuid}/rows/{rowId}', [App\Http\Controllers\User\ContactImportController::class, 'deleteRow'])->name('contacts.import.rows.delete');
+                Route::post('/contacts/import/{batchUuid}/group-assignment', [App\Http\Controllers\User\ContactImportController::class, 'assignGroups'])->name('contacts.import.groups');
+                Route::post('/contacts/import/{batchUuid}/commit', [App\Http\Controllers\User\ContactImportController::class, 'commit'])->name('contacts.import.commit');
+                Route::get('/contacts/import/{batchUuid}/report.csv', [App\Http\Controllers\User\ContactImportController::class, 'reportCsv'])->name('contacts.import.report.csv');
 
                 Route::get('/contacts/{uuid?}', [App\Http\Controllers\User\ContactController::class, 'index'])->name('contacts');
                 Route::post('/contacts', [App\Http\Controllers\User\ContactController::class, 'store']);

@@ -131,8 +131,15 @@ class WhatsappService
         $responseObject = $this->sendHttpRequest('POST', $url, $requestData, $headers);
 
         if($responseObject->success === true){
-            $response['text']['body'] = clean($messageContent);
-            $response['type'] = 'text';
+            $response = [];
+
+            if (($requestData['type'] ?? 'text') === 'interactive') {
+                $response['type'] = 'interactive';
+                $response['interactive'] = $requestData['interactive'] ?? [];
+            } else {
+                $response['type'] = 'text';
+                $response['text']['body'] = clean($messageContent);
+            }
 
             $chat = Chat::create([
                 'organization_id' => $contact->organization_id,

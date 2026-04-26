@@ -26,7 +26,17 @@
             @viewTemplate="displayTemplate = true" />
         </div>
         <div v-if="displayTemplate" class="flex-1 overflow-y-hidden">
-          <CampaignForm v-if="displayTemplate" class="bg-white h-full" :contact="contact.uuid" :templates="templates"
+          <div v-if="isContactBlocked" class="h-full bg-white flex items-center justify-center p-6">
+            <div class="max-w-md text-center border border-red-200 bg-red-50 rounded-xl p-6">
+              <h3 class="text-base font-semibold text-red-700 mb-2">{{ $t('Blocked contact') }}</h3>
+              <p class="text-sm text-red-700 mb-4">{{ $t('This contact is blocked. Sending templates is disabled.') }}</p>
+              <button type="button" class="rounded-md bg-white border border-red-300 px-4 py-2 text-sm text-red-700"
+                @click="displayTemplate = false">
+                {{ $t('Back') }}
+              </button>
+            </div>
+          </div>
+          <CampaignForm v-else class="bg-white h-full" :contact="contact.uuid" :templates="templates"
             :contactGroups="[]" :settings="props.settings" :displayCancelBtn="false" :displayTitle="true"
             :isCampaignFlow="false" :scheduleTemplate="false" :sendText="'Send Message'"
             @viewTemplate="displayTemplate = false" :contactFields="contactFields" />
@@ -41,7 +51,7 @@ import AppLayout from "./../Layout/App.vue";
 import { default as axios } from "axios";
 import { router, useForm } from "@inertiajs/vue3";
 import { useChatFilterStore } from '@/stores/chatFilterStore.js';
-import { defineEmits, ref, onMounted, watch, onUnmounted } from "vue";
+import { defineEmits, ref, onMounted, watch, onUnmounted, computed } from "vue";
 import CampaignForm from "@/Components/CampaignForm.vue";
 import ChatForm from "@/Components/ChatComponents/ChatForm.vue";
 import ChatHeader from "@/Components/ChatComponents/ChatHeader.vue";
@@ -95,6 +105,7 @@ const chatThread = ref(props.chatThread);
 const contact = ref(props.contact);
 const contactFields = ref(props.contactFields);
 const labelColors = ref(props.labelColors);
+const isContactBlocked = computed(() => Boolean(contact.value?.is_blocked));
 
 
 /* Chat Optimization Configuration */
@@ -234,6 +245,10 @@ watch(
   () => props.contact,
   (newContact) => {
     contact.value = newContact;
+
+    if (newContact?.is_blocked && displayTemplate.value) {
+      displayTemplate.value = false;
+    }
   }
 );
 
