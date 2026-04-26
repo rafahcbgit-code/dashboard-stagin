@@ -331,19 +331,37 @@ class FlowExecutionService
                 continue;
             }
 
-            // Message node: send and stop (wait for user response)
+            // Message node: send the message
             $sent = $this->sendNodeMessage($node, $contact);
+
+            // Determine if this node type requires user input (buttons, lists, CTAs)
+            $fields = \Arr::get($node, 'data.metadata.fields', []);
+            $msgType = $fields['type'] ?? null;
+            $needsUserInput = in_array($msgType, ['interactive buttons', 'interactive list', 'interactive call to action url']);
+
             Log::info('FlowExecution: message node send result', [
                 'node_id' => $currentNodeId,
+                'msg_type' => $msgType,
+                'needs_user_input' => $needsUserInput,
                 'sent' => $sent ? 'true' : 'false',
             ]);
-            if ($sent) {
-                $this->advanceToNextStep($parser, $currentNodeId, $chat->contact_id);
-            } else {
-                // Even on send failure, advance to avoid getting stuck
-                $this->advanceToNextStep($parser, $currentNodeId, $chat->contact_id);
+
+            // Advance step regardless of send success to avoid getting stuck
+            $this->advanceToNextStep($parser, $currentNodeId, $chat->contact_id);
+
+            if ($needsUserInput) {
+                // Interactive node: stop and wait for user response
+                return true;
             }
-            return true;
+
+            // Plain text/media: send and continue to next node
+            $flowData = $this->refreshFlowData($chat->contact_id);
+            if (!$flowData) {
+                // Flow was completed (no more steps) — endFlow already called by advanceToNextStep
+                return true;
+            }
+            $currentNodeId = (string) $flowData->current_step;
+            continue;
         }
 
         Log::warning("FlowExecution: max iterations reached for contact {$chat->contact_id}");
