@@ -36,6 +36,8 @@ class ContactFilter
         $groupIds = $this->toIntArray($request->query('group_id', $request->query('group_ids', [])));
         $labelIds = $this->toIntArray($request->query('label_id', $request->query('labels', [])));
         $country = trim((string) $request->query('country', ''));
+        $countryDialCode = preg_replace('/\D+/', '', trim((string) $request->query('country_dial_code', '')));
+        $contactSource = strtolower(trim((string) $request->query('contact_source', '')));
         $subscriptionStatus = $request->query('subscription_status');
         $blockedStatus = $request->query('blocked_status');
         $noGroup = $this->toBool($request->query('no_group', false));
@@ -72,6 +74,25 @@ class ContactFilter
                 $builder->whereRaw("JSON_UNQUOTE(JSON_EXTRACT(contacts.address, '$.country')) = ?", [$country])
                     ->orWhere('contacts.address', 'like', '%"country":"' . $escapedCountry . '"%');
             });
+        }
+
+        if ($countryDialCode !== '') {
+            $normalizedPhoneExpression = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(contacts.phone, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '')";
+            $query->where(function (Builder $builder) use ($normalizedPhoneExpression, $countryDialCode) {
+                $builder->whereRaw("{$normalizedPhoneExpression} LIKE ?", [$countryDialCode . '%'])
+                    ->orWhereRaw("{$normalizedPhoneExpression} LIKE ?", ['00' . $countryDialCode . '%']);
+            });
+        }
+
+        if ($contactSource !== '') {
+            if ($contactSource === 'platform') {
+                $query->where(function (Builder $builder) {
+                    $builder->where('contacts.contact_source', 'platform')
+                        ->orWhereNull('contacts.contact_source');
+                });
+            } else {
+                $query->where('contacts.contact_source', $contactSource);
+            }
         }
 
         if ($subscriptionStatus !== null && $subscriptionStatus !== '') {

@@ -14,6 +14,7 @@ const emit = defineEmits(['update:modelValue', 'completed']);
 
 const wizardStep = ref(1);
 const busy = ref(false);
+const uploadBusy = ref(false);
 const errorMessage = ref('');
 const successMessage = ref('');
 
@@ -38,9 +39,13 @@ const mapping = reactive({
 });
 
 const defaultCountryCode = ref('+966');
+const normalizationApplied = ref(false);
 const groupForm = reactive({
+    assignment_mode: 'all_selected',
     group_ids: [],
     new_group_name: '',
+    split_group_size: 100,
+    split_group_prefix: 'group',
 });
 
 const rowEditor = reactive({
@@ -65,6 +70,7 @@ const hasBatch = computed(() => !!batch.value?.uuid);
 const batchHeaders = computed(() => batch.value?.headers || []);
 const batchStats = computed(() => batch.value?.stats || {});
 const report = computed(() => batch.value?.report || null);
+const isImportCompleted = computed(() => Boolean(report.value));
 
 watch(
     () => props.modelValue,
@@ -94,6 +100,7 @@ const closeModal = () => {
 const resetWizard = () => {
     wizardStep.value = 1;
     busy.value = false;
+    uploadBusy.value = false;
     errorMessage.value = '';
     successMessage.value = '';
     fileName.value = '';
@@ -105,8 +112,12 @@ const resetWizard = () => {
     rowsMeta.per_page = 10;
     rowsMeta.total = 0;
     defaultCountryCode.value = '+966';
+    normalizationApplied.value = false;
     groupForm.group_ids = [];
     groupForm.new_group_name = '';
+    groupForm.assignment_mode = 'all_selected';
+    groupForm.split_group_size = 100;
+    groupForm.split_group_prefix = 'group';
 
     Object.assign(mapping, {
         first_name: '',
@@ -171,6 +182,7 @@ const uploadAndPreview = async (event) => {
     errorMessage.value = '';
     successMessage.value = '';
     busy.value = true;
+    uploadBusy.value = true;
     fileName.value = file.name;
 
     try {
@@ -196,6 +208,7 @@ const uploadAndPreview = async (event) => {
         errorMessage.value = error?.response?.data?.message || 'Failed to parse file.';
     } finally {
         busy.value = false;
+        uploadBusy.value = false;
     }
 };
 
@@ -225,6 +238,7 @@ const mapColumns = async () => {
         batch.value = data.batch;
         applyRowsPayload(data.rows);
         wizardStep.value = 3;
+        normalizationApplied.value = false;
         rowFilter.value = 'invalid';
         await fetchRows(1, 'invalid');
     } catch (error) {
@@ -247,8 +261,18 @@ const normalizeRows = async () => {
             default_country_code: defaultCountryCode.value,
         });
         batch.value = data.batch;
-        applyRowsPayload(data.rows);
+        normalizationApplied.value = true;
         rowFilter.value = 'invalid';
+
+        // Clear stale rows to avoid flashing old invalid data.
+        applyRowsPayload({
+            data: [],
+            current_page: 1,
+            last_page: 1,
+            per_page: rowsMeta.per_page,
+            total: 0,
+        });
+
         await fetchRows(1, 'invalid');
         successMessage.value = 'Normalization completed. Fix or remove invalid rows before import.';
     } catch (error) {
@@ -368,6 +392,34 @@ const removeRow = async (row) => {
     }
 };
 
+const clearAllInvalidRows = async () => {
+    if (!hasBatch.value || !hasInvalidRows.value) {
+        return;
+    }
+
+    const confirmed = window.confirm('Are you sure you want to remove all invalid rows?');
+    if (!confirmed) {
+        return;
+    }
+
+    busy.value = true;
+    errorMessage.value = '';
+    successMessage.value = '';
+
+    try {
+        const { data } = await axios.delete(`/contacts/import/${batch.value.uuid}/rows/clear-invalid`);
+        batch.value = data?.batch?.batch || batch.value;
+        applyRowsPayload(data?.batch?.rows || { data: [], current_page: 1, last_page: 1, per_page: rowsMeta.per_page, total: 0 });
+        rowFilter.value = 'invalid';
+        normalizationApplied.value = true;
+        successMessage.value = `Removed ${data?.removed_count || 0} invalid rows.`;
+    } catch (error) {
+        errorMessage.value = error?.response?.data?.message || 'Failed to clear invalid rows.';
+    } finally {
+        busy.value = false;
+    }
+};
+
 const saveGroupAssignment = async () => {
     if (!hasBatch.value) {
         return;
@@ -380,6 +432,9 @@ const saveGroupAssignment = async () => {
         const { data } = await axios.post(`/contacts/import/${batch.value.uuid}/group-assignment`, {
             group_ids: groupForm.group_ids,
             new_group_name: groupForm.new_group_name,
+            assignment_mode: groupForm.assignment_mode,
+            split_group_size: groupForm.assignment_mode === 'split' ? Number(groupForm.split_group_size) : null,
+            split_group_prefix: groupForm.assignment_mode === 'split' ? groupForm.split_group_prefix : null,
         });
         batch.value = data.batch;
         applyRowsPayload(data.rows);
@@ -402,7 +457,14 @@ const executeImport = async () => {
 
     try {
         const { data } = await axios.post(`/contacts/import/${batch.value.uuid}/commit`);
-        batch.value = data.batch;
+        // Controller returns nested payload:
+        // { report: {...}, batch: { batch: {...}, rows: {...} } }
+        if (data?.batch?.batch) {
+            batch.value = data.batch.batch;
+            applyRowsPayload(data.batch.rows || { data: [], current_page: 1, last_page: 1, per_page: rowsMeta.per_page, total: 0 });
+        } else {
+            batch.value = data?.batch || batch.value;
+        }
         successMessage.value = 'Import finished successfully.';
         emit('completed');
     } catch (error) {
@@ -413,6 +475,16 @@ const executeImport = async () => {
 };
 
 const canGoToGroupStep = computed(() => (batchStats.value.invalid || 0) === 0);
+const canContinueToGroups = computed(() => normalizationApplied.value && canGoToGroupStep.value);
+const hasInvalidRows = computed(() => (batchStats.value.invalid || 0) > 0);
+
+const goToPreviousStep = () => {
+    if (busy.value || uploadBusy.value) {
+        return;
+    }
+
+    wizardStep.value = Math.max(1, wizardStep.value - 1);
+};
 </script>
 
 <template>
@@ -431,8 +503,17 @@ const canGoToGroupStep = computed(() => (batchStats.value.invalid || 0) === 0);
 
             <div v-if="wizardStep === 1" class="space-y-3">
                 <p class="text-sm text-slate-600">Upload CSV/XLSX file to start import preview.</p>
-                <input type="file" accept=".csv,.xlsx" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" @change="uploadAndPreview">
+                <input type="file" accept=".csv,.xlsx" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-slate-100" :disabled="uploadBusy" @change="uploadAndPreview">
                 <p v-if="fileName" class="text-xs text-slate-500">File: {{ fileName }}</p>
+                <div v-if="uploadBusy" class="rounded-md border border-slate-200 bg-slate-50 px-3 py-3">
+                    <div class="flex items-center gap-2 text-sm text-slate-700">
+                        <svg class="h-4 w-4 animate-spin text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4z"></path>
+                        </svg>
+                        <span>جارٍ تحميل الملف ومعالجة البيانات... سيتم نقلك تلقائيًا إلى خطوة Mapping.</span>
+                    </div>
+                </div>
             </div>
 
             <div v-if="wizardStep === 2" class="space-y-3">
@@ -513,44 +594,71 @@ const canGoToGroupStep = computed(() => (batchStats.value.invalid || 0) === 0);
                 </div>
 
                 <div class="flex justify-end">
-                    <button type="button" class="rounded-md bg-primary px-4 py-2 text-sm text-white disabled:opacity-60" :disabled="busy" @click="mapColumns">
+                    <div class="flex items-center gap-2">
+                        <button type="button" class="rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-700 disabled:opacity-60" :disabled="busy || uploadBusy" @click="goToPreviousStep">
+                            Previous
+                        </button>
+                        <button type="button" class="rounded-md bg-primary px-4 py-2 text-sm text-white disabled:opacity-60" :disabled="busy" @click="mapColumns">
                         {{ busy ? 'Saving...' : 'Save Mapping & Continue' }}
-                    </button>
+                        </button>
+                    </div>
                 </div>
             </div>
 
-            <div v-if="wizardStep === 3" class="space-y-3">
-                <div class="grid gap-2 md:grid-cols-2">
-                    <label class="text-xs text-slate-500">Default Country Code (for numbers without code)
-                        <input v-model="defaultCountryCode" type="text" class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="+966">
+            <div v-if="wizardStep === 3" class="space-y-4">
+                <div class="grid gap-3 md:grid-cols-2">
+                    <label class="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">Default Country Code (for numbers without code)
+                        <input v-model="defaultCountryCode" type="text" class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" placeholder="+966">
                     </label>
-                    <label class="text-xs text-slate-500">Filter Rows
-                        <select v-model="rowFilter" class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" @change="fetchRows(1, rowFilter)">
-                            <option value="all">All</option>
+                    <label class="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600">Filter Rows
+                        <select v-model="rowFilter" class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" @change="fetchRows(1, 'invalid')">
                             <option value="invalid">Invalid</option>
-                            <option value="valid">Valid</option>
-                            <option value="removed">Removed</option>
                         </select>
                     </label>
                 </div>
 
-                <div class="flex flex-wrap items-center gap-2 text-xs text-slate-600">
-                    <span>Total: {{ batchStats.total || 0 }}</span>
-                    <span>Valid: {{ batchStats.valid || 0 }}</span>
-                    <span>Invalid: {{ batchStats.invalid || 0 }}</span>
-                    <span>Removed: {{ batchStats.removed || 0 }}</span>
+                <div class="grid grid-cols-2 gap-2 md:grid-cols-4">
+                    <div class="rounded-lg border border-slate-200 bg-white px-3 py-2">
+                        <p class="text-[11px] text-slate-500">Total</p>
+                        <p class="text-sm font-semibold text-slate-800">{{ batchStats.total || 0 }}</p>
+                    </div>
+                    <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+                        <p class="text-[11px] text-emerald-700">Valid</p>
+                        <p class="text-sm font-semibold text-emerald-800">{{ batchStats.valid || 0 }}</p>
+                    </div>
+                    <div class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2">
+                        <p class="text-[11px] text-rose-700">Invalid</p>
+                        <p class="text-sm font-semibold text-rose-800">{{ batchStats.invalid || 0 }}</p>
+                    </div>
+                    <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                        <p class="text-[11px] text-amber-700">Removed</p>
+                        <p class="text-sm font-semibold text-amber-800">{{ batchStats.removed || 0 }}</p>
+                    </div>
                 </div>
 
-                <div class="flex justify-between">
-                    <button type="button" class="rounded-md border border-slate-300 px-4 py-2 text-sm" :disabled="busy" @click="normalizeRows">
-                        {{ busy ? 'Processing...' : 'Apply Normalization' }}
-                    </button>
-                    <button type="button" class="rounded-md bg-primary px-4 py-2 text-sm text-white disabled:opacity-60" :disabled="busy || !canGoToGroupStep" @click="wizardStep = 4">
-                        Continue to Group Assignment
-                    </button>
+                <div class="rounded-lg border border-slate-200 bg-white p-3">
+                    <div class="grid w-full grid-cols-1 gap-2 sm:grid-cols-2">
+                        <button type="button" class="inline-flex h-11 w-full items-center justify-center rounded-md border border-slate-300 px-4 text-sm disabled:opacity-60" :disabled="busy || uploadBusy" @click="goToPreviousStep">
+                                Previous
+                        </button>
+                        <button type="button" class="inline-flex h-11 w-full items-center justify-center rounded-md border border-slate-300 px-4 text-sm font-medium disabled:opacity-60" :disabled="busy" @click="normalizeRows">
+                            {{ busy ? 'Processing...' : 'Apply Normalization' }}
+                        </button>
+                        <button v-if="hasInvalidRows" type="button" class="inline-flex h-11 w-full items-center justify-center rounded-md border border-rose-300 px-4 text-sm font-medium text-rose-700 disabled:opacity-60" :disabled="busy" @click="clearAllInvalidRows">
+                            Clear All Invalid
+                        </button>
+                        <button type="button" class="inline-flex h-11 w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60 sm:col-span-2" :disabled="busy || !canContinueToGroups" @click="wizardStep = 4">
+                            Continue to Group Assignment
+                        </button>
+                    </div>
+                    <p class="mt-2 text-xs" :class="canContinueToGroups ? 'text-emerald-700' : 'text-slate-500'">
+                        {{ canContinueToGroups
+                            ? 'Normalization applied successfully. You can continue to group assignment.'
+                            : 'Run Apply Normalization first, then resolve invalid rows to continue.' }}
+                    </p>
                 </div>
 
-                <div class="overflow-x-auto rounded-md border border-slate-200">
+                <div v-if="hasInvalidRows" class="overflow-x-auto rounded-lg border border-slate-200 bg-white">
                     <table class="min-w-full divide-y divide-slate-200 text-xs">
                         <thead class="bg-slate-50">
                             <tr>
@@ -578,8 +686,11 @@ const canGoToGroupStep = computed(() => (batchStats.value.invalid || 0) === 0);
                         </tbody>
                     </table>
                 </div>
+                <div v-else class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-700">
+                    No invalid rows found after normalization.
+                </div>
 
-                <div class="flex items-center justify-end gap-2">
+                <div v-if="hasInvalidRows" class="flex items-center justify-end gap-2">
                     <button type="button" class="rounded border border-slate-300 px-2 py-1 text-xs disabled:opacity-50" :disabled="rowsMeta.current_page <= 1 || busy" @click="fetchRows(rowsMeta.current_page - 1, rowFilter)">Prev</button>
                     <span class="text-xs text-slate-500">{{ rowsMeta.current_page }} / {{ rowsMeta.last_page }}</span>
                     <button type="button" class="rounded border border-slate-300 px-2 py-1 text-xs disabled:opacity-50" :disabled="rowsMeta.current_page >= rowsMeta.last_page || busy" @click="fetchRows(rowsMeta.current_page + 1, rowFilter)">Next</button>
@@ -587,33 +698,73 @@ const canGoToGroupStep = computed(() => (batchStats.value.invalid || 0) === 0);
             </div>
 
             <div v-if="wizardStep === 4" class="space-y-3">
-                <p class="text-sm text-slate-600">Assign existing groups and/or create one new group. File groups and selected groups will be merged.</p>
-                <div class="max-h-48 overflow-auto rounded-md border border-slate-200 p-2">
-                    <label v-for="group in contactGroups" :key="`assign-${group.id}`" class="mb-1 flex items-center gap-2 text-sm text-slate-700">
-                        <input v-model="groupForm.group_ids" type="checkbox" :value="group.id">
-                        {{ group.name }}
+                <p class="text-sm text-slate-600">Choose how to assign imported contacts to groups.</p>
+
+                <div class="rounded-lg border border-slate-200 p-3 space-y-3">
+                    <label class="flex items-start gap-2 rounded-md border border-slate-200 p-2">
+                        <input v-model="groupForm.assignment_mode" type="radio" value="all_selected" class="mt-0.5">
+                        <div>
+                            <p class="text-sm font-medium text-slate-800">Add all contacts to selected groups</p>
+                            <p class="text-xs text-slate-500">All imported contacts will be added to selected/manual groups. File group names will also be merged.</p>
+                        </div>
+                    </label>
+                    <label class="flex items-start gap-2 rounded-md border border-slate-200 p-2">
+                        <input v-model="groupForm.assignment_mode" type="radio" value="split" class="mt-0.5">
+                        <div>
+                            <p class="text-sm font-medium text-slate-800">Split contacts across generated groups</p>
+                            <p class="text-xs text-slate-500">Create sequential groups like prefix_1, prefix_2 and distribute contacts by batch size.</p>
+                        </div>
                     </label>
                 </div>
-                <label class="text-xs text-slate-500">Create New Group
-                    <input v-model="groupForm.new_group_name" type="text" class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="New group name">
-                </label>
+
+                <div v-if="groupForm.assignment_mode === 'all_selected'" class="space-y-3">
+                    <div class="max-h-48 overflow-auto rounded-md border border-slate-200 p-2">
+                        <label v-for="group in contactGroups" :key="`assign-${group.id}`" class="mb-1 flex items-center gap-2 text-sm text-slate-700">
+                            <input v-model="groupForm.group_ids" type="checkbox" :value="group.id">
+                            {{ group.name }}
+                        </label>
+                    </div>
+                    <label class="text-xs text-slate-500">Create New Group
+                        <input v-model="groupForm.new_group_name" type="text" class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="New group name">
+                    </label>
+                </div>
+
+                <div v-else class="grid gap-3 md:grid-cols-2">
+                    <label class="text-xs text-slate-500">Contacts per group
+                        <input v-model.number="groupForm.split_group_size" min="1" type="number" class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="100">
+                    </label>
+                    <label class="text-xs text-slate-500">Group name prefix
+                        <input v-model="groupForm.split_group_prefix" type="text" class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="group">
+                    </label>
+                </div>
+
                 <div class="flex justify-end">
-                    <button type="button" class="rounded-md bg-primary px-4 py-2 text-sm text-white disabled:opacity-60" :disabled="busy" @click="saveGroupAssignment">
-                        {{ busy ? 'Saving...' : 'Save Group Assignment' }}
-                    </button>
+                    <div class="flex items-center gap-2">
+                        <button type="button" class="rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-700 disabled:opacity-60" :disabled="busy || uploadBusy" @click="goToPreviousStep">
+                            Previous
+                        </button>
+                        <button type="button" class="rounded-md bg-primary px-4 py-2 text-sm text-white disabled:opacity-60" :disabled="busy || (groupForm.assignment_mode === 'split' && (!groupForm.split_group_size || groupForm.split_group_size < 1 || !String(groupForm.split_group_prefix || '').trim()))" @click="saveGroupAssignment">
+                            {{ busy ? 'Saving...' : 'Save Group Assignment' }}
+                        </button>
+                    </div>
                 </div>
             </div>
 
             <div v-if="wizardStep === 5" class="space-y-3">
-                <div class="rounded-md bg-slate-50 p-3 text-sm text-slate-700">
+                <div v-if="!isImportCompleted" class="rounded-md bg-slate-50 p-3 text-sm text-slate-700">
                     <p>Ready to import valid rows.</p>
                     <p>Valid rows: {{ batchStats.valid || 0 }} | Invalid rows: {{ batchStats.invalid || 0 }} | Removed rows: {{ batchStats.removed || 0 }}</p>
                 </div>
 
                 <div v-if="!report" class="flex justify-end">
-                    <button type="button" class="rounded-md bg-primary px-4 py-2 text-sm text-white disabled:opacity-60" :disabled="busy" @click="executeImport">
-                        {{ busy ? 'Importing...' : 'Execute Import' }}
-                    </button>
+                    <div class="flex items-center gap-2">
+                        <button type="button" class="rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-700 disabled:opacity-60" :disabled="busy || uploadBusy" @click="goToPreviousStep">
+                            Previous
+                        </button>
+                        <button type="button" class="rounded-md bg-primary px-4 py-2 text-sm text-white disabled:opacity-60" :disabled="busy" @click="executeImport">
+                            {{ busy ? 'Importing...' : 'Execute Import' }}
+                        </button>
+                    </div>
                 </div>
 
                 <div v-else class="space-y-2 rounded-md border border-slate-200 p-3 text-sm">
@@ -621,6 +772,11 @@ const canGoToGroupStep = computed(() => (batchStats.value.invalid || 0) === 0);
                     <p class="text-slate-600">{{ importSummaryText }}</p>
                     <p class="text-slate-600">Created: {{ report.created_count || 0 }}, Updated: {{ report.updated_count || 0 }}, Removed: {{ report.removed_count || 0 }}</p>
                     <a :href="`/contacts/import/${batch.uuid}/report.csv`" target="_blank" class="text-primary underline">Download failure report CSV</a>
+                    <div class="pt-2">
+                        <button type="button" class="rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-700 disabled:opacity-60" :disabled="busy || uploadBusy" @click="goToPreviousStep">
+                            Previous
+                        </button>
+                    </div>
                 </div>
             </div>
         </div>

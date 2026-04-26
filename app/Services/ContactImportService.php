@@ -203,33 +203,65 @@ class ContactImportService
         return $row->fresh();
     }
 
-    public function assignGroups(ContactImportBatch $batch, array $groupIds, ?string $newGroupName, int $organizationId, int $userId): ContactImportBatch
+    public function removeInvalidRows(ContactImportBatch $batch): int
+    {
+        return ContactImportRow::query()
+            ->where('contact_import_batch_id', $batch->id)
+            ->where('is_removed', false)
+            ->where('status', 'invalid')
+            ->update([
+                'is_removed' => true,
+                'status' => 'removed',
+                'errors' => json_encode(['Removed by user (Clear All invalid rows)']),
+                'updated_at' => now(),
+            ]);
+    }
+
+    public function assignGroups(
+        ContactImportBatch $batch,
+        array $groupIds,
+        ?string $newGroupName,
+        string $assignmentMode,
+        ?int $splitGroupSize,
+        ?string $splitGroupPrefix,
+        int $organizationId,
+        int $userId
+    ): ContactImportBatch
     {
         $assignedGroupIds = collect($groupIds)->map(fn ($id) => (int) $id)->filter()->values();
 
-        $name = trim((string) $newGroupName);
-        if ($name !== '') {
-            $group = ContactGroup::query()
-                ->where('organization_id', $organizationId)
-                ->whereNull('deleted_at')
-                ->whereRaw('LOWER(name) = ?', [Str::lower($name)])
-                ->first();
+        $normalizedMode = in_array($assignmentMode, ['all_selected', 'split'], true) ? $assignmentMode : 'all_selected';
 
-            if (! $group) {
-                $group = ContactGroup::query()->create([
-                    'organization_id' => $organizationId,
-                    'name' => $name,
-                    'created_by' => $userId,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
+        if ($normalizedMode === 'all_selected') {
+            $name = trim((string) $newGroupName);
+            if ($name !== '') {
+                $group = ContactGroup::query()
+                    ->where('organization_id', $organizationId)
+                    ->whereNull('deleted_at')
+                    ->whereRaw('LOWER(name) = ?', [Str::lower($name)])
+                    ->first();
+
+                if (! $group) {
+                    $group = ContactGroup::query()->create([
+                        'organization_id' => $organizationId,
+                        'name' => $name,
+                        'created_by' => $userId,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
+
+                $assignedGroupIds->push((int) $group->id);
             }
-
-            $assignedGroupIds->push((int) $group->id);
         }
 
         $batch->update([
             'selected_group_ids' => $assignedGroupIds->unique()->values()->all(),
+            'group_assignment' => [
+                'mode' => $normalizedMode,
+                'split_group_size' => $normalizedMode === 'split' ? (int) ($splitGroupSize ?? 0) : null,
+                'split_group_prefix' => $normalizedMode === 'split' ? trim((string) ($splitGroupPrefix ?? '')) : null,
+            ],
             'status' => 'group_assigned',
         ]);
 
@@ -239,6 +271,19 @@ class ContactImportService
     public function commit(ContactImportBatch $batch, int $organizationId, int $userId): array
     {
         $selectedGroupIds = collect($batch->selected_group_ids ?? [])->map(fn ($id) => (int) $id)->filter()->unique()->values();
+        $groupAssignment = (array) ($batch->group_assignment ?? []);
+        $assignmentMode = (string) ($groupAssignment['mode'] ?? 'all_selected');
+        $splitEnabled = $assignmentMode === 'split'
+            && (int) ($groupAssignment['split_group_size'] ?? 0) > 0
+            && trim((string) ($groupAssignment['split_group_prefix'] ?? '')) !== '';
+        $splitState = [
+            'enabled' => $splitEnabled,
+            'size' => max(1, (int) ($groupAssignment['split_group_size'] ?? 0)),
+            'prefix' => trim((string) ($groupAssignment['split_group_prefix'] ?? '')),
+            'current_index' => 1,
+            'current_count' => 0,
+        ];
+        $splitAssignmentByPhone = [];
         $groupCacheRaw = ContactGroup::query()
             ->where('organization_id', $organizationId)
             ->whereNull('deleted_at')
@@ -258,7 +303,7 @@ class ContactImportService
             ->where('is_removed', false)
             ->where('status', 'valid')
             ->orderBy('id')
-            ->chunkById(1000, function ($rows) use ($organizationId, $userId, $selectedGroupIds, &$groupCache, &$created, &$updated, &$failed): void {
+            ->chunkById(1000, function ($rows) use ($organizationId, $userId, $selectedGroupIds, $assignmentMode, &$splitState, &$splitAssignmentByPhone, &$groupCache, &$created, &$updated, &$failed): void {
                 $now = now();
                 $rowStatusUpdates = [];
                 $entriesByPhone = [];
@@ -351,8 +396,29 @@ class ContactImportService
                         ->filter()
                         ->values();
 
-                    $entriesByPhone[$phone]['all_group_ids'] = $selectedGroupIds
+                    $manualGroupIds = $assignmentMode === 'all_selected' ? $selectedGroupIds : collect();
+                    $splitGroupId = null;
+
+                    if ($splitState['enabled']) {
+                        if (isset($splitAssignmentByPhone[$phone])) {
+                            $splitGroupId = (int) $splitAssignmentByPhone[$phone];
+                        } else {
+                            $splitGroupId = $this->resolveSplitGroupId(
+                                $organizationId,
+                                $userId,
+                                $groupCache,
+                                $now,
+                                $splitState
+                            );
+                            if ($splitGroupId) {
+                                $splitAssignmentByPhone[$phone] = $splitGroupId;
+                            }
+                        }
+                    }
+
+                    $entriesByPhone[$phone]['all_group_ids'] = $manualGroupIds
                         ->merge($groupIdsFromFile)
+                        ->when($splitGroupId, fn ($collection) => $collection->push($splitGroupId))
                         ->map(fn ($id) => (int) $id)
                         ->filter()
                         ->unique()
@@ -924,6 +990,30 @@ class ContactImportService
     private function groupCacheKey(string $name): string
     {
         return Str::lower(trim($name));
+    }
+
+    private function resolveSplitGroupId(int $organizationId, int $userId, array &$groupCache, $now, array &$splitState): ?int
+    {
+        if (!($splitState['enabled'] ?? false)) {
+            return null;
+        }
+
+        if (($splitState['current_count'] ?? 0) >= ($splitState['size'] ?? 1)) {
+            $splitState['current_index'] = (int) ($splitState['current_index'] ?? 1) + 1;
+            $splitState['current_count'] = 0;
+        }
+
+        $prefix = trim((string) ($splitState['prefix'] ?? 'group'));
+        $prefix = rtrim($prefix, "_ \t\n\r\0\x0B");
+        $prefix = $prefix === '' ? 'group' : $prefix;
+        $groupName = $prefix . '_' . ((int) ($splitState['current_index'] ?? 1));
+
+        $this->ensureGroupIdsForNames([$groupName], $organizationId, $userId, $groupCache, $now);
+        $groupId = $groupCache[$this->groupCacheKey($groupName)] ?? null;
+
+        $splitState['current_count'] = (int) ($splitState['current_count'] ?? 0) + 1;
+
+        return $groupId ? (int) $groupId : null;
     }
 
     private function decodeJsonArray(mixed $value): array

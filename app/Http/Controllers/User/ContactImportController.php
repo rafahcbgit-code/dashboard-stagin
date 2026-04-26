@@ -41,6 +41,7 @@ class ContactImportController extends BaseController
                 'mapping' => $batch->mapping ?? [],
                 'default_country_code' => $batch->default_country_code,
                 'selected_group_ids' => $batch->selected_group_ids ?? [],
+                'group_assignment' => $batch->group_assignment ?? null,
                 'report' => $batch->report,
             ],
             'custom_fields' => ContactField::query()
@@ -153,6 +154,20 @@ class ContactImportController extends BaseController
         ]);
     }
 
+    public function clearInvalidRows(string $batchUuid)
+    {
+        $batch = $this->findBatch($batchUuid);
+        $this->assertNotCommitted($batch);
+        $this->assertBatchAllowsRowEdits($batch);
+
+        $removedCount = $this->importService->removeInvalidRows($batch);
+
+        return response()->json([
+            'removed_count' => $removedCount,
+            'batch' => $this->buildBatchResponse($batch->fresh(), 1, 15, 'invalid'),
+        ]);
+    }
+
     public function assignGroups(Request $request, string $batchUuid)
     {
         $batch = $this->findBatch($batchUuid);
@@ -163,7 +178,17 @@ class ContactImportController extends BaseController
             'group_ids' => ['nullable', 'array'],
             'group_ids.*' => ['integer'],
             'new_group_name' => ['nullable', 'string', 'max:255'],
+            'assignment_mode' => ['required', 'string', 'in:all_selected,split'],
+            'split_group_size' => ['nullable', 'integer', 'min:1', 'max:50000'],
+            'split_group_prefix' => ['nullable', 'string', 'max:120'],
         ]);
+
+        if (($validated['assignment_mode'] ?? 'all_selected') === 'split') {
+            $request->validate([
+                'split_group_size' => ['required', 'integer', 'min:1', 'max:50000'],
+                'split_group_prefix' => ['required', 'string', 'max:120'],
+            ]);
+        }
 
         $validGroupIds = collect($validated['group_ids'] ?? [])
             ->map(fn ($id) => (int) $id)
@@ -188,6 +213,9 @@ class ContactImportController extends BaseController
             $batch,
             $validGroupIds->all(),
             $validated['new_group_name'] ?? null,
+            $validated['assignment_mode'] ?? 'all_selected',
+            isset($validated['split_group_size']) ? (int) $validated['split_group_size'] : null,
+            isset($validated['split_group_prefix']) ? (string) $validated['split_group_prefix'] : null,
             $this->organizationId(),
             auth()->id()
         );
@@ -261,6 +289,7 @@ class ContactImportController extends BaseController
                 'mapping' => $batch->mapping ?? [],
                 'default_country_code' => $batch->default_country_code,
                 'selected_group_ids' => $batch->selected_group_ids ?? [],
+                'group_assignment' => $batch->group_assignment ?? null,
                 'report' => $batch->report,
                 'stats' => $this->batchStats($batch),
             ],
