@@ -114,6 +114,7 @@ Route::prefix('v1')->group(function () {
             Route::put('/contacts/{contact_uuid}/labels', [App\Http\Controllers\Api\ContactController::class, 'updateLabels']);
             Route::delete('/contacts/{contact_uuid}/labels', [App\Http\Controllers\Api\ContactController::class, 'removeLabels']);
             Route::put('/contacts/{contact_uuid}/bot', [App\Http\Controllers\Api\ContactController::class, 'toggleBot']);
+            Route::put('/contacts/{contact_uuid}/block', [App\Http\Controllers\Api\ContactController::class, 'toggleBlock']);
 
             // Ticket Management
             Route::get('/agents', [App\Http\Controllers\Api\TicketController::class, 'getAgents']);

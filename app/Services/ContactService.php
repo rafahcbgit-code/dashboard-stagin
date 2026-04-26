@@ -78,6 +78,7 @@ class ContactService
                 'phone' => $normalizedPhone,
                 'first_name' => $firstName,
                 'last_name' => $lastName,
+                'contact_source' => 'whatsapp',
                 'is_subscribed' => 1,
                 'bot_enable' => 1,
                 'created_by' => 0, // System created
@@ -202,6 +203,12 @@ class ContactService
             $contact->organization_id = $this->organizationId;
             $contact->created_by = auth()->user() ? auth()->user()->id : 0;
             $contact->created_at = now();
+            if (empty($contact->contact_source)) {
+                $source = method_exists($request, 'input')
+                    ? $request->input('contact_source', 'platform')
+                    : ($request->contact_source ?? 'platform');
+                $contact->contact_source = $source ?: 'platform';
+            }
         }
 
         $address = json_encode([
@@ -243,8 +250,34 @@ class ContactService
         }
 
         if ($request->group) {
-            $groupUuids = array_map('trim', $request->group);
-            $groupIds = ContactGroup::whereIn('uuid', $groupUuids)->pluck('id')->toArray();
+            $normalizedGroups = collect($request->group)
+                ->map(function ($item) {
+                    if (is_string($item) || is_numeric($item)) {
+                        return trim((string) $item);
+                    }
+
+                    if (is_array($item)) {
+                        if (isset($item['value'])) {
+                            return trim((string) $item['value']);
+                        }
+
+                        if (isset($item['uuid'])) {
+                            return trim((string) $item['uuid']);
+                        }
+
+                        if (isset($item['id'])) {
+                            return trim((string) $item['id']);
+                        }
+                    }
+
+                    return null;
+                })
+                ->filter(fn ($value) => !is_null($value) && $value !== '')
+                ->values();
+
+            $groupIdsByUuid = ContactGroup::whereIn('uuid', $normalizedGroups->all())->pluck('id')->toArray();
+            $groupIdsById = ContactGroup::whereIn('id', $normalizedGroups->filter(fn ($value) => ctype_digit($value))->all())->pluck('id')->toArray();
+            $groupIds = array_values(array_unique(array_merge($groupIdsByUuid, $groupIdsById)));
             $contact->contactGroups()->sync($groupIds);
         }
 

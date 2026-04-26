@@ -245,6 +245,17 @@ class ProcessWebhookJob implements ShouldQueue
         $contact = $result['contact'];
         $isNewContact = $result['isNew'];
 
+        // Blocked contacts should not have inbound messages stored.
+        if ((bool) ($contact->is_blocked ?? false)) {
+            Log::channel('webhook')->info('Inbound message ignored for blocked contact', [
+                'organization_id' => $this->organizationId,
+                'contact_id' => $contact->id,
+                'wam_id' => $wamId,
+            ]);
+
+            return;
+        }
+
         // AC-1.9.1, AC-1.9.2: Check for unsubscribe keywords in text and button messages
         // AC-1.9.4: Wrapped in try-catch to isolate failures - job continues on error
         try {
@@ -1166,6 +1177,7 @@ class ProcessWebhookJob implements ShouldQueue
             'phone' => $phone,
             'first_name' => $parsedFirstName,
             'last_name' => $parsedLastName,
+            'contact_source' => 'whatsapp',
             'is_subscribed' => 1,
             'created_by' => 0, // System created
             'created_at' => now(),
@@ -1535,6 +1547,16 @@ class ProcessWebhookJob implements ShouldQueue
         $chatType = ($direction === 'outbound') ? 'outbound' : 'inbound';
         $chatStatus = ($direction === 'outbound') ? 'sent' : 'received';
         $isRead = ($direction === 'outbound') ? 1 : 0;
+
+        if ($chatType === 'inbound' && (bool) ($contact->is_blocked ?? false)) {
+            Log::channel('webhook')->info('History inbound message ignored for blocked contact', [
+                'organization_id' => $this->organizationId,
+                'contact_id' => $contact->id,
+                'wam_id' => $wamId,
+            ]);
+
+            return false;
+        }
 
         // Build metadata (reuse existing method)
         $metadata = $this->buildMessageMetadata($message, $messageType);

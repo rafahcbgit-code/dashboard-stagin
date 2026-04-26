@@ -136,6 +136,10 @@ class HandleInertiaRequests extends Middleware
             'meta_flows_module' => fn() => $user && $user->role === 'user'
                 ? CustomHelper::isModuleEnabled('Meta Flows')
                 : false,
+            'contactConstants' => [
+                'countries' => config('formats.countries', []),
+                'staticCustomAttributes' => config('contact_management.static_custom_attributes', []),
+            ],
         ]);
     }
 

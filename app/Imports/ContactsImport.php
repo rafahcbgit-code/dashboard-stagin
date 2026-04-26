@@ -165,6 +165,7 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
                 'last_name'       => $row['last_name'] ?? null,
                 'phone'           => $formattedPhone,
                 'email'           => $row['email'] ?? null,
+                'contact_source'  => 'imported',
                 'address'         => json_encode([
                     'street'  => $row['street'] ?? null,
                     'city'    => $row['city'] ?? null,

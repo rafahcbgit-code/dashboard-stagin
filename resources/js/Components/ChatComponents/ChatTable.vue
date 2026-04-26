@@ -718,7 +718,9 @@ const buildChatUrl = (contactUuid) => {
                         <div v-if="contentType(contact?.last_chat?.metadata) === 'interactive'"
                             class="text-slate-500 text-xs truncate self-end"> {{
                                 content(contact?.last_chat?.metadata).interactive?.button_reply?.title ||
-                                content(contact?.last_chat?.metadata).interactive?.list_reply?.title }}</div>
+                                content(contact?.last_chat?.metadata).interactive?.list_reply?.title ||
+                                content(contact?.last_chat?.metadata).interactive?.body?.text ||
+                                content(contact?.last_chat?.metadata).interactive?.action?.button }}</div>
                         <div v-if="contentType(contact?.last_chat?.metadata) === 'image'"
                             class="text-slate-500 text-xs truncate self-end">
                             <div class="flex items-center">
