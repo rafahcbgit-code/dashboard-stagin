@@ -12,7 +12,8 @@ return new class extends Migration
         Schema::table('flow_logs', function (Blueprint $table) {
             $table->foreignId('contact_id')->nullable()->after('flow_id')->constrained()->nullOnDelete();
             $table->foreignId('organization_id')->nullable()->after('contact_id')->constrained()->nullOnDelete();
-            $table->string('trigger_group_id')->nullable()->after('organization_id');
+            $table->foreignId('chat_id')->nullable()->after('organization_id')->constrained()->nullOnDelete();
+            $table->string('trigger_group_id')->nullable()->after('chat_id');
             $table->string('trigger_name')->nullable()->after('trigger_group_id');
             $table->string('trigger_type')->nullable()->after('trigger_name');
             $table->string('match_mode')->nullable()->after('trigger_type');
@@ -29,6 +30,7 @@ return new class extends Migration
             $table->dropColumn([
                 'contact_id',
                 'organization_id',
+                'chat_id',
                 'trigger_group_id',
                 'trigger_name',
                 'trigger_type',

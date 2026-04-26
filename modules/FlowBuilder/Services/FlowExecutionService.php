@@ -162,6 +162,8 @@ class FlowExecutionService
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
+            // Clean up stale flow state to prevent resumeActiveFlow from re-processing
+            FlowUserData::where('contact_id', $chat->contact_id ?? 0)->delete();
             return false;
         }
     }
@@ -257,11 +259,6 @@ class FlowExecutionService
         ]);
 
         $this->logNodesProcessed = 0;
-            'flow_id' => $flow->id,
-            'contact_id' => $chat->contact_id,
-            'current_step' => $currentNodeId,
-            'message' => $message,
-        ]);
 
         for ($i = 0; $i < $maxSteps; $i++) {
             // Cycle detection
@@ -569,13 +566,20 @@ class FlowExecutionService
     {
         $flowData = FlowUserData::where('contact_id', $contactId)->first();
         if ($flowData) {
-            FlowLog::create([
-                'flow_id' => $flowData->flow_id,
-                'contact_id' => $contactId,
-                'organization_id' => $this->organizationId,
-                'status' => $reason,
-                'nodes_processed' => $this->logNodesProcessed,
-            ]);
+            try {
+                FlowLog::create([
+                    'flow_id' => $flowData->flow_id,
+                    'contact_id' => $contactId,
+                    'organization_id' => $this->organizationId,
+                    'status' => $reason,
+                    'nodes_processed' => $this->logNodesProcessed,
+                ]);
+            } catch (\Throwable $e) {
+                Log::error('FlowExecution: failed to create FlowLog, continuing cleanup', [
+                    'contact_id' => $contactId,
+                    'error' => $e->getMessage(),
+                ]);
+            }
         }
         FlowUserData::where('contact_id', $contactId)->delete();
     }
