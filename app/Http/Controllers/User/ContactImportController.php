@@ -9,8 +9,10 @@ use App\Models\ContactImportRow;
 use App\Services\ContactImportService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
 
 class ContactImportController extends BaseController
 {
@@ -26,11 +28,50 @@ class ContactImportController extends BaseController
             'file' => ['required', 'file', 'mimes:csv,txt,xlsx', 'max:51200'],
         ]);
 
-        $batch = $this->importService->createPreview(
-            $validated['file'],
-            $this->organizationId(),
-            auth()->id()
-        );
+        $file = $validated['file'];
+        $organizationId = $this->organizationId();
+        $userId = (int) auth()->id();
+
+        Log::info('Contact import preview started', [
+            'organization_id' => $organizationId,
+            'user_id' => $userId,
+            'file_name' => $file->getClientOriginalName(),
+            'file_extension' => $file->getClientOriginalExtension(),
+            'file_size_bytes' => $file->getSize(),
+            'mime_type' => $file->getClientMimeType(),
+        ]);
+
+        try {
+            $batch = $this->importService->createPreview(
+                $file,
+                $organizationId,
+                $userId
+            );
+        } catch (Throwable $exception) {
+            Log::error('Contact import preview failed', [
+                'organization_id' => $organizationId,
+                'user_id' => $userId,
+                'file_name' => $file->getClientOriginalName(),
+                'file_extension' => $file->getClientOriginalExtension(),
+                'file_size_bytes' => $file->getSize(),
+                'mime_type' => $file->getClientMimeType(),
+                'exception_message' => $exception->getMessage(),
+                'exception_class' => $exception::class,
+                'exception_file' => $exception->getFile(),
+                'exception_line' => $exception->getLine(),
+                'trace' => $exception->getTraceAsString(),
+            ]);
+
+            throw $exception;
+        }
+
+        Log::info('Contact import preview completed', [
+            'organization_id' => $organizationId,
+            'user_id' => $userId,
+            'batch_uuid' => $batch->uuid,
+            'batch_status' => $batch->status,
+            'headers_count' => count((array) ($batch->headers ?? [])),
+        ]);
 
         // Fast preview response: only what Step 2 (mapping) needs immediately.
         return response()->json([
