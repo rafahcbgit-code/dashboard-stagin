@@ -215,6 +215,14 @@ class ContactGroupController extends BaseController
             'list' => $deletedGroups
         ]);
 
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => __('Group(s) deleted successfully'),
+                'deleted' => $deletedGroups,
+            ]);
+        }
+
         return redirect('/contact-groups')->with(
             'status', [
                 'type' => 'success',
