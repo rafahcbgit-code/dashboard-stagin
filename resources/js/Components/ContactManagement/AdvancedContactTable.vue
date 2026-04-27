@@ -1011,13 +1011,13 @@ const onImportCompleted = () => {
             </section>
 
             <section class="rounded-[2rem] border border-white bg-white/95 p-4 shadow-sm shadow-slate-200/70">
-                <div class="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
-                    <div class="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_18rem]">
-                        <label class="relative block">
-                            <Search class="pointer-events-none absolute top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" :class="isRtl ? 'right-4' : 'left-4'" />
+                <div class="flex flex-col gap-3 2xl:flex-row 2xl:items-center 2xl:justify-between">
+                    <div class="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row">
+                        <label class="relative block min-w-[18rem] flex-1">
+                            <Search class="pointer-events-none absolute top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-slate-400" :class="isRtl ? 'right-4' : 'left-4'" />
                             <input v-model="query.search" type="text" class="h-12 w-full rounded-full border border-slate-200 bg-[#F8FAFC] text-sm font-medium outline-none ring-primary/20 transition-all duration-300 placeholder:text-slate-400 focus:border-primary focus:bg-white focus:ring" :class="isRtl ? 'pr-11 pl-4' : 'pl-11 pr-4'" :placeholder="$t('Search name, phone, country, or email')" @input="debouncedSearch">
                         </label>
-                        <select v-model="query.country_dial_code" class="h-12 w-full rounded-full border border-slate-200 bg-[#F8FAFC] px-4 text-sm font-medium text-slate-700 outline-none ring-primary/20 transition-all duration-300 focus:border-primary focus:bg-white focus:ring" @change="applyQuickCountryDialCodeFilter">
+                        <select v-model="query.country_dial_code" class="h-12 w-full min-w-[14rem] rounded-full border border-slate-200 bg-[#F8FAFC] px-4 text-sm font-medium text-slate-700 outline-none ring-primary/20 transition-all duration-300 focus:border-primary focus:bg-white focus:ring sm:w-72" @change="applyQuickCountryDialCodeFilter">
                             <option value="">{{ $t('All Countries') }}</option>
                             <option v-for="option in countryDialCodeOptions" :key="`quick-${option.region}-${option.value}`" :value="option.value">
                                 {{ option.label }}
