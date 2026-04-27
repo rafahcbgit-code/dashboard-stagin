@@ -18,6 +18,7 @@ class ContactImportBatch extends Model
         'headers' => 'array',
         'mapping' => 'array',
         'selected_group_ids' => 'array',
+        'group_assignment' => 'array',
         'report' => 'array',
     ];
 
@@ -26,4 +27,3 @@ class ContactImportBatch extends Model
         return $this->hasMany(ContactImportRow::class, 'contact_import_batch_id');
     }
 }
-

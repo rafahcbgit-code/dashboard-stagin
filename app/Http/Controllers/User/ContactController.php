@@ -98,7 +98,8 @@ class ContactController extends BaseController
 
         $contactFields = ContactField::where('organization_id', $organizationId)
             ->whereNull('deleted_at')
-            ->get(['id', 'name', 'type', 'uuid']);
+            ->orderBy('position')
+            ->get(['id', 'name', 'type', 'value', 'required', 'uuid']);
 
         $team = Team::where('organization_id', $organizationId)
             ->where('user_id', auth()->user()->id)
@@ -420,18 +421,37 @@ class ContactController extends BaseController
     public function bulkDelete(Request $request)
     {
         $validated = $request->validate([
-            'ids' => ['required', 'array', 'min:1'],
+            'ids' => ['required_without:select_all_filtered', 'array', 'min:1'],
             'ids.*' => ['integer'],
+            'select_all_filtered' => ['nullable', 'boolean'],
+            'except_ids' => ['nullable', 'array'],
+            'except_ids.*' => ['integer'],
         ]);
 
         $organizationId = $this->getCurrentOrganizationId();
+        $selectAllFiltered = (bool) $request->boolean('select_all_filtered');
+        $exceptIds = collect($validated['except_ids'] ?? [])->map(fn ($id) => (int) $id)->filter()->values();
 
-        $uuids = Contact::query()
-            ->where('organization_id', $organizationId)
-            ->whereNull('deleted_at')
-            ->whereIn('id', $validated['ids'])
-            ->pluck('uuid')
-            ->all();
+        if ($selectAllFiltered) {
+            $query = Contact::query()
+                ->where('organization_id', $organizationId)
+                ->whereNull('deleted_at')
+                ->select('contacts.*');
+
+            $query = (new ContactFilter())->apply($query, $this->toFilterRequest($request));
+            if ($exceptIds->isNotEmpty()) {
+                $query->whereNotIn('contacts.id', $exceptIds->all());
+            }
+
+            $uuids = $query->pluck('contacts.uuid')->all();
+        } else {
+            $uuids = Contact::query()
+                ->where('organization_id', $organizationId)
+                ->whereNull('deleted_at')
+                ->whereIn('id', $validated['ids'] ?? [])
+                ->pluck('uuid')
+                ->all();
+        }
 
         if (! empty($uuids)) {
             $this->contactService()->delete($uuids);
@@ -446,8 +466,11 @@ class ContactController extends BaseController
     public function bulkUpdateAttribute(Request $request)
     {
         $validated = $request->validate([
-            'ids' => ['required', 'array', 'min:1'],
+            'ids' => ['required_without:select_all_filtered', 'array', 'min:1'],
             'ids.*' => ['integer'],
+            'select_all_filtered' => ['nullable', 'boolean'],
+            'except_ids' => ['nullable', 'array'],
+            'except_ids.*' => ['integer'],
             'action' => ['required', 'in:add_group,remove_group,add_label,remove_label,change_subscription_status'],
             'group_ids' => ['array'],
             'group_ids.*' => ['integer'],
@@ -457,13 +480,24 @@ class ContactController extends BaseController
         ]);
 
         $organizationId = $this->getCurrentOrganizationId();
-        $contacts = Contact::query()
+        $selectAllFiltered = (bool) $request->boolean('select_all_filtered');
+        $exceptIds = collect($validated['except_ids'] ?? [])->map(fn ($id) => (int) $id)->filter()->values();
+
+        $contactsQuery = Contact::query()
             ->where('organization_id', $organizationId)
             ->whereNull('deleted_at')
-            ->whereIn('id', $validated['ids'])
-            ->get(['id', 'organization_id']);
+            ->select('contacts.*');
 
-        if ($contacts->isEmpty()) {
+        if ($selectAllFiltered) {
+            $contactsQuery = (new ContactFilter())->apply($contactsQuery, $this->toFilterRequest($request));
+            if ($exceptIds->isNotEmpty()) {
+                $contactsQuery->whereNotIn('contacts.id', $exceptIds->all());
+            }
+        } else {
+            $contactsQuery->whereIn('contacts.id', $validated['ids'] ?? []);
+        }
+
+        if (!(clone $contactsQuery)->exists()) {
             return back()->with('status', [
                 'type' => 'warning',
                 'message' => __('No contacts matched the selected rows.'),
@@ -491,32 +525,31 @@ class ContactController extends BaseController
         }
 
         if ($action === 'change_subscription_status') {
-            Contact::query()
-                ->where('organization_id', $organizationId)
-                ->whereNull('deleted_at')
-                ->whereIn('id', $contacts->pluck('id'))
+            (clone $contactsQuery)
                 ->update([
                     'is_subscribed' => (int) ($validated['subscription_status'] ?? 1),
                     'updated_at' => now(),
                 ]);
         } else {
-            foreach ($contacts as $contact) {
-                if ($action === 'add_group' && $groupIds->isNotEmpty()) {
-                    $contact->contactGroups()->syncWithoutDetaching($groupIds->all());
-                }
+            (clone $contactsQuery)->chunkById(500, function ($contacts) use ($action, $groupIds, $labelIds) {
+                foreach ($contacts as $contact) {
+                    if ($action === 'add_group' && $groupIds->isNotEmpty()) {
+                        $contact->contactGroups()->syncWithoutDetaching($groupIds->all());
+                    }
 
-                if ($action === 'remove_group' && $groupIds->isNotEmpty()) {
-                    $contact->contactGroups()->detach($groupIds->all());
-                }
+                    if ($action === 'remove_group' && $groupIds->isNotEmpty()) {
+                        $contact->contactGroups()->detach($groupIds->all());
+                    }
 
-                if ($action === 'add_label' && $labelIds->isNotEmpty()) {
-                    $contact->labels()->syncWithoutDetaching($labelIds->all());
-                }
+                    if ($action === 'add_label' && $labelIds->isNotEmpty()) {
+                        $contact->labels()->syncWithoutDetaching($labelIds->all());
+                    }
 
-                if ($action === 'remove_label' && $labelIds->isNotEmpty()) {
-                    $contact->labels()->detach($labelIds->all());
+                    if ($action === 'remove_label' && $labelIds->isNotEmpty()) {
+                        $contact->labels()->detach($labelIds->all());
+                    }
                 }
-            }
+            }, 'contacts.id');
         }
 
         return back()->with('status', [
@@ -530,6 +563,8 @@ class ContactController extends BaseController
         $organizationId = $this->getCurrentOrganizationId();
         $ids = collect($request->query('ids', []))->map(fn ($id) => (int) $id)->filter()->values();
         $scope = (string) $request->query('scope', 'filtered');
+        $selectAllFiltered = (bool) $request->boolean('select_all_filtered');
+        $exceptIds = collect($request->query('except_ids', []))->map(fn ($id) => (int) $id)->filter()->values();
 
         $query = Contact::query()
             ->with(['contactGroups:id,name', 'labels:id,title'])
@@ -549,6 +584,11 @@ class ContactController extends BaseController
 
         if ($ids->isNotEmpty()) {
             $query->whereIn('id', $ids->all());
+        } elseif ($selectAllFiltered) {
+            $query = (new ContactFilter())->apply($query, $request);
+            if ($exceptIds->isNotEmpty()) {
+                $query->whereNotIn('contacts.id', $exceptIds->all());
+            }
         } elseif ($scope !== 'all') {
             $query = (new ContactFilter())->apply($query, $request);
         }
@@ -704,6 +744,11 @@ class ContactController extends BaseController
             'type' => 'success',
             'message' => __('Bot status updated successfully!')
         ]);
+    }
+
+    private function toFilterRequest(Request $request): Request
+    {
+        return Request::create('/contacts', 'GET', $request->all());
     }
 
     public function toggleBlock(Request $request, $uuid)

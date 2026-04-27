@@ -9,8 +9,10 @@ use App\Models\ContactImportRow;
 use App\Services\ContactImportService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
+use Throwable;
 
 class ContactImportController extends BaseController
 {
@@ -26,11 +28,50 @@ class ContactImportController extends BaseController
             'file' => ['required', 'file', 'mimes:csv,txt,xlsx', 'max:51200'],
         ]);
 
-        $batch = $this->importService->createPreview(
-            $validated['file'],
-            $this->organizationId(),
-            auth()->id()
-        );
+        $file = $validated['file'];
+        $organizationId = $this->organizationId();
+        $userId = (int) auth()->id();
+
+        Log::info('Contact import preview started', [
+            'organization_id' => $organizationId,
+            'user_id' => $userId,
+            'file_name' => $file->getClientOriginalName(),
+            'file_extension' => $file->getClientOriginalExtension(),
+            'file_size_bytes' => $file->getSize(),
+            'mime_type' => $file->getClientMimeType(),
+        ]);
+
+        try {
+            $batch = $this->importService->createPreview(
+                $file,
+                $organizationId,
+                $userId
+            );
+        } catch (Throwable $exception) {
+            Log::error('Contact import preview failed', [
+                'organization_id' => $organizationId,
+                'user_id' => $userId,
+                'file_name' => $file->getClientOriginalName(),
+                'file_extension' => $file->getClientOriginalExtension(),
+                'file_size_bytes' => $file->getSize(),
+                'mime_type' => $file->getClientMimeType(),
+                'exception_message' => $exception->getMessage(),
+                'exception_class' => $exception::class,
+                'exception_file' => $exception->getFile(),
+                'exception_line' => $exception->getLine(),
+                'trace' => $exception->getTraceAsString(),
+            ]);
+
+            throw $exception;
+        }
+
+        Log::info('Contact import preview completed', [
+            'organization_id' => $organizationId,
+            'user_id' => $userId,
+            'batch_uuid' => $batch->uuid,
+            'batch_status' => $batch->status,
+            'headers_count' => count((array) ($batch->headers ?? [])),
+        ]);
 
         // Fast preview response: only what Step 2 (mapping) needs immediately.
         return response()->json([
@@ -41,6 +82,7 @@ class ContactImportController extends BaseController
                 'mapping' => $batch->mapping ?? [],
                 'default_country_code' => $batch->default_country_code,
                 'selected_group_ids' => $batch->selected_group_ids ?? [],
+                'group_assignment' => $batch->group_assignment ?? null,
                 'report' => $batch->report,
             ],
             'custom_fields' => ContactField::query()
@@ -92,9 +134,19 @@ class ContactImportController extends BaseController
             'default_country_code' => ['required', 'string', 'max:8'],
         ]);
 
-        $batch = $this->importService->normalize($batch, $validated['default_country_code']);
+        $normalization = $this->importService->normalize($batch, $validated['default_country_code']);
+        $batch = $normalization['batch'];
 
-        return response()->json($this->buildBatchResponse($batch));
+        return response()->json(array_merge(
+            $this->buildBatchResponse($batch),
+            [
+                'invalid_preview' => [
+                    'count' => (int) ($normalization['invalid_rows_count'] ?? 0),
+                    'rows' => (array) ($normalization['invalid_rows_preview'] ?? []),
+                    'limited' => (bool) ($normalization['invalid_rows_preview_limited'] ?? false),
+                ],
+            ]
+        ));
     }
 
     public function rows(Request $request, string $batchUuid)
@@ -153,6 +205,20 @@ class ContactImportController extends BaseController
         ]);
     }
 
+    public function clearInvalidRows(string $batchUuid)
+    {
+        $batch = $this->findBatch($batchUuid);
+        $this->assertNotCommitted($batch);
+        $this->assertBatchAllowsRowEdits($batch);
+
+        $removedCount = $this->importService->removeInvalidRows($batch);
+
+        return response()->json([
+            'removed_count' => $removedCount,
+            'batch' => $this->buildBatchResponse($batch->fresh(), 1, 15, 'invalid'),
+        ]);
+    }
+
     public function assignGroups(Request $request, string $batchUuid)
     {
         $batch = $this->findBatch($batchUuid);
@@ -163,7 +229,17 @@ class ContactImportController extends BaseController
             'group_ids' => ['nullable', 'array'],
             'group_ids.*' => ['integer'],
             'new_group_name' => ['nullable', 'string', 'max:255'],
+            'assignment_mode' => ['required', 'string', 'in:all_selected,split'],
+            'split_group_size' => ['nullable', 'integer', 'min:1', 'max:50000'],
+            'split_group_prefix' => ['nullable', 'string', 'max:120'],
         ]);
+
+        if (($validated['assignment_mode'] ?? 'all_selected') === 'split') {
+            $request->validate([
+                'split_group_size' => ['required', 'integer', 'min:1', 'max:50000'],
+                'split_group_prefix' => ['required', 'string', 'max:120'],
+            ]);
+        }
 
         $validGroupIds = collect($validated['group_ids'] ?? [])
             ->map(fn ($id) => (int) $id)
@@ -188,6 +264,9 @@ class ContactImportController extends BaseController
             $batch,
             $validGroupIds->all(),
             $validated['new_group_name'] ?? null,
+            $validated['assignment_mode'] ?? 'all_selected',
+            isset($validated['split_group_size']) ? (int) $validated['split_group_size'] : null,
+            isset($validated['split_group_prefix']) ? (string) $validated['split_group_prefix'] : null,
             $this->organizationId(),
             auth()->id()
         );
@@ -252,6 +331,11 @@ class ContactImportController extends BaseController
     private function buildBatchResponse(ContactImportBatch $batch, int $page = 1, int $perPage = 15, string $status = 'all'): array
     {
         $rows = $this->importService->paginateRows($batch, $page, max(1, min($perPage, 100)), $status);
+        $requiresDefaultCountryCode = false;
+
+        if ($batch->status === 'mapped') {
+            $requiresDefaultCountryCode = $this->importService->hasRowsMissingCountryCode($batch);
+        }
 
         return [
             'batch' => [
@@ -261,7 +345,9 @@ class ContactImportController extends BaseController
                 'mapping' => $batch->mapping ?? [],
                 'default_country_code' => $batch->default_country_code,
                 'selected_group_ids' => $batch->selected_group_ids ?? [],
+                'group_assignment' => $batch->group_assignment ?? null,
                 'report' => $batch->report,
+                'requires_default_country_code' => $requiresDefaultCountryCode,
                 'stats' => $this->batchStats($batch),
             ],
             'rows' => $rows,

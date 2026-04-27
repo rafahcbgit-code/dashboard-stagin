@@ -1,6 +1,7 @@
 <script setup>
 import { computed, reactive, ref, watch } from 'vue';
 import axios from 'axios';
+import { useI18n } from 'vue-i18n';
 import Modal from '@/Components/Modal.vue';
 
 const props = defineProps({
@@ -11,9 +12,11 @@ const props = defineProps({
 });
 
 const emit = defineEmits(['update:modelValue', 'completed']);
+const { t } = useI18n();
 
 const wizardStep = ref(1);
 const busy = ref(false);
+const uploadBusy = ref(false);
 const errorMessage = ref('');
 const successMessage = ref('');
 
@@ -21,7 +24,9 @@ const fileName = ref('');
 const batch = ref(null);
 const rows = ref([]);
 const rowsMeta = reactive({ current_page: 1, last_page: 1, per_page: 10, total: 0 });
-const rowFilter = ref('all');
+const invalidRowsPreview = ref([]);
+const invalidRowsCount = ref(0);
+const invalidRowsPreviewLimited = ref(false);
 
 const mapping = reactive({
     first_name: '',
@@ -38,10 +43,15 @@ const mapping = reactive({
 });
 
 const defaultCountryCode = ref('+966');
+const normalizationApplied = ref(false);
 const groupForm = reactive({
+    assignment_mode: 'all_selected',
     group_ids: [],
     new_group_name: '',
+    split_group_size: 100,
+    split_group_prefix: 'audince',
 });
+const groupSearch = ref('');
 
 const rowEditor = reactive({
     id: null,
@@ -60,11 +70,15 @@ const rowEditor = reactive({
 const isEditOpen = ref(false);
 const editErrorMessage = ref('');
 const isSavingEdit = ref(false);
+const showAdvancedMapping = ref(false);
 
 const hasBatch = computed(() => !!batch.value?.uuid);
 const batchHeaders = computed(() => batch.value?.headers || []);
 const batchStats = computed(() => batch.value?.stats || {});
 const report = computed(() => batch.value?.report || null);
+const isImportCompleted = computed(() => Boolean(report.value));
+const requiresDefaultCountryCode = computed(() => Boolean(batch.value?.requires_default_country_code));
+const showDefaultCodeControls = computed(() => !normalizationApplied.value && requiresDefaultCountryCode.value);
 
 watch(
     () => props.modelValue,
@@ -94,19 +108,28 @@ const closeModal = () => {
 const resetWizard = () => {
     wizardStep.value = 1;
     busy.value = false;
+    uploadBusy.value = false;
     errorMessage.value = '';
     successMessage.value = '';
     fileName.value = '';
     batch.value = null;
     rows.value = [];
-    rowFilter.value = 'all';
+    invalidRowsPreview.value = [];
+    invalidRowsCount.value = 0;
+    invalidRowsPreviewLimited.value = false;
     rowsMeta.current_page = 1;
     rowsMeta.last_page = 1;
     rowsMeta.per_page = 10;
     rowsMeta.total = 0;
     defaultCountryCode.value = '+966';
+    normalizationApplied.value = false;
     groupForm.group_ids = [];
     groupForm.new_group_name = '';
+    groupForm.assignment_mode = 'all_selected';
+    groupForm.split_group_size = 100;
+    groupForm.split_group_prefix = 'audince';
+    groupSearch.value = '';
+    showAdvancedMapping.value = false;
 
     Object.assign(mapping, {
         first_name: '',
@@ -154,14 +177,6 @@ const setDefaultMapping = () => {
     });
 };
 
-const importSummaryText = computed(() => {
-    if (!report.value) {
-        return '';
-    }
-
-    return `${report.value.success_count || 0} success / ${report.value.failed_count || 0} failed`;
-});
-
 const uploadAndPreview = async (event) => {
     const file = event?.target?.files?.[0];
     if (!file) {
@@ -171,6 +186,7 @@ const uploadAndPreview = async (event) => {
     errorMessage.value = '';
     successMessage.value = '';
     busy.value = true;
+    uploadBusy.value = true;
     fileName.value = file.name;
 
     try {
@@ -193,9 +209,10 @@ const uploadAndPreview = async (event) => {
         setDefaultMapping();
         wizardStep.value = 2;
     } catch (error) {
-        errorMessage.value = error?.response?.data?.message || 'Failed to parse file.';
+        errorMessage.value = error?.response?.data?.message || t('Failed to parse file.');
     } finally {
         busy.value = false;
+        uploadBusy.value = false;
     }
 };
 
@@ -213,7 +230,7 @@ const mapColumns = async () => {
     }
 
     if (!mapping.phone) {
-        errorMessage.value = 'Phone mapping is required.';
+        errorMessage.value = t('Phone mapping is required.');
         return;
     }
 
@@ -225,10 +242,14 @@ const mapColumns = async () => {
         batch.value = data.batch;
         applyRowsPayload(data.rows);
         wizardStep.value = 3;
-        rowFilter.value = 'invalid';
-        await fetchRows(1, 'invalid');
+        normalizationApplied.value = false;
+        if (!requiresDefaultCountryCode.value) {
+            await normalizeRows();
+        } else {
+            successMessage.value = t('Some numbers have no country code. Set default country code and apply normalization.');
+        }
     } catch (error) {
-        errorMessage.value = error?.response?.data?.message || 'Failed to save mapping.';
+        errorMessage.value = error?.response?.data?.message || t('Failed to save mapping.');
     } finally {
         busy.value = false;
     }
@@ -247,39 +268,16 @@ const normalizeRows = async () => {
             default_country_code: defaultCountryCode.value,
         });
         batch.value = data.batch;
-        applyRowsPayload(data.rows);
-        rowFilter.value = 'invalid';
-        await fetchRows(1, 'invalid');
-        successMessage.value = 'Normalization completed. Fix or remove invalid rows before import.';
+        batch.value.requires_default_country_code = false;
+        normalizationApplied.value = true;
+        invalidRowsCount.value = Number(data?.invalid_preview?.count || 0);
+        invalidRowsPreview.value = Array.isArray(data?.invalid_preview?.rows) ? data.invalid_preview.rows : [];
+        invalidRowsPreviewLimited.value = Boolean(data?.invalid_preview?.limited);
+        successMessage.value = invalidRowsCount.value > 0
+            ? t('Normalization completed. Invalid rows were excluded from import and shown below.')
+            : t('Normalization completed. No invalid rows found.');
     } catch (error) {
-        errorMessage.value = error?.response?.data?.message || 'Failed to normalize rows.';
-    } finally {
-        busy.value = false;
-    }
-};
-
-const fetchRows = async (page = 1, status = rowFilter.value) => {
-    if (!hasBatch.value) {
-        return;
-    }
-
-    busy.value = true;
-    errorMessage.value = '';
-    rowFilter.value = status;
-
-    try {
-        const { data } = await axios.get(`/contacts/import/${batch.value.uuid}/rows`, {
-            params: {
-                page,
-                per_page: rowsMeta.per_page,
-                status,
-            },
-        });
-
-        batch.value = data.batch;
-        applyRowsPayload(data.rows);
-    } catch (error) {
-        errorMessage.value = error?.response?.data?.message || 'Failed to load rows.';
+        errorMessage.value = error?.response?.data?.message || t('Failed to normalize rows.');
     } finally {
         busy.value = false;
     }
@@ -305,12 +303,12 @@ const openEdit = (row) => {
 
 const saveEdit = async () => {
     if (!rowEditor.id) {
-        editErrorMessage.value = 'Unable to edit this row (missing row id). Please reopen the row.';
+        editErrorMessage.value = t('Unable to edit this row (missing row id). Please reopen the row.');
         return;
     }
 
     if (!hasBatch.value) {
-        editErrorMessage.value = 'Import batch is not ready. Please reopen the import wizard.';
+        editErrorMessage.value = t('Import batch is not ready. Please reopen the import wizard.');
         return;
     }
 
@@ -335,13 +333,13 @@ const saveEdit = async () => {
             custom_attributes: rowEditor.custom_attributes,
         });
         isEditOpen.value = false;
-        await fetchRows(rowsMeta.current_page, rowFilter.value);
+        await normalizeRows();
     } catch (error) {
         const errors = error?.response?.data?.errors;
         const firstError = errors && typeof errors === 'object'
             ? Object.values(errors).flat()[0]
             : null;
-        const message = firstError || error?.response?.data?.message || 'Failed to update row.';
+        const message = firstError || error?.response?.data?.message || t('Failed to update row.');
         editErrorMessage.value = message;
         errorMessage.value = message;
     } finally {
@@ -350,23 +348,6 @@ const saveEdit = async () => {
     }
 };
 
-const removeRow = async (row) => {
-    if (!hasBatch.value) {
-        return;
-    }
-
-    busy.value = true;
-    errorMessage.value = '';
-
-    try {
-        await axios.delete(`/contacts/import/${batch.value.uuid}/rows/${row.id}`);
-        await fetchRows(rowsMeta.current_page, rowFilter.value);
-    } catch (error) {
-        errorMessage.value = error?.response?.data?.message || 'Failed to remove row.';
-    } finally {
-        busy.value = false;
-    }
-};
 
 const saveGroupAssignment = async () => {
     if (!hasBatch.value) {
@@ -380,12 +361,15 @@ const saveGroupAssignment = async () => {
         const { data } = await axios.post(`/contacts/import/${batch.value.uuid}/group-assignment`, {
             group_ids: groupForm.group_ids,
             new_group_name: groupForm.new_group_name,
+            assignment_mode: groupForm.assignment_mode,
+            split_group_size: groupForm.assignment_mode === 'split' ? Number(groupForm.split_group_size) : null,
+            split_group_prefix: groupForm.assignment_mode === 'split' ? groupForm.split_group_prefix : null,
         });
         batch.value = data.batch;
         applyRowsPayload(data.rows);
         wizardStep.value = 5;
     } catch (error) {
-        errorMessage.value = error?.response?.data?.message || 'Failed to assign groups.';
+        errorMessage.value = error?.response?.data?.message || t('Failed to assign audince.');
     } finally {
         busy.value = false;
     }
@@ -402,225 +386,395 @@ const executeImport = async () => {
 
     try {
         const { data } = await axios.post(`/contacts/import/${batch.value.uuid}/commit`);
-        batch.value = data.batch;
-        successMessage.value = 'Import finished successfully.';
+        // Controller returns nested payload:
+        // { report: {...}, batch: { batch: {...}, rows: {...} } }
+        if (data?.batch?.batch) {
+            batch.value = data.batch.batch;
+            applyRowsPayload(data.batch.rows || { data: [], current_page: 1, last_page: 1, per_page: rowsMeta.per_page, total: 0 });
+        } else {
+            batch.value = data?.batch || batch.value;
+        }
+        successMessage.value = t('Import finished successfully.');
         emit('completed');
     } catch (error) {
-        errorMessage.value = error?.response?.data?.message || 'Failed to import contacts.';
+        errorMessage.value = error?.response?.data?.message || t('Failed to import contacts.');
     } finally {
         busy.value = false;
     }
 };
 
-const canGoToGroupStep = computed(() => (batchStats.value.invalid || 0) === 0);
+const canContinueToGroups = computed(() => normalizationApplied.value);
+const hasInvalidRows = computed(() => invalidRowsCount.value > 0);
+const filteredContactGroups = computed(() => {
+    const keyword = String(groupSearch.value || '').trim().toLowerCase();
+    if (keyword === '') {
+        return props.contactGroups;
+    }
+
+    return (props.contactGroups || []).filter((group) =>
+        String(group?.name || '').toLowerCase().includes(keyword)
+    );
+});
+const selectedGroupsCount = computed(() => (groupForm.group_ids || []).length);
+
+const goToPreviousStep = () => {
+    if (busy.value || uploadBusy.value) {
+        return;
+    }
+
+    wizardStep.value = Math.max(1, wizardStep.value - 1);
+};
 </script>
 
 <template>
     <Modal :label="$t('Import Contacts Wizard')" :isOpen="modelValue" :closeBtn="true" @close="closeModal">
         <div class="space-y-4 pt-4">
             <div class="flex flex-wrap items-center gap-2 text-xs">
-                <span class="rounded-full px-2 py-1" :class="wizardStep >= 1 ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600'">1. Upload</span>
-                <span class="rounded-full px-2 py-1" :class="wizardStep >= 2 ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600'">2. Mapping</span>
-                <span class="rounded-full px-2 py-1" :class="wizardStep >= 3 ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600'">3. Normalize & Clean</span>
-                <span class="rounded-full px-2 py-1" :class="wizardStep >= 4 ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600'">4. Groups</span>
-                <span class="rounded-full px-2 py-1" :class="wizardStep >= 5 ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600'">5. Import Report</span>
+                <span class="rounded-full px-2 py-1" :class="wizardStep >= 1 ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600'">{{ $t('1. Upload') }}</span>
+                <span class="rounded-full px-2 py-1" :class="wizardStep >= 2 ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600'">{{ $t('2. Mapping') }}</span>
+                <span class="rounded-full px-2 py-1" :class="wizardStep >= 3 ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600'">{{ $t('3. Normalize & Clean') }}</span>
+                <span class="rounded-full px-2 py-1" :class="wizardStep >= 4 ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600'">{{ $t('4. Audince') }}</span>
+                <span class="rounded-full px-2 py-1" :class="wizardStep >= 5 ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600'">{{ $t('5. Import Report') }}</span>
             </div>
 
             <div v-if="errorMessage" class="rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">{{ errorMessage }}</div>
             <div v-if="successMessage" class="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{{ successMessage }}</div>
 
             <div v-if="wizardStep === 1" class="space-y-3">
-                <p class="text-sm text-slate-600">Upload CSV/XLSX file to start import preview.</p>
-                <input type="file" accept=".csv,.xlsx" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" @change="uploadAndPreview">
-                <p v-if="fileName" class="text-xs text-slate-500">File: {{ fileName }}</p>
+                <p class="text-sm text-slate-600">{{ $t('Upload CSV/XLSX file to start import preview.') }}</p>
+                <input type="file" accept=".csv,.xlsx" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm disabled:cursor-not-allowed disabled:bg-slate-100" :disabled="uploadBusy" @change="uploadAndPreview">
+                <p v-if="fileName" class="text-xs text-slate-500">{{ $t('File') }}: {{ fileName }}</p>
+                <div v-if="uploadBusy" class="rounded-md border border-slate-200 bg-slate-50 px-3 py-3">
+                    <div class="flex items-center gap-2 text-sm text-slate-700">
+                        <svg class="h-4 w-4 animate-spin text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4z"></path>
+                        </svg>
+                        <span>{{ $t('Uploading and processing file... You will be moved automatically to Mapping step.') }}</span>
+                    </div>
+                </div>
             </div>
 
             <div v-if="wizardStep === 2" class="space-y-3">
-                <p class="text-sm text-slate-600">Field mapping is required before processing the file.</p>
+                <p class="text-sm text-slate-600">{{ $t('Field mapping is required before processing the file.') }}</p>
                 <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
-                    <label class="text-xs text-slate-500">First Name
+                    <label class="text-xs text-slate-500">{{ $t('First Name') }}
                         <select v-model="mapping.first_name" class="mt-1 w-full rounded-md border border-slate-300 px-2 py-2 text-sm">
                             <option value="">-</option>
                             <option v-for="header in batchHeaders" :key="`first_name-${header}`" :value="header">{{ header }}</option>
                         </select>
                     </label>
-                    <label class="text-xs text-slate-500">Last Name
-                        <select v-model="mapping.last_name" class="mt-1 w-full rounded-md border border-slate-300 px-2 py-2 text-sm">
-                            <option value="">-</option>
-                            <option v-for="header in batchHeaders" :key="`last_name-${header}`" :value="header">{{ header }}</option>
-                        </select>
-                    </label>
-                    <label class="text-xs text-slate-500">Phone *
+                    <label class="text-xs text-slate-500">{{ $t('Phone') }} *
                         <select v-model="mapping.phone" class="mt-1 w-full rounded-md border border-slate-300 px-2 py-2 text-sm">
-                            <option value="">Select phone column</option>
+                            <option value="">{{ $t('Select phone column') }}</option>
                             <option v-for="header in batchHeaders" :key="`phone-${header}`" :value="header">{{ header }}</option>
-                        </select>
-                    </label>
-                    <label class="text-xs text-slate-500">Email
-                        <select v-model="mapping.email" class="mt-1 w-full rounded-md border border-slate-300 px-2 py-2 text-sm">
-                            <option value="">-</option>
-                            <option v-for="header in batchHeaders" :key="`email-${header}`" :value="header">{{ header }}</option>
-                        </select>
-                    </label>
-                    <label class="text-xs text-slate-500">Group Name
-                        <select v-model="mapping.group_name" class="mt-1 w-full rounded-md border border-slate-300 px-2 py-2 text-sm">
-                            <option value="">-</option>
-                            <option v-for="header in batchHeaders" :key="`group-${header}`" :value="header">{{ header }}</option>
-                        </select>
-                    </label>
-                    <label class="text-xs text-slate-500">Country
-                        <select v-model="mapping.country" class="mt-1 w-full rounded-md border border-slate-300 px-2 py-2 text-sm">
-                            <option value="">-</option>
-                            <option v-for="header in batchHeaders" :key="`country-${header}`" :value="header">{{ header }}</option>
-                        </select>
-                    </label>
-                    <label class="text-xs text-slate-500">Street
-                        <select v-model="mapping.street" class="mt-1 w-full rounded-md border border-slate-300 px-2 py-2 text-sm">
-                            <option value="">-</option>
-                            <option v-for="header in batchHeaders" :key="`street-${header}`" :value="header">{{ header }}</option>
-                        </select>
-                    </label>
-                    <label class="text-xs text-slate-500">City
-                        <select v-model="mapping.city" class="mt-1 w-full rounded-md border border-slate-300 px-2 py-2 text-sm">
-                            <option value="">-</option>
-                            <option v-for="header in batchHeaders" :key="`city-${header}`" :value="header">{{ header }}</option>
-                        </select>
-                    </label>
-                    <label class="text-xs text-slate-500">State
-                        <select v-model="mapping.state" class="mt-1 w-full rounded-md border border-slate-300 px-2 py-2 text-sm">
-                            <option value="">-</option>
-                            <option v-for="header in batchHeaders" :key="`state-${header}`" :value="header">{{ header }}</option>
-                        </select>
-                    </label>
-                    <label class="text-xs text-slate-500">Zip
-                        <select v-model="mapping.zip" class="mt-1 w-full rounded-md border border-slate-300 px-2 py-2 text-sm">
-                            <option value="">-</option>
-                            <option v-for="header in batchHeaders" :key="`zip-${header}`" :value="header">{{ header }}</option>
                         </select>
                     </label>
                 </div>
 
-                <div class="rounded-md border border-slate-200 p-3">
-                    <p class="mb-2 text-sm font-medium text-slate-700">Custom Attributes Mapping</p>
-                    <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
-                        <label v-for="field in fields" :key="`custom-${field.id}`" class="text-xs text-slate-500">{{ field.name }}
-                            <select v-model="mapping.custom_attributes[field.name]" class="mt-1 w-full rounded-md border border-slate-300 px-2 py-2 text-sm">
-                                <option value="">-</option>
-                                <option v-for="header in batchHeaders" :key="`${field.name}-${header}`" :value="header">{{ header }}</option>
-                            </select>
-                        </label>
+                <div class="rounded-md border border-slate-200">
+                    <button
+                        type="button"
+                        class="flex w-full items-center justify-between px-3 py-2 text-sm font-medium text-slate-700"
+                        @click="showAdvancedMapping = !showAdvancedMapping"
+                    >
+                        <span>{{ $t('Advanced Mapping Fields') }}</span>
+                        <span>{{ showAdvancedMapping ? $t('Hide') : $t('Show') }}</span>
+                    </button>
+                    <div v-if="showAdvancedMapping" class="space-y-3 border-t border-slate-200 p-3">
+                        <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
+                            <label class="text-xs text-slate-500">{{ $t('Last Name') }}
+                                <select v-model="mapping.last_name" class="mt-1 w-full rounded-md border border-slate-300 px-2 py-2 text-sm">
+                                    <option value="">-</option>
+                                    <option v-for="header in batchHeaders" :key="`last_name-${header}`" :value="header">{{ header }}</option>
+                                </select>
+                            </label>
+                            <label class="text-xs text-slate-500">{{ $t('Email') }}
+                                <select v-model="mapping.email" class="mt-1 w-full rounded-md border border-slate-300 px-2 py-2 text-sm">
+                                    <option value="">-</option>
+                                    <option v-for="header in batchHeaders" :key="`email-${header}`" :value="header">{{ header }}</option>
+                                </select>
+                            </label>
+                            <label class="text-xs text-slate-500">{{ $t('Audince Name') }}
+                                <select v-model="mapping.group_name" class="mt-1 w-full rounded-md border border-slate-300 px-2 py-2 text-sm">
+                                    <option value="">-</option>
+                                    <option v-for="header in batchHeaders" :key="`group-${header}`" :value="header">{{ header }}</option>
+                                </select>
+                            </label>
+                            <label class="text-xs text-slate-500">{{ $t('Country') }}
+                                <select v-model="mapping.country" class="mt-1 w-full rounded-md border border-slate-300 px-2 py-2 text-sm">
+                                    <option value="">-</option>
+                                    <option v-for="header in batchHeaders" :key="`country-${header}`" :value="header">{{ header }}</option>
+                                </select>
+                            </label>
+                            <label class="text-xs text-slate-500">{{ $t('Street') }}
+                                <select v-model="mapping.street" class="mt-1 w-full rounded-md border border-slate-300 px-2 py-2 text-sm">
+                                    <option value="">-</option>
+                                    <option v-for="header in batchHeaders" :key="`street-${header}`" :value="header">{{ header }}</option>
+                                </select>
+                            </label>
+                            <label class="text-xs text-slate-500">{{ $t('City') }}
+                                <select v-model="mapping.city" class="mt-1 w-full rounded-md border border-slate-300 px-2 py-2 text-sm">
+                                    <option value="">-</option>
+                                    <option v-for="header in batchHeaders" :key="`city-${header}`" :value="header">{{ header }}</option>
+                                </select>
+                            </label>
+                            <label class="text-xs text-slate-500">{{ $t('State') }}
+                                <select v-model="mapping.state" class="mt-1 w-full rounded-md border border-slate-300 px-2 py-2 text-sm">
+                                    <option value="">-</option>
+                                    <option v-for="header in batchHeaders" :key="`state-${header}`" :value="header">{{ header }}</option>
+                                </select>
+                            </label>
+                            <label class="text-xs text-slate-500">{{ $t('Zip') }}
+                                <select v-model="mapping.zip" class="mt-1 w-full rounded-md border border-slate-300 px-2 py-2 text-sm">
+                                    <option value="">-</option>
+                                    <option v-for="header in batchHeaders" :key="`zip-${header}`" :value="header">{{ header }}</option>
+                                </select>
+                            </label>
+                        </div>
+
+                        <div class="rounded-md border border-slate-200 p-3">
+                            <p class="mb-2 text-sm font-medium text-slate-700">{{ $t('Custom Attributes Mapping') }}</p>
+                            <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
+                                <label v-for="field in fields" :key="`custom-${field.id}`" class="text-xs text-slate-500">{{ field.name }}
+                                    <select v-model="mapping.custom_attributes[field.name]" class="mt-1 w-full rounded-md border border-slate-300 px-2 py-2 text-sm">
+                                        <option value="">-</option>
+                                        <option v-for="header in batchHeaders" :key="`${field.name}-${header}`" :value="header">{{ header }}</option>
+                                    </select>
+                                </label>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
                 <div class="flex justify-end">
-                    <button type="button" class="rounded-md bg-primary px-4 py-2 text-sm text-white disabled:opacity-60" :disabled="busy" @click="mapColumns">
-                        {{ busy ? 'Saving...' : 'Save Mapping & Continue' }}
-                    </button>
+                    <div class="flex items-center gap-2">
+                        <button type="button" class="rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-700 disabled:opacity-60" :disabled="busy || uploadBusy" @click="goToPreviousStep">
+                            {{ $t('Previous') }}
+                        </button>
+                        <button type="button" class="rounded-md bg-primary px-4 py-2 text-sm text-white disabled:opacity-60" :disabled="busy" @click="mapColumns">
+                        {{ busy ? $t('Saving...') : $t('Continue') }}
+                        </button>
+                    </div>
                 </div>
             </div>
 
-            <div v-if="wizardStep === 3" class="space-y-3">
-                <div class="grid gap-2 md:grid-cols-2">
-                    <label class="text-xs text-slate-500">Default Country Code (for numbers without code)
-                        <input v-model="defaultCountryCode" type="text" class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="+966">
-                    </label>
-                    <label class="text-xs text-slate-500">Filter Rows
-                        <select v-model="rowFilter" class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" @change="fetchRows(1, rowFilter)">
-                            <option value="all">All</option>
-                            <option value="invalid">Invalid</option>
-                            <option value="valid">Valid</option>
-                            <option value="removed">Removed</option>
-                        </select>
-                    </label>
+            <div v-if="wizardStep === 3" class="space-y-4">
+                <div v-if="busy && !normalizationApplied" class="rounded-md border border-slate-200 bg-slate-50 px-3 py-3">
+                    <div class="flex items-center gap-2 text-sm text-slate-700">
+                        <svg class="h-4 w-4 animate-spin text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                            <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                            <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4z"></path>
+                        </svg>
+                        <span>{{ $t('Normalizing and validating numbers...') }}</span>
+                    </div>
                 </div>
 
-                <div class="flex flex-wrap items-center gap-2 text-xs text-slate-600">
-                    <span>Total: {{ batchStats.total || 0 }}</span>
-                    <span>Valid: {{ batchStats.valid || 0 }}</span>
-                    <span>Invalid: {{ batchStats.invalid || 0 }}</span>
-                    <span>Removed: {{ batchStats.removed || 0 }}</span>
+                <div class="grid grid-cols-2 gap-2 md:grid-cols-4">
+                    <div class="rounded-lg border border-slate-200 bg-white px-3 py-2">
+                        <p class="text-[11px] text-slate-500">{{ $t('Total') }}</p>
+                        <p class="text-sm font-semibold text-slate-800">{{ batchStats.total || 0 }}</p>
+                    </div>
+                    <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+                        <p class="text-[11px] text-emerald-700">{{ $t('Valid') }}</p>
+                        <p class="text-sm font-semibold text-emerald-800">{{ batchStats.valid || 0 }}</p>
+                    </div>
+                    <div class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2">
+                        <p class="text-[11px] text-rose-700">{{ $t('Invalid') }}</p>
+                        <p class="text-sm font-semibold text-rose-800">{{ invalidRowsCount }}</p>
+                    </div>
+                    <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                        <p class="text-[11px] text-amber-700">{{ $t('Removed') }}</p>
+                        <p class="text-sm font-semibold text-amber-800">{{ batchStats.removed || 0 }}</p>
+                    </div>
                 </div>
 
-                <div class="flex justify-between">
-                    <button type="button" class="rounded-md border border-slate-300 px-4 py-2 text-sm" :disabled="busy" @click="normalizeRows">
-                        {{ busy ? 'Processing...' : 'Apply Normalization' }}
-                    </button>
-                    <button type="button" class="rounded-md bg-primary px-4 py-2 text-sm text-white disabled:opacity-60" :disabled="busy || !canGoToGroupStep" @click="wizardStep = 4">
-                        Continue to Group Assignment
-                    </button>
+                <div class="rounded-lg border border-slate-200 bg-white p-3">
+                    <div class="grid w-full grid-cols-1 gap-2 sm:grid-cols-2">
+                        <button type="button" class="inline-flex h-11 w-full items-center justify-center rounded-md border border-slate-300 px-4 text-sm disabled:opacity-60" :disabled="busy || uploadBusy" @click="goToPreviousStep">
+                                {{ $t('Previous') }}
+                        </button>
+                        <button
+                            v-if="showDefaultCodeControls"
+                            type="button"
+                            class="inline-flex h-11 w-full items-center justify-center rounded-md border border-slate-300 px-4 text-sm font-medium disabled:opacity-60"
+                            :disabled="busy"
+                            @click="normalizeRows"
+                        >
+                            {{ busy ? $t('Processing...') : $t('Apply Normalization') }}
+                        </button>
+                    </div>
+                    <div v-if="showDefaultCodeControls" class="mt-2">
+                        <label class="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 block">{{ $t('Default Country Code (for numbers without code)') }}
+                            <input v-model="defaultCountryCode" type="text" class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" placeholder="+966">
+                        </label>
+                    </div>
+                    <div class="mt-2 grid w-full grid-cols-1 gap-2">
+                        <button type="button" class="inline-flex h-11 w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60 sm:col-span-2" :disabled="busy || !canContinueToGroups" @click="wizardStep = 4">
+                            {{ $t('Continue') }}
+                        </button>
+                    </div>
+                    <p class="mt-2 text-xs" :class="canContinueToGroups ? 'text-emerald-700' : 'text-slate-500'">
+                        {{ canContinueToGroups
+                            ? $t('Normalization applied successfully. You can continue to audince assignment.')
+                            : $t('Run normalization before continuing.') }}
+                    </p>
                 </div>
 
-                <div class="overflow-x-auto rounded-md border border-slate-200">
+                <div v-if="hasInvalidRows" class="overflow-x-auto rounded-lg border border-slate-200 bg-white">
                     <table class="min-w-full divide-y divide-slate-200 text-xs">
                         <thead class="bg-slate-50">
                             <tr>
-                                <th class="px-2 py-2 text-left">Row</th>
-                                <th class="px-2 py-2 text-left">Phone</th>
-                                <th class="px-2 py-2 text-left">Name</th>
-                                <th class="px-2 py-2 text-left">Status</th>
-                                <th class="px-2 py-2 text-left">Errors</th>
-                                <th class="px-2 py-2 text-right">Actions</th>
+                                <th class="px-2 py-2 text-left">{{ $t('Row') }}</th>
+                                <th class="px-2 py-2 text-left">{{ $t('Phone') }}</th>
+                                <th class="px-2 py-2 text-left">{{ $t('Name') }}</th>
+                                <th class="px-2 py-2 text-left">{{ $t('Status') }}</th>
+                                <th class="px-2 py-2 text-left">{{ $t('Errors') }}</th>
                             </tr>
                         </thead>
                         <tbody class="divide-y divide-slate-100">
-                            <tr v-for="row in rows" :key="row.id">
+                            <tr v-for="row in invalidRowsPreview" :key="`invalid-${row.row_number}`">
                                 <td class="px-2 py-2">{{ row.row_number }}</td>
                                 <td class="px-2 py-2">{{ row.mapped_data?.phone || '-' }}</td>
                                 <td class="px-2 py-2">{{ row.mapped_data?.first_name || '-' }}</td>
                                 <td class="px-2 py-2">
-                                    <span class="rounded-full px-2 py-0.5" :class="row.status === 'invalid' ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'">{{ row.status }}</span>
+                                    <span class="rounded-full px-2 py-0.5" :class="row.status === 'invalid' ? 'bg-rose-100 text-rose-700' : 'bg-emerald-100 text-emerald-700'">{{ $t(row.status) }}</span>
                                 </td>
                                 <td class="px-2 py-2">{{ (row.errors || []).join(' | ') || '-' }}</td>
-                                <td class="px-2 py-2 text-right">
-                                    <button type="button" class="rounded border border-rose-300 px-2 py-1 text-rose-600" @click="removeRow(row)">Delete</button>
-                                </td>
                             </tr>
                         </tbody>
                     </table>
+                    <div v-if="invalidRowsPreviewLimited" class="border-t border-slate-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                        {{ $t('Only part of invalid rows is shown for preview.') }}
+                    </div>
                 </div>
-
-                <div class="flex items-center justify-end gap-2">
-                    <button type="button" class="rounded border border-slate-300 px-2 py-1 text-xs disabled:opacity-50" :disabled="rowsMeta.current_page <= 1 || busy" @click="fetchRows(rowsMeta.current_page - 1, rowFilter)">Prev</button>
-                    <span class="text-xs text-slate-500">{{ rowsMeta.current_page }} / {{ rowsMeta.last_page }}</span>
-                    <button type="button" class="rounded border border-slate-300 px-2 py-1 text-xs disabled:opacity-50" :disabled="rowsMeta.current_page >= rowsMeta.last_page || busy" @click="fetchRows(rowsMeta.current_page + 1, rowFilter)">Next</button>
+                <div v-else class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-700">
+                    {{ $t('No invalid rows found after normalization.') }}
                 </div>
             </div>
 
             <div v-if="wizardStep === 4" class="space-y-3">
-                <p class="text-sm text-slate-600">Assign existing groups and/or create one new group. File groups and selected groups will be merged.</p>
-                <div class="max-h-48 overflow-auto rounded-md border border-slate-200 p-2">
-                    <label v-for="group in contactGroups" :key="`assign-${group.id}`" class="mb-1 flex items-center gap-2 text-sm text-slate-700">
-                        <input v-model="groupForm.group_ids" type="checkbox" :value="group.id">
-                        {{ group.name }}
+                <p class="text-sm text-slate-600">{{ $t('Choose how to assign imported contacts to audince.') }}</p>
+
+                <div class="rounded-xl border border-slate-200 bg-slate-50/60 p-3 space-y-3">
+                    <label
+                        class="flex cursor-pointer items-start gap-2 rounded-lg border p-3 transition"
+                        :class="groupForm.assignment_mode === 'all_selected' ? 'border-primary bg-primary/5 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300'"
+                    >
+                        <input v-model="groupForm.assignment_mode" type="radio" value="all_selected" class="mt-0.5">
+                        <div>
+                            <p class="text-sm font-semibold text-slate-800">{{ $t('Add all contacts to selected audince') }}</p>
+                            <p class="text-xs text-slate-500">{{ $t('All imported contacts will be added to selected/manual audince. File audince names will also be merged.') }}</p>
+                        </div>
+                    </label>
+                    <label
+                        class="flex cursor-pointer items-start gap-2 rounded-lg border p-3 transition"
+                        :class="groupForm.assignment_mode === 'split' ? 'border-primary bg-primary/5 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300'"
+                    >
+                        <input v-model="groupForm.assignment_mode" type="radio" value="split" class="mt-0.5">
+                        <div>
+                            <p class="text-sm font-semibold text-slate-800">{{ $t('Split contacts across generated audince') }}</p>
+                            <p class="text-xs text-slate-500">{{ $t('Create sequential audince like prefix_1, prefix_2 and distribute contacts by batch size.') }}</p>
+                        </div>
                     </label>
                 </div>
-                <label class="text-xs text-slate-500">Create New Group
-                    <input v-model="groupForm.new_group_name" type="text" class="mt-1 w-full rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="New group name">
-                </label>
+
+                <div v-if="groupForm.assignment_mode === 'all_selected'" class="space-y-3">
+                    <div class="rounded-xl border border-slate-200 bg-white p-3">
+                        <div class="relative">
+                            <svg class="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
+                                <path fill-rule="evenodd" d="M8.5 3a5.5 5.5 0 104.236 9.01l3.127 3.127a1 1 0 001.414-1.414l-3.127-3.127A5.5 5.5 0 008.5 3zM5 8.5a3.5 3.5 0 117 0 3.5 3.5 0 01-7 0z" clip-rule="evenodd" />
+                            </svg>
+                            <input
+                                v-model="groupSearch"
+                                type="text"
+                                class="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm outline-none ring-primary/20 transition focus:border-primary focus:ring"
+                                :placeholder="$t('Search audince...')"
+                            >
+                        </div>
+
+                        <div class="mt-2 flex items-center gap-2 text-xs">
+                            <span class="rounded-full bg-slate-100 px-2 py-1 text-slate-600">{{ $t('Visible') }}: {{ filteredContactGroups.length }}</span>
+                            <span class="rounded-full bg-emerald-50 px-2 py-1 text-emerald-700">{{ $t('Selected') }}: {{ selectedGroupsCount }}</span>
+                        </div>
+
+                        <div class="mt-2 max-h-56 overflow-auto rounded-lg border border-slate-200 bg-slate-50/40 p-2">
+                            <label
+                                v-for="group in filteredContactGroups"
+                                :key="`assign-${group.id}`"
+                                class="mb-1 flex cursor-pointer items-center gap-2 rounded-md border px-2 py-2 text-sm transition last:mb-0"
+                                :class="groupForm.group_ids.includes(group.id) ? 'border-primary bg-primary/5 text-primary' : 'border-transparent bg-white text-slate-700 hover:border-slate-200'"
+                            >
+                                <input v-model="groupForm.group_ids" type="checkbox" :value="group.id">
+                                <span class="truncate">{{ group.name }}</span>
+                            </label>
+                            <p v-if="filteredContactGroups.length === 0" class="px-2 py-3 text-center text-xs text-slate-500">
+                                {{ $t('No audince found') }}
+                            </p>
+                        </div>
+                    </div>
+
+                    <label class="text-xs text-slate-600">{{ $t('Create New Audince') }}
+                        <input v-model="groupForm.new_group_name" type="text" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-primary/20 focus:border-primary focus:ring" :placeholder="$t('New audince name')">
+                    </label>
+                </div>
+
+                <div v-else class="grid gap-3 md:grid-cols-2">
+                    <label class="text-xs text-slate-600">{{ $t('Contacts per audince') }}
+                        <input v-model.number="groupForm.split_group_size" min="1" type="number" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-primary/20 focus:border-primary focus:ring" :placeholder="$t('100')">
+                    </label>
+                    <label class="text-xs text-slate-600">{{ $t('Audince name prefix') }}
+                        <input v-model="groupForm.split_group_prefix" type="text" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-primary/20 focus:border-primary focus:ring" :placeholder="$t('audince')">
+                    </label>
+                </div>
+
                 <div class="flex justify-end">
-                    <button type="button" class="rounded-md bg-primary px-4 py-2 text-sm text-white disabled:opacity-60" :disabled="busy" @click="saveGroupAssignment">
-                        {{ busy ? 'Saving...' : 'Save Group Assignment' }}
-                    </button>
+                    <div class="flex items-center gap-2">
+                        <button type="button" class="rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-700 disabled:opacity-60" :disabled="busy || uploadBusy" @click="goToPreviousStep">
+                            {{ $t('Previous') }}
+                        </button>
+                        <button type="button" class="rounded-md bg-primary px-4 py-2 text-sm text-white disabled:opacity-60" :disabled="busy || (groupForm.assignment_mode === 'split' && (!groupForm.split_group_size || groupForm.split_group_size < 1 || !String(groupForm.split_group_prefix || '').trim()))" @click="saveGroupAssignment">
+                            {{ busy ? $t('Saving...') : $t('Save Audince Assignment') }}
+                        </button>
+                    </div>
                 </div>
             </div>
 
             <div v-if="wizardStep === 5" class="space-y-3">
-                <div class="rounded-md bg-slate-50 p-3 text-sm text-slate-700">
-                    <p>Ready to import valid rows.</p>
-                    <p>Valid rows: {{ batchStats.valid || 0 }} | Invalid rows: {{ batchStats.invalid || 0 }} | Removed rows: {{ batchStats.removed || 0 }}</p>
+                <div v-if="!isImportCompleted" class="rounded-md bg-slate-50 p-3 text-sm text-slate-700">
+                    <p>{{ $t('Ready to import valid rows.') }}</p>
+                    <p>{{ $t('Valid rows') }}: {{ batchStats.valid || 0 }} | {{ $t('Invalid rows') }}: {{ batchStats.invalid || 0 }} | {{ $t('Removed rows') }}: {{ batchStats.removed || 0 }}</p>
                 </div>
 
                 <div v-if="!report" class="flex justify-end">
-                    <button type="button" class="rounded-md bg-primary px-4 py-2 text-sm text-white disabled:opacity-60" :disabled="busy" @click="executeImport">
-                        {{ busy ? 'Importing...' : 'Execute Import' }}
-                    </button>
+                    <div class="flex items-center gap-2">
+                        <button type="button" class="rounded-md bg-primary px-4 py-2 text-sm text-white disabled:opacity-60" :disabled="busy" @click="executeImport">
+                            {{ busy ? $t('Importing...') : $t('Execute Import') }}
+                        </button>
+                    </div>
                 </div>
 
                 <div v-else class="space-y-2 rounded-md border border-slate-200 p-3 text-sm">
-                    <p class="font-medium text-slate-800">Execution Report</p>
-                    <p class="text-slate-600">{{ importSummaryText }}</p>
-                    <p class="text-slate-600">Created: {{ report.created_count || 0 }}, Updated: {{ report.updated_count || 0 }}, Removed: {{ report.removed_count || 0 }}</p>
-                    <a :href="`/contacts/import/${batch.uuid}/report.csv`" target="_blank" class="text-primary underline">Download failure report CSV</a>
+                    <p class="font-medium text-slate-800">{{ $t('Execution Report') }}</p>
+                    <div class="grid grid-cols-2 gap-2 md:grid-cols-4">
+                        <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
+                            <p class="text-[11px] text-emerald-700">{{ $t('success') }}</p>
+                            <p class="text-sm font-semibold text-emerald-800">{{ report.success_count || 0 }}</p>
+                        </div>
+                        <div class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2">
+                            <p class="text-[11px] text-rose-700">{{ $t('failed') }}</p>
+                            <p class="text-sm font-semibold text-rose-800">{{ report.failed_count || 0 }}</p>
+                        </div>
+                        <div class="rounded-lg border border-sky-200 bg-sky-50 px-3 py-2">
+                            <p class="text-[11px] text-sky-700">{{ $t('Created') }}</p>
+                            <p class="text-sm font-semibold text-sky-800">{{ report.created_count || 0 }}</p>
+                        </div>
+                        <div class="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2">
+                            <p class="text-[11px] text-indigo-700">{{ $t('Updated') }}</p>
+                            <p class="text-sm font-semibold text-indigo-800">{{ report.updated_count || 0 }}</p>
+                        </div>
+                    </div>
+                    <a :href="`/contacts/import/${batch.uuid}/report.csv`" target="_blank" class="text-primary underline">{{ $t('Download failure report CSV') }}</a>
                 </div>
             </div>
         </div>
@@ -630,20 +784,20 @@ const canGoToGroupStep = computed(() => (batchStats.value.invalid || 0) === 0);
         <div class="space-y-2 pt-4">
             <div v-if="editErrorMessage" class="rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">{{ editErrorMessage }}</div>
             <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
-                <input v-model="rowEditor.first_name" type="text" class="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="First name">
-                <input v-model="rowEditor.last_name" type="text" class="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Last name">
-                <input v-model="rowEditor.phone" type="text" class="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Phone">
-                <input v-model="rowEditor.email" type="text" class="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Email">
-                <input v-model="rowEditor.group_name" type="text" class="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Group names | separated">
-                <input v-model="rowEditor.country" type="text" class="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Country">
-                <input v-model="rowEditor.street" type="text" class="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Street">
-                <input v-model="rowEditor.city" type="text" class="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="City">
-                <input v-model="rowEditor.state" type="text" class="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="State">
-                <input v-model="rowEditor.zip" type="text" class="rounded-md border border-slate-300 px-3 py-2 text-sm" placeholder="Zip">
+                <input v-model="rowEditor.first_name" type="text" class="rounded-md border border-slate-300 px-3 py-2 text-sm" :placeholder="$t('First name')">
+                <input v-model="rowEditor.last_name" type="text" class="rounded-md border border-slate-300 px-3 py-2 text-sm" :placeholder="$t('Last name')">
+                <input v-model="rowEditor.phone" type="text" class="rounded-md border border-slate-300 px-3 py-2 text-sm" :placeholder="$t('Phone')">
+                <input v-model="rowEditor.email" type="text" class="rounded-md border border-slate-300 px-3 py-2 text-sm" :placeholder="$t('Email')">
+                <input v-model="rowEditor.group_name" type="text" class="rounded-md border border-slate-300 px-3 py-2 text-sm" :placeholder="$t('Audince names | separated')">
+                <input v-model="rowEditor.country" type="text" class="rounded-md border border-slate-300 px-3 py-2 text-sm" :placeholder="$t('Country')">
+                <input v-model="rowEditor.street" type="text" class="rounded-md border border-slate-300 px-3 py-2 text-sm" :placeholder="$t('Street')">
+                <input v-model="rowEditor.city" type="text" class="rounded-md border border-slate-300 px-3 py-2 text-sm" :placeholder="$t('City')">
+                <input v-model="rowEditor.state" type="text" class="rounded-md border border-slate-300 px-3 py-2 text-sm" :placeholder="$t('State')">
+                <input v-model="rowEditor.zip" type="text" class="rounded-md border border-slate-300 px-3 py-2 text-sm" :placeholder="$t('Zip')">
             </div>
 
             <div class="rounded-md border border-slate-200 p-2">
-                <p class="mb-2 text-xs font-medium text-slate-600">Custom Attributes</p>
+                <p class="mb-2 text-xs font-medium text-slate-600">{{ $t('Custom Attributes') }}</p>
                 <div class="grid grid-cols-1 gap-2 md:grid-cols-2">
                     <label v-for="field in fields" :key="`edit-custom-${field.id}`" class="text-xs text-slate-500">{{ field.name }}
                         <input v-model="rowEditor.custom_attributes[field.name]" type="text" class="mt-1 w-full rounded-md border border-slate-300 px-2 py-2 text-sm">
@@ -652,9 +806,9 @@ const canGoToGroupStep = computed(() => (batchStats.value.invalid || 0) === 0);
             </div>
 
             <div class="flex justify-end gap-2">
-                <button type="button" class="rounded-md border border-slate-300 px-3 py-2 text-sm" @click="isEditOpen = false">Cancel</button>
+                <button type="button" class="rounded-md border border-slate-300 px-3 py-2 text-sm" @click="isEditOpen = false">{{ $t('Cancel') }}</button>
                 <button type="button" class="rounded-md bg-primary px-3 py-2 text-sm text-white disabled:opacity-60" :disabled="isSavingEdit" @click.prevent="saveEdit">
-                    {{ isSavingEdit ? 'Saving...' : 'Save' }}
+                    {{ isSavingEdit ? $t('Saving...') : $t('Save') }}
                 </button>
             </div>
         </div>

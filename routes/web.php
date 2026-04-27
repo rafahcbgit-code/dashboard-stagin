@@ -299,6 +299,7 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::post('/contacts/import/{batchUuid}/mapping', [App\Http\Controllers\User\ContactImportController::class, 'map'])->name('contacts.import.mapping');
                 Route::post('/contacts/import/{batchUuid}/normalize', [App\Http\Controllers\User\ContactImportController::class, 'normalize'])->name('contacts.import.normalize');
                 Route::get('/contacts/import/{batchUuid}/rows', [App\Http\Controllers\User\ContactImportController::class, 'rows'])->name('contacts.import.rows');
+                Route::delete('/contacts/import/{batchUuid}/rows/clear-invalid', [App\Http\Controllers\User\ContactImportController::class, 'clearInvalidRows'])->name('contacts.import.rows.clear-invalid');
                 Route::patch('/contacts/import/{batchUuid}/rows/{rowId}', [App\Http\Controllers\User\ContactImportController::class, 'updateRow'])->name('contacts.import.rows.update');
                 Route::delete('/contacts/import/{batchUuid}/rows/{rowId}', [App\Http\Controllers\User\ContactImportController::class, 'deleteRow'])->name('contacts.import.rows.delete');
                 Route::post('/contacts/import/{batchUuid}/group-assignment', [App\Http\Controllers\User\ContactImportController::class, 'assignGroups'])->name('contacts.import.groups');

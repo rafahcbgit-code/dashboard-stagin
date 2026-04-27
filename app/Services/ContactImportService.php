@@ -13,6 +13,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
 use PhpOffice\PhpSpreadsheet\IOFactory;
+use App\Services\PhoneService;
 
 class ContactImportService
 {
@@ -102,12 +103,15 @@ class ContactImportService
         return $batch->fresh();
     }
 
-    public function normalize(ContactImportBatch $batch, string $defaultCountryCode): ContactImportBatch
+    public function normalize(ContactImportBatch $batch, string $defaultCountryCode): array
     {
         $defaultCountryCode = $this->normalizeCountryCode($defaultCountryCode);
         $batchMapping = (array) ($batch->mapping ?? []);
+        $invalidRowsPreview = [];
+        $invalidRowsCount = 0;
+        $invalidPreviewLimit = 1000;
 
-        DB::transaction(function () use ($batch, $defaultCountryCode, $batchMapping): void {
+        DB::transaction(function () use ($batch, $defaultCountryCode, $batchMapping, &$invalidRowsPreview, &$invalidRowsCount, $invalidPreviewLimit): void {
             $batch->update([
                 'default_country_code' => $defaultCountryCode,
                 'status' => 'normalized',
@@ -119,8 +123,9 @@ class ContactImportService
                 ->where('contact_import_batch_id', $batch->id)
                 ->where('is_removed', false)
                 ->orderBy('id')
-                ->chunkById(1000, function ($rows) use ($defaultCountryCode, $batchMapping): void {
+                ->chunkById(1000, function ($rows) use ($defaultCountryCode, $batchMapping, $batch, &$invalidRowsPreview, &$invalidRowsCount, $invalidPreviewLimit): void {
                     $updates = [];
+                    $invalidIdsToDelete = [];
                     $now = now();
 
                     foreach ($rows as $row) {
@@ -133,6 +138,22 @@ class ContactImportService
 
                         $evaluation = $this->evaluateMappedRow($mappedData, $defaultCountryCode);
 
+                        if (! empty($evaluation['errors'])) {
+                            $invalidRowsCount++;
+
+                            if (count($invalidRowsPreview) < $invalidPreviewLimit) {
+                                $invalidRowsPreview[] = [
+                                    'row_number' => (int) $row->row_number,
+                                    'status' => 'invalid',
+                                    'mapped_data' => $mappedData,
+                                    'errors' => array_values((array) $evaluation['errors']),
+                                ];
+                            }
+
+                            $invalidIdsToDelete[] = (int) $row->id;
+                            continue;
+                        }
+
                         $updates[] = [
                             'id' => (int) $row->id,
                             'contact_import_batch_id' => (int) $row->contact_import_batch_id,
@@ -141,8 +162,8 @@ class ContactImportService
                             'created_at' => $row->created_at,
                             'mapped_data' => json_encode($mappedData),
                             'normalized_data' => json_encode($evaluation['normalized']),
-                            'errors' => ! empty($evaluation['errors']) ? json_encode($evaluation['errors']) : null,
-                            'status' => empty($evaluation['errors']) ? 'valid' : 'invalid',
+                            'errors' => null,
+                            'status' => 'valid',
                             'updated_at' => $now,
                         ];
                     }
@@ -154,10 +175,22 @@ class ContactImportService
                             ['mapped_data', 'normalized_data', 'errors', 'status', 'updated_at']
                         );
                     }
+
+                    if (! empty($invalidIdsToDelete)) {
+                        DB::table('contact_import_rows')
+                            ->where('contact_import_batch_id', $batch->id)
+                            ->whereIn('id', $invalidIdsToDelete)
+                            ->delete();
+                    }
                 });
         });
 
-        return $batch->fresh();
+        return [
+            'batch' => $batch->fresh(),
+            'invalid_rows_count' => $invalidRowsCount,
+            'invalid_rows_preview' => $invalidRowsPreview,
+            'invalid_rows_preview_limited' => $invalidRowsCount > $invalidPreviewLimit,
+        ];
     }
 
     public function updateRow(ContactImportBatch $batch, ContactImportRow $row, array $payload): ContactImportRow
@@ -203,33 +236,65 @@ class ContactImportService
         return $row->fresh();
     }
 
-    public function assignGroups(ContactImportBatch $batch, array $groupIds, ?string $newGroupName, int $organizationId, int $userId): ContactImportBatch
+    public function removeInvalidRows(ContactImportBatch $batch): int
+    {
+        return ContactImportRow::query()
+            ->where('contact_import_batch_id', $batch->id)
+            ->where('is_removed', false)
+            ->where('status', 'invalid')
+            ->update([
+                'is_removed' => true,
+                'status' => 'removed',
+                'errors' => json_encode(['Removed by user (Clear All invalid rows)']),
+                'updated_at' => now(),
+            ]);
+    }
+
+    public function assignGroups(
+        ContactImportBatch $batch,
+        array $groupIds,
+        ?string $newGroupName,
+        string $assignmentMode,
+        ?int $splitGroupSize,
+        ?string $splitGroupPrefix,
+        int $organizationId,
+        int $userId
+    ): ContactImportBatch
     {
         $assignedGroupIds = collect($groupIds)->map(fn ($id) => (int) $id)->filter()->values();
 
-        $name = trim((string) $newGroupName);
-        if ($name !== '') {
-            $group = ContactGroup::query()
-                ->where('organization_id', $organizationId)
-                ->whereNull('deleted_at')
-                ->whereRaw('LOWER(name) = ?', [Str::lower($name)])
-                ->first();
+        $normalizedMode = in_array($assignmentMode, ['all_selected', 'split'], true) ? $assignmentMode : 'all_selected';
 
-            if (! $group) {
-                $group = ContactGroup::query()->create([
-                    'organization_id' => $organizationId,
-                    'name' => $name,
-                    'created_by' => $userId,
-                    'created_at' => now(),
-                    'updated_at' => now(),
-                ]);
+        if ($normalizedMode === 'all_selected') {
+            $name = trim((string) $newGroupName);
+            if ($name !== '') {
+                $group = ContactGroup::query()
+                    ->where('organization_id', $organizationId)
+                    ->whereNull('deleted_at')
+                    ->whereRaw('LOWER(name) = ?', [Str::lower($name)])
+                    ->first();
+
+                if (! $group) {
+                    $group = ContactGroup::query()->create([
+                        'organization_id' => $organizationId,
+                        'name' => $name,
+                        'created_by' => $userId,
+                        'created_at' => now(),
+                        'updated_at' => now(),
+                    ]);
+                }
+
+                $assignedGroupIds->push((int) $group->id);
             }
-
-            $assignedGroupIds->push((int) $group->id);
         }
 
         $batch->update([
             'selected_group_ids' => $assignedGroupIds->unique()->values()->all(),
+            'group_assignment' => [
+                'mode' => $normalizedMode,
+                'split_group_size' => $normalizedMode === 'split' ? (int) ($splitGroupSize ?? 0) : null,
+                'split_group_prefix' => $normalizedMode === 'split' ? trim((string) ($splitGroupPrefix ?? '')) : null,
+            ],
             'status' => 'group_assigned',
         ]);
 
@@ -239,6 +304,19 @@ class ContactImportService
     public function commit(ContactImportBatch $batch, int $organizationId, int $userId): array
     {
         $selectedGroupIds = collect($batch->selected_group_ids ?? [])->map(fn ($id) => (int) $id)->filter()->unique()->values();
+        $groupAssignment = (array) ($batch->group_assignment ?? []);
+        $assignmentMode = (string) ($groupAssignment['mode'] ?? 'all_selected');
+        $splitEnabled = $assignmentMode === 'split'
+            && (int) ($groupAssignment['split_group_size'] ?? 0) > 0
+            && trim((string) ($groupAssignment['split_group_prefix'] ?? '')) !== '';
+        $splitState = [
+            'enabled' => $splitEnabled,
+            'size' => max(1, (int) ($groupAssignment['split_group_size'] ?? 0)),
+            'prefix' => trim((string) ($groupAssignment['split_group_prefix'] ?? '')),
+            'current_index' => 1,
+            'current_count' => 0,
+        ];
+        $splitAssignmentByPhone = [];
         $groupCacheRaw = ContactGroup::query()
             ->where('organization_id', $organizationId)
             ->whereNull('deleted_at')
@@ -258,7 +336,7 @@ class ContactImportService
             ->where('is_removed', false)
             ->where('status', 'valid')
             ->orderBy('id')
-            ->chunkById(1000, function ($rows) use ($organizationId, $userId, $selectedGroupIds, &$groupCache, &$created, &$updated, &$failed): void {
+            ->chunkById(1000, function ($rows) use ($organizationId, $userId, $selectedGroupIds, $assignmentMode, &$splitState, &$splitAssignmentByPhone, &$groupCache, &$created, &$updated, &$failed): void {
                 $now = now();
                 $rowStatusUpdates = [];
                 $entriesByPhone = [];
@@ -297,7 +375,7 @@ class ContactImportService
                     if (! isset($entriesByPhone[$phone])) {
                         $entriesByPhone[$phone] = [
                             'phone' => $phone,
-                            'first_name' => (string) ($normalized['first_name'] ?? 'name'),
+                            'first_name' => isset($normalized['first_name']) ? trim((string) $normalized['first_name']) : null,
                             'last_name' => $normalized['last_name'] ?? null,
                             'email' => $normalized['email'] ?? null,
                             'address' => (array) ($normalized['address'] ?? []),
@@ -310,8 +388,15 @@ class ContactImportService
                     }
 
                     $existing = &$entriesByPhone[$phone];
-                    $existing['first_name'] = (string) ($normalized['first_name'] ?: $existing['first_name']);
-                    $existing['last_name'] = $normalized['last_name'] ?: $existing['last_name'];
+                    $normalizedFirstName = isset($normalized['first_name']) ? trim((string) $normalized['first_name']) : null;
+                    if ($normalizedFirstName !== null && $normalizedFirstName !== '') {
+                        $existing['first_name'] = $normalizedFirstName;
+                    }
+
+                    $normalizedLastName = isset($normalized['last_name']) ? trim((string) $normalized['last_name']) : null;
+                    if ($normalizedLastName !== null && $normalizedLastName !== '') {
+                        $existing['last_name'] = $normalizedLastName;
+                    }
                     $existing['email'] = $normalized['email'] ?: $existing['email'];
                     $existing['address'] = array_merge((array) $existing['address'], (array) ($normalized['address'] ?? []));
                     $existing['custom_attributes'] = array_merge((array) $existing['custom_attributes'], (array) ($normalized['custom_attributes'] ?? []));
@@ -351,8 +436,29 @@ class ContactImportService
                         ->filter()
                         ->values();
 
-                    $entriesByPhone[$phone]['all_group_ids'] = $selectedGroupIds
+                    $manualGroupIds = $assignmentMode === 'all_selected' ? $selectedGroupIds : collect();
+                    $splitGroupId = null;
+
+                    if ($splitState['enabled']) {
+                        if (isset($splitAssignmentByPhone[$phone])) {
+                            $splitGroupId = (int) $splitAssignmentByPhone[$phone];
+                        } else {
+                            $splitGroupId = $this->resolveSplitGroupId(
+                                $organizationId,
+                                $userId,
+                                $groupCache,
+                                $now,
+                                $splitState
+                            );
+                            if ($splitGroupId) {
+                                $splitAssignmentByPhone[$phone] = $splitGroupId;
+                            }
+                        }
+                    }
+
+                    $entriesByPhone[$phone]['all_group_ids'] = $manualGroupIds
                         ->merge($groupIdsFromFile)
+                        ->when($splitGroupId, fn ($collection) => $collection->push($splitGroupId))
                         ->map(fn ($id) => (int) $id)
                         ->filter()
                         ->unique()
@@ -364,7 +470,7 @@ class ContactImportService
                 $existingContacts = Contact::withTrashed()
                     ->where('organization_id', $organizationId)
                     ->whereIn('phone', $phones)
-                    ->get(['id', 'uuid', 'organization_id', 'phone', 'created_by', 'created_at', 'metadata', 'deleted_at'])
+                    ->get(['id', 'uuid', 'organization_id', 'phone', 'first_name', 'last_name', 'created_by', 'created_at', 'metadata', 'deleted_at'])
                     ->keyBy('phone');
 
                 $contactUpdates = [];
@@ -379,6 +485,12 @@ class ContactImportService
                             : ((array) $existingContact->metadata);
 
                         $mergedMetadata = array_merge($existingMetadata, (array) $entry['custom_attributes']);
+                        $resolvedFirstName = trim((string) ($entry['first_name'] ?? '')) !== ''
+                            ? trim((string) $entry['first_name'])
+                            : ((string) ($existingContact->first_name ?: 'name'));
+                        $resolvedLastName = trim((string) ($entry['last_name'] ?? '')) !== ''
+                            ? trim((string) $entry['last_name'])
+                            : $existingContact->last_name;
 
                         $contactUpdates[] = [
                             'id' => (int) $existingContact->id,
@@ -387,8 +499,8 @@ class ContactImportService
                             'phone' => (string) $existingContact->phone,
                             'created_by' => (int) $existingContact->created_by,
                             'created_at' => $existingContact->created_at,
-                            'first_name' => (string) ($entry['first_name'] ?: 'name'),
-                            'last_name' => $entry['last_name'] ?: null,
+                            'first_name' => $resolvedFirstName,
+                            'last_name' => $resolvedLastName,
                             'email' => $entry['email'] ?: null,
                             'address' => json_encode($entry['address'] ?? []),
                             'metadata' => ! empty($mergedMetadata) ? json_encode($mergedMetadata) : null,
@@ -401,8 +513,8 @@ class ContactImportService
                         $contactInserts[] = [
                             'uuid' => (string) Str::uuid(),
                             'organization_id' => $organizationId,
-                            'first_name' => (string) ($entry['first_name'] ?: 'name'),
-                            'last_name' => $entry['last_name'] ?: null,
+                            'first_name' => trim((string) ($entry['first_name'] ?? '')) !== '' ? trim((string) $entry['first_name']) : 'name',
+                            'last_name' => trim((string) ($entry['last_name'] ?? '')) !== '' ? trim((string) $entry['last_name']) : null,
                             'phone' => $phone,
                             'email' => $entry['email'] ?: null,
                             'address' => json_encode($entry['address'] ?? []),
@@ -566,6 +678,39 @@ class ContactImportService
         }
 
         return $query->paginate($perPage, ['*'], 'page', $page);
+    }
+
+    public function hasRowsMissingCountryCode(ContactImportBatch $batch): bool
+    {
+        $mapping = (array) ($batch->mapping ?? []);
+        $phoneColumn = trim((string) ($mapping['phone'] ?? ''));
+
+        if ($phoneColumn === '') {
+            return false;
+        }
+
+        $found = false;
+
+        DB::table('contact_import_rows')
+            ->select(['id', 'raw_data'])
+            ->where('contact_import_batch_id', $batch->id)
+            ->where('is_removed', false)
+            ->orderBy('id')
+            ->chunkById(1000, function ($rows) use ($phoneColumn, &$found) {
+                foreach ($rows as $row) {
+                    $rawData = $this->decodeJsonArray($row->raw_data);
+                    $phoneRaw = trim((string) ($rawData[$phoneColumn] ?? ''));
+
+                    if ($this->phoneNeedsDefaultCountryCode($phoneRaw)) {
+                        $found = true;
+                        return false;
+                    }
+                }
+
+                return true;
+            });
+
+        return $found;
     }
 
     private function parseUploadedFile(UploadedFile $file): array
@@ -738,7 +883,7 @@ class ContactImportService
         }
 
         $normalized = [
-            'first_name' => trim((string) ($mappedData['first_name'] ?? '')) ?: 'name',
+            'first_name' => trim((string) ($mappedData['first_name'] ?? '')) ?: null,
             'last_name' => trim((string) ($mappedData['last_name'] ?? '')) ?: null,
             'phone' => $e164Phone,
             'email' => trim((string) ($mappedData['email'] ?? '')) ?: null,
@@ -834,6 +979,29 @@ class ContactImportService
         return $defaultCountryCode . $local;
     }
 
+    private function phoneNeedsDefaultCountryCode(string $phone): bool
+    {
+        $phone = trim($phone);
+        if ($phone === '') {
+            return false;
+        }
+
+        $phone = $this->convertEasternArabicDigitsToAscii($phone);
+        $phone = preg_replace('/[^\d+]/u', '', $phone) ?: '';
+
+        if ($phone === '') {
+            return false;
+        }
+
+        if (str_starts_with($phone, '+') || str_starts_with($phone, '00')) {
+            return false;
+        }
+
+        $candidateInternational = '+' . ltrim($phone, '+');
+
+        return ! (bool) PhoneService::getE164Format($candidateInternational);
+    }
+
     private function convertEasternArabicDigitsToAscii(string $value): string
     {
         $arabicIndic = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
@@ -924,6 +1092,30 @@ class ContactImportService
     private function groupCacheKey(string $name): string
     {
         return Str::lower(trim($name));
+    }
+
+    private function resolveSplitGroupId(int $organizationId, int $userId, array &$groupCache, $now, array &$splitState): ?int
+    {
+        if (!($splitState['enabled'] ?? false)) {
+            return null;
+        }
+
+        if (($splitState['current_count'] ?? 0) >= ($splitState['size'] ?? 1)) {
+            $splitState['current_index'] = (int) ($splitState['current_index'] ?? 1) + 1;
+            $splitState['current_count'] = 0;
+        }
+
+        $prefix = trim((string) ($splitState['prefix'] ?? 'group'));
+        $prefix = rtrim($prefix, "_ \t\n\r\0\x0B");
+        $prefix = $prefix === '' ? 'group' : $prefix;
+        $groupName = $prefix . '_' . ((int) ($splitState['current_index'] ?? 1));
+
+        $this->ensureGroupIdsForNames([$groupName], $organizationId, $userId, $groupCache, $now);
+        $groupId = $groupCache[$this->groupCacheKey($groupName)] ?? null;
+
+        $splitState['current_count'] = (int) ($splitState['current_count'] ?? 0) + 1;
+
+        return $groupId ? (int) $groupId : null;
     }
 
     private function decodeJsonArray(mixed $value): array
