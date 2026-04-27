@@ -51,7 +51,7 @@ class ContactImportService
                 'row_number' => $index + 2,
                 'status' => 'pending',
                 'is_removed' => false,
-                'raw_data' => json_encode($row),
+                'raw_data' => $this->encodeJson($row),
                 'mapped_data' => null,
                 'normalized_data' => null,
                 'errors' => null,
@@ -160,8 +160,8 @@ class ContactImportService
                             'row_number' => (int) $row->row_number,
                             'is_removed' => (int) $row->is_removed,
                             'created_at' => $row->created_at,
-                            'mapped_data' => json_encode($mappedData),
-                            'normalized_data' => json_encode($evaluation['normalized']),
+                            'mapped_data' => $this->encodeJson($mappedData),
+                            'normalized_data' => $this->encodeJson($evaluation['normalized']),
                             'errors' => null,
                             'status' => 'valid',
                             'updated_at' => $now,
@@ -245,7 +245,7 @@ class ContactImportService
             ->update([
                 'is_removed' => true,
                 'status' => 'removed',
-                'errors' => json_encode(['Removed by user (Clear All invalid rows)']),
+                'errors' => $this->encodeJson(['Removed by user (Clear All invalid rows)']),
                 'updated_at' => now(),
             ]);
     }
@@ -366,7 +366,7 @@ class ContactImportService
                             'is_removed' => (int) $row->is_removed,
                             'created_at' => $row->created_at,
                             'status' => 'failed',
-                            'errors' => json_encode([$error]),
+                            'errors' => $this->encodeJson([$error]),
                             'updated_at' => $now,
                         ];
                         continue;
@@ -502,8 +502,8 @@ class ContactImportService
                             'first_name' => $resolvedFirstName,
                             'last_name' => $resolvedLastName,
                             'email' => $entry['email'] ?: null,
-                            'address' => json_encode($entry['address'] ?? []),
-                            'metadata' => ! empty($mergedMetadata) ? json_encode($mergedMetadata) : null,
+                            'address' => $this->encodeJson($entry['address'] ?? []),
+                            'metadata' => ! empty($mergedMetadata) ? $this->encodeJson($mergedMetadata) : null,
                             'deleted_at' => null,
                             'updated_at' => $now,
                         ];
@@ -517,8 +517,8 @@ class ContactImportService
                             'last_name' => trim((string) ($entry['last_name'] ?? '')) !== '' ? trim((string) $entry['last_name']) : null,
                             'phone' => $phone,
                             'email' => $entry['email'] ?: null,
-                            'address' => json_encode($entry['address'] ?? []),
-                            'metadata' => ! empty($entry['custom_attributes']) ? json_encode($entry['custom_attributes']) : null,
+                            'address' => $this->encodeJson($entry['address'] ?? []),
+                            'metadata' => ! empty($entry['custom_attributes']) ? $this->encodeJson($entry['custom_attributes']) : null,
                             'created_by' => $userId,
                             'contact_source' => 'imported',
                             'created_at' => $now,
@@ -614,7 +614,7 @@ class ContactImportService
                             'is_removed' => (int) ($rowMetaById[(int) $rowId]['is_removed'] ?? 0),
                             'created_at' => $rowMetaById[(int) $rowId]['created_at'] ?? $now,
                             'status' => 'failed',
-                            'errors' => json_encode(['Failed to resolve contact id after import.']),
+                            'errors' => $this->encodeJson(['Failed to resolve contact id after import.']),
                             'updated_at' => $now,
                         ];
                     }
@@ -699,7 +699,7 @@ class ContactImportService
             ->chunkById(1000, function ($rows) use ($phoneColumn, &$found) {
                 foreach ($rows as $row) {
                     $rawData = $this->decodeJsonArray($row->raw_data);
-                    $phoneRaw = trim((string) ($rawData[$phoneColumn] ?? ''));
+                    $phoneRaw = trim((string) $this->valueForSourceColumn($rawData, $phoneColumn));
 
                     if ($this->phoneNeedsDefaultCountryCode($phoneRaw)) {
                         $found = true;
@@ -847,7 +847,7 @@ class ContactImportService
 
         foreach (self::STANDARD_TARGET_FIELDS as $field) {
             $sourceColumn = (string) ($mapping[$field] ?? '');
-            $mapped[$field] = $sourceColumn !== '' ? trim((string) ($rawData[$sourceColumn] ?? '')) : null;
+            $mapped[$field] = $sourceColumn !== '' ? trim((string) $this->valueForSourceColumn($rawData, $sourceColumn)) : null;
         }
 
         $customAttributes = [];
@@ -858,12 +858,43 @@ class ContactImportService
                 continue;
             }
 
-            $customAttributes[$customFieldName] = trim((string) ($rawData[$sourceColumn] ?? ''));
+            $customAttributes[$customFieldName] = trim((string) $this->valueForSourceColumn($rawData, $sourceColumn));
         }
 
         $mapped['custom_attributes'] = $customAttributes;
 
         return $mapped;
+    }
+
+    private function valueForSourceColumn(array $rawData, string $sourceColumn): mixed
+    {
+        if (array_key_exists($sourceColumn, $rawData)) {
+            return $rawData[$sourceColumn];
+        }
+
+        $normalizedSourceColumn = $this->normalizeColumnKey($sourceColumn);
+        foreach ($rawData as $column => $value) {
+            if ($this->normalizeColumnKey((string) $column) === $normalizedSourceColumn) {
+                return $value;
+            }
+        }
+
+        return '';
+    }
+
+    private function normalizeColumnKey(string $column): string
+    {
+        $column = Str::lower(trim($column));
+
+        return preg_replace('/[^a-z0-9]+/', '', $column) ?: '';
+    }
+
+    private function encodeJson(mixed $value): string
+    {
+        return json_encode(
+            $value,
+            JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE | JSON_THROW_ON_ERROR
+        );
     }
 
     private function evaluateMappedRow(array $mappedData, string $defaultCountryCode): array
