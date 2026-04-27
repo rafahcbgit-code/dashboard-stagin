@@ -10,6 +10,7 @@ import ButtonsNode from '@modules/FlowBuilder/Pages/User/Components/vue-flow/nod
 import ListNode from '@modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/List-node.vue'
 import MediaNode from '@modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/Media-node.vue'
 import TextNode from '@modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/Text-node.vue'
+import QuestionNode from '@modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/Question-node.vue'
 import ActionNode from '@modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/Action-node.vue'
 import { Test_data } from '@/lib/constant'
 
@@ -30,6 +31,7 @@ const nodeTypes = {
   buttons: markRaw(ButtonsNode),
   media: markRaw(MediaNode),
   text: markRaw(TextNode),
+  question: markRaw(QuestionNode),
   action: markRaw(ActionNode),
 }
 
@@ -236,6 +238,20 @@ function handleOnDrop(event: DragEvent) {
       }
     }
   } else {
+    // Set default fields based on node type
+    let defaultFields = []
+    if (type === 'question') {
+      defaultFields = {
+        type: 'question',
+        question_text: '',
+        variable_name: '',
+        input_type: 'text',
+        max_retries: 3,
+        retry_message: '',
+        validation_pattern: '',
+      }
+    }
+
     newNode = {
       id: (lastNodeId + 1).toString(),
       type,
@@ -245,7 +261,7 @@ function handleOnDrop(event: DragEvent) {
         uuid: props.uuid,
         title: type,
         metadata: {
-          fields: [],
+          fields: defaultFields,
         },
       }
     }

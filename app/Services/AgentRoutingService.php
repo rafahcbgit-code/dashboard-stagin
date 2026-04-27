@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\ChatTicket;
 use App\Models\Organization;
 use App\Models\User;
+use App\Services\RateLimitService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
@@ -22,6 +23,9 @@ class AgentRoutingService
     public function assignToAgent(int $organizationId, int $contactId, string $targetType, ?int $targetAgentId = null): ?ChatTicket
     {
         try {
+            // Reset fallback counter — escalation served its purpose
+            app(RateLimitService::class)->resetFallbackCounter($organizationId, $contactId);
+
             // If a ticket is already open and assigned, don't reassign
             $existingTicket = ChatTicket::where('contact_id', $contactId)
                 ->where('status', 'open')

@@ -66,7 +66,7 @@ class ActionExecutionService
                     return $this->executeUpdateContact($config, $contact, $userMessage);
                 
                 case 'send_email':
-                    return $this->executeSendEmail($config, $contact);
+                    return $this->executeSendEmail($config, $contact, $flowData);
                 
                 case 'delay':
                     return $this->executeDelay($config, $contact, $flowData, $contactId);
@@ -213,7 +213,7 @@ class ActionExecutionService
     /**
      * Send email to contact
      */
-    private function executeSendEmail($config, $contact)
+    private function executeSendEmail($config, $contact, $flowData = null)
     {
         if (!$contact->email) {
             Log::warning("Contact {$contact->id} has no email address");
@@ -246,8 +246,8 @@ class ActionExecutionService
         }
 
         // Replace placeholders in subject and body
-        $subject = $this->replacePlaceholders($contact, $subject);
-        $body = $this->replacePlaceholders($contact, $body);
+        $subject = $this->replacePlaceholders($contact, $subject, $flowData);
+        $body = $this->replacePlaceholders($contact, $body, $flowData);
 
         try {
             // Configure mail settings
@@ -490,36 +490,63 @@ class ActionExecutionService
     /**
      * Replace placeholders in text
      */
-    private function replacePlaceholders($contact, $text)
+    private function replacePlaceholders($contact, $text, ?FlowUserData $flowData = null)
     {
         $address = $contact->address ? json_decode($contact->address, true) : [];
         $metadata = $contact->metadata ? json_decode($contact->metadata, true) : [];
-        
+
         $fullAddress = ($address['street'] ?? '') . ', ' .
                       ($address['city'] ?? '') . ', ' .
                       ($address['state'] ?? '') . ', ' .
                       ($address['zip'] ?? '') . ', ' .
                       ($address['country'] ?? '');
 
-        $placeholders = [
-            '{first_name}' => $contact->first_name ?? '',
-            '{last_name}' => $contact->last_name ?? '',
-            '{full_name}' => $contact->full_name ?? '',
-            '{email}' => $contact->email ?? '',
-            '{phone}' => $contact->phone ?? '',
-            '{organization_name}' => $this->organization->name ?? '',
-            '{full_address}' => $fullAddress,
-            '{street}' => $address['street'] ?? '',
-            '{city}' => $address['city'] ?? '',
-            '{state}' => $address['state'] ?? '',
-            '{zip_code}' => $address['zip'] ?? '',
-            '{country}' => $address['country'] ?? '',
+        $contactData = [
+            'first_name' => $contact->first_name ?? '',
+            'last_name' => $contact->last_name ?? '',
+            'full_name' => $contact->full_name ?? '',
+            'email' => $contact->email ?? '',
+            'phone' => $contact->phone ?? '',
+            'organization_name' => $this->organization->name ?? '',
+            'full_address' => $fullAddress,
+            'street' => $address['street'] ?? '',
+            'city' => $address['city'] ?? '',
+            'state' => $address['state'] ?? '',
+            'zip_code' => $address['zip'] ?? '',
+            'country' => $address['country'] ?? '',
         ];
 
-        // Add metadata placeholders
+        // Add metadata
         foreach ($metadata as $key => $value) {
-            $transformedKey = strtolower(str_replace(' ', '_', $key));
-            $placeholders['{' . $transformedKey . '}'] = $value;
+            $contactData[strtolower(str_replace(' ', '_', $key))] = $value;
+        }
+
+        $flowVariables = ($flowData?->variables) ?? [];
+        $systemData = [
+            'current_date' => now()->format('Y-m-d'),
+            'current_time' => now()->format('H:i'),
+            'organization_name' => $this->organization->name ?? '',
+        ];
+
+        // Replace {{system.*}}
+        $text = preg_replace_callback('/\{\{system\.(\w+)\}\}/', function ($m) use ($systemData) {
+            return $systemData[$m[1]] ?? $m[0];
+        }, $text);
+
+        // Replace {{flow.*}}
+        $text = preg_replace_callback('/\{\{flow\.(\w+)\}\}/', function ($m) use ($flowVariables) {
+            return $flowVariables[$m[1]] ?? $m[0];
+        }, $text);
+
+        // Replace {{contact.*}}
+        $text = preg_replace_callback('/\{\{contact\.(\w+)\}\}/', function ($m) use ($contactData) {
+            return $contactData[$m[1]] ?? $m[0];
+        }, $text);
+
+        // Replace legacy {flat} placeholders
+        $placeholders = [];
+        foreach ($contactData as $key => $value) {
+            $placeholders['{' . $key . '}'] = $value;
         }
 
         return str_replace(array_keys($placeholders), array_values($placeholders), $text);

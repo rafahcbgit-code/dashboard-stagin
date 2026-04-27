@@ -376,10 +376,11 @@ class AutoReplyService
                 $organizationId
             );
 
-            $whatsappService->sendTextMessage(
-                $contact->wa_id,
+            $whatsappService->sendMessage(
+                $contact->uuid,
                 $result['content'],
-                $organizationId
+                null,
+                'text'
             );
 
             // Send "Was this helpful?" follow-up buttons
@@ -440,10 +441,11 @@ class AutoReplyService
                 $routingService = new AgentRoutingService();
                 $routingService->assignToAgent($organizationId, $contact->id, 'auto_assignment');
 
-                $this->initializeWhatsappService($organizationId)->sendTextMessage(
-                    $contact->wa_id,
+                $this->initializeWhatsappService($organizationId)->sendMessage(
+                    $contact->uuid,
                     "You're being connected to a team member who can help. Please hold on a moment.",
-                    $organizationId
+                    null,
+                    'text'
                 );
                 return true;
             }
@@ -613,10 +615,11 @@ class AutoReplyService
                     $organizationId
                 );
 
-                $whatsappService->sendTextMessage(
-                    $contact->wa_id,
+                $whatsappService->sendMessage(
+                    $contact->uuid,
                     'Great! Let me know if you need anything else.',
-                    $organizationId
+                    null,
+                    'text'
                 );
 
                 Log::info('AI Helpful: User confirmed answer was helpful', [

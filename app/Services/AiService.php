@@ -84,7 +84,7 @@ class AiService
 
             $aiResponse = new AiResponse(
                 content: trim($content),
-                confidence: 1.0,
+                confidence: 0,
                 model: $data['model'] ?? $model,
                 success: true,
                 error: null

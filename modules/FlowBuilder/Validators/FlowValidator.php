@@ -53,6 +53,13 @@ class FlowValidator
                     }
                     break;
 
+                case 'question':
+                    $questionValidation = $this->validateQuestion($data);
+                    if ($questionValidation !== true) {
+                        $errors['question'] = $questionValidation;
+                    }
+                    break;
+
                 case 'action':
                     $actionValidation = $this->validateAction($node['data']);
                     if ($actionValidation !== true) {
@@ -213,6 +220,24 @@ class FlowValidator
         }
         
         // Additional checks can be added for other media fields like 'caption'
+        return !empty($errors) ? $errors : true;
+    }
+
+    /**
+     * Validate a question node.
+     */
+    private function validateQuestion(array $data)
+    {
+        $errors = [];
+
+        if (empty($data['question_text'])) {
+            $errors[] = 'Question text is required.';
+        }
+
+        if (empty($data['variable_name'])) {
+            $errors[] = 'Variable name is required.';
+        }
+
         return !empty($errors) ? $errors : true;
     }
 

@@ -259,6 +259,27 @@
                     </span>
                   </div>
                 </div>
+                <div
+                  class="mb-4 cursor-grab rounded-md bg-white px-4 py-3 border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
+                  :draggable="true"
+                  @dragstart="handleOnDragStart($event, 'question')"
+                >
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-x-2 text-sm">
+                      <span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M9.09 9a3 3 0 0 1 5.83 1c0 2-3 3-3 3"/>
+                          <path d="M12 17h.01"/>
+                          <circle cx="12" cy="12" r="10"/>
+                        </svg>
+                      </span>
+                      Question
+                    </div>
+                    <span>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M9 19.23q-.508 0-.87-.36q-.36-.362-.36-.87t.36-.87t.87-.36t.87.36q.36.362.36.87t-.36.87t-.87.36m6 0q-.508 0-.87-.36q-.36-.362-.36-.87t.36-.87t.87-.36t.87.36q.36.362.36.87t-.36.87t-.87.36m-6-6q-.508 0-.87-.36q-.36-.362-.36-.87t.36-.87t.87-.36t.87.36q.36.362.36.87t-.36.87t-.87.36m6 0q-.508 0-.87-.36q-.36-.362-.36-.87t.36-.87t.87-.36t.87.36q.36.362.36.87t-.36.87t-.87.36m-6-6q-.508 0-.87-.36q-.36-.362-.36-.87t.36-.87t.87-.36t.87.36q.36.362.36.87t-.36.87t-.87.36m6 0q-.508 0-.87-.36q-.36-.362-.36-.87t.36-.87t.87-.36t.87.36q.36.362.36.87t-.36.87t-.87.36"></path></svg>
+                    </span>
+                  </div>
+                </div>
               </ScrollArea>
             </TabsContent>
             

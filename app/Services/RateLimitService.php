@@ -127,7 +127,36 @@ class RateLimitService
             return false;
         }
 
-        return $this->getTriggerCount($organizationId, $contactId, $fallbackTrigger->id) >= $threshold;
+        $rateLimit = MessageRateLimit::forOrganization($organizationId)
+            ->forContact($contactId)
+            ->forTriggerGroup($fallbackTrigger->id)
+            ->first();
+
+        if (!$rateLimit) {
+            return false;
+        }
+
+        // Auto-expire: if last fallback was >24h ago, reset counter and don't escalate
+        if ($rateLimit->last_triggered_at && $rateLimit->last_triggered_at->diffInHours(now()) >= 24) {
+            $rateLimit->delete();
+            return false;
+        }
+
+        return $rateLimit->trigger_count >= $threshold;
+    }
+
+    /**
+     * Reset the fallback counter for a contact (e.g. after agent assignment).
+     */
+    public function resetFallbackCounter(int $organizationId, int $contactId): void
+    {
+        $fallbackTrigger = TriggerGroup::forOrganization($organizationId)
+            ->byType('fallback')
+            ->first();
+
+        if ($fallbackTrigger) {
+            $this->resetTrigger($organizationId, $contactId, $fallbackTrigger->id);
+        }
     }
 
     /**

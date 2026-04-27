@@ -11,6 +11,7 @@ use Illuminate\Support\Facades\Log;
 use Modules\FlowBuilder\Models\Flow;
 use Modules\FlowBuilder\Models\FlowLog;
 use Modules\FlowBuilder\Models\FlowMedia;
+use Modules\FlowBuilder\Models\FlowSubmission;
 use Modules\FlowBuilder\Models\FlowUserData;
 use Modules\FlowBuilder\Services\ActionExecutionService;
 
@@ -74,6 +75,12 @@ class FlowExecutionService
             Log::info("FlowExecution: flow timed out for contact {$chat->contact_id} after {$timeoutMinutes} min");
             $flowData->delete();
             return false;
+        }
+
+        // Check if resuming on a question node — validate before continuing
+        $questionConfig = $flowData->getVariable('_question_config');
+        if ($questionConfig && is_array($questionConfig)) {
+            return $this->handleQuestionResponse($chat, $flowData, $message, $questionConfig);
         }
 
         $result = $this->processFlow($chat, $flowData, strtolower(trim($message)));
@@ -331,8 +338,44 @@ class FlowExecutionService
                 continue;
             }
 
+            // Question node: send question text, pause for user response
+            if ($nodeType === 'question') {
+                $fields = \Arr::get($node, 'data.metadata.fields', []);
+                $questionText = $fields['question_text'] ?? '';
+                $variableName = $fields['variable_name'] ?? '';
+
+                if (empty($questionText) || empty($variableName)) {
+                    Log::warning('FlowExecution: question node missing question_text or variable_name', [
+                        'node_id' => $currentNodeId,
+                    ]);
+                    $this->endFlow($chat->contact_id);
+                    return false;
+                }
+
+                $questionText = $this->replacePlaceholders($contact->uuid, $questionText, $flowData->variables ?? []);
+                $this->whatsappService->sendMessage($contact->uuid, $questionText, 0, 'text');
+
+                // Store question config for validation on resume
+                $flowData->setVariable('_question_config', [
+                    'node_id' => $currentNodeId,
+                    'variable_name' => $variableName,
+                    'input_type' => $fields['input_type'] ?? 'text',
+                    'max_retries' => (int) ($fields['max_retries'] ?? 3),
+                    'retry_message' => $fields['retry_message'] ?? '',
+                    'validation_pattern' => $fields['validation_pattern'] ?? '',
+                ]);
+                $flowData->setVariable('_question_retries', 0);
+
+                // Don't advance — stay on this node until the answer is validated
+                Log::info('FlowExecution: question node sent, pausing for response', [
+                    'node_id' => $currentNodeId,
+                    'variable_name' => $variableName,
+                ]);
+                return true;
+            }
+
             // Message node: send the message
-            $sent = $this->sendNodeMessage($node, $contact);
+            $sent = $this->sendNodeMessage($node, $contact, $flowData->variables ?? []);
 
             // Determine if this node type requires user input (buttons, lists, CTAs)
             $fields = \Arr::get($node, 'data.metadata.fields', []);
@@ -438,7 +481,7 @@ class FlowExecutionService
 
     // ─── Message Sending ────────────────────────────────────────
 
-    private function sendNodeMessage(array $node, Contact $contact): bool
+    private function sendNodeMessage(array $node, Contact $contact, array $flowVariables = []): bool
     {
         $fields = \Arr::get($node, 'data.metadata.fields', []);
         $type = $fields['type'] ?? null;
@@ -459,7 +502,7 @@ class FlowExecutionService
             return false;
         }
 
-        $message = $this->replacePlaceholders($contact->uuid, $fields['body'] ?? '');
+        $message = $this->replacePlaceholders($contact->uuid, $fields['body'] ?? '', $flowVariables);
         $header = $this->prepareHeader($fields);
 
         switch ($type) {
@@ -633,7 +676,15 @@ class FlowExecutionService
         return '';
     }
 
-    private function replacePlaceholders(string $contactUuid, string $message): string
+    /**
+     * Replace placeholder variables in a message string.
+     * Supports three syntaxes:
+     *   {first_name}         — legacy flat contact fields (backward compat)
+     *   {{contact.first_name}} — dot-notation contact variables
+     *   {{flow.order_id}}    — flow-scoped session variables
+     *   {{system.current_date}} — read-only system variables
+     */
+    private function replacePlaceholders(string $contactUuid, string $message, ?array $flowVariables = null): string
     {
         $organization = Organization::where('id', $this->organizationId)->first();
         $contact = Contact::with('contactGroups')->where('uuid', $contactUuid)->first();
@@ -643,7 +694,7 @@ class FlowExecutionService
         }
 
         $address = $contact->address ? json_decode($contact->address, true) : [];
-        $metadata = $contact->metadata ? json_decode($contact->metadata, true) : [];
+        $contactMetadata = $contact->metadata ? json_decode($contact->metadata, true) : [];
 
         $fullAddress = collect([
             $address['street'] ?? null,
@@ -653,30 +704,229 @@ class FlowExecutionService
             $address['country'] ?? null,
         ])->filter()->implode(', ');
 
-        $data = [
-            'first_name' => $contact->first_name,
-            'last_name' => $contact->last_name,
-            'full_name' => $contact->full_name,
-            'email' => $contact->email,
-            'phone' => $contact->phone,
+        // Build contact data map (used by both {flat} and {{contact.*}})
+        $contactData = [
+            'first_name' => $contact->first_name ?? '',
+            'last_name' => $contact->last_name ?? '',
+            'full_name' => $contact->full_name ?? '',
+            'email' => $contact->email ?? '',
+            'phone' => $contact->phone ?? '',
             'organization_name' => $organization->name ?? '',
             'full_address' => $fullAddress,
-            'street' => $address['street'] ?? null,
-            'city' => $address['city'] ?? null,
-            'state' => $address['state'] ?? null,
-            'zip_code' => $address['zip'] ?? null,
-            'country' => $address['country'] ?? null,
+            'street' => $address['street'] ?? '',
+            'city' => $address['city'] ?? '',
+            'state' => $address['state'] ?? '',
+            'zip_code' => $address['zip'] ?? '',
+            'country' => $address['country'] ?? '',
         ];
 
-        // Merge contact metadata with transformed keys
-        if ($metadata) {
-            foreach ($metadata as $key => $value) {
-                $data[strtolower(str_replace(' ', '_', $key))] = $value;
+        // Merge contact metadata
+        if ($contactMetadata) {
+            foreach ($contactMetadata as $key => $value) {
+                $contactData[strtolower(str_replace(' ', '_', $key))] = $value;
             }
         }
 
-        return preg_replace_callback('/\{(\w+)\}/', function ($m) use ($data) {
-            return $data[$m[1]] ?? $m[0];
+        // System variables
+        $systemData = [
+            'current_date' => now()->format('Y-m-d'),
+            'current_time' => now()->format('H:i'),
+            'organization_name' => $organization->name ?? '',
+        ];
+
+        // Flow variables (from flow_user_data.variables)
+        $flowData = $flowVariables ?? [];
+
+        // Replace {{system.*}} variables
+        $message = preg_replace_callback('/\{\{system\.(\w+)\}\}/', function ($m) use ($systemData) {
+            return $systemData[$m[1]] ?? $m[0];
         }, $message);
+
+        // Replace {{flow.*}} variables
+        $message = preg_replace_callback('/\{\{flow\.(\w+)\}\}/', function ($m) use ($flowData) {
+            return $flowData[$m[1]] ?? $m[0];
+        }, $message);
+
+        // Replace {{contact.*}} variables
+        $message = preg_replace_callback('/\{\{contact\.(\w+)\}\}/', function ($m) use ($contactData) {
+            return $contactData[$m[1]] ?? $m[0];
+        }, $message);
+
+        // Replace legacy {flat} variables (backward compat)
+        $message = preg_replace_callback('/\{(\w+)\}/', function ($m) use ($contactData) {
+            return $contactData[$m[1]] ?? $m[0];
+        }, $message);
+
+        return $message;
+    }
+
+    // ─── Question Node Handling ────────────────────────────────────
+
+    /**
+     * Handle a user's response to a question node.
+     * Validates the input, saves to variables + submissions on success,
+     * retries or routes to fail path on failure.
+     */
+    private function handleQuestionResponse($chat, FlowUserData $flowData, string $message, array $config): bool
+    {
+        $contact = Contact::find($chat->contact_id);
+        if (!$contact) {
+            return false;
+        }
+
+        $nodeId = $config['node_id'];
+        $variableName = $config['variable_name'];
+        $inputType = $config['input_type'] ?? 'text';
+        $maxRetries = $config['max_retries'] ?? 3;
+        $retryMessage = $config['retry_message'] ?? '';
+        $validationPattern = $config['validation_pattern'] ?? '';
+
+        $isValid = $this->validateQuestionInput($message, $inputType, $validationPattern);
+
+        Log::info('FlowExecution::handleQuestionResponse', [
+            'contact_id' => $chat->contact_id,
+            'node_id' => $nodeId,
+            'variable_name' => $variableName,
+            'input_type' => $inputType,
+            'is_valid' => $isValid,
+            'message_length' => strlen($message),
+        ]);
+
+        if ($isValid) {
+            // Save answer to flow variables
+            $vars = $flowData->variables ?? [];
+            $vars[$variableName] = $message;
+            unset($vars['_question_config'], $vars['_question_retries']);
+            $flowData->variables = $vars;
+            $flowData->save();
+
+            // Save to persistent submissions for org export
+            try {
+                FlowSubmission::create([
+                    'organization_id' => $this->organizationId,
+                    'flow_id' => $flowData->flow_id,
+                    'contact_id' => $chat->contact_id,
+                    'submission_data' => [
+                        'variable_name' => $variableName,
+                        'input_type' => $inputType,
+                        'value' => $message,
+                        'node_id' => $nodeId,
+                    ],
+                ]);
+            } catch (\Throwable $e) {
+                Log::error('FlowExecution: failed to save FlowSubmission', [
+                    'error' => $e->getMessage(),
+                ]);
+                // Don't block the flow — submission is for export, not execution
+            }
+
+            // Advance past the question node and continue processing
+            $flow = Flow::find($flowData->flow_id);
+            if (!$flow) {
+                $this->endFlow($chat->contact_id);
+                return false;
+            }
+
+            $parser = new FlowMetadataParser($flow->metadata);
+            $successHandle = 'success|' . $nodeId;
+            $nextNode = $parser->getNextNode($nodeId, '', $successHandle);
+
+            // Fallback: if no success handle edge found, try default (no handle) edge
+            if (!$nextNode) {
+                $nextNode = $parser->getNextNode($nodeId);
+            }
+
+            if ($nextNode) {
+                $this->updateStep($chat->contact_id, (string) $nextNode['id']);
+                $flowData = $this->refreshFlowData($chat->contact_id);
+                if (!$flowData) {
+                    return true;
+                }
+                $result = $this->processFlow($chat, $flowData, '');
+                return $result !== false;
+            }
+
+            // No next node — flow complete
+            $this->endFlow($chat->contact_id);
+            return true;
+        }
+
+        // Invalid input — handle retry
+        $currentRetries = ($flowData->getVariable('_question_retries') ?? 0) + 1;
+
+        Log::info('FlowExecution: question validation failed, retry', [
+            'contact_id' => $chat->contact_id,
+            'node_id' => $nodeId,
+            'retry_attempt' => $currentRetries,
+            'max_retries' => $maxRetries,
+        ]);
+
+        if ($currentRetries >= $maxRetries) {
+            // Max retries reached — look for fail route or end flow
+            $flow = Flow::find($flowData->flow_id);
+            if (!$flow) {
+                $this->endFlow($chat->contact_id);
+                return false;
+            }
+
+            $parser = new FlowMetadataParser($flow->metadata);
+            $failHandle = 'fail|' . $nodeId;
+            $failNode = $parser->getNextNode($nodeId, '', $failHandle);
+
+            if ($failNode) {
+                // Route to fail path
+                $vars = $flowData->variables ?? [];
+                unset($vars['_question_config'], $vars['_question_retries']);
+                $flowData->variables = $vars;
+                $flowData->save();
+
+                $this->updateStep($chat->contact_id, (string) $failNode['id']);
+                $flowData = $this->refreshFlowData($chat->contact_id);
+                if (!$flowData) {
+                    return true;
+                }
+                $result = $this->processFlow($chat, $flowData, $message);
+                return $result !== false;
+            }
+
+            // No fail route — end flow
+            Log::info('FlowExecution: question max retries reached, no fail route, ending flow', [
+                'contact_id' => $chat->contact_id,
+            ]);
+            $this->endFlow($chat->contact_id);
+            return false;
+        }
+
+        // Send retry message and stay paused
+        $flowData->setVariable('_question_retries', $currentRetries);
+
+        if (!empty($retryMessage)) {
+            $retryText = $this->replacePlaceholders($contact->uuid, $retryMessage, $flowData->variables ?? []);
+            $this->whatsappService->sendMessage($contact->uuid, $retryText, 0, 'text');
+        }
+
+        return true;
+    }
+
+    /**
+     * Validate user input against the question's input type.
+     */
+    private function validateQuestionInput(string $input, string $inputType, string $pattern = ''): bool
+    {
+        $input = trim($input);
+
+        if ($input === '') {
+            return false;
+        }
+
+        return match ($inputType) {
+            'text'   => true,
+            'email'  => filter_var($input, FILTER_VALIDATE_EMAIL) !== false,
+            'phone'  => preg_match('/^\+?[0-9\s\-\(\)]{7,15}$/', $input) === 1,
+            'number'  => is_numeric($input),
+            'date'   => (bool) strtotime($input),
+            'regex'  => $pattern ? (preg_match('/' . $pattern . '/', $input) === 1) : true,
+            default  => true,
+        };
     }
 }
