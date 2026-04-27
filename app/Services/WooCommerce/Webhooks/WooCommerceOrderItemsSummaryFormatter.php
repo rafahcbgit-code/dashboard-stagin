@@ -34,7 +34,7 @@ class WooCommerceOrderItemsSummaryFormatter
             $index++;
         }
 
-        return implode("\n", $chunks);
+        return implode(' | ', $chunks);
     }
 
     private function scalarToString(mixed $value): string
