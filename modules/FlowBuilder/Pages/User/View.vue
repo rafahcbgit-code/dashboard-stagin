@@ -439,7 +439,6 @@
                   </div>
                 </div>
                 
-                <!-- AI Response action temporarily disabled-->
                 <div
                   v-if="availableActions.includes('ai_response')"
                   class="mb-4 cursor-grab rounded-md bg-white px-4 py-3 border border-gray-200 shadow-sm hover:shadow-md transition-shadow"

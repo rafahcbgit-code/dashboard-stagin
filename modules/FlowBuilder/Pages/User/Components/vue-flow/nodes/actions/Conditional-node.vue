@@ -123,12 +123,13 @@
                       :options="[
                         { value: 'message_contains', label: 'Message Contains' },
                         { value: 'message_equals', label: 'Message Equals' },
-                        { value: 'contact_field', label: 'Contact Field' }
+                        { value: 'contact_field', label: 'Contact Field' },
+                        { value: 'flow_variable', label: 'Flow Variable' }
                       ]"
                       required
                     />
                   </div>
-                  
+
                   <!-- Contact field configuration -->
                   <div v-if="editForm.config.condition_type === 'contact_field'">
                     <div class="space-y-3">
@@ -146,13 +147,41 @@
                           { value: 'contains', label: 'Contains' },
                           { value: 'not_equals', label: 'Not Equals' },
                           { value: 'is_empty', label: 'Is Empty' },
-                          { value: 'is_not_empty', label: 'Is Not Empty' }
+                          { value: 'is_not_empty', label: 'Is Not Empty' },
+                          { value: 'greater_than', label: 'Greater Than' },
+                          { value: 'less_than', label: 'Less Than' }
                         ]"
                         required
                       />
                     </div>
                   </div>
-                  
+
+                  <!-- Flow variable configuration -->
+                  <div v-if="editForm.config.condition_type === 'flow_variable'">
+                    <div class="space-y-3">
+                      <FormInput
+                        v-model="editForm.config.field_name"
+                        placeholder="Variable name (e.g. order_status)"
+                        required
+                      />
+                      <span class="text-xs text-gray-400">Use the variable name from an earlier Question node</span>
+                      <FormSelect
+                        v-model="editForm.config.field_operator"
+                        name="Operator"
+                        :options="[
+                          { value: 'equals', label: 'Equals' },
+                          { value: 'contains', label: 'Contains' },
+                          { value: 'not_equals', label: 'Not Equals' },
+                          { value: 'is_empty', label: 'Is Empty' },
+                          { value: 'is_not_empty', label: 'Is Not Empty' },
+                          { value: 'greater_than', label: 'Greater Than' },
+                          { value: 'less_than', label: 'Less Than' }
+                        ]"
+                        required
+                      />
+                    </div>
+                  </div>
+
                   <!-- Values List -->
                   <div class="space-y-3">
                     <div class="flex items-center justify-between">
