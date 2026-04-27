@@ -96,28 +96,71 @@ const defaultColumns = {
     subscription: true,
     contact_source: true,
     country: true,
-    custom_attributes: true,
     created_at: true,
 };
+
+const customColumnKey = (field) => `custom_attr_${field.uuid ?? field.name}`;
+
+const buildDefaultColumns = () => ({
+    ...defaultColumns,
+    ...Object.fromEntries((props.fields || []).map((field) => [customColumnKey(field), true])),
+});
 
 const columns = ref(loadColumns());
 
 function loadColumns() {
+    const defaults = buildDefaultColumns();
+
     if (typeof window === 'undefined') {
-        return { ...defaultColumns };
+        return defaults;
     }
 
     try {
         const cached = localStorage.getItem('advanced-contact-columns');
         if (!cached) {
-            return { ...defaultColumns };
+            return defaults;
         }
 
-        return { ...defaultColumns, ...JSON.parse(cached) };
+        const parsed = JSON.parse(cached);
+        const merged = { ...defaults, ...parsed };
+        const shouldHideCustomColumns = parsed?.custom_attributes === false;
+
+        if (shouldHideCustomColumns) {
+            Object.keys(merged)
+                .filter((key) => key.startsWith('custom_attr_'))
+                .forEach((key) => {
+                    merged[key] = false;
+                });
+        }
+
+        return merged;
     } catch (error) {
-        return { ...defaultColumns };
+        return defaults;
     }
 }
+
+watch(
+    () => props.fields,
+    () => {
+        const keys = (props.fields || []).map((field) => customColumnKey(field));
+        const nextColumns = { ...columns.value };
+
+        keys.forEach((key) => {
+            if (typeof nextColumns[key] === 'undefined') {
+                nextColumns[key] = true;
+            }
+        });
+
+        Object.keys(nextColumns)
+            .filter((key) => key.startsWith('custom_attr_') && !keys.includes(key))
+            .forEach((key) => {
+                delete nextColumns[key];
+            });
+
+        columns.value = nextColumns;
+    },
+    { immediate: true, deep: true }
+);
 
 watch(columns, (value) => {
     if (typeof window === 'undefined') {
@@ -207,6 +250,24 @@ const availableCustomAttributes = computed(() => {
 const countryDialCodeOptions = computed(() => {
     const options = Array.isArray(contactConstants.value.countryDialCodes) ? contactConstants.value.countryDialCodes : [];
     return options.length ? options : fallbackCountryDialCodes;
+});
+
+const activeFilterCount = computed(() => {
+    let count = 0;
+
+    if ((query.search || '').trim() !== '') count += 1;
+    if (selectedGroupIdsForFilter.value.length > 0) count += 1;
+    if (hasNoGroupFilter.value) count += 1;
+    if (selectedLabelIdsForFilter.value.length > 0) count += 1;
+    if (hasNoLabelFilter.value) count += 1;
+    if ((query.country_dial_code || '').trim() !== '') count += 1;
+    if ((query.subscription_status || '').trim() !== '') count += 1;
+    if ((query.contact_source || '').trim() !== '') count += 1;
+    if ((query.blocked_status || '').trim() !== '') count += 1;
+    if ((query.created_from || '').trim() !== '' || (query.created_to || '').trim() !== '') count += 1;
+    if ((query.custom_attribute_key || '').trim() !== '' && (query.custom_attribute_value || '').trim() !== '') count += 1;
+
+    return count;
 });
 
 const contactSourceOptions = [
@@ -523,6 +584,49 @@ const parseMetadata = (contact) => {
     }
 };
 
+const metadataCache = new WeakMap();
+
+const getContactMetadata = (contact) => {
+    if (!contact || typeof contact !== 'object') {
+        return {};
+    }
+
+    if (metadataCache.has(contact)) {
+        return metadataCache.get(contact);
+    }
+
+    const parsed = parseMetadata(contact);
+    metadataCache.set(contact, parsed);
+    return parsed;
+};
+
+const formatCustomAttributeValue = (value) => {
+    if (value === null || typeof value === 'undefined' || value === '') {
+        return '-';
+    }
+
+    if (Array.isArray(value)) {
+        const items = value.map((item) => String(item).trim()).filter((item) => item !== '');
+        return items.length ? items.join(', ') : '-';
+    }
+
+    if (typeof value === 'object') {
+        try {
+            return JSON.stringify(value);
+        } catch (error) {
+            return '-';
+        }
+    }
+
+    const normalized = String(value).trim();
+    return normalized !== '' ? normalized : '-';
+};
+
+const getCustomAttributeDisplay = (contact, fieldName) => {
+    const metadata = getContactMetadata(contact);
+    return formatCustomAttributeValue(metadata?.[fieldName]);
+};
+
 const runBulkDelete = () => {
     if (selectedCount.value === 0 || !confirm('Delete selected contacts?')) {
         return;
@@ -640,23 +744,48 @@ const onImportCompleted = () => {
 </script>
 
 <template>
-    <div class="space-y-4">
-        <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+    <div class="space-y-5">
+        <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                 <div>
                     <h1 class="text-xl font-semibold text-slate-900">{{ $t('Contact Management') }}</h1>
-                    <p class="text-sm text-slate-500">{{ filteredCount }} / {{ rowCount }} {{ $t('contacts') }}</p>
+                    <p class="mt-1 text-sm text-slate-500">{{ $t('Manage contacts, filters, groups, and bulk actions from one place.') }}</p>
                 </div>
                 <div class="flex flex-wrap items-center gap-2">
-                    <Link href="/contacts/add" class="rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white">{{ $t('Add Contact') }}</Link>
-                    <button type="button" class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700" @click="isImportWizardOpen = true">{{ $t('Import') }}</button>
-                    <button type="button" class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700" @click="runExportAll">{{ $t('Export All') }}</button>
-                    <button type="button" class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700" @click="isGroupsModalOpen = true">{{ $t('Groups') }}</button>
-                    <button type="button" class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700" @click="isFilterModalOpen = true">{{ $t('Advanced Filters') }}</button>
+                    <Link href="/contacts/add" class="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white">
+                        <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" /></svg>
+                        {{ $t('Add Contact') }}
+                    </Link>
+                    <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700" @click="isImportWizardOpen = true">
+                        <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M3 13a1 1 0 011 1v2h12v-2a1 1 0 112 0v3a1 1 0 01-1 1H3a1 1 0 01-1-1v-3a1 1 0 011-1zm7-11a1 1 0 011 1v7.586l2.293-2.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L9 10.586V3a1 1 0 011-1z" clip-rule="evenodd" /></svg>
+                        {{ $t('Import') }}
+                    </button>
+                    <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700" @click="runExportAll">
+                        <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v8a1 1 0 11-2 0V4H5v7a1 1 0 11-2 0V3zm7 3a1 1 0 011 1v5.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 011.414-1.414L9 12.586V7a1 1 0 011-1zm-6 11a1 1 0 100-2h12a1 1 0 100 2H4z" clip-rule="evenodd" /></svg>
+                        {{ $t('Export All') }}
+                    </button>
                 </div>
             </div>
-            <div class="mt-4 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div class="flex w-full flex-col gap-2 lg:max-w-3xl lg:flex-row">
+
+            <div class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
+                <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <p class="text-xs font-medium text-slate-500">{{ $t('Total Contacts') }}</p>
+                    <p class="mt-1 text-lg font-semibold text-slate-900">{{ rowCount }}</p>
+                </div>
+                <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <p class="text-xs font-medium text-slate-500">{{ $t('Filtered Contacts') }}</p>
+                    <p class="mt-1 text-lg font-semibold text-slate-900">{{ filteredCount }}</p>
+                </div>
+                <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
+                    <p class="text-xs font-medium text-slate-500">{{ $t('Active Filters') }}</p>
+                    <p class="mt-1 text-lg font-semibold text-slate-900">{{ activeFilterCount }}</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
+            <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+                <div class="flex w-full flex-col gap-2 lg:max-w-4xl lg:flex-row">
                     <input v-model="query.search" type="text" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-primary/20 focus:border-primary focus:ring" :placeholder="$t('Search name, phone, country, or email')" @input="debouncedSearch">
                     <select v-model="query.country_dial_code" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none ring-primary/20 focus:border-primary focus:ring lg:max-w-xs" @change="applyQuickCountryDialCodeFilter">
                         <option value="">{{ $t('All Countries') }}</option>
@@ -665,26 +794,54 @@ const onImportCompleted = () => {
                         </option>
                     </select>
                 </div>
-                <div class="flex flex-wrap items-center justify-end gap-2">
-                    <button type="button" class="rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700" @click="selectAllFilteredRows">
+
+                <div class="flex flex-wrap items-center gap-2">
+                    <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700" @click="isGroupsModalOpen = true">
+                        <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M7 4a3 3 0 11-6 0 3 3 0 016 0zM19 4a3 3 0 11-6 0 3 3 0 016 0zM7 14a3 3 0 11-6 0 3 3 0 016 0zM19 14a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                        {{ $t('Groups') }}
+                    </button>
+                    <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700" @click="isFilterModalOpen = true">
+                        <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 010 2h-1.586l-3.707 3.707A1 1 0 0010 9.414V14a1 1 0 01-.553.894l-2 1A1 1 0 016 15v-5.586a1 1 0 00-.293-.707L2 5H4a1 1 0 01-1-1z" clip-rule="evenodd" /></svg>
+                        {{ $t('Advanced Filters') }}
+                    </button>
+                    <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700" @click="selectAllFilteredRows">
+                        <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-7.5 7.5a1 1 0 01-1.414 0l-3.5-3.5a1 1 0 111.414-1.414l2.793 2.793 6.793-6.793a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>
                         {{ $t('Select All Results') }}
                     </button>
                     <div ref="columnsMenuRef" class="relative">
-                        <button type="button" class="cursor-pointer rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700" @click.stop="toggleColumnsMenu">{{ $t('Columns') }}</button>
-                    <div v-if="isColumnsMenuOpen" class="absolute right-0 z-20 mt-2 w-60 rounded-xl border border-slate-200 bg-white p-3 shadow-lg">
-                        <label class="mb-2 flex items-center gap-2 text-sm text-slate-700"><input v-model="columns.name" type="checkbox"> {{ $t('Name') }}</label>
-                        <label class="mb-2 flex items-center gap-2 text-sm text-slate-700"><input v-model="columns.phone" type="checkbox"> {{ $t('Phone') }}</label>
-                        <label class="mb-2 flex items-center gap-2 text-sm text-slate-700"><input v-model="columns.email" type="checkbox"> {{ $t('Email') }}</label>
-                        <label class="mb-2 flex items-center gap-2 text-sm text-slate-700"><input v-model="columns.groups" type="checkbox"> {{ $t('Groups') }}</label>
-                        <label class="mb-2 flex items-center gap-2 text-sm text-slate-700"><input v-model="columns.labels" type="checkbox"> {{ $t('Labels') }}</label>
-                        <label class="mb-2 flex items-center gap-2 text-sm text-slate-700"><input v-model="columns.subscription" type="checkbox"> {{ $t('Subscription') }}</label>
-                        <label class="mb-2 flex items-center gap-2 text-sm text-slate-700"><input v-model="columns.contact_source" type="checkbox"> {{ $t('Contact Source') }}</label>
-                        <label class="mb-2 flex items-center gap-2 text-sm text-slate-700"><input v-model="columns.country" type="checkbox"> {{ $t('Country') }}</label>
-                        <label class="mb-2 flex items-center gap-2 text-sm text-slate-700"><input v-model="columns.custom_attributes" type="checkbox"> {{ $t('Custom Attributes') }}</label>
-                        <label class="flex items-center gap-2 text-sm text-slate-700"><input v-model="columns.created_at" type="checkbox"> {{ $t('Created At') }}</label>
-                    </div>
+                        <button type="button" class="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700" @click.stop="toggleColumnsMenu">
+                            <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M3 4a1 1 0 011-1h4a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm8 0a1 1 0 011-1h4a1 1 0 011 1v5a1 1 0 01-1 1h-4a1 1 0 01-1-1V4zm1 8a1 1 0 00-1 1v3a1 1 0 001 1h4a1 1 0 001-1v-3a1 1 0 00-1-1h-4z" /></svg>
+                            {{ $t('Columns') }}
+                        </button>
+                        <div v-if="isColumnsMenuOpen" class="absolute right-0 z-20 mt-2 w-60 rounded-xl border border-slate-200 bg-white p-3 shadow-lg">
+                            <label class="mb-2 flex items-center gap-2 text-sm text-slate-700"><input v-model="columns.name" type="checkbox"> {{ $t('Name') }}</label>
+                            <label class="mb-2 flex items-center gap-2 text-sm text-slate-700"><input v-model="columns.phone" type="checkbox"> {{ $t('Phone') }}</label>
+                            <label class="mb-2 flex items-center gap-2 text-sm text-slate-700"><input v-model="columns.email" type="checkbox"> {{ $t('Email') }}</label>
+                            <label class="mb-2 flex items-center gap-2 text-sm text-slate-700"><input v-model="columns.groups" type="checkbox"> {{ $t('Groups') }}</label>
+                            <label class="mb-2 flex items-center gap-2 text-sm text-slate-700"><input v-model="columns.labels" type="checkbox"> {{ $t('Labels') }}</label>
+                            <label class="mb-2 flex items-center gap-2 text-sm text-slate-700"><input v-model="columns.subscription" type="checkbox"> {{ $t('Subscription') }}</label>
+                            <label class="mb-2 flex items-center gap-2 text-sm text-slate-700"><input v-model="columns.contact_source" type="checkbox"> {{ $t('Contact Source') }}</label>
+                            <label class="mb-2 flex items-center gap-2 text-sm text-slate-700"><input v-model="columns.country" type="checkbox"> {{ $t('Country') }}</label>
+                            <div v-if="fields.length" class="mb-2 rounded-md border border-slate-200 p-2">
+                                <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{{ $t('Custom Attributes') }}</p>
+                                <label
+                                    v-for="field in fields"
+                                    :key="`col-custom-${field.uuid ?? field.name}`"
+                                    class="mb-1 flex items-center gap-2 text-sm text-slate-700 last:mb-0"
+                                >
+                                    <input v-model="columns[customColumnKey(field)]" type="checkbox">
+                                    {{ field.name }}
+                                </label>
+                            </div>
+                            <label class="flex items-center gap-2 text-sm text-slate-700"><input v-model="columns.created_at" type="checkbox"> {{ $t('Created At') }}</label>
+                        </div>
                     </div>
                 </div>
+            </div>
+
+            <div v-if="activeFilterCount > 0" class="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                <span class="text-xs font-medium text-amber-700">{{ activeFilterCount }} {{ $t('filters active') }}</span>
+                <button type="button" class="rounded-md bg-white px-2.5 py-1 text-xs text-slate-700 ring-1 ring-slate-200" @click="clearFilters">{{ $t('Reset Filters') }}</button>
             </div>
         </div>
 
@@ -698,10 +855,17 @@ const onImportCompleted = () => {
             <button type="button" class="rounded-md bg-white px-3 py-1.5 text-sm text-slate-700 ring-1 ring-slate-200" @click="bulkActionModal = 'add_label'">{{ $t('Add Labels') }}</button>
             <button type="button" class="rounded-md bg-white px-3 py-1.5 text-sm text-slate-700 ring-1 ring-slate-200" @click="bulkActionModal = 'remove_label'">{{ $t('Remove Labels') }}</button>
             <button type="button" class="rounded-md bg-white px-3 py-1.5 text-sm text-slate-700 ring-1 ring-slate-200" @click="bulkActionModal = 'change_subscription_status'">{{ $t('Change Subscription') }}</button>
-            <button type="button" class="rounded-md bg-white px-3 py-1.5 text-sm text-slate-700 ring-1 ring-slate-200" @click="runExport">{{ $t('Export Selected') }}</button>
+            <button type="button" class="inline-flex items-center gap-2 rounded-md bg-white px-3 py-1.5 text-sm text-slate-700 ring-1 ring-slate-200" @click="runExport">
+                <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v8a1 1 0 11-2 0V4H5v7a1 1 0 11-2 0V3zm7 3a1 1 0 011 1v5.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 011.414-1.414L9 12.586V7a1 1 0 011-1zm-6 11a1 1 0 100-2h12a1 1 0 100 2H4z" clip-rule="evenodd" /></svg>
+                {{ $t('Export Selected') }}
+            </button>
         </div>
 
-        <div class="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div class="flex items-center justify-between border-b border-slate-200 bg-slate-50/70 px-4 py-3">
+                <h2 class="text-sm font-semibold text-slate-800">{{ $t('Contacts List') }}</h2>
+                <p class="text-xs text-slate-500">{{ rows.meta?.from || 0 }}-{{ rows.meta?.to || 0 }} / {{ rows.meta?.total || 0 }}</p>
+            </div>
             <div class="overflow-x-auto">
                 <table class="min-w-full divide-y divide-slate-200 text-left text-sm">
                     <thead class="bg-slate-50 text-slate-600">
@@ -717,7 +881,14 @@ const onImportCompleted = () => {
                             <th v-if="columns.subscription" class="px-4 py-3">{{ $t('Subscription') }}</th>
                             <th v-if="columns.contact_source" class="px-4 py-3">{{ $t('Contact Source') }}</th>
                             <th v-if="columns.country" class="px-4 py-3">{{ $t('Country') }}</th>
-                            <th v-if="columns.custom_attributes" class="px-4 py-3">{{ $t('Custom Attributes') }}</th>
+                            <th
+                                v-for="field in fields"
+                                v-show="columns[customColumnKey(field)]"
+                                :key="`head-custom-${field.uuid ?? field.name}`"
+                                class="px-4 py-3"
+                            >
+                                {{ field.name }}
+                            </th>
                             <th v-if="columns.created_at" class="px-4 py-3">{{ $t('Created At') }}</th>
                         </tr>
                     </thead>
@@ -740,12 +911,17 @@ const onImportCompleted = () => {
                             </td>
                             <td v-if="columns.contact_source" class="px-4 py-3">
                                 <span class="rounded-full px-2 py-1 text-xs bg-slate-100 text-slate-700">
-                                    {{ contact.contact_source || 'platform' }}
+                                    {{ $t(String(contact.contact_source || 'platform').toLowerCase()) }}
                                 </span>
                             </td>
                             <td v-if="columns.country" class="px-4 py-3">{{ parseAddress(contact).country || '-' }}</td>
-                            <td v-if="columns.custom_attributes" class="px-4 py-3">
-                                <span class="line-clamp-2">{{ Object.entries(parseMetadata(contact)).slice(0, 3).map(([key, value]) => `${key}: ${value}`).join(' | ') || '-' }}</span>
+                            <td
+                                v-for="field in fields"
+                                v-show="columns[customColumnKey(field)]"
+                                :key="`row-custom-${contact.id}-${field.uuid ?? field.name}`"
+                                class="px-4 py-3"
+                            >
+                                <span class="line-clamp-2">{{ getCustomAttributeDisplay(contact, field.name) }}</span>
                             </td>
                             <td v-if="columns.created_at" class="px-4 py-3">{{ contact.created_at || '-' }}</td>
                         </tr>
@@ -764,56 +940,79 @@ const onImportCompleted = () => {
     </div>
 
     <Modal :label="$t('Advanced Filters')" :isOpen="isFilterModalOpen" :closeBtn="true" @close="isFilterModalOpen = false">
-        <div class="grid gap-3 pt-4">
-            <label class="text-xs font-medium text-slate-500">{{ $t('Group') }}</label>
-            <select v-model="query.group_ids" class="rounded-md border border-slate-300 px-3 py-2 text-sm" multiple>
-                <option :value="NO_GROUP_OPTION">{{ $t('No Group') }}</option>
-                <option v-for="group in groups" :key="group.id" :value="String(group.id)">{{ group.name }}</option>
-            </select>
-
-            <label class="text-xs font-medium text-slate-500">{{ $t('Subscription Status') }}</label>
-            <select v-model="query.subscription_status" class="rounded-md border border-slate-300 px-3 py-2 text-sm">
-                <option value="">{{ $t('All Statuses') }}</option>
-                <option value="1">{{ $t('Subscribed') }}</option>
-                <option value="0">{{ $t('Unsubscribed') }}</option>
-            </select>
-
-            <label class="text-xs font-medium text-slate-500">{{ $t('Contact Source') }}</label>
-            <select v-model="query.contact_source" class="rounded-md border border-slate-300 px-3 py-2 text-sm">
-                <option value="">{{ $t('All Sources') }}</option>
-                <option v-for="source in contactSourceOptions" :key="source.value" :value="source.value">{{ $t(source.label) }}</option>
-            </select>
-
-            <label class="text-xs font-medium text-slate-500">{{ $t('Block Status') }}</label>
-            <select v-model="query.blocked_status" class="rounded-md border border-slate-300 px-3 py-2 text-sm">
-                <option value="">{{ $t('All') }}</option>
-                <option value="1">{{ $t('Blocked') }}</option>
-                <option value="0">{{ $t('Not blocked') }}</option>
-            </select>
-
-            <label class="text-xs font-medium text-slate-500">{{ $t('Label') }}</label>
-            <select v-model="query.label_ids" class="rounded-md border border-slate-300 px-3 py-2 text-sm" multiple>
-                <option :value="NO_LABEL_OPTION">{{ $t('No Label') }}</option>
-                <option v-for="label in labels" :key="label.id" :value="String(label.id)">{{ label.title }}</option>
-            </select>
-
-            <div class="grid grid-cols-2 gap-2">
-                <div>
-                    <label class="mb-1 block text-xs font-medium text-slate-500">{{ $t('Created From') }}</label>
-                    <input v-model="query.created_from" type="date" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
-                </div>
-                <div>
-                    <label class="mb-1 block text-xs font-medium text-slate-500">{{ $t('Created To') }}</label>
-                    <input v-model="query.created_to" type="date" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+        <div class="space-y-3 pt-4">
+            <div class="rounded-lg border border-slate-200 p-3">
+               <div class="space-y-3">
+                    <div>
+                        <label class="mb-1 block text-xs font-medium text-slate-500">{{ $t('Group') }}</label>
+                        <select v-model="query.group_ids" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" multiple>
+                            <option :value="NO_GROUP_OPTION">{{ $t('No Group') }}</option>
+                            <option v-for="group in groups" :key="group.id" :value="String(group.id)">{{ group.name }}</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-xs font-medium text-slate-500">{{ $t('Label') }}</label>
+                        <select v-model="query.label_ids" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" multiple>
+                            <option :value="NO_LABEL_OPTION">{{ $t('No Label') }}</option>
+                            <option v-for="label in labels" :key="label.id" :value="String(label.id)">{{ label.title }}</option>
+                        </select>
+                    </div>
                 </div>
             </div>
 
-            <label class="text-xs font-medium text-slate-500">{{ $t('Custom Attribute') }}</label>
-            <select v-model="query.custom_attribute_key" class="rounded-md border border-slate-300 px-3 py-2 text-sm">
-                <option value="">{{ $t('Select Attribute') }}</option>
-                <option v-for="attribute in availableCustomAttributes" :key="attribute.value" :value="attribute.value">{{ attribute.label }}</option>
-            </select>
-            <input v-model="query.custom_attribute_value" type="text" class="rounded-md border border-slate-300 px-3 py-2 text-sm" :placeholder="$t('Contains value')">
+            <div class="rounded-lg border border-slate-200 p-3">
+                <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{{ $t('Status') }}</p>
+                <div class="grid gap-3 sm:grid-cols-2">
+                    <div>
+                        <label class="mb-1 block text-xs font-medium text-slate-500">{{ $t('Subscription Status') }}</label>
+                        <select v-model="query.subscription_status" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+                            <option value="">{{ $t('All Statuses') }}</option>
+                            <option value="1">{{ $t('Subscribed') }}</option>
+                            <option value="0">{{ $t('Unsubscribed') }}</option>
+                        </select>
+                    </div>
+                    <div>
+                        <label class="mb-1 block text-xs font-medium text-slate-500">{{ $t('Contact Source') }}</label>
+                        <select v-model="query.contact_source" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+                            <option value="">{{ $t('All Sources') }}</option>
+                            <option v-for="source in contactSourceOptions" :key="source.value" :value="source.value">{{ $t(source.label) }}</option>
+                        </select>
+                    </div>
+                    <div class="sm:col-span-2">
+                        <label class="mb-1 block text-xs font-medium text-slate-500">{{ $t('Block Status') }}</label>
+                        <select v-model="query.blocked_status" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+                            <option value="">{{ $t('All') }}</option>
+                            <option value="1">{{ $t('Blocked') }}</option>
+                            <option value="0">{{ $t('Not blocked') }}</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <div class="rounded-lg border border-slate-200 p-3">
+                <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{{ $t('Date & Attributes') }}</p>
+                <div class="grid gap-3">
+                    <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
+                        <div>
+                            <label class="mb-1 block text-xs font-medium text-slate-500">{{ $t('Created From') }}</label>
+                            <input v-model="query.created_from" type="date" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+                        </div>
+                        <div>
+                            <label class="mb-1 block text-xs font-medium text-slate-500">{{ $t('Created To') }}</label>
+                            <input v-model="query.created_to" type="date" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="mb-1 block text-xs font-medium text-slate-500">{{ $t('Custom Attribute') }}</label>
+                        <select v-model="query.custom_attribute_key" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+                            <option value="">{{ $t('Select Attribute') }}</option>
+                            <option v-for="attribute in availableCustomAttributes" :key="attribute.value" :value="attribute.value">{{ attribute.label }}</option>
+                        </select>
+                    </div>
+                    <input v-model="query.custom_attribute_value" type="text" class="rounded-md border border-slate-300 px-3 py-2 text-sm" :placeholder="$t('Contains value')">
+                </div>
+            </div>
 
             <div class="mt-2 flex gap-2">
                 <button type="button" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" @click="clearFilters">{{ $t('Reset') }}</button>

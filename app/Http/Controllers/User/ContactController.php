@@ -98,7 +98,8 @@ class ContactController extends BaseController
 
         $contactFields = ContactField::where('organization_id', $organizationId)
             ->whereNull('deleted_at')
-            ->get(['id', 'name', 'type', 'uuid']);
+            ->orderBy('position')
+            ->get(['id', 'name', 'type', 'value', 'required', 'uuid']);
 
         $team = Team::where('organization_id', $organizationId)
             ->where('user_id', auth()->user()->id)

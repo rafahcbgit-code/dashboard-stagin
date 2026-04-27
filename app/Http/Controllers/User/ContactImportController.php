@@ -93,9 +93,19 @@ class ContactImportController extends BaseController
             'default_country_code' => ['required', 'string', 'max:8'],
         ]);
 
-        $batch = $this->importService->normalize($batch, $validated['default_country_code']);
+        $normalization = $this->importService->normalize($batch, $validated['default_country_code']);
+        $batch = $normalization['batch'];
 
-        return response()->json($this->buildBatchResponse($batch));
+        return response()->json(array_merge(
+            $this->buildBatchResponse($batch),
+            [
+                'invalid_preview' => [
+                    'count' => (int) ($normalization['invalid_rows_count'] ?? 0),
+                    'rows' => (array) ($normalization['invalid_rows_preview'] ?? []),
+                    'limited' => (bool) ($normalization['invalid_rows_preview_limited'] ?? false),
+                ],
+            ]
+        ));
     }
 
     public function rows(Request $request, string $batchUuid)
@@ -280,6 +290,11 @@ class ContactImportController extends BaseController
     private function buildBatchResponse(ContactImportBatch $batch, int $page = 1, int $perPage = 15, string $status = 'all'): array
     {
         $rows = $this->importService->paginateRows($batch, $page, max(1, min($perPage, 100)), $status);
+        $requiresDefaultCountryCode = false;
+
+        if ($batch->status === 'mapped') {
+            $requiresDefaultCountryCode = $this->importService->hasRowsMissingCountryCode($batch);
+        }
 
         return [
             'batch' => [
@@ -291,6 +306,7 @@ class ContactImportController extends BaseController
                 'selected_group_ids' => $batch->selected_group_ids ?? [],
                 'group_assignment' => $batch->group_assignment ?? null,
                 'report' => $batch->report,
+                'requires_default_country_code' => $requiresDefaultCountryCode,
                 'stats' => $this->batchStats($batch),
             ],
             'rows' => $rows,

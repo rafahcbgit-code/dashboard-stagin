@@ -18,8 +18,28 @@
         return acc;
     }, {});
 
+    const parseJsonLike = (value, fallback = {}) => {
+        if (value === null || typeof value === 'undefined' || value === '') {
+            return fallback;
+        }
+
+        if (typeof value === 'object') {
+            return value;
+        }
+
+        if (typeof value === 'string') {
+            try {
+                return JSON.parse(value);
+            } catch (error) {
+                return fallback;
+            }
+        }
+
+        return fallback;
+    };
+
     const getAddressDetail = (value, key) => {
-        const address = JSON.parse(value);
+        const address = parseJsonLike(value, {});
         return address?.[key] ?? '';
     }
 
@@ -35,7 +55,7 @@
         state: props.contact?.address ? getAddressDetail(props.contact?.address, 'state') : null,
         zip: props.contact?.address ? getAddressDetail(props.contact?.address, 'zip') : null,
         country: props.contact?.address ? getAddressDetail(props.contact?.address, 'country') : null,
-        metadata: props.contact?.metadata ? JSON.parse(props.contact?.metadata) : defaultFields,
+        metadata: props.contact?.metadata ? parseJsonLike(props.contact?.metadata, defaultFields) : defaultFields,
         is_subscribed: props.contact?.is_subscribed ?? 1
     });
 
@@ -86,8 +106,52 @@
         }
     }
 
-    const transformOptions = (optionsString) => {
-        return optionsString.split(", ").map(option => ({ label: option, value: option }));
+    const transformOptions = (optionsInput) => {
+        if (Array.isArray(optionsInput)) {
+            return optionsInput
+                .map((option) => {
+                    if (option && typeof option === 'object') {
+                        return String(option.label ?? option.value ?? '').trim();
+                    }
+
+                    return String(option ?? '').trim();
+                })
+                .filter((option) => option !== '')
+                .map((option) => ({ label: option, value: option }));
+        }
+
+        if (typeof optionsInput !== 'string') {
+            return [];
+        }
+
+        return optionsInput
+            .split(',')
+            .map((option) => option.trim())
+            .filter((option) => option !== '')
+            .map((option) => ({ label: option, value: option }));
+    };
+
+    const resolveSelectOptions = (field) => {
+        if (!field || typeof field !== 'object') {
+            return [];
+        }
+
+        // Try explicit options payload first.
+        if (Array.isArray(field.options)) {
+            return transformOptions(field.options);
+        }
+
+        // Accept JSON string arrays too.
+        if (typeof field.options === 'string' && field.options.trim().startsWith('[')) {
+            const parsed = parseJsonLike(field.options, []);
+            return transformOptions(parsed);
+        }
+
+        return transformOptions(field.value);
+    };
+
+    const isFieldType = (field, type) => {
+        return String(field?.type ?? '').trim().toLowerCase() === String(type).trim().toLowerCase();
     };
 </script>
 <template>
@@ -118,16 +182,16 @@
                 <FormInput v-model="form.last_name" :name="$t('Last name')" :error="form.errors.last_name" :type="'text'" :class="'sm:col-span-3'"/>
                 <FormPhoneInput v-model="form.phone" :name="$t('Phone')" :error="form.errors.phone" :type="'text'" :class="'sm:col-span-3'"/>
                 <FormInput v-model="form.email" :name="$t('Email')" :error="form.errors.email" :type="'text'" :class="'sm:col-span-3'"/>
-                <FormSelect v-model="form.is_subscribed" :name="$t('Subscription Status')":options="[{ label: $t('Subscribed'), value: 1 },{ label: $t('Unsubscribed'), value: 0 }]":class="'sm:col-span-3'"/>
-                <FormSelect v-model="form.group" :name="$t('Group')" :error="form.errors.group" :options="contactGroupOptions()" :type="'text'" :class="'sm:col-span-6'" :multiple="true"@change="onGroupChange"/>
+                <FormSelect v-model="form.is_subscribed" :name="$t('Subscription Status')" :options="[{ label: $t('Subscribed'), value: 1 }, { label: $t('Unsubscribed'), value: 0 }]" :class="'sm:col-span-3'"/>
+                <FormSelect v-model="form.group" :name="$t('Group')" :error="form.errors.group" :options="contactGroupOptions()" :type="'text'" :class="'sm:col-span-6'" :multiple="true" @change="onGroupChange"/>
  </div>
             <div v-if="locationSettings === 'before' && props.fields.length > 0">
                 <div class="grid gap-x-6 gap-y-4 sm:grid-cols-2 mt-4 pb-6 border-b">
                     <div v-for="(input, index) in props.fields" :key="index" :class="input.type != 'input' ? 'sm:col-span-2' : 'sm:col-span-1'">
-                        <FormInput v-if="input.type === 'input'" v-model="form.metadata[input.name]" :name="input.name" :label="$t(input.name)" :type="input.value" :class="'sm:col-span-2'" :required="input.required === 1 ? true : false"/>
-                        <FormTextArea v-if="input.type === 'textarea'" v-model="form.metadata[input.name]" :name="input.name" :label="$t(input.name)" :class="'sm:col-span-2'" :required="input.required === 1 ? true : false"/>
-                        <FormSelect v-if="input.type === 'select'" v-model="form.metadata[input.name]" :name="input.name" :options="transformOptions(input.value)" :class="'sm:col-span-2'" :required="input.required === 1 ? true : false"/>
-                        <FormCheckbox v-if="input.type === 'checkbox'" v-model="form.metadata[input.name]" :name="input.name" :label="input.name" :class="'sm:col-span-2'" :required="input.required === 1 ? true : false"/>
+                        <FormInput v-if="isFieldType(input, 'input')" v-model="form.metadata[input.name]" :name="input.name" :label="$t(input.name)" :type="input.value" :class="'sm:col-span-2'" :required="input.required === 1 ? true : false"/>
+                        <FormTextArea v-if="isFieldType(input, 'textarea')" v-model="form.metadata[input.name]" :name="input.name" :label="$t(input.name)" :class="'sm:col-span-2'" :required="input.required === 1 ? true : false"/>
+                        <FormSelect v-if="isFieldType(input, 'select')" v-model="form.metadata[input.name]" :name="input.name" :options="resolveSelectOptions(input)" :class="'sm:col-span-2'" :required="input.required === 1 ? true : false"/>
+                        <FormCheckbox v-if="isFieldType(input, 'checkbox')" v-model="form.metadata[input.name]" :name="input.name" :label="input.name" :class="'sm:col-span-2'" :required="input.required === 1 ? true : false"/>
                     </div>
                 </div>
             </div>
@@ -141,10 +205,10 @@
             <div v-if="props.fields.length > 0">
                 <div class="grid gap-x-6 gap-y-4 sm:grid-cols-2 mb-8 pt-4 border-t">
                     <div v-for="(input, index) in props.fields" :key="index" :class="input.type != 'input' ? 'sm:col-span-2' : 'sm:col-span-1'">
-                        <FormInput v-if="input.type === 'input'" v-model="form.metadata[input.name]" :name="input.name" :label="$t(input.name)" :type="input.value" :class="'sm:col-span-2'" :required="input.required === 1 ? true : false"/>
-                        <FormTextArea v-if="input.type === 'textarea'" v-model="form.metadata[input.name]" :name="input.name" :label="$t(input.name)" :class="'sm:col-span-2'" :required="input.required === 1 ? true : false"/>
-                        <FormSelect v-if="input.type === 'select'" v-model="form.metadata[input.name]" :name="input.name" :options="transformOptions(input.value)" :class="'sm:col-span-2'" :required="input.required === 1 ? true : false"/>
-                        <FormCheckbox v-if="input.type === 'checkbox'" v-model="form.metadata[input.name]" :name="input.name" :label="input.name" :class="'sm:col-span-2'" :required="input.required === 1 ? true : false"/>
+                        <FormInput v-if="isFieldType(input, 'input')" v-model="form.metadata[input.name]" :name="input.name" :label="$t(input.name)" :type="input.value" :class="'sm:col-span-2'" :required="input.required === 1 ? true : false"/>
+                        <FormTextArea v-if="isFieldType(input, 'textarea')" v-model="form.metadata[input.name]" :name="input.name" :label="$t(input.name)" :class="'sm:col-span-2'" :required="input.required === 1 ? true : false"/>
+                        <FormSelect v-if="isFieldType(input, 'select')" v-model="form.metadata[input.name]" :name="input.name" :options="resolveSelectOptions(input)" :class="'sm:col-span-2'" :required="input.required === 1 ? true : false"/>
+                        <FormCheckbox v-if="isFieldType(input, 'checkbox')" v-model="form.metadata[input.name]" :name="input.name" :label="input.name" :class="'sm:col-span-2'" :required="input.required === 1 ? true : false"/>
                     </div>
                 </div>
             </div>
