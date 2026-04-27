@@ -553,7 +553,7 @@ class ContactController extends BaseController
                         $contact->labels()->detach($labelIds->all());
                     }
                 }
-            }, 'contacts.id');
+            }, 'contacts.id', 'id');
         }
 
         return back()->with('status', [
