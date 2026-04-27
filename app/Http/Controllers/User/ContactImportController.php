@@ -10,6 +10,7 @@ use App\Services\ContactImportService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Throwable;
@@ -442,7 +443,13 @@ class ContactImportController extends BaseController
     private function assertMappingUsesKnownHeaders(ContactImportBatch $batch, array $mapping): void
     {
         $headers = collect($batch->headers ?? [])->map(fn ($header) => (string) $header)->all();
-        $known = array_flip($headers);
+        $known = array_fill_keys($headers, true);
+        foreach ($headers as $header) {
+            $normalized = $this->normalizeImportColumnKey($header);
+            if ($normalized !== '') {
+                $known[$normalized] = true;
+            }
+        }
 
         $columns = [];
         foreach ($mapping as $key => $value) {
@@ -462,11 +469,18 @@ class ContactImportController extends BaseController
                 continue;
             }
 
-            if (! isset($known[$column])) {
+            if (! isset($known[$column]) && ! isset($known[$this->normalizeImportColumnKey($column)])) {
                 throw ValidationException::withMessages([
                     'mapping' => "Mapping for [{$entry['label']}] references unknown column [{$column}].",
                 ]);
             }
         }
+    }
+
+    private function normalizeImportColumnKey(string $column): string
+    {
+        $column = Str::lower(trim($column));
+
+        return preg_replace('/[^a-z0-9]+/', '', $column) ?: '';
     }
 }
