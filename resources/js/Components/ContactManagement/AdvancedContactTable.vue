@@ -627,7 +627,7 @@ const createGroup = async () => {
     const name = (createGroupForm.name || '').trim();
 
     if (!name) {
-        createGroupError.value = 'Group name is required.';
+        createGroupError.value = t('Audince name is required.');
         return;
     }
 
@@ -670,7 +670,7 @@ const createGroup = async () => {
             runFilterRequest({ page: undefined });
             isGroupsModalOpen.value = false;
         } else {
-            throw new Error('Failed to create group.');
+            throw new Error(t('Failed to create audince.'));
         }
     } catch (error) {
         const errors = error?.response?.data?.errors;
@@ -685,7 +685,7 @@ const createGroup = async () => {
             || error?.message
             || (statusCode ? `Request failed (${statusCode}).` : null)
             || (typeof rawResponse === 'string' && rawResponse.trim() ? 'Unexpected server response.' : null)
-            || 'Failed to create group.';
+            || t('Failed to create audince.');
     } finally {
         isCreatingGroup.value = false;
     }
@@ -721,7 +721,7 @@ const deleteGroup = async (group) => {
             runFilterRequest({ page: undefined });
         }
     } catch (error) {
-        createGroupError.value = error?.response?.data?.message || 'Failed to delete group.';
+        createGroupError.value = error?.response?.data?.message || t('Failed to delete audince.');
     } finally {
         deletingGroupUuid.value = '';
     }
@@ -767,7 +767,7 @@ const deleteSelectedGroups = async () => {
             runFilterRequest({ page: undefined });
         }
     } catch (error) {
-        createGroupError.value = error?.response?.data?.message || 'Failed to delete selected groups.';
+        createGroupError.value = error?.response?.data?.message || t('Failed to delete selected audince.');
     } finally {
         isDeletingGroups.value = false;
     }

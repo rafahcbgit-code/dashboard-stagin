@@ -590,27 +590,36 @@ const goToPreviousStep = () => {
                 </div>
 
                 <div class="rounded-lg border border-slate-200 bg-white p-3">
-                    <div class="grid w-full grid-cols-1 gap-2 sm:grid-cols-2">
-                        <button type="button" class="inline-flex h-11 w-full items-center justify-center rounded-md border border-slate-300 px-4 text-sm disabled:opacity-60" :disabled="busy || uploadBusy" @click="goToPreviousStep">
-                                {{ $t('Previous') }}
+                    <div v-if="showDefaultCodeControls">
+                        <label class="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 block">{{ $t('Default Country Code (for numbers without code)') }}
+                            <input v-model="defaultCountryCode" type="text" class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" placeholder="+966">
+                        </label>
+                    </div>
+
+                    <div class="mt-3 flex flex-wrap gap-2">
+                        <button
+                            type="button"
+                            class="inline-flex h-11 min-w-[10rem] flex-1 items-center justify-center rounded-md border border-slate-300 px-4 text-sm text-slate-700 transition-colors hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-60"
+                            :disabled="busy || uploadBusy"
+                            @click="goToPreviousStep"
+                        >
+                            {{ $t('Previous') }}
                         </button>
                         <button
                             v-if="showDefaultCodeControls"
                             type="button"
-                            class="inline-flex h-11 w-full items-center justify-center rounded-md border border-slate-300 px-4 text-sm font-medium disabled:opacity-60"
+                            class="inline-flex h-11 min-w-[12rem] flex-1 items-center justify-center rounded-md border border-primary/30 bg-primary/5 px-4 text-sm font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
                             :disabled="busy"
                             @click="normalizeRows"
                         >
                             {{ busy ? $t('Processing...') : $t('Apply Normalization') }}
                         </button>
-                    </div>
-                    <div v-if="showDefaultCodeControls" class="mt-2">
-                        <label class="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 block">{{ $t('Default Country Code (for numbers without code)') }}
-                            <input v-model="defaultCountryCode" type="text" class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" placeholder="+966">
-                        </label>
-                    </div>
-                    <div class="mt-2 grid w-full grid-cols-1 gap-2">
-                        <button type="button" class="inline-flex h-11 w-full items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-white disabled:cursor-not-allowed disabled:opacity-60 sm:col-span-2" :disabled="busy || !canContinueToGroups" @click="wizardStep = 4">
+                        <button
+                            type="button"
+                            class="inline-flex h-11 min-w-[12rem] flex-[2_1_14rem] items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-white transition-colors hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                            :disabled="busy || !canContinueToGroups"
+                            @click="wizardStep = 4"
+                        >
                             {{ $t('Continue') }}
                         </button>
                     </div>
