@@ -436,6 +436,8 @@ const clearGroupFilterSelection = () => {
     query.group_ids = [];
 };
 
+const groupContactsCount = (group) => Number(group?.contacts_count ?? group?.contact_count ?? 0);
+
 const clearGroupDeletionSelection = () => {
     selectedGroupUuidsForDeletion.value = [];
 };
@@ -512,6 +514,7 @@ const createGroup = async () => {
                     id: newGroupId,
                     uuid: newGroupUuid,
                     name: newGroupName,
+                    contacts_count: 0,
                 });
             }
 
@@ -1166,6 +1169,9 @@ const onImportCompleted = () => {
                         <span class="truncate">{{ group.name }}</span>
                         <span v-if="query.group_ids.includes(String(group.id))" class="ml-2 text-xs">{{ $t('Selected') }}</span>
                     </button>
+                    <span class="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                        {{ groupContactsCount(group) }}
+                    </span>
                     <button
                         type="button"
                         class="rounded-md border border-rose-200 px-2 py-1 text-xs text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
