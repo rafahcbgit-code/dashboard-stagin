@@ -81,6 +81,10 @@ class ContactController extends BaseController
         $contactGroups = ContactGroup::query()
             ->where('organization_id', $organizationId)
             ->whereNull('deleted_at')
+            ->withCount(['contacts as contacts_count' => function (Builder $query) use ($organizationId): void {
+                $query->where('contacts.organization_id', $organizationId)
+                    ->whereNull('contacts.deleted_at');
+            }])
             ->orderBy('name')
             ->get(['id', 'uuid', 'name']);
 
@@ -549,7 +553,7 @@ class ContactController extends BaseController
                         $contact->labels()->detach($labelIds->all());
                     }
                 }
-            }, 'contacts.id');
+            }, 'contacts.id', 'id');
         }
 
         return back()->with('status', [

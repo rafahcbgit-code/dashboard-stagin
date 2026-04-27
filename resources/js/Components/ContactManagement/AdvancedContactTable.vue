@@ -3,6 +3,27 @@ import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import axios from 'axios';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import debounce from 'lodash/debounce';
+import { useI18n } from 'vue-i18n';
+import {
+    Check,
+    ChevronLeft,
+    ChevronRight,
+    Download,
+    Filter,
+    Grid2X2,
+    Import,
+    List,
+    MessageCircle,
+    Minus,
+    Search,
+    Columns3,
+    Tags,
+    Table2,
+    Trash2,
+    UserPlus,
+    Users,
+    X,
+} from 'lucide-vue-next';
 import Modal from '@/Components/Modal.vue';
 import ContactImportWizardModal from '@/Components/ContactManagement/ContactImportWizardModal.vue';
 import fallbackCountryDialCodes from '@/Data/countryDialCodes.json';
@@ -19,6 +40,10 @@ const props = defineProps({
 });
 
 const page = usePage();
+const { t, locale } = useI18n();
+const isRtl = computed(() => Boolean(page.props.isRtl) || locale.value === 'ar');
+const uiDirection = computed(() => (isRtl.value ? 'rtl' : 'ltr'));
+const uiTextAlignmentClass = computed(() => (isRtl.value ? 'text-right' : 'text-left'));
 const contactConstants = computed(() => page.props.contactConstants || { countries: [], staticCustomAttributes: [], countryDialCodes: [] });
 const NO_GROUP_OPTION = '__no_group__';
 const NO_LABEL_OPTION = '__no_label__';
@@ -70,6 +95,7 @@ const isFilterModalOpen = ref(false);
 const isGroupsModalOpen = ref(false);
 const isColumnsMenuOpen = ref(false);
 const isImportWizardOpen = ref(false);
+const viewMode = ref('grid');
 const columnsMenuRef = ref(null);
 const selectAllCheckboxRef = ref(null);
 const selectedIds = ref([]);
@@ -238,6 +264,124 @@ const allOnPageSelected = computed(() => idsOnPage.value.length > 0 && idsOnPage
 const someOnPageSelected = computed(() => !allOnPageSelected.value && idsOnPage.value.some((id) => isRowSelected(id)));
 const totalPages = computed(() => props.rows.meta?.last_page ?? 1);
 const currentPage = computed(() => props.rows.meta?.current_page ?? 1);
+const selectedContactsOnPage = computed(() => props.rows.data.filter((contact) => isRowSelected(contact.id)));
+
+const avatarPalette = [
+    'bg-emerald-100 text-emerald-700 ring-emerald-200',
+    'bg-sky-100 text-sky-700 ring-sky-200',
+    'bg-amber-100 text-amber-700 ring-amber-200',
+    'bg-rose-100 text-rose-700 ring-rose-200',
+    'bg-indigo-100 text-indigo-700 ring-indigo-200',
+    'bg-teal-100 text-teal-700 ring-teal-200',
+    'bg-fuchsia-100 text-fuchsia-700 ring-fuchsia-200',
+    'bg-lime-100 text-lime-700 ring-lime-200',
+];
+
+const contactName = (contact) => {
+    const name = contact.full_name || [contact.first_name, contact.last_name].filter(Boolean).join(' ');
+    return String(name || contact.name || contact.formatted_phone_number || contact.phone || 'Contact').trim();
+};
+
+const contactInitial = (contact) => {
+    const firstCharacter = Array.from(contactName(contact)).find((character) => character.trim() !== '');
+    return firstCharacter ? firstCharacter.toLocaleUpperCase() : '#';
+};
+
+const avatarClass = (contact) => {
+    const initial = contactInitial(contact);
+    const code = initial.codePointAt(0) || 0;
+    return avatarPalette[code % avatarPalette.length];
+};
+
+const contactPhone = (contact) => contact.formatted_phone_number || contact.phone || '-';
+
+const contactGroupNames = (contact) => (Array.isArray(contact.contact_groups) ? contact.contact_groups : [])
+    .map((group) => group?.name)
+    .filter(Boolean);
+
+const visibleGroupNames = (contact) => contactGroupNames(contact).slice(0, 3);
+const remainingGroupCount = (contact) => Math.max(contactGroupNames(contact).length - 3, 0);
+
+const contactLabels = (contact) => (Array.isArray(contact.labels) ? contact.labels : [])
+    .map((label) => label?.title || label?.name)
+    .filter(Boolean);
+
+const visibleLabels = (contact) => contactLabels(contact).slice(0, 3);
+const remainingLabelCount = (contact) => Math.max(contactLabels(contact).length - 3, 0);
+
+const contactCustomFields = (contact) => (props.fields || [])
+    .map((field) => ({
+        key: field.uuid ?? field.name,
+        name: field.name,
+        value: getCustomAttributeDisplay(contact, field.name),
+    }))
+    .filter((field) => field.value !== '-');
+
+const visibleCustomFields = (contact) => contactCustomFields(contact).slice(0, 3);
+const remainingCustomFieldCount = (contact) => Math.max(contactCustomFields(contact).length - 3, 0);
+
+const formatDate = (value) => {
+    if (!value) {
+        return '-';
+    }
+
+    try {
+        return new Intl.DateTimeFormat(undefined, {
+            year: 'numeric',
+            month: 'short',
+            day: '2-digit',
+        }).format(new Date(value));
+    } catch (error) {
+        return String(value);
+    }
+};
+
+const tableColumnDefinitions = computed(() => [
+    { key: 'name', label: 'Name' },
+    { key: 'phone', label: 'Phone' },
+    { key: 'email', label: 'Email' },
+    { key: 'groups', label: 'Groups' },
+    { key: 'labels', label: 'Labels' },
+    { key: 'subscription', label: 'Subscription' },
+    { key: 'contact_source', label: 'Source' },
+    { key: 'country', label: 'Country' },
+    { key: 'created_at', label: 'Created At' },
+    ...(props.fields || []).map((field) => ({
+        key: customColumnKey(field),
+        label: field.name,
+        fieldName: field.name,
+        isCustom: true,
+    })),
+]);
+
+const visibleTableColumns = computed(() => tableColumnDefinitions.value.filter((column) => columns.value[column.key] !== false));
+
+const resetTableColumns = () => {
+    columns.value = buildDefaultColumns();
+};
+
+const quickWhatsappUrl = (contact) => {
+    const rawPhone = String(contact.phone || contact.formatted_phone_number || '').replace(/[^\d]/g, '');
+    return rawPhone ? `https://wa.me/${rawPhone}` : '#';
+};
+
+const openQuickWhatsapp = (contact) => {
+    const url = quickWhatsappUrl(contact);
+    if (url === '#') {
+        return;
+    }
+
+    window.open(url, '_blank', 'noopener,noreferrer');
+};
+
+const messageSelectedContacts = () => {
+    if (selectedContactsOnPage.value.length === 1 && selectedCount.value === 1) {
+        openQuickWhatsapp(selectedContactsOnPage.value[0]);
+        return;
+    }
+
+    alert(t('Select one visible contact to open WhatsApp.'));
+};
 
 const availableCustomAttributes = computed(() => {
     const hiddenAttributeValues = new Set(['source', 'lifecycle_stage', 'preferred_language']);
@@ -436,6 +580,8 @@ const clearGroupFilterSelection = () => {
     query.group_ids = [];
 };
 
+const groupContactsCount = (group) => Number(group?.contacts_count ?? group?.contact_count ?? 0);
+
 const clearGroupDeletionSelection = () => {
     selectedGroupUuidsForDeletion.value = [];
 };
@@ -481,7 +627,7 @@ const createGroup = async () => {
     const name = (createGroupForm.name || '').trim();
 
     if (!name) {
-        createGroupError.value = 'Group name is required.';
+        createGroupError.value = t('Audince name is required.');
         return;
     }
 
@@ -512,6 +658,7 @@ const createGroup = async () => {
                     id: newGroupId,
                     uuid: newGroupUuid,
                     name: newGroupName,
+                    contacts_count: 0,
                 });
             }
 
@@ -523,7 +670,7 @@ const createGroup = async () => {
             runFilterRequest({ page: undefined });
             isGroupsModalOpen.value = false;
         } else {
-            throw new Error('Failed to create group.');
+            throw new Error(t('Failed to create audince.'));
         }
     } catch (error) {
         const errors = error?.response?.data?.errors;
@@ -538,7 +685,7 @@ const createGroup = async () => {
             || error?.message
             || (statusCode ? `Request failed (${statusCode}).` : null)
             || (typeof rawResponse === 'string' && rawResponse.trim() ? 'Unexpected server response.' : null)
-            || 'Failed to create group.';
+            || t('Failed to create audince.');
     } finally {
         isCreatingGroup.value = false;
     }
@@ -549,7 +696,7 @@ const deleteGroup = async (group) => {
         return;
     }
 
-    if (!confirm(`Delete group "${group.name}"?`)) {
+    if (!confirm(t('Delete group :name?', { name: group.name }))) {
         return;
     }
 
@@ -574,7 +721,7 @@ const deleteGroup = async (group) => {
             runFilterRequest({ page: undefined });
         }
     } catch (error) {
-        createGroupError.value = error?.response?.data?.message || 'Failed to delete group.';
+        createGroupError.value = error?.response?.data?.message || t('Failed to delete audince.');
     } finally {
         deletingGroupUuid.value = '';
     }
@@ -586,7 +733,7 @@ const deleteSelectedGroups = async () => {
         return;
     }
 
-    if (!confirm(`Delete ${uuids.length} selected groups?`)) {
+    if (!confirm(t('Delete :count selected groups?', { count: uuids.length }))) {
         return;
     }
 
@@ -620,7 +767,7 @@ const deleteSelectedGroups = async () => {
             runFilterRequest({ page: undefined });
         }
     } catch (error) {
-        createGroupError.value = error?.response?.data?.message || 'Failed to delete selected groups.';
+        createGroupError.value = error?.response?.data?.message || t('Failed to delete selected audince.');
     } finally {
         isDeletingGroups.value = false;
     }
@@ -702,7 +849,7 @@ const getCustomAttributeDisplay = (contact, fieldName) => {
 };
 
 const runBulkDelete = () => {
-    if (selectedCount.value === 0 || !confirm('Delete selected contacts?')) {
+    if (selectedCount.value === 0 || !confirm(t('Delete selected contacts?'))) {
         return;
     }
 
@@ -818,199 +965,480 @@ const onImportCompleted = () => {
 </script>
 
 <template>
-    <div class="space-y-5">
-        <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                <div>
-                    <h1 class="text-xl font-semibold text-slate-900">{{ $t('Contact Management') }}</h1>
-                    <p class="mt-1 text-sm text-slate-500">{{ $t('Manage contacts, filters, groups, and bulk actions from one place.') }}</p>
-                </div>
-                <div class="flex flex-wrap items-center gap-2">
-                    <Link href="/contacts/add" class="inline-flex items-center gap-2 rounded-lg bg-primary px-3 py-2 text-sm font-medium text-white">
-                        <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clip-rule="evenodd" /></svg>
-                        {{ $t('Add Contact') }}
-                    </Link>
-                    <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700" @click="isImportWizardOpen = true">
-                        <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M3 13a1 1 0 011 1v2h12v-2a1 1 0 112 0v3a1 1 0 01-1 1H3a1 1 0 01-1-1v-3a1 1 0 011-1zm7-11a1 1 0 011 1v7.586l2.293-2.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 111.414-1.414L9 10.586V3a1 1 0 011-1z" clip-rule="evenodd" /></svg>
-                        {{ $t('Import') }}
-                    </button>
-                    <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700" @click="runExportAll">
-                        <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v8a1 1 0 11-2 0V4H5v7a1 1 0 11-2 0V3zm7 3a1 1 0 011 1v5.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 011.414-1.414L9 12.586V7a1 1 0 011-1zm-6 11a1 1 0 100-2h12a1 1 0 100 2H4z" clip-rule="evenodd" /></svg>
-                        {{ $t('Export All') }}
-                    </button>
-                </div>
-            </div>
-
-            <div class="mt-4 grid grid-cols-1 gap-3 md:grid-cols-3">
-                <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                    <p class="text-xs font-medium text-slate-500">{{ $t('Total Contacts') }}</p>
-                    <p class="mt-1 text-lg font-semibold text-slate-900">{{ rowCount }}</p>
-                </div>
-                <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                    <p class="text-xs font-medium text-slate-500">{{ $t('Filtered Contacts') }}</p>
-                    <p class="mt-1 text-lg font-semibold text-slate-900">{{ filteredCount }}</p>
-                </div>
-                <div class="rounded-xl border border-slate-200 bg-slate-50 p-3">
-                    <p class="text-xs font-medium text-slate-500">{{ $t('Active Filters') }}</p>
-                    <p class="mt-1 text-lg font-semibold text-slate-900">{{ activeFilterCount }}</p>
-                </div>
-            </div>
-        </div>
-
-        <div class="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-            <div class="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-                <div class="flex w-full flex-col gap-2 lg:max-w-4xl lg:flex-row">
-                    <input v-model="query.search" type="text" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-primary/20 focus:border-primary focus:ring" :placeholder="$t('Search name, phone, country, or email')" @input="debouncedSearch">
-                    <select v-model="query.country_dial_code" class="w-full rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700 outline-none ring-primary/20 focus:border-primary focus:ring lg:max-w-xs" @change="applyQuickCountryDialCodeFilter">
-                        <option value="">{{ $t('All Countries') }}</option>
-                        <option v-for="option in countryDialCodeOptions" :key="`quick-${option.region}-${option.value}`" :value="option.value">
-                            {{ option.label }}
-                        </option>
-                    </select>
-                </div>
-
-                <div class="flex flex-wrap items-center gap-2">
-                    <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700" @click="isGroupsModalOpen = true">
-                        <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M7 4a3 3 0 11-6 0 3 3 0 016 0zM19 4a3 3 0 11-6 0 3 3 0 016 0zM7 14a3 3 0 11-6 0 3 3 0 016 0zM19 14a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
-                        {{ $t('Groups') }}
-                    </button>
-                    <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700" @click="isFilterModalOpen = true">
-                        <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M3 4a1 1 0 011-1h12a1 1 0 010 2h-1.586l-3.707 3.707A1 1 0 0010 9.414V14a1 1 0 01-.553.894l-2 1A1 1 0 016 15v-5.586a1 1 0 00-.293-.707L2 5H4a1 1 0 01-1-1z" clip-rule="evenodd" /></svg>
-                        {{ $t('Advanced Filters') }}
-                    </button>
-                    <button type="button" class="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm font-medium text-slate-700" @click="selectAllFilteredRows">
-                        <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-7.5 7.5a1 1 0 01-1.414 0l-3.5-3.5a1 1 0 111.414-1.414l2.793 2.793 6.793-6.793a1 1 0 011.414 0z" clip-rule="evenodd" /></svg>
-                        {{ $t('Select All Results') }}
-                    </button>
-                    <div ref="columnsMenuRef" class="relative">
-                        <button type="button" class="inline-flex cursor-pointer items-center gap-2 rounded-lg border border-slate-300 px-3 py-2 text-sm text-slate-700" @click.stop="toggleColumnsMenu">
-                            <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path d="M3 4a1 1 0 011-1h4a1 1 0 011 1v12a1 1 0 01-1 1H4a1 1 0 01-1-1V4zm8 0a1 1 0 011-1h4a1 1 0 011 1v5a1 1 0 01-1 1h-4a1 1 0 01-1-1V4zm1 8a1 1 0 00-1 1v3a1 1 0 001 1h4a1 1 0 001-1v-3a1 1 0 00-1-1h-4z" /></svg>
-                            {{ $t('Columns') }}
-                        </button>
-                        <div v-if="isColumnsMenuOpen" class="absolute right-0 z-20 mt-2 w-60 rounded-xl border border-slate-200 bg-white p-3 shadow-lg">
-                            <label class="mb-2 flex items-center gap-2 text-sm text-slate-700"><input v-model="columns.name" type="checkbox"> {{ $t('Name') }}</label>
-                            <label class="mb-2 flex items-center gap-2 text-sm text-slate-700"><input v-model="columns.phone" type="checkbox"> {{ $t('Phone') }}</label>
-                            <label class="mb-2 flex items-center gap-2 text-sm text-slate-700"><input v-model="columns.email" type="checkbox"> {{ $t('Email') }}</label>
-                            <label class="mb-2 flex items-center gap-2 text-sm text-slate-700"><input v-model="columns.groups" type="checkbox"> {{ $t('Groups') }}</label>
-                            <label class="mb-2 flex items-center gap-2 text-sm text-slate-700"><input v-model="columns.labels" type="checkbox"> {{ $t('Labels') }}</label>
-                            <label class="mb-2 flex items-center gap-2 text-sm text-slate-700"><input v-model="columns.subscription" type="checkbox"> {{ $t('Subscription') }}</label>
-                            <label class="mb-2 flex items-center gap-2 text-sm text-slate-700"><input v-model="columns.contact_source" type="checkbox"> {{ $t('Contact Source') }}</label>
-                            <label class="mb-2 flex items-center gap-2 text-sm text-slate-700"><input v-model="columns.country" type="checkbox"> {{ $t('Country') }}</label>
-                            <div v-if="fields.length" class="mb-2 rounded-md border border-slate-200 p-2">
-                                <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{{ $t('Custom Attributes') }}</p>
-                                <label
-                                    v-for="field in fields"
-                                    :key="`col-custom-${field.uuid ?? field.name}`"
-                                    class="mb-1 flex items-center gap-2 text-sm text-slate-700 last:mb-0"
-                                >
-                                    <input v-model="columns[customColumnKey(field)]" type="checkbox">
-                                    {{ field.name }}
-                                </label>
-                            </div>
-                            <label class="flex items-center gap-2 text-sm text-slate-700"><input v-model="columns.created_at" type="checkbox"> {{ $t('Created At') }}</label>
+    <div :dir="uiDirection" class="-m-4 min-h-screen bg-[#F8FAFC] px-4 py-5 text-slate-950 md:-m-6 md:px-6 md:py-6" :class="uiTextAlignmentClass">
+        <div class="mx-auto max-w-[1800px] space-y-5 pb-24">
+            <section class="rounded-[2rem] border border-white bg-white/90 p-5 shadow-sm shadow-slate-200/70">
+                <div class="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+                    <div class="max-w-2xl">
+                        <div class="mb-3 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-100">
+                            <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
+                            {{ $t('WhatsApp CRM') }}
                         </div>
+                        <h1 class="text-3xl font-extrabold tracking-tight text-slate-950 md:text-4xl">{{ $t('Contact Management') }}</h1>
+                        <p class="mt-2 text-sm leading-6 text-slate-500">{{ $t('Manage contacts, filters, groups, and bulk actions from one place.') }}</p>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button type="button" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md" @click="isImportWizardOpen = true">
+                            <Import class="h-4 w-4" />
+                            {{ $t('Import') }}
+                        </button>
+                        <button type="button" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md" @click="runExportAll">
+                            <Download class="h-4 w-4" />
+                            {{ $t('Export All') }}
+                        </button>
+                        <Link href="/contacts/add" class="inline-flex items-center gap-2 rounded-full bg-slate-950 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-slate-300 transition-all duration-300 hover:-translate-y-0.5 hover:bg-slate-800">
+                            <UserPlus class="h-4 w-4" />
+                            {{ $t('Add Contact') }}
+                        </Link>
                     </div>
                 </div>
-            </div>
 
-            <div v-if="activeFilterCount > 0" class="mt-3 flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
-                <span class="text-xs font-medium text-amber-700">{{ activeFilterCount }} {{ $t('filters active') }}</span>
-                <button type="button" class="rounded-md bg-white px-2.5 py-1 text-xs text-slate-700 ring-1 ring-slate-200" @click="clearFilters">{{ $t('Reset Filters') }}</button>
-            </div>
-        </div>
+                <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
+                    <div class="rounded-[1.5rem] border border-slate-100 bg-[#F8FAFC] p-4">
+                        <p class="text-xs font-bold text-slate-500">{{ $t('Total Contacts') }}</p>
+                        <p class="mt-2 text-2xl font-extrabold tracking-tight text-slate-950">{{ rowCount }}</p>
+                    </div>
+                    <div class="rounded-[1.5rem] border border-slate-100 bg-[#F8FAFC] p-4">
+                        <p class="text-xs font-bold text-slate-500">{{ $t('Filtered Contacts') }}</p>
+                        <p class="mt-2 text-2xl font-extrabold tracking-tight text-slate-950">{{ filteredCount }}</p>
+                    </div>
+                    <div class="rounded-[1.5rem] border border-slate-100 bg-[#F8FAFC] p-4">
+                        <p class="text-xs font-bold text-slate-500">{{ $t('Active Filters') }}</p>
+                        <p class="mt-2 text-2xl font-extrabold tracking-tight text-slate-950">{{ activeFilterCount }}</p>
+                    </div>
+                </div>
+            </section>
 
-        <div v-if="selectedCount > 0" class="sticky top-16 z-20 flex flex-wrap items-center gap-2 rounded-xl border border-blue-200 bg-blue-50 p-3 shadow-sm">
-            <span class="text-sm font-medium text-blue-700">{{ selectedCount }} {{ $t('selected') }}</span>
-            <span v-if="allFilteredSelected" class="text-xs text-blue-700">{{ $t('All filtered results selected') }}</span>
-            <button type="button" class="rounded-md bg-white px-3 py-1.5 text-sm text-slate-700 ring-1 ring-slate-200" @click="clearSelectionAndFilters">{{ $t('Clear Selection') }}</button>
-            <button v-if="role !== 'agent'" type="button" class="rounded-md bg-red-600 px-3 py-1.5 text-sm text-white" @click="runBulkDelete">{{ $t('Delete') }}</button>
-            <button type="button" class="rounded-md bg-white px-3 py-1.5 text-sm text-slate-700 ring-1 ring-slate-200" @click="bulkActionModal = 'add_group'">{{ $t('Add Group') }}</button>
-            <button type="button" class="rounded-md bg-white px-3 py-1.5 text-sm text-slate-700 ring-1 ring-slate-200" @click="bulkActionModal = 'remove_group'">{{ $t('Remove Group') }}</button>
-            <button type="button" class="rounded-md bg-white px-3 py-1.5 text-sm text-slate-700 ring-1 ring-slate-200" @click="bulkActionModal = 'add_label'">{{ $t('Add Labels') }}</button>
-            <button type="button" class="rounded-md bg-white px-3 py-1.5 text-sm text-slate-700 ring-1 ring-slate-200" @click="bulkActionModal = 'remove_label'">{{ $t('Remove Labels') }}</button>
-            <button type="button" class="rounded-md bg-white px-3 py-1.5 text-sm text-slate-700 ring-1 ring-slate-200" @click="bulkActionModal = 'change_subscription_status'">{{ $t('Change Subscription') }}</button>
-            <button type="button" class="inline-flex items-center gap-2 rounded-md bg-white px-3 py-1.5 text-sm text-slate-700 ring-1 ring-slate-200" @click="runExport">
-                <svg class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor" aria-hidden="true"><path fill-rule="evenodd" d="M3 3a1 1 0 011-1h12a1 1 0 011 1v8a1 1 0 11-2 0V4H5v7a1 1 0 11-2 0V3zm7 3a1 1 0 011 1v5.586l1.293-1.293a1 1 0 111.414 1.414l-3 3a1 1 0 01-1.414 0l-3-3a1 1 0 011.414-1.414L9 12.586V7a1 1 0 011-1zm-6 11a1 1 0 100-2h12a1 1 0 100 2H4z" clip-rule="evenodd" /></svg>
-                {{ $t('Export Selected') }}
-            </button>
-        </div>
+            <section class="rounded-[2rem] border border-white bg-white/95 p-4 shadow-sm shadow-slate-200/70">
+                <div class="grid grid-cols-1 gap-3 xl:grid-cols-[minmax(0,1fr)_auto] xl:items-center">
+                    <div class="grid grid-cols-1 gap-3 lg:grid-cols-[minmax(0,1fr)_18rem]">
+                        <label class="relative block">
+                            <Search class="pointer-events-none absolute top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" :class="isRtl ? 'right-4' : 'left-4'" />
+                            <input v-model="query.search" type="text" class="h-12 w-full rounded-full border border-slate-200 bg-[#F8FAFC] text-sm font-medium outline-none ring-primary/20 transition-all duration-300 placeholder:text-slate-400 focus:border-primary focus:bg-white focus:ring" :class="isRtl ? 'pr-11 pl-4' : 'pl-11 pr-4'" :placeholder="$t('Search name, phone, country, or email')" @input="debouncedSearch">
+                        </label>
+                        <select v-model="query.country_dial_code" class="h-12 w-full rounded-full border border-slate-200 bg-[#F8FAFC] px-4 text-sm font-medium text-slate-700 outline-none ring-primary/20 transition-all duration-300 focus:border-primary focus:bg-white focus:ring" @change="applyQuickCountryDialCodeFilter">
+                            <option value="">{{ $t('All Countries') }}</option>
+                            <option v-for="option in countryDialCodeOptions" :key="`quick-${option.region}-${option.value}`" :value="option.value">
+                                {{ option.label }}
+                            </option>
+                        </select>
+                    </div>
 
-        <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-            <div class="flex items-center justify-between border-b border-slate-200 bg-slate-50/70 px-4 py-3">
-                <h2 class="text-sm font-semibold text-slate-800">{{ $t('Contacts List') }}</h2>
-                <p class="text-xs text-slate-500">{{ rows.meta?.from || 0 }}-{{ rows.meta?.to || 0 }} / {{ rows.meta?.total || 0 }}</p>
-            </div>
-            <div class="overflow-x-auto">
-                <table class="min-w-full divide-y divide-slate-200 text-left text-sm">
-                    <thead class="bg-slate-50 text-slate-600">
-                        <tr>
-                            <th class="px-4 py-3">
-                                <input ref="selectAllCheckboxRef" type="checkbox" :checked="allOnPageSelected" :aria-label="$t('Select all rows')" @change="toggleSelectAll">
-                            </th>
-                            <th v-if="columns.name" class="px-4 py-3">{{ $t('Name') }}</th>
-                            <th v-if="columns.phone" class="px-4 py-3">{{ $t('Phone') }}</th>
-                            <th v-if="columns.email" class="px-4 py-3">{{ $t('Email') }}</th>
-                            <th v-if="columns.groups" class="px-4 py-3">{{ $t('Groups') }}</th>
-                            <th v-if="columns.labels" class="px-4 py-3">{{ $t('Labels') }}</th>
-                            <th v-if="columns.subscription" class="px-4 py-3">{{ $t('Subscription') }}</th>
-                            <th v-if="columns.contact_source" class="px-4 py-3">{{ $t('Contact Source') }}</th>
-                            <th v-if="columns.country" class="px-4 py-3">{{ $t('Country') }}</th>
-                            <th
-                                v-for="field in fields"
-                                v-show="columns[customColumnKey(field)]"
-                                :key="`head-custom-${field.uuid ?? field.name}`"
-                                class="px-4 py-3"
+                    <div class="flex flex-wrap items-center gap-2">
+                        <div class="inline-flex rounded-full bg-slate-100 p-1">
+                            <button type="button" class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-bold transition-all duration-300" :class="viewMode === 'grid' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-800'" @click="viewMode = 'grid'">
+                                <Grid2X2 class="h-4 w-4" />
+                                {{ $t('Grid') }}
+                            </button>
+                            <button type="button" class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-bold transition-all duration-300" :class="viewMode === 'list' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-800'" @click="viewMode = 'list'">
+                                <List class="h-4 w-4" />
+                                {{ $t('List') }}
+                            </button>
+                            <button type="button" class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-bold transition-all duration-300" :class="viewMode === 'table' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-800'" @click="viewMode = 'table'">
+                                <Table2 class="h-4 w-4" />
+                                {{ $t('Table') }}
+                            </button>
+                        </div>
+                        <div v-if="viewMode === 'table'" ref="columnsMenuRef" class="relative">
+                            <button type="button" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-all duration-300 hover:border-indigo-200 hover:text-indigo-700" @click.stop="toggleColumnsMenu">
+                                <Columns3 class="h-4 w-4" />
+                                {{ $t('Columns') }}
+                            </button>
+                            <Transition
+                                enter-active-class="transition duration-200 ease-out"
+                                enter-from-class="-translate-y-2 opacity-0"
+                                enter-to-class="translate-y-0 opacity-100"
+                                leave-active-class="transition duration-150 ease-in"
+                                leave-from-class="translate-y-0 opacity-100"
+                                leave-to-class="-translate-y-2 opacity-0"
                             >
-                                {{ field.name }}
-                            </th>
-                            <th v-if="columns.created_at" class="px-4 py-3">{{ $t('Created At') }}</th>
-                        </tr>
-                    </thead>
-                    <tbody class="divide-y divide-slate-100 text-slate-700">
-                        <tr v-for="contact in rows.data" :key="contact.id" class="hover:bg-slate-50">
-                            <td class="px-4 py-3">
-                                <input type="checkbox" :checked="isRowSelected(contact.id)" @change="toggleRow(contact.id)">
-                            </td>
-                            <td v-if="columns.name" class="px-4 py-3">
-                                <Link :href="`/contacts?id=${contact.uuid}`" class="font-medium text-slate-900 hover:text-primary">{{ contact.full_name }}</Link>
-                            </td>
-                            <td v-if="columns.phone" class="px-4 py-3">{{ contact.formatted_phone_number || '-' }}</td>
-                            <td v-if="columns.email" class="px-4 py-3">{{ contact.email || '-' }}</td>
-                            <td v-if="columns.groups" class="px-4 py-3">{{ contact.contact_groups?.map((group) => group.name).join(', ') || '-' }}</td>
-                            <td v-if="columns.labels" class="px-4 py-3">{{ contact.labels?.map((label) => label.title).join(', ') || '-' }}</td>
-                            <td v-if="columns.subscription" class="px-4 py-3">
-                                <span class="rounded-full px-2 py-1 text-xs" :class="contact.is_subscribed ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'">
+                                <div v-if="isColumnsMenuOpen" class="absolute z-30 mt-2 w-72 rounded-[1.5rem] border border-slate-100 bg-white p-3 shadow-2xl shadow-slate-200" :class="isRtl ? 'left-0' : 'right-0'">
+                                    <div class="mb-2 flex items-center justify-between gap-3 border-b border-slate-100 pb-2">
+                                        <p class="text-sm font-extrabold tracking-tight text-slate-950">{{ $t('Table Columns') }}</p>
+                                        <button type="button" class="rounded-full px-2 py-1 text-xs font-bold text-slate-500 transition-all duration-300 hover:bg-slate-100 hover:text-slate-900" @click="resetTableColumns">
+                                            {{ $t('Reset') }}
+                                        </button>
+                                    </div>
+                                    <div class="max-h-80 space-y-1 overflow-y-auto pr-1">
+                                        <label v-for="column in tableColumnDefinitions" :key="`column-${column.key}`" class="flex cursor-pointer items-center justify-between gap-3 rounded-2xl px-3 py-2 text-sm font-bold text-slate-700 transition-all duration-300 hover:bg-[#F8FAFC]">
+                                            <span class="truncate">{{ $t(column.label) }}</span>
+                                            <input v-model="columns[column.key]" type="checkbox" class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                                        </label>
+                                    </div>
+                                </div>
+                            </Transition>
+                        </div>
+                        <button type="button" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-all duration-300 hover:border-emerald-200 hover:text-emerald-700" @click="isGroupsModalOpen = true">
+                            <Users class="h-4 w-4" />
+                            {{ $t('Groups') }}
+                        </button>
+                        <button type="button" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-all duration-300 hover:border-sky-200 hover:text-sky-700" @click="isFilterModalOpen = true">
+                            <Filter class="h-4 w-4" />
+                            {{ $t('Advanced Filters') }}
+                            <span v-if="activeFilterCount > 0" class="rounded-full bg-sky-100 px-2 py-0.5 text-xs text-sky-700">{{ activeFilterCount }}</span>
+                        </button>
+                        <button type="button" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-all duration-300 hover:border-blue-200 hover:text-blue-700" @click="selectAllFilteredRows">
+                            <Check class="h-4 w-4" />
+                            {{ $t('Select All Results') }}
+                        </button>
+                    </div>
+                </div>
+
+                <div v-if="activeFilterCount > 0" class="mt-3 flex flex-wrap items-center gap-2 rounded-full border border-amber-100 bg-amber-50 px-4 py-2">
+                    <span class="text-xs font-bold text-amber-700">{{ activeFilterCount }} {{ $t('filters active') }}</span>
+                    <button type="button" class="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-700 ring-1 ring-amber-100 transition-all duration-300 hover:text-amber-700" @click="clearFilters">{{ $t('Reset Filters') }}</button>
+                </div>
+            </section>
+
+            <section class="space-y-4">
+                <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
+                    <div>
+                        <h2 class="text-2xl font-extrabold tracking-tight text-slate-950">{{ $t('Contacts') }}</h2>
+                        <p class="mt-1 text-sm text-slate-500">{{ rows.meta?.from || 0 }}-{{ rows.meta?.to || 0 }} / {{ rows.meta?.total || 0 }}</p>
+                    </div>
+                    <button type="button" class="inline-flex items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition-all duration-300 hover:border-blue-200 hover:text-blue-700" @click="toggleSelectAll">
+                        <Check class="h-4 w-4" />
+                        {{ allOnPageSelected ? $t('Unselect Page') : $t('Select Page') }}
+                    </button>
+                </div>
+
+                <div v-if="rows.data.length === 0" class="rounded-[2rem] border border-dashed border-slate-200 bg-white p-10 text-center">
+                    <div class="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-emerald-50 text-emerald-600">
+                        <Users class="h-7 w-7" />
+                    </div>
+                    <p class="mt-4 text-lg font-extrabold tracking-tight text-slate-950">{{ $t('No contacts found') }}</p>
+                    <p class="mt-1 text-sm text-slate-500">{{ $t('Try changing filters or importing contacts.') }}</p>
+                </div>
+
+                <Transition name="contact-view" mode="out-in">
+                    <div v-if="viewMode === 'grid'" key="grid" class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
+                        <article
+                            v-for="contact in rows.data"
+                            :key="`card-${contact.id}`"
+                            class="group relative cursor-pointer rounded-[2rem] border-2 bg-white p-5 shadow-sm shadow-slate-200/70 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-slate-200"
+                            :class="isRowSelected(contact.id) ? 'border-blue-500 ring-4 ring-blue-100' : 'border-transparent hover:border-slate-100'"
+                            @click="toggleRow(contact.id)"
+                        >
+                            <div
+                                class="absolute left-5 top-5 flex h-9 w-9 items-center justify-center rounded-full border-2 bg-white shadow-sm transition-all duration-300"
+                                :class="isRowSelected(contact.id) ? 'border-blue-600 bg-blue-600 text-white shadow-lg shadow-blue-200' : 'border-slate-200 text-transparent group-hover:border-blue-300 group-hover:bg-blue-50'"
+                                :aria-label="isRowSelected(contact.id) ? $t('Selected') : $t('Select contact')"
+                            >
+                                <Check class="h-4 w-4" />
+                            </div>
+
+                            <div class="flex items-start gap-4">
+                                <div class="relative shrink-0">
+                                    <div class="flex h-16 w-16 items-center justify-center rounded-3xl text-2xl font-extrabold ring-4" :class="avatarClass(contact)">
+                                        {{ contactInitial(contact) }}
+                                    </div>
+                                    <span class="absolute -bottom-1 -left-1 flex h-5 w-5 items-center justify-center rounded-full bg-white">
+                                        <span class="absolute h-3 w-3 animate-ping rounded-full bg-emerald-400 opacity-70"></span>
+                                        <span class="relative h-3 w-3 rounded-full bg-emerald-500 ring-2 ring-white"></span>
+                                    </span>
+                                </div>
+                                <div class="min-w-0 flex-1 pt-1">
+                                    <Link :href="`/contacts?id=${contact.uuid}`" class="line-clamp-2 text-xl font-extrabold tracking-tight text-slate-950 transition-colors duration-300 hover:text-primary" @click.stop>
+                                        {{ contactName(contact) }}
+                                    </Link>
+                                    <p class="mt-2 truncate text-left font-mono text-[15px] font-semibold text-slate-600" dir="ltr">{{ contactPhone(contact) }}</p>
+                                </div>
+                            </div>
+
+                            <div class="mt-5 space-y-4">
+                                <div>
+                                    <p class="mb-2 text-xs font-extrabold uppercase text-slate-400">{{ $t('Groups') }}</p>
+                                    <div class="flex flex-wrap gap-2">
+                                        <span v-for="groupName in visibleGroupNames(contact)" :key="`group-${contact.id}-${groupName}`" class="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-100">
+                                            {{ groupName }}
+                                        </span>
+                                        <span v-if="remainingGroupCount(contact) > 0" class="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
+                                            +{{ remainingGroupCount(contact) }}
+                                        </span>
+                                        <span v-if="visibleGroupNames(contact).length === 0" class="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-500">{{ $t('No Group') }}</span>
+                                    </div>
+                                </div>
+
+                                <div>
+                                    <p class="mb-2 text-xs font-extrabold uppercase text-slate-400">{{ $t('Labels') }}</p>
+                                    <div class="flex flex-wrap gap-2">
+                                        <span v-for="label in visibleLabels(contact)" :key="`label-${contact.id}-${label}`" class="rounded-full bg-sky-50 px-3 py-1 text-xs font-bold text-sky-700 ring-1 ring-sky-100">
+                                            {{ label }}
+                                        </span>
+                                        <span v-if="remainingLabelCount(contact) > 0" class="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
+                                            +{{ remainingLabelCount(contact) }}
+                                        </span>
+                                        <span v-if="visibleLabels(contact).length === 0" class="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-500">{{ $t('No Labels') }}</span>
+                                    </div>
+                                </div>
+
+                                <div v-if="visibleCustomFields(contact).length > 0">
+                                    <p class="mb-2 text-xs font-extrabold uppercase text-slate-400">{{ $t('Custom Fields') }}</p>
+                                    <div class="space-y-2 rounded-3xl bg-[#F8FAFC] p-3">
+                                        <div v-for="field in visibleCustomFields(contact)" :key="`custom-${contact.id}-${field.key}`" class="flex items-start justify-between gap-3 text-xs">
+                                            <span class="shrink-0 font-bold text-slate-500">{{ field.name }}</span>
+                                            <span class="line-clamp-2 text-left font-semibold text-slate-700" dir="auto">{{ field.value }}</span>
+                                        </div>
+                                        <span v-if="remainingCustomFieldCount(contact) > 0" class="inline-flex rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-600 ring-1 ring-slate-100">
+                                            +{{ remainingCustomFieldCount(contact) }}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div class="mt-4 flex flex-wrap items-center gap-2">
+                                <span class="rounded-full px-3 py-1 text-xs font-bold" :class="contact.is_subscribed ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'">
                                     {{ contact.is_subscribed ? $t('Subscribed') : $t('Unsubscribed') }}
                                 </span>
-                            </td>
-                            <td v-if="columns.contact_source" class="px-4 py-3">
-                                <span class="rounded-full px-2 py-1 text-xs bg-slate-100 text-slate-700">
+                                <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
                                     {{ $t(String(contact.contact_source || 'platform').toLowerCase()) }}
                                 </span>
-                            </td>
-                            <td v-if="columns.country" class="px-4 py-3">{{ parseAddress(contact).country || '-' }}</td>
-                            <td
-                                v-for="field in fields"
-                                v-show="columns[customColumnKey(field)]"
-                                :key="`row-custom-${contact.id}-${field.uuid ?? field.name}`"
-                                class="px-4 py-3"
-                            >
-                                <span class="line-clamp-2">{{ getCustomAttributeDisplay(contact, field.name) }}</span>
-                            </td>
-                            <td v-if="columns.created_at" class="px-4 py-3">{{ contact.created_at || '-' }}</td>
-                        </tr>
-                    </tbody>
-                </table>
-            </div>
-            <div class="flex items-center justify-between border-t border-slate-200 px-4 py-3 text-sm">
-                <p class="text-slate-500">{{ rows.meta?.from || 0 }}-{{ rows.meta?.to || 0 }} / {{ rows.meta?.total || 0 }}</p>
-                <div class="flex items-center gap-2">
-                    <button type="button" class="rounded-md border border-slate-300 px-3 py-1 disabled:opacity-50" :disabled="currentPage <= 1" @click="goToPage(currentPage - 1)">{{ $t('Previous') }}</button>
-                    <span class="text-slate-600">{{ currentPage }} / {{ totalPages }}</span>
-                    <button type="button" class="rounded-md border border-slate-300 px-3 py-1 disabled:opacity-50" :disabled="currentPage >= totalPages" @click="goToPage(currentPage + 1)">{{ $t('Next') }}</button>
+                            </div>
+
+                            <button type="button" class="mt-6 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#25D366] px-4 text-sm font-extrabold text-white shadow-lg shadow-emerald-100 transition-all duration-300 hover:-translate-y-0.5 hover:bg-[#1fb85a]" @click.stop="openQuickWhatsapp(contact)">
+                                <MessageCircle class="h-5 w-5" />
+                                {{ $t('Quick WhatsApp') }}
+                            </button>
+                        </article>
+                    </div>
+
+                    <div v-else-if="viewMode === 'list'" key="list" class="space-y-3">
+                        <article
+                            v-for="contact in rows.data"
+                            :key="`list-${contact.id}`"
+                            class="group grid cursor-pointer grid-cols-1 gap-4 rounded-[2rem] border-2 bg-white p-4 shadow-sm shadow-slate-200/70 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center"
+                            :class="isRowSelected(contact.id) ? 'border-blue-500 ring-4 ring-blue-100' : 'border-transparent hover:border-slate-100'"
+                            @click="toggleRow(contact.id)"
+                        >
+                            <div class="flex items-center gap-4">
+                                <div class="relative shrink-0">
+                                    <div class="flex h-14 w-14 items-center justify-center rounded-3xl text-xl font-extrabold ring-4" :class="avatarClass(contact)">
+                                        {{ contactInitial(contact) }}
+                                    </div>
+                                    <span class="absolute -bottom-1 -left-1 h-3.5 w-3.5 rounded-full bg-emerald-500 ring-2 ring-white"></span>
+                                </div>
+                                <div
+                                    class="flex h-8 w-8 items-center justify-center rounded-full border-2 bg-white shadow-sm transition-all duration-300"
+                                    :class="isRowSelected(contact.id) ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-200 text-transparent group-hover:border-blue-300 group-hover:bg-blue-50'"
+                                    :aria-label="isRowSelected(contact.id) ? $t('Selected') : $t('Select contact')"
+                                >
+                                    <Check class="h-4 w-4" />
+                                </div>
+                            </div>
+
+                            <div class="min-w-0">
+                                <Link :href="`/contacts?id=${contact.uuid}`" class="block truncate text-lg font-extrabold tracking-tight text-slate-950 hover:text-primary" @click.stop>{{ contactName(contact) }}</Link>
+                                <div class="mt-1 flex flex-wrap items-center gap-2">
+                                    <span class="font-mono text-sm font-semibold text-slate-600" dir="ltr">{{ contactPhone(contact) }}</span>
+                                </div>
+                                <div class="mt-3 grid gap-2 lg:grid-cols-3">
+                                    <div>
+                                        <p class="mb-1 text-[11px] font-extrabold uppercase text-slate-400">{{ $t('Groups') }}</p>
+                                        <div class="flex flex-wrap gap-1.5">
+                                            <span v-for="groupName in visibleGroupNames(contact)" :key="`list-group-${contact.id}-${groupName}`" class="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
+                                                {{ groupName }}
+                                            </span>
+                                            <span v-if="remainingGroupCount(contact) > 0" class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">+{{ remainingGroupCount(contact) }}</span>
+                                            <span v-if="visibleGroupNames(contact).length === 0" class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-500">{{ $t('No Group') }}</span>
+                                        </div>
+                                    </div>
+                                    <div>
+                                        <p class="mb-1 text-[11px] font-extrabold uppercase text-slate-400">{{ $t('Labels') }}</p>
+                                        <div class="flex flex-wrap gap-1.5">
+                                            <span v-for="label in visibleLabels(contact)" :key="`list-label-${contact.id}-${label}`" class="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-bold text-sky-700">
+                                                {{ label }}
+                                            </span>
+                                            <span v-if="remainingLabelCount(contact) > 0" class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">+{{ remainingLabelCount(contact) }}</span>
+                                            <span v-if="visibleLabels(contact).length === 0" class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-500">{{ $t('No Labels') }}</span>
+                                        </div>
+                                    </div>
+                                    <div v-if="visibleCustomFields(contact).length > 0">
+                                        <p class="mb-1 text-[11px] font-extrabold uppercase text-slate-400">{{ $t('Custom Fields') }}</p>
+                                        <div class="flex flex-wrap gap-1.5">
+                                            <span v-for="field in visibleCustomFields(contact)" :key="`list-custom-${contact.id}-${field.key}`" class="max-w-full truncate rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">
+                                                {{ field.name }}: {{ field.value }}
+                                            </span>
+                                            <span v-if="remainingCustomFieldCount(contact) > 0" class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">+{{ remainingCustomFieldCount(contact) }}</span>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <button type="button" class="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 text-sm font-extrabold text-white transition-all duration-300 hover:bg-[#1fb85a]" @click.stop="openQuickWhatsapp(contact)">
+                                <MessageCircle class="h-4 w-4" />
+                                {{ $t('Quick WhatsApp') }}
+                            </button>
+                        </article>
+                    </div>
+
+                    <div v-else key="table" class="overflow-hidden rounded-[2rem] border border-slate-100 bg-white shadow-sm shadow-slate-200/70">
+                        <div class="overflow-x-auto">
+                            <table class="min-w-full divide-y divide-slate-100" :class="uiTextAlignmentClass">
+                                <thead class="bg-[#F8FAFC]">
+                                    <tr>
+                                        <th class="sticky right-0 z-10 w-14 bg-[#F8FAFC] px-4 py-4">
+                                            <input
+                                                ref="selectAllCheckboxRef"
+                                                type="checkbox"
+                                                class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                                                :checked="allOnPageSelected"
+                                                @change="toggleSelectAll"
+                                            >
+                                        </th>
+                                        <th v-for="column in visibleTableColumns" :key="`head-${column.key}`" class="whitespace-nowrap px-4 py-4 text-xs font-extrabold uppercase tracking-normal text-slate-500">
+                                            {{ $t(column.label) }}
+                                        </th>
+                                    </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-100 bg-white">
+                                    <tr
+                                        v-for="contact in rows.data"
+                                        :key="`table-${contact.id}`"
+                                        class="group cursor-pointer transition-all duration-300 hover:bg-slate-50/80"
+                                        :class="isRowSelected(contact.id) ? 'bg-blue-50/70' : ''"
+                                        @click="toggleRow(contact.id)"
+                                    >
+                                        <td class="sticky right-0 z-10 bg-inherit px-4 py-4">
+                                            <div class="flex h-8 w-8 items-center justify-center rounded-full border-2 bg-white shadow-sm transition-all duration-300" :class="isRowSelected(contact.id) ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-200 text-transparent group-hover:border-blue-300 group-hover:bg-blue-50'">
+                                                <Check class="h-4 w-4" />
+                                            </div>
+                                        </td>
+                                        <td v-for="column in visibleTableColumns" :key="`cell-${contact.id}-${column.key}`" class="whitespace-nowrap px-4 py-4 align-top text-sm">
+                                            <template v-if="column.key === 'name'">
+                                                <div class="flex items-center gap-3">
+                                                    <div class="relative shrink-0">
+                                                        <div class="flex h-11 w-11 items-center justify-center rounded-2xl text-base font-extrabold ring-2" :class="avatarClass(contact)">
+                                                            {{ contactInitial(contact) }}
+                                                        </div>
+                                                        <span class="absolute -bottom-0.5 -left-0.5 h-3 w-3 rounded-full bg-emerald-500 ring-2 ring-white"></span>
+                                                    </div>
+                                                    <Link :href="`/contacts?id=${contact.uuid}`" class="max-w-[14rem] truncate text-sm font-extrabold tracking-tight text-slate-950 hover:text-primary" @click.stop>
+                                                        {{ contactName(contact) }}
+                                                    </Link>
+                                                </div>
+                                            </template>
+                                            <template v-else-if="column.key === 'phone'">
+                                                <span class="font-mono font-semibold text-slate-600" dir="ltr">{{ contactPhone(contact) }}</span>
+                                            </template>
+                                            <template v-else-if="column.key === 'email'">
+                                                <span class="text-slate-600">{{ contact.email || '-' }}</span>
+                                            </template>
+                                            <template v-else-if="column.key === 'groups'">
+                                                <div class="flex max-w-[16rem] flex-wrap gap-1.5">
+                                                    <span v-for="groupName in visibleGroupNames(contact)" :key="`table-group-${contact.id}-${groupName}`" class="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
+                                                        {{ groupName }}
+                                                    </span>
+                                                    <span v-if="remainingGroupCount(contact) > 0" class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">+{{ remainingGroupCount(contact) }}</span>
+                                                    <span v-if="visibleGroupNames(contact).length === 0" class="text-xs font-bold text-slate-400">{{ $t('No Group') }}</span>
+                                                </div>
+                                            </template>
+                                            <template v-else-if="column.key === 'labels'">
+                                                <div class="flex max-w-[16rem] flex-wrap gap-1.5">
+                                                    <span v-for="label in visibleLabels(contact)" :key="`table-label-${contact.id}-${label}`" class="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-bold text-sky-700">
+                                                        {{ label }}
+                                                    </span>
+                                                    <span v-if="remainingLabelCount(contact) > 0" class="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">+{{ remainingLabelCount(contact) }}</span>
+                                                    <span v-if="visibleLabels(contact).length === 0" class="text-xs font-bold text-slate-400">{{ $t('No Labels') }}</span>
+                                                </div>
+                                            </template>
+                                            <template v-else-if="column.key === 'subscription'">
+                                                <span class="rounded-full px-3 py-1 text-xs font-bold" :class="contact.is_subscribed ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'">
+                                                    {{ contact.is_subscribed ? $t('Subscribed') : $t('Unsubscribed') }}
+                                                </span>
+                                            </template>
+                                            <template v-else-if="column.key === 'contact_source'">
+                                                <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
+                                                    {{ $t(String(contact.contact_source || 'platform').toLowerCase()) }}
+                                                </span>
+                                            </template>
+                                            <template v-else-if="column.key === 'country'">
+                                                <span class="text-slate-600">{{ contact.country || '-' }}</span>
+                                            </template>
+                                            <template v-else-if="column.key === 'created_at'">
+                                                <span class="text-slate-600">{{ formatDate(contact.created_at) }}</span>
+                                            </template>
+                                            <template v-else-if="column.isCustom">
+                                                <span class="block max-w-[16rem] truncate text-slate-600" dir="auto">{{ getCustomAttributeDisplay(contact, column.fieldName) }}</span>
+                                            </template>
+                                        </td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div v-if="visibleTableColumns.length === 0" class="border-t border-slate-100 p-6 text-center text-sm font-bold text-slate-500">
+                            {{ $t('Choose at least one column to display in the table.') }}
+                        </div>
+                    </div>
+                </Transition>
+
+                <div class="flex flex-col gap-3 rounded-[2rem] border border-white bg-white px-4 py-3 text-sm shadow-sm shadow-slate-200/70 sm:flex-row sm:items-center sm:justify-between">
+                    <p class="font-medium text-slate-500">{{ rows.meta?.from || 0 }}-{{ rows.meta?.to || 0 }} / {{ rows.meta?.total || 0 }}</p>
+                    <div class="flex items-center justify-between gap-2 sm:justify-end">
+                        <button type="button" class="inline-flex h-10 items-center gap-2 rounded-full border border-slate-200 px-4 font-bold text-slate-700 transition-all duration-300 disabled:opacity-40" :disabled="currentPage <= 1" @click="goToPage(currentPage - 1)">
+                            <ChevronRight class="h-4 w-4" />
+                            {{ $t('Previous') }}
+                        </button>
+                        <span class="rounded-full bg-[#F8FAFC] px-4 py-2 font-extrabold text-slate-700">{{ currentPage }} / {{ totalPages }}</span>
+                        <button type="button" class="inline-flex h-10 items-center gap-2 rounded-full border border-slate-200 px-4 font-bold text-slate-700 transition-all duration-300 disabled:opacity-40" :disabled="currentPage >= totalPages" @click="goToPage(currentPage + 1)">
+                            {{ $t('Next') }}
+                            <ChevronLeft class="h-4 w-4" />
+                        </button>
+                    </div>
+                </div>
+            </section>
+        </div>
+
+        <Transition
+            enter-active-class="transition duration-300 ease-out"
+            enter-from-class="translate-y-8 scale-95 opacity-0"
+            enter-to-class="translate-y-0 scale-100 opacity-100"
+            leave-active-class="transition duration-200 ease-in"
+            leave-from-class="translate-y-0 scale-100 opacity-100"
+            leave-to-class="translate-y-8 scale-95 opacity-0"
+        >
+            <div v-if="selectedCount > 0" class="fixed inset-x-0 bottom-5 z-50 flex justify-center px-4">
+                <div class="flex max-w-[min(96vw,1100px)] flex-wrap items-center justify-center gap-2 rounded-[2rem] border border-white/10 bg-slate-950/95 p-2 text-white shadow-2xl shadow-slate-400/50 backdrop-blur sm:rounded-full">
+                    <div class="flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm font-extrabold">
+                        <Check class="h-4 w-4 text-blue-300" />
+                        {{ selectedCount }} {{ $t('selected') }}
+                    </div>
+                    <span v-if="allFilteredSelected" class="hidden rounded-full bg-blue-500/15 px-3 py-2 text-xs font-bold text-blue-100 sm:inline-flex">{{ $t('All filtered results selected') }}</span>
+                    <button type="button" class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold text-white transition-all duration-300 hover:bg-white/10" @click="bulkActionModal = 'add_label'">
+                        <Tags class="h-4 w-4" />
+                        {{ $t('Add Labels') }}
+                    </button>
+                    <button type="button" class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold text-white transition-all duration-300 hover:bg-white/10" @click="bulkActionModal = 'remove_label'">
+                        <Minus class="h-4 w-4 text-sky-300" />
+                        {{ $t('Remove Labels') }}
+                    </button>
+                    <button type="button" class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold text-white transition-all duration-300 hover:bg-white/10" @click="bulkActionModal = 'add_group'">
+                        <Users class="h-4 w-4 text-emerald-300" />
+                        {{ $t('Add Group') }}
+                    </button>
+                    <button type="button" class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold text-white transition-all duration-300 hover:bg-white/10" @click="bulkActionModal = 'remove_group'">
+                        <Minus class="h-4 w-4 text-emerald-300" />
+                        {{ $t('Remove Group') }}
+                    </button>
+                    <button type="button" class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold text-white transition-all duration-300 hover:bg-white/10" @click="bulkActionModal = 'change_subscription_status'">
+                        <Check class="h-4 w-4 text-amber-300" />
+                        {{ $t('Change Subscription') }}
+                    </button>
+
+                    <button v-if="role !== 'agent'" type="button" class="inline-flex items-center gap-2 rounded-full bg-rose-500 px-4 py-2 text-sm font-bold text-white transition-all duration-300 hover:bg-rose-600" @click="runBulkDelete">
+                        <Trash2 class="h-4 w-4" />
+                        {{ $t('Delete') }}
+                    </button>
+                    <button type="button" class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-bold text-slate-200 transition-all duration-300 hover:bg-white/10" @click="runExport">
+                        <Download class="h-4 w-4" />
+                        {{ $t('Export Selected') }}
+                    </button>
+                    <button type="button" class="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-slate-200 transition-all duration-300 hover:bg-white/20" :aria-label="$t('Clear Selection')" @click="clearSelectionAndFilters">
+                        <X class="h-4 w-4" />
+                    </button>
                 </div>
             </div>
-        </div>
+        </Transition>
     </div>
 
     <Modal :label="$t('Advanced Filters')" :isOpen="isFilterModalOpen" :closeBtn="true" @close="isFilterModalOpen = false">
@@ -1166,6 +1594,9 @@ const onImportCompleted = () => {
                         <span class="truncate">{{ group.name }}</span>
                         <span v-if="query.group_ids.includes(String(group.id))" class="ml-2 text-xs">{{ $t('Selected') }}</span>
                     </button>
+                    <span class="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
+                        {{ groupContactsCount(group) }}
+                    </span>
                     <button
                         type="button"
                         class="rounded-md border border-rose-200 px-2 py-1 text-xs text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
