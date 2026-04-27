@@ -86,6 +86,9 @@ const createGroupForm = reactive({ name: '' });
 const isCreatingGroup = ref(false);
 const createGroupError = ref('');
 const deletingGroupUuid = ref('');
+const selectedGroupUuidsForDeletion = ref([]);
+const isDeletingGroups = ref(false);
+const selectedGroupDeletionCount = computed(() => selectedGroupUuidsForDeletion.value.length);
 
 const defaultColumns = {
     name: true,
@@ -433,6 +436,16 @@ const clearGroupFilterSelection = () => {
     query.group_ids = [];
 };
 
+const clearGroupDeletionSelection = () => {
+    selectedGroupUuidsForDeletion.value = [];
+};
+
+const selectAllGroupsForDeletion = () => {
+    selectedGroupUuidsForDeletion.value = groups.value
+        .map((group) => String(group.uuid || ''))
+        .filter(Boolean);
+};
+
 const toggleGroupFilterSelection = (groupId) => {
     const value = String(groupId);
     if (query.group_ids.includes(value)) {
@@ -441,6 +454,20 @@ const toggleGroupFilterSelection = (groupId) => {
     }
 
     query.group_ids = [...query.group_ids, value];
+};
+
+const toggleGroupDeletionSelection = (groupUuid) => {
+    const value = String(groupUuid || '');
+    if (!value) {
+        return;
+    }
+
+    if (selectedGroupUuidsForDeletion.value.includes(value)) {
+        selectedGroupUuidsForDeletion.value = selectedGroupUuidsForDeletion.value.filter((uuid) => uuid !== value);
+        return;
+    }
+
+    selectedGroupUuidsForDeletion.value = [...selectedGroupUuidsForDeletion.value, value];
 };
 
 const applyGroupFilters = () => {
@@ -539,6 +566,7 @@ const deleteGroup = async (group) => {
 
         groups.value = groups.value.filter((item) => String(item.uuid) !== String(group.uuid));
         bulkForm.group_ids = bulkForm.group_ids.filter((id) => Number(id) !== Number(group.id));
+        selectedGroupUuidsForDeletion.value = selectedGroupUuidsForDeletion.value.filter((uuid) => uuid !== String(group.uuid));
 
         if (query.group_ids.includes(String(group.id))) {
             query.group_ids = query.group_ids.filter((id) => id !== String(group.id));
@@ -549,6 +577,52 @@ const deleteGroup = async (group) => {
         createGroupError.value = error?.response?.data?.message || 'Failed to delete group.';
     } finally {
         deletingGroupUuid.value = '';
+    }
+};
+
+const deleteSelectedGroups = async () => {
+    const uuids = selectedGroupUuidsForDeletion.value.filter(Boolean);
+    if (!uuids.length) {
+        return;
+    }
+
+    if (!confirm(`Delete ${uuids.length} selected groups?`)) {
+        return;
+    }
+
+    createGroupError.value = '';
+    isDeletingGroups.value = true;
+
+    try {
+        await axios.delete('/contact-groups', {
+            data: { uuids },
+            headers: {
+                Accept: 'application/json',
+                'X-Requested-With': 'XMLHttpRequest',
+            },
+        });
+
+        const deletedUuidSet = new Set(uuids.map((uuid) => String(uuid)));
+        const deletedIdSet = new Set(
+            groups.value
+                .filter((group) => deletedUuidSet.has(String(group.uuid)))
+                .map((group) => String(group.id))
+        );
+
+        groups.value = groups.value.filter((group) => !deletedUuidSet.has(String(group.uuid)));
+        bulkForm.group_ids = bulkForm.group_ids.filter((id) => !deletedIdSet.has(String(id)));
+        selectedGroupUuidsForDeletion.value = [];
+
+        const previousGroupFilterCount = query.group_ids.length;
+        query.group_ids = query.group_ids.filter((id) => !deletedIdSet.has(String(id)));
+        if (query.group_ids.length !== previousGroupFilterCount) {
+            query.page = 1;
+            runFilterRequest({ page: undefined });
+        }
+    } catch (error) {
+        createGroupError.value = error?.response?.data?.message || 'Failed to delete selected groups.';
+    } finally {
+        isDeletingGroups.value = false;
     }
 };
 
@@ -1045,6 +1119,25 @@ const onImportCompleted = () => {
                 <p v-if="createGroupError" class="mt-2 text-xs text-rose-600">{{ createGroupError }}</p>
             </div>
 
+            <div v-if="groups.length" class="mt-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                <div class="flex flex-wrap items-center justify-between gap-2">
+                    <span class="text-xs text-slate-600">
+                        {{ $t('Selected for deletion') }}: {{ selectedGroupDeletionCount }}
+                    </span>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button type="button" class="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-700 disabled:cursor-not-allowed disabled:opacity-60" :disabled="isDeletingGroups" @click="selectAllGroupsForDeletion">
+                            {{ $t('Select All') }}
+                        </button>
+                        <button type="button" class="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-700 disabled:cursor-not-allowed disabled:opacity-60" :disabled="isDeletingGroups || !selectedGroupDeletionCount" @click="clearGroupDeletionSelection">
+                            {{ $t('Clear') }}
+                        </button>
+                        <button type="button" class="rounded-md border border-rose-200 bg-white px-2.5 py-1 text-xs text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60" :disabled="isDeletingGroups || !selectedGroupDeletionCount" @click="deleteSelectedGroups">
+                            {{ isDeletingGroups ? $t('Deleting...') : $t('Delete Selected') }}
+                        </button>
+                    </div>
+                </div>
+            </div>
+
             <div class="mt-2 flex-1 space-y-2 overflow-y-auto pr-1">
                 <button
                     type="button"
@@ -1062,6 +1155,13 @@ const onImportCompleted = () => {
                     class="flex w-full items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm"
                     :class="query.group_ids.includes(String(group.id)) ? 'border-primary bg-primary/5 text-primary' : 'border-slate-300 text-slate-700'"
                 >
+                    <input
+                        type="checkbox"
+                        class="h-4 w-4 shrink-0 rounded border-slate-300 text-primary focus:ring-primary"
+                        :checked="selectedGroupUuidsForDeletion.includes(String(group.uuid))"
+                        :aria-label="`${$t('Select')} ${group.name}`"
+                        @change="toggleGroupDeletionSelection(group.uuid)"
+                    >
                     <button type="button" class="min-w-0 flex-1 text-left" @click="toggleGroupFilterSelection(group.id)">
                         <span class="truncate">{{ group.name }}</span>
                         <span v-if="query.group_ids.includes(String(group.id))" class="ml-2 text-xs">{{ $t('Selected') }}</span>
