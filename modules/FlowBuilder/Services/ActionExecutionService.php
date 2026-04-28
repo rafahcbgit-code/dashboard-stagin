@@ -402,27 +402,22 @@ class ActionExecutionService
     }
 
     /**
-     * Execute AI response action
+     * Execute AI response action.
+     * Uses org's KB automatically. Confidence threshold fixed at 0.75.
+     * If confident: send answer, flow continues. If not: send low_confidence_message, flow pauses.
      */
     private function executeAIResponse($config, $contact, $userMessage, $flowData = null)
     {
-        $customPrompt = $config['prompt'] ?? '';
-        $proceedCondition = $config['proceed_condition'] ?? 'always';
-        $confidenceThreshold = (float) ($config['confidence_threshold'] ?? 0.8);
         $lowConfidenceMessage = $config['low_confidence_message'] ?? '';
-
-        // Replace placeholders in custom prompt
-        if ($customPrompt) {
-            $customPrompt = $this->replacePlaceholders($contact, $customPrompt, $flowData);
-        }
+        $confidenceThreshold = 0.75;
 
         try {
-            // 1. Get KB context
+            // 1. Get KB context (auto from org)
             $kbService = new \App\Services\AiKnowledgeBaseService();
             $kbContext = $kbService->getEnabledForContext($this->organizationId);
 
-            // 2. Build system prompt with KB context + optional custom instructions
-            $systemPrompt = $this->buildAiSystemPrompt($kbContext, $customPrompt);
+            // 2. Build system prompt with KB context
+            $systemPrompt = $this->buildAiSystemPrompt($kbContext);
 
             // 3. Call AI
             $aiService = new \App\Services\AiService();
@@ -456,21 +451,26 @@ class ActionExecutionService
                 Log::info("AI response action: AI returned NONE, no answer available", [
                     'contact_id' => $contact->id,
                 ]);
+
+                if (!empty($lowConfidenceMessage)) {
+                    $lowConfidenceMessage = $this->replacePlaceholders($contact, $lowConfidenceMessage, $flowData);
+                    $this->whatsappService->sendMessage($contact->uuid, $lowConfidenceMessage);
+                }
+
                 return false;
             }
 
             // 5. Send the AI answer via WhatsApp
             $this->whatsappService->sendMessage($contact->uuid, $answer);
 
-            // 6. Check confidence threshold (if configured)
-            if ($proceedCondition === 'confidence_threshold' && $confidence < $confidenceThreshold) {
+            // 6. Check confidence threshold
+            if ($confidence < $confidenceThreshold) {
                 Log::info("AI response action: confidence below threshold, pausing flow", [
                     'contact_id' => $contact->id,
                     'confidence' => $confidence,
                     'threshold' => $confidenceThreshold,
                 ]);
 
-                // Send low confidence message if configured
                 if (!empty($lowConfidenceMessage)) {
                     $lowConfidenceMessage = $this->replacePlaceholders($contact, $lowConfidenceMessage, $flowData);
                     $this->whatsappService->sendMessage($contact->uuid, $lowConfidenceMessage);
@@ -493,11 +493,11 @@ class ActionExecutionService
 
     /**
      * Build the system prompt for AI response action.
-     * Same structured JSON format as AiFallbackService, with optional custom instructions.
+     * Same structured JSON format as AiFallbackService.
      */
-    private function buildAiSystemPrompt(string $kbContext, string $customInstructions = ''): string
+    private function buildAiSystemPrompt(string $kbContext): string
     {
-        $prompt = "You are a customer support assistant. Answer the user's question using ONLY the information from the knowledge base below.\n\n"
+        return "You are a customer support assistant. Answer the user's question using ONLY the information from the knowledge base below.\n\n"
             . "RULES:\n"
             . "- You MUST respond with valid JSON in this exact format:\n"
             . '  {"answer": "your answer here", "confidence": 0.0_to_1.0}' . "\n"
@@ -508,15 +508,8 @@ class ActionExecutionService
             . "- Never guess or infer answers not explicitly in the knowledge base.\n"
             . "- Keep answers under 3 sentences.\n"
             . "- Respond in the same language as the user's message.\n"
-            . "- Do not mention the knowledge base or that you are an AI.\n";
-
-        if (!empty($customInstructions)) {
-            $prompt .= "\nADDITIONAL INSTRUCTIONS:\n" . $customInstructions . "\n";
-        }
-
-        $prompt .= "\nKNOWLEDGE BASE:\n" . $kbContext;
-
-        return $prompt;
+            . "- Do not mention the knowledge base or that you are an AI.\n\n"
+            . "KNOWLEDGE BASE:\n" . $kbContext;
     }
 
     /**

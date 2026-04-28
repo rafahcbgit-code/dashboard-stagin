@@ -168,10 +168,7 @@ const getDefaultConfig = (actionType: string) => {
     case 'webhook':
       return { url: '', method: 'POST', headers: [], body: '', response_mapping: [] }
     case 'ai_response':
-      return { 
-        prompt: '',
-        proceed_condition: 'always',
-        confidence_threshold: 0.8,
+      return {
         low_confidence_message: ''
       }
     case 'conditional':

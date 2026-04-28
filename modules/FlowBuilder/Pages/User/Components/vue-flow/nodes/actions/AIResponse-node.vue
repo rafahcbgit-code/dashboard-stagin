@@ -16,7 +16,7 @@
             </svg>
           </div>
           <div>
-            <h3 class="font-medium text-gray-900 text-sm">{{ actionName }}</h3>
+            <h3 class="font-medium text-gray-900 text-sm">AI Response</h3>
           </div>
         </div>
         <div class="flex items-center gap-1 ml-auto">
@@ -43,16 +43,16 @@
           </button>
         </div>
       </div>
+
       <div class="text-xs text-gray-600 mb-2">
-        <span class="font-medium">Prompt:</span> {{ config.prompt ? (config.prompt.substring(0, 30) + (config.prompt.length > 30 ? '...' : '')) : 'No prompt set' }}
-        <div v-if="config.proceed_condition === 'confidence_threshold'" class="text-xs text-gray-500 mt-1">
-          Confidence: {{ (config.confidence_threshold || 0.8) * 100 }}%
-        </div>
+        <span class="font-medium">Knowledge Base Q&A</span>
+        <span class="text-gray-400 ml-1">(auto from org settings)</span>
       </div>
+
       <div class="flex items-center justify-between text-xs">
         <span class="text-gray-500">Action</span>
         <div class="flex items-center gap-1">
-          <span 
+          <span
             :class="isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'"
             class="px-2 py-1 rounded-full text-xs"
           >
@@ -61,16 +61,20 @@
         </div>
       </div>
     </div>
+
     <Handle
       type="source"
       :position="Position.Bottom"
       class="w-3 h-3 !bg-teal-500"
     />
+
+    <!-- Edit Modal -->
     <div v-if="showEditModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div class="bg-white rounded-lg max-w-md w-full mx-4 max-h-[80vh] overflow-y-auto">
         <div class="px-6 py-4 border-b border-gray-200">
           <h3 class="text-lg font-semibold text-gray-900">Edit AI Response Action</h3>
         </div>
+
         <form @submit.prevent="saveAction" class="p-6">
           <div class="space-y-4">
             <div>
@@ -78,80 +82,29 @@
               <div class="space-y-3">
                 <div>
                   <FormTextArea
-                    v-model="editForm.config.prompt"
-                    name="AI Prompt"
-                    rows="4"
-                    placeholder="Enter the prompt for AI response... (optional)"
+                    v-model="editForm.config.low_confidence_message"
+                    name="Low Confidence Message"
+                    rows="3"
+                    placeholder="I'm not sure about that. Let me connect you with someone who can help."
                   />
                   <p class="text-xs text-gray-500 mt-1">
-                    Leave empty to use default AI behavior, or add specific instructions for the AI.
+                    Message sent when AI can't answer confidently. Leave empty to just pause the flow.
                   </p>
                 </div>
-                <div>
-                  <FormSelect
-                    v-model="editForm.config.proceed_condition"
-                    name="Proceed Condition"
-                    :options="[
-                      { value: 'always', label: 'Always Proceed' },
-                      { value: 'confidence_threshold', label: 'Wait for High Confidence' }
-                    ]"
-                    required
-                  />
-                </div>
-                <div v-if="editForm.config.proceed_condition === 'confidence_threshold'" class="space-y-3">
-                  <div>
-                    <FormInput
-                      v-model="editForm.config.confidence_threshold"
-                      name="Confidence Threshold"
-                      type="number"
-                      min="0.1"
-                      max="1"
-                      step="0.1"
-                      placeholder="0.8"
-                      required
-                    />
-                    <p class="text-xs text-gray-500 mt-1">
-                      Set between 0.1 (10%) and 1.0 (100%). Higher values require more confident AI responses.
-                    </p>
-                  </div>
-                  <div>
-                    <FormTextArea
-                      v-model="editForm.config.low_confidence_message"
-                      name="Low Confidence Message"
-                      rows="2"
-                      placeholder="I'm not confident about my response. Could you rephrase your question?"
-                    />
-                    <p class="text-xs text-gray-500 mt-1">
-                      Message sent when AI confidence is below the threshold. Leave empty for default message.
-                    </p>
-                  </div>
-                </div>
+
                 <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
                   <p class="text-sm font-medium text-blue-800 mb-3">
-                    How AI Response Flow Works:
+                    How AI Response Works:
                   </p>
-                  <div class="space-y-3 text-sm text-blue-700">
-                    <div>
-                      <p class="font-medium">Always Proceed:</p>
-                      <p class="text-xs">AI sends response and flow immediately continues to next node.</p>
-                    </div>
-                    <div v-if="editForm.config.proceed_condition === 'confidence_threshold'">
-                      <p class="font-medium">Wait for High Confidence:</p>
-                      <div class="text-xs space-y-2">
-                        <p>• AI generates response and calculates confidence (0-100%)</p>
-                        <p>• If confidence ≥ {{ (editForm.config.confidence_threshold || 0.8) * 100 }}%: Send response and continue</p>
-                        <p>• If confidence < {{ (editForm.config.confidence_threshold || 0.8) * 100 }}%: Send fallback message and wait for user input</p>
-                        <p>• AI keeps trying until it reaches the confidence threshold</p>
-                      </div>
-                    </div>
-                    <div v-else>
-                      <p class="font-medium">Wait for High Confidence:</p>
-                      <p class="text-xs">AI only proceeds when response confidence meets your threshold. Keeps conversing until confident.</p>
-                    </div>
+                  <div class="space-y-2 text-sm text-blue-700">
+                    <p class="text-xs">AI answers from your organization's knowledge base automatically.</p>
+                    <p class="text-xs">If AI is confident (75%+): sends answer, flow continues.</p>
+                    <p class="text-xs">If AI is not confident: sends the message above (if set), flow pauses and waits for user to respond again.</p>
                   </div>
                 </div>
               </div>
             </div>
+
             <div class="flex items-center">
               <FormCheckbox
                 v-model="editForm.is_active"
@@ -160,15 +113,16 @@
               />
             </div>
           </div>
+
           <div class="flex justify-end space-x-3 mt-6">
-            <button 
+            <button
               type="button"
               @click="closeEditModal"
               class="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
             >
               Cancel
             </button>
-            <button 
+            <button
               type="submit"
               class="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
             >
@@ -180,49 +134,45 @@
     </div>
   </div>
 </template>
+
 <script setup>
-import { ref, reactive, computed, onMounted } from 'vue'
+import { ref, reactive, computed } from 'vue'
 import { Handle, Position, useVueFlow, useNode } from '@vue-flow/core'
-import FormSelect from '../../../../../../../../resources/js/Components/FormSelect.vue'
 import FormCheckbox from '../../../../../../../../resources/js/Components/FormCheckbox.vue'
-import FormInput from '../../../../../../../../resources/js/Components/FormInput.vue'
 import FormTextArea from '../../../../../../../../resources/js/Components/FormTextArea.vue'
+
 const props = defineProps({
   id: String,
   data: Object,
   selected: Boolean,
 })
+
 const { removeNodes } = useVueFlow()
 const node = useNode()
+
 const config = computed(() => props.data?.config || {})
 const isActive = computed(() => props.data?.is_active !== false)
+
 const showEditModal = ref(false)
-const actionName = computed(() => {
-  const actionConfig = config.value
-  if (actionConfig.proceed_condition === 'confidence_threshold') {
-    const threshold = (actionConfig.confidence_threshold || 0.8) * 100
-    return `AI Response (${threshold}% confidence)`
-  }
-  return actionConfig.prompt ? `AI Response: ${actionConfig.prompt.substring(0, 30)}${actionConfig.prompt.length > 30 ? '...' : ''}` : 'AI Response'
-})
+
 const editForm = reactive({
   config: {},
   is_active: true
 })
+
 const toggleEdit = () => {
   const currentConfig = config.value || {}
   editForm.config = {
-    prompt: currentConfig.prompt || '',
-    proceed_condition: currentConfig.proceed_condition || 'always',
-    confidence_threshold: currentConfig.confidence_threshold || 0.8,
     low_confidence_message: currentConfig.low_confidence_message || ''
   }
   editForm.is_active = isActive.value
   showEditModal.value = true
 }
+
 const closeEditModal = () => {
   showEditModal.value = false
 }
+
 const saveAction = () => {
   node.node.data = {
     ...node.node.data,
@@ -232,20 +182,20 @@ const saveAction = () => {
   }
   closeEditModal()
 }
+
 const deleteNode = () => {
   if (confirm('Are you sure you want to delete this action?')) {
     removeNodes([props.id])
   }
 }
-onMounted(() => {
-  // Node data loaded
-})
 </script>
+
 <style scoped>
 .ai-response-node {
   position: relative;
 }
+
 .ai-response-node:hover {
   z-index: 10;
 }
-</style> 
+</style>
