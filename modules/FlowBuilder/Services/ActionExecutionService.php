@@ -261,13 +261,18 @@ class ActionExecutionService
                 'mail.mailers.smtp.encryption' => $smtpEncryption,
             ]);
 
+            // Purge cached SMTP transport so new config takes effect
+            app('mail.manager')->purge('smtp');
+
             Mail::raw($body, function ($message) use ($contact, $subject, $fromName, $fromEmail) {
                 $message->to($contact->email)
                         ->subject($subject)
                         ->from($fromEmail, $fromName);
             });
 
-            // Log::info("Email sent to {$contact->email}: {$subject}");
+            // Purge again so global config is used for subsequent emails
+            app('mail.manager')->purge('smtp');
+
             return true;
         } catch (\Exception $e) {
             Log::error("Failed to send email: " . $e->getMessage());

@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\ChatTicket;
 use App\Models\Organization;
 use App\Models\User;
+use App\Jobs\SendAssignmentEmailJob;
 use App\Services\RateLimitService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -245,16 +246,26 @@ class AgentRoutingService
             return;
         }
 
+        // FCM push notification
         try {
             $notificationService = new ApiNotificationService();
             $notificationService->sendAssignmentNotification(
                 $contactId,
                 $agentId,
-                0, // System-assigned, not by a specific user
+                0,
                 $organizationId
             );
         } catch (\Throwable $e) {
-            Log::error('AgentRoutingService: Notification failed', [
+            Log::error('AgentRoutingService: Push notification failed', [
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        // Email notification (queued, non-blocking)
+        try {
+            SendAssignmentEmailJob::dispatch($organizationId, $agentId, $contactId);
+        } catch (\Throwable $e) {
+            Log::error('AgentRoutingService: Email job dispatch failed', [
                 'error' => $e->getMessage(),
             ]);
         }

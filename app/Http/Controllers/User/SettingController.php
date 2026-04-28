@@ -906,7 +906,7 @@ public function campaign(Request $request)
     }
 
     private function syncAssignedAgents($organizationId, array $selectedAgents)
-    { 
+    {
         DB::table('assigned_agents')
             ->where('organization_id', $organizationId)
             ->delete();
@@ -926,5 +926,61 @@ public function campaign(Request $request)
         if (!empty($data)) {
             DB::table('assigned_agents')->insert($data);
         }
+    }
+
+    public function emailSettings(Request $request)
+    {
+        $settings = Organization::where('id', session()->get('current_organization'))->first();
+
+        return Inertia::render('User/Settings/Email', [
+            'title' => __('Settings'),
+            'settings' => $settings,
+            'modules' => Addon::get(),
+        ]);
+    }
+
+    public function updateEmailSettings(Request $request)
+    {
+        $currentOrganizationId = session()->get('current_organization');
+        $organizationConfig = Organization::where('id', $currentOrganizationId)->first();
+        $metadataArray = $organizationConfig->metadata ? json_decode($organizationConfig->metadata, true) : [];
+
+        $metadataArray['email_settings'] = [
+            'active' => $request->input('active', false),
+            'host' => $request->input('host', ''),
+            'port' => (int) $request->input('port', 587),
+            'username' => $request->input('username', ''),
+            'password' => $request->input('password', ''),
+            'encryption' => $request->input('encryption', 'tls'),
+            'from_name' => $request->input('from_name', ''),
+            'from_address' => $request->input('from_address', ''),
+        ];
+
+        // Keep existing password if new one is empty
+        if (empty($metadataArray['email_settings']['password']) && !empty($organizationConfig->metadata)) {
+            $existing = json_decode($organizationConfig->metadata, true);
+            if (!empty($existing['email_settings']['password'])) {
+                $metadataArray['email_settings']['password'] = $existing['email_settings']['password'];
+            }
+        }
+
+        $organizationConfig->metadata = json_encode($metadataArray);
+        $organizationConfig->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => __('Email settings saved successfully'),
+        ]);
+    }
+
+    public function testEmailSettings(Request $request)
+    {
+        $organizationId = session()->get('current_organization');
+        $user = $request->user();
+
+        $mailService = new \App\Services\OrganizationMailConfigService();
+        $result = $mailService->sendTestEmail($organizationId, $user->email);
+
+        return response()->json($result);
     }
 }

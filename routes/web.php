@@ -420,6 +420,13 @@ Route::middleware(['auth:user'])->group(function () {
                     Route::match(['get', 'post'], '/settings/contacts', [App\Http\Controllers\User\SettingController::class, 'contacts']);
                     Route::match(['get', 'post'], '/settings/tickets', [App\Http\Controllers\User\SettingController::class, 'tickets']);
                     Route::match(['get', 'post'], '/settings/automation', [App\Http\Controllers\User\SettingController::class, 'automation']);
+                    Route::get('/settings/notifications', [App\Http\Controllers\User\SettingController::class, 'emailSettings']);
+                    Route::post('/settings/notifications/email', [App\Http\Controllers\User\SettingController::class, 'updateEmailSettings']);
+                    Route::post('/settings/notifications/email/test', [App\Http\Controllers\User\SettingController::class, 'testEmailSettings']);
+                    Route::get('/notifications', [App\Http\Controllers\User\NotificationController::class, 'index']);
+                    Route::get('/notifications/unread-count', [App\Http\Controllers\User\NotificationController::class, 'unreadCount']);
+                    Route::post('/notifications/{id}/click', [App\Http\Controllers\User\NotificationController::class, 'markClicked']);
+                    Route::post('/notifications/mark-all-read', [App\Http\Controllers\User\NotificationController::class, 'markAllRead']);
                     Route::resource('contact-fields', App\Http\Controllers\User\ContactFieldController::class);
                     Route::post('/contact-fields/update-positions', [App\Http\Controllers\User\ContactFieldController::class, 'updatePositions']);
 

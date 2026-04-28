@@ -136,6 +136,17 @@
                             </Link>
                         </li>
                         <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-1 truncate cursor-pointer"
+                            :class="$page.url.startsWith('/settings/notifications') ? 'bg-slate-50 text-black' : ''">
+                            <Link rel="noopener noreferrer" href="/settings/notifications"
+                                class="flex items-center p-2 space-s-3 rounded-md">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+                                    <path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                                    <polyline fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" points="22,6 12,13 2,6" />
+                                </svg>
+                                <span>{{ $t('Notifications') }}</span>
+                            </Link>
+                        </li>
+                        <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-1 truncate cursor-pointer"
                             :class="$page.url.startsWith('/settings/plugins') ? 'bg-slate-50 text-black' : ''">
                             <Link rel="noopener noreferrer" href="/settings/plugins"
                                 class="flex items-center p-2 space-s-3 rounded-md">

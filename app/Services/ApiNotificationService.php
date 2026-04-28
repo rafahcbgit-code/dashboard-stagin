@@ -78,6 +78,7 @@ class ApiNotificationService
                     'organization_id' => (string) $organizationId,
                     'unread_count' => (string) $unreadCount,
                     'click_action' => 'OPEN_CHAT',
+                    'message' => "New message from {$contactName}",
                 ];
 
                 // Send FCM notification
@@ -136,6 +137,7 @@ class ApiNotificationService
                 'assigned_by' => $assignerName,
                 'organization_id' => (string) $organizationId,
                 'click_action' => 'OPEN_CHAT',
+                'message' => "New conversation from {$contactName} assigned to you",
             ];
 
             // Send FCM notification
