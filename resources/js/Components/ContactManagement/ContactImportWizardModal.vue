@@ -3,6 +3,7 @@ import { computed, reactive, ref, watch } from 'vue';
 import axios from 'axios';
 import { useI18n } from 'vue-i18n';
 import Modal from '@/Components/Modal.vue';
+import fallbackCountryDialCodes from '@/Data/countryDialCodes.json';
 
 const props = defineProps({
     modelValue: { type: Boolean, default: false },
@@ -42,7 +43,7 @@ const mapping = reactive({
     custom_attributes: {},
 });
 
-const defaultCountryCode = ref('+966');
+const defaultCountryCode = ref('');
 const normalizationApplied = ref(false);
 const groupForm = reactive({
     assignment_mode: 'all_selected',
@@ -79,6 +80,25 @@ const rawReport = computed(() => batch.value?.report || null);
 const isImportCompleted = computed(() => batch.value?.status === 'committed' || Boolean(rawReport.value?.executed_at));
 const report = computed(() => (isImportCompleted.value ? rawReport.value : null));
 const invalidRowsReportUrl = computed(() => (batch.value?.uuid ? `/contacts/import/${batch.value.uuid}/invalid-report.csv` : '#'));
+const requiresDefaultCountryCode = computed(() => (
+    Boolean(batch.value?.requires_default_country_code) || previewRowsNeedDefaultCountryCode.value
+) && !normalizationApplied.value);
+const previewRowsNeedDefaultCountryCode = computed(() => rows.value.some((row) => rowNeedsDefaultCountryCode(row)));
+const countryCodeOptions = computed(() => {
+    const options = Array.isArray(props.countries) && props.countries.length > 0
+        ? props.countries
+        : fallbackCountryDialCodes;
+
+    return options
+        .map((country) => {
+            const dialCode = country?.dial_code || (country?.value ? `+${String(country.value).replace(/^\+/, '')}` : '');
+            return {
+                value: dialCode,
+                label: country?.label || `${country?.country || country?.name || dialCode} (${dialCode})`,
+            };
+        })
+        .filter((country) => country.value);
+});
 
 watch(
     () => props.modelValue,
@@ -121,7 +141,7 @@ const resetWizard = () => {
     rowsMeta.last_page = 1;
     rowsMeta.per_page = 10;
     rowsMeta.total = 0;
-    defaultCountryCode.value = '+966';
+    defaultCountryCode.value = '';
     normalizationApplied.value = false;
     groupForm.group_ids = [];
     groupForm.new_group_name = '';
@@ -243,7 +263,11 @@ const mapColumns = async () => {
         applyRowsPayload(data.rows);
         wizardStep.value = 3;
         normalizationApplied.value = false;
-        await normalizeRows();
+        if (requiresDefaultCountryCode.value) {
+            successMessage.value = t('Local phone numbers were detected. Choose a default country code before checking numbers.');
+        } else {
+            await normalizeRows();
+        }
     } catch (error) {
         errorMessage.value = error?.response?.data?.message || t('Failed to save mapping.');
     } finally {
@@ -261,7 +285,7 @@ const normalizeRows = async () => {
 
     try {
         const { data } = await axios.post(`/contacts/import/${batch.value.uuid}/normalize`, {
-            default_country_code: defaultCountryCode.value,
+            default_country_code: defaultCountryCode.value || '',
         });
         batch.value = data.batch;
         batch.value.requires_default_country_code = false;
@@ -277,6 +301,27 @@ const normalizeRows = async () => {
     } finally {
         busy.value = false;
     }
+};
+
+const rowNeedsDefaultCountryCode = (row) => {
+    const phoneColumn = mapping.phone;
+    const rawData = row?.raw_data || {};
+    const mappedData = row?.mapped_data || {};
+    const rawPhone = phoneColumn && Object.prototype.hasOwnProperty.call(rawData, phoneColumn)
+        ? rawData[phoneColumn]
+        : mappedData.phone;
+
+    let phone = String(rawPhone ?? '').trim();
+    if (phone === '') {
+        return false;
+    }
+
+    phone = phone.replace(/^[=\s]+/, '').replace(/[^\d+]/g, '');
+    if (phone === '' || phone.startsWith('+') || phone.startsWith('00')) {
+        return false;
+    }
+
+    return /^\d{4,9}$/.test(phone);
 };
 
 const openEdit = (row) => {
@@ -560,6 +605,32 @@ const goToPreviousStep = () => {
             </div>
 
             <div v-if="wizardStep === 3" class="space-y-4">
+                <div v-if="requiresDefaultCountryCode" class="rounded-xl border border-amber-200 bg-amber-50 p-3">
+                    <p class="text-sm font-semibold text-amber-900">{{ $t('Default country code required') }}</p>
+                    <p class="mt-1 text-xs text-amber-800">
+                        {{ $t('Some phone numbers do not include a country code. Choose the default country code that should be applied only to those local numbers.') }}
+                    </p>
+                    <div class="mt-3 grid grid-cols-1 gap-2 md:grid-cols-[1fr_auto]">
+                        <select
+                            v-model="defaultCountryCode"
+                            class="h-11 rounded-md border border-amber-300 bg-white px-3 text-sm text-slate-800 outline-none ring-amber-200 transition focus:border-amber-500 focus:ring"
+                        >
+                            <option value="">{{ $t('Select country code') }}</option>
+                            <option v-for="country in countryCodeOptions" :key="`default-country-${country.value}-${country.label}`" :value="country.value">
+                                {{ country.label }}
+                            </option>
+                        </select>
+                        <button
+                            type="button"
+                            class="inline-flex h-11 items-center justify-center rounded-md bg-primary px-4 text-sm font-medium text-white transition hover:bg-primary/90 disabled:cursor-not-allowed disabled:opacity-60"
+                            :disabled="busy || !defaultCountryCode"
+                            @click="normalizeRows"
+                        >
+                            {{ busy ? $t('Checking...') : $t('Check numbers') }}
+                        </button>
+                    </div>
+                </div>
+
                 <div v-if="busy && !normalizationApplied" class="rounded-md border border-slate-200 bg-slate-50 px-3 py-3">
                     <div class="flex items-center gap-2 text-sm text-slate-700">
                         <svg class="h-4 w-4 animate-spin text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">

@@ -1015,6 +1015,7 @@ class ContactImportService
         }
 
         $phone = $this->convertEasternArabicDigitsToAscii($phone);
+        $phone = ltrim($phone, "=\t\n\r\0\x0B ");
 
         $phone = preg_replace('/[^\d+]/u', '', $phone) ?: '';
         if ($phone === '') {
@@ -1030,10 +1031,12 @@ class ContactImportService
             return $phone;
         }
 
-        // If the number looks international already but without "+", keep it as such.
-        $candidateInternational = '+' . ltrim($phone, '+');
-        if (PhoneService::getE164FormatForImport($candidateInternational)) {
-            return $candidateInternational;
+        // Accept international numbers that were entered without "+" first.
+        if (strlen($phone) >= 10) {
+            $candidateInternational = '+' . ltrim($phone, '+');
+            if (PhoneService::getE164FormatForImport($candidateInternational)) {
+                return $candidateInternational;
+            }
         }
 
         $local = ltrim($phone, '0');
@@ -1042,11 +1045,11 @@ class ContactImportService
         }
 
         $defaultCountryCode = $this->normalizeCountryCode($defaultCountryCode);
-        if ($defaultCountryCode === '') {
-            return null;
+        if ($defaultCountryCode !== '') {
+            return $defaultCountryCode . $local;
         }
 
-        return $defaultCountryCode . $local;
+        return null;
     }
 
     private function phoneNeedsDefaultCountryCode(string $phone): bool
@@ -1057,6 +1060,7 @@ class ContactImportService
         }
 
         $phone = $this->convertEasternArabicDigitsToAscii($phone);
+        $phone = ltrim($phone, "=\t\n\r\0\x0B ");
         $phone = preg_replace('/[^\d+]/u', '', $phone) ?: '';
 
         if ($phone === '') {
@@ -1067,9 +1071,14 @@ class ContactImportService
             return false;
         }
 
-        $candidateInternational = '+' . ltrim($phone, '+');
+        if (strlen($phone) >= 10) {
+            $candidateInternational = '+' . ltrim($phone, '+');
+            if (PhoneService::getE164FormatForImport($candidateInternational)) {
+                return false;
+            }
+        }
 
-        return ! (bool) PhoneService::getE164Format($candidateInternational);
+        return (bool) preg_match('/^\d{4,}$/', $phone);
     }
 
     private function convertEasternArabicDigitsToAscii(string $value): string

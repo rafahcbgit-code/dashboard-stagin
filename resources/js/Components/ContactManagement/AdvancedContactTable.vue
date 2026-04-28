@@ -1661,7 +1661,7 @@ const onImportCompleted = () => {
         v-model="isImportWizardOpen"
         :contactGroups="groups"
         :fields="fields"
-        :countries="contactConstants.countries"
+        :countries="contactConstants.countryDialCodes"
         @completed="onImportCompleted"
     />
 </template>
