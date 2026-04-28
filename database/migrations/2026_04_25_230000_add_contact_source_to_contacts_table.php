@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         if (! Schema::hasColumn('contacts', 'contact_source')) {
-            DB::statement('ALTER TABLE contacts ADD COLUMN contact_source VARCHAR(32) NULL DEFAULT NULL, ALGORITHM=INSTANT, LOCK=NONE');
+            DB::statement('ALTER TABLE contacts ADD COLUMN contact_source VARCHAR(32) NULL DEFAULT NULL');
         }
     }
 
@@ -23,7 +23,7 @@ return new class extends Migration
     {
 
         if (Schema::hasColumn('contacts', 'contact_source')) {
-            DB::statement('ALTER TABLE contacts DROP COLUMN contact_source, ALGORITHM=INSTANT, LOCK=NONE');
+            DB::statement('ALTER TABLE contacts DROP COLUMN contact_source');
         }
     }
 };

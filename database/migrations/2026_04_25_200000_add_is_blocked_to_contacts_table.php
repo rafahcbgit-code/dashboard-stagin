@@ -12,7 +12,7 @@ return new class extends Migration
     public function up(): void
     {
         Schema::table('contacts', function (Blueprint $table) {
-            $table->boolean('is_blocked')->default(false)->after('bot_enable');
+            $table->boolean('is_blocked')->default(false);
         });
     }
 

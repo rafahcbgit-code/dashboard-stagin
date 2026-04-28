@@ -119,8 +119,10 @@ class ContactImportController extends BaseController
         $this->assertMappingUsesKnownHeaders($batch, $validated['mapping']);
 
         $batch = $this->importService->applyMapping($batch, $validated['mapping']);
+        $response = $this->buildBatchResponse($batch);
+        $response['batch']['requires_default_country_code'] = $this->importService->hasRowsMissingCountryCode($batch);
 
-        return response()->json($this->buildBatchResponse($batch));
+        return response()->json($response);
     }
 
     public function normalize(Request $request, string $batchUuid)
@@ -132,10 +134,18 @@ class ContactImportController extends BaseController
         $this->assertBatchHasMapping($batch);
 
         $validated = $request->validate([
-            'default_country_code' => ['required', 'string', 'max:8'],
+            'default_country_code' => ['nullable', 'string', 'max:8'],
         ]);
 
-        $normalization = $this->importService->normalize($batch, $validated['default_country_code']);
+        $defaultCountryCode = (string) ($validated['default_country_code'] ?? '');
+
+        if ($this->importService->hasRowsMissingCountryCode($batch) && trim($defaultCountryCode) === '') {
+            throw ValidationException::withMessages([
+                'default_country_code' => 'Please choose a default country code for local phone numbers.',
+            ]);
+        }
+
+        $normalization = $this->importService->normalize($batch, $defaultCountryCode);
         $batch = $normalization['batch'];
 
         return response()->json(array_merge(
