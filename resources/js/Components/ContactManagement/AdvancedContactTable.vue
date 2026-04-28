@@ -95,7 +95,7 @@ const isFilterModalOpen = ref(false);
 const isGroupsModalOpen = ref(false);
 const isColumnsMenuOpen = ref(false);
 const isImportWizardOpen = ref(false);
-const viewMode = ref('grid');
+const viewMode = ref('table');
 const columnsMenuRef = ref(null);
 const selectAllCheckboxRef = ref(null);
 const selectedIds = ref([]);
@@ -360,23 +360,22 @@ const resetTableColumns = () => {
     columns.value = buildDefaultColumns();
 };
 
-const quickWhatsappUrl = (contact) => {
-    const rawPhone = String(contact.phone || contact.formatted_phone_number || '').replace(/[^\d]/g, '');
-    return rawPhone ? `https://wa.me/${rawPhone}` : '#';
+const contactChatUrl = (contact) => {
+    return contact?.uuid ? `/chats/${contact.uuid}` : '#';
 };
 
-const openQuickWhatsapp = (contact) => {
-    const url = quickWhatsappUrl(contact);
+const openContactChat = (contact) => {
+    const url = contactChatUrl(contact);
     if (url === '#') {
         return;
     }
 
-    window.open(url, '_blank', 'noopener,noreferrer');
+    router.visit(url);
 };
 
 const messageSelectedContacts = () => {
     if (selectedContactsOnPage.value.length === 1 && selectedCount.value === 1) {
-        openQuickWhatsapp(selectedContactsOnPage.value[0]);
+        openContactChat(selectedContactsOnPage.value[0]);
         return;
     }
 
@@ -1200,7 +1199,14 @@ const onImportCompleted = () => {
                                 </span>
                             </div>
 
-                    
+                            <Link
+                                :href="contactChatUrl(contact)"
+                                class="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 py-3 text-sm font-extrabold text-white shadow-sm shadow-emerald-200 transition-all duration-300 hover:-translate-y-0.5 hover:bg-[#1fb85a] hover:shadow-lg hover:shadow-emerald-200"
+                                @click.stop
+                            >
+                                <MessageCircle class="h-4 w-4" />
+                                {{ $t('Send WhatsApp Message') }}
+                            </Link>
                         </article>
                     </div>
 
@@ -1266,10 +1272,10 @@ const onImportCompleted = () => {
                                 </div>
                             </div>
 
-                            <button type="button" class="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 text-sm font-extrabold text-white transition-all duration-300 hover:bg-[#1fb85a]" @click.stop="openQuickWhatsapp(contact)">
+                            <Link :href="contactChatUrl(contact)" class="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 text-sm font-extrabold text-white transition-all duration-300 hover:bg-[#1fb85a]" @click.stop>
                                 <MessageCircle class="h-4 w-4" />
-                                {{ $t('Quick WhatsApp') }}
-                            </button>
+                                {{ $t('Send WhatsApp Message') }}
+                            </Link>
                         </article>
                     </div>
 
