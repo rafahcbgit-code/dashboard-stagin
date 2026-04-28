@@ -304,6 +304,7 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::delete('/contacts/import/{batchUuid}/rows/{rowId}', [App\Http\Controllers\User\ContactImportController::class, 'deleteRow'])->name('contacts.import.rows.delete');
                 Route::post('/contacts/import/{batchUuid}/group-assignment', [App\Http\Controllers\User\ContactImportController::class, 'assignGroups'])->name('contacts.import.groups');
                 Route::post('/contacts/import/{batchUuid}/commit', [App\Http\Controllers\User\ContactImportController::class, 'commit'])->name('contacts.import.commit');
+                Route::get('/contacts/import/{batchUuid}/invalid-report.csv', [App\Http\Controllers\User\ContactImportController::class, 'invalidReportCsv'])->name('contacts.import.invalid-report.csv');
                 Route::get('/contacts/import/{batchUuid}/report.csv', [App\Http\Controllers\User\ContactImportController::class, 'reportCsv'])->name('contacts.import.report.csv');
 
                 Route::get('/contacts/{uuid?}', [App\Http\Controllers\User\ContactController::class, 'index'])->name('contacts');

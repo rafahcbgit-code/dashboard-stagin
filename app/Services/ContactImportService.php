@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Models\Contact;
 use App\Models\ContactGroup;
 use App\Models\ContactImportBatch;
 use App\Models\ContactImportRow;
@@ -18,6 +17,8 @@ use App\Services\PhoneService;
 class ContactImportService
 {
     private const MAX_PREVIEW_ROWS = 100000;
+    private const INSERT_CHUNK_SIZE = 2000;
+    private const PROCESSING_CHUNK_SIZE = 1000;
 
     private const STANDARD_TARGET_FIELDS = [
         'first_name',
@@ -45,6 +46,7 @@ class ContactImportService
         ]);
 
         $insertRows = [];
+        $now = now();
         foreach ($rows as $index => $row) {
             $insertRows[] = [
                 'contact_import_batch_id' => $batch->id,
@@ -55,11 +57,11 @@ class ContactImportService
                 'mapped_data' => null,
                 'normalized_data' => null,
                 'errors' => null,
-                'created_at' => now(),
-                'updated_at' => now(),
+                'created_at' => $now,
+                'updated_at' => $now,
             ];
 
-            if (count($insertRows) >= 2000) {
+            if (count($insertRows) >= self::INSERT_CHUNK_SIZE) {
                 DB::table('contact_import_rows')->insert($insertRows);
                 $insertRows = [];
             }
@@ -84,14 +86,15 @@ class ContactImportService
             // Row-level transformations are evaluated during normalize/commit.
             ContactImportRow::query()
                 ->where('contact_import_batch_id', $batch->id)
-                ->where('is_removed', false)
                 ->where(function ($query): void {
                     $query->whereNotNull('mapped_data')
                         ->orWhereNotNull('normalized_data')
                         ->orWhereNotNull('errors')
+                        ->orWhere('is_removed', true)
                         ->orWhere('status', '!=', 'pending');
                 })
                 ->update([
+                    'is_removed' => false,
                     'mapped_data' => null,
                     'normalized_data' => null,
                     'errors' => null,
@@ -123,9 +126,8 @@ class ContactImportService
                 ->where('contact_import_batch_id', $batch->id)
                 ->where('is_removed', false)
                 ->orderBy('id')
-                ->chunkById(1000, function ($rows) use ($defaultCountryCode, $batchMapping, $batch, &$invalidRowsPreview, &$invalidRowsCount, $invalidPreviewLimit): void {
+                ->chunkById(self::PROCESSING_CHUNK_SIZE, function ($rows) use ($defaultCountryCode, $batchMapping, $batch, &$invalidRowsPreview, &$invalidRowsCount, $invalidPreviewLimit): void {
                     $updates = [];
-                    $invalidIdsToDelete = [];
                     $now = now();
 
                     foreach ($rows as $row) {
@@ -140,17 +142,28 @@ class ContactImportService
 
                         if (! empty($evaluation['errors'])) {
                             $invalidRowsCount++;
-
+                            $invalidRow = [
+                                'row_number' => (int) $row->row_number,
+                                'status' => 'invalid',
+                                'mapped_data' => $mappedData,
+                                'errors' => array_values((array) $evaluation['errors']),
+                            ];
                             if (count($invalidRowsPreview) < $invalidPreviewLimit) {
-                                $invalidRowsPreview[] = [
-                                    'row_number' => (int) $row->row_number,
-                                    'status' => 'invalid',
-                                    'mapped_data' => $mappedData,
-                                    'errors' => array_values((array) $evaluation['errors']),
-                                ];
+                                $invalidRowsPreview[] = $invalidRow;
                             }
 
-                            $invalidIdsToDelete[] = (int) $row->id;
+                            $updates[] = [
+                                'id' => (int) $row->id,
+                                'contact_import_batch_id' => (int) $row->contact_import_batch_id,
+                                'row_number' => (int) $row->row_number,
+                                'is_removed' => 1,
+                                'created_at' => $row->created_at,
+                                'mapped_data' => $this->encodeJson($mappedData),
+                                'normalized_data' => null,
+                                'errors' => $this->encodeJson(array_values((array) $evaluation['errors'])),
+                                'status' => 'invalid',
+                                'updated_at' => $now,
+                            ];
                             continue;
                         }
 
@@ -172,17 +185,19 @@ class ContactImportService
                         DB::table('contact_import_rows')->upsert(
                             $updates,
                             ['id'],
-                            ['mapped_data', 'normalized_data', 'errors', 'status', 'updated_at']
+                            ['is_removed', 'mapped_data', 'normalized_data', 'errors', 'status', 'updated_at']
                         );
                     }
-
-                    if (! empty($invalidIdsToDelete)) {
-                        DB::table('contact_import_rows')
-                            ->where('contact_import_batch_id', $batch->id)
-                            ->whereIn('id', $invalidIdsToDelete)
-                            ->delete();
-                    }
                 });
+
+            $batch->update([
+                'report' => array_merge((array) ($batch->report ?? []), [
+                    'invalid_rows_report' => [
+                        'count' => $invalidRowsCount,
+                        'generated_at' => now()->toISOString(),
+                    ],
+                ]),
+            ]);
         });
 
         return [
@@ -331,12 +346,15 @@ class ContactImportService
         $updated = 0;
         $failed = [];
 
-        ContactImportRow::query()
+        $batchId = (int) $batch->id;
+
+        DB::table('contact_import_rows')
+            ->select(['id', 'contact_import_batch_id', 'row_number', 'is_removed', 'created_at', 'normalized_data'])
             ->where('contact_import_batch_id', $batch->id)
             ->where('is_removed', false)
             ->where('status', 'valid')
             ->orderBy('id')
-            ->chunkById(1000, function ($rows) use ($organizationId, $userId, $selectedGroupIds, $assignmentMode, &$splitState, &$splitAssignmentByPhone, &$groupCache, &$created, &$updated, &$failed): void {
+            ->chunkById(self::PROCESSING_CHUNK_SIZE, function ($rows) use ($batchId, $organizationId, $userId, $selectedGroupIds, $assignmentMode, &$splitState, &$splitAssignmentByPhone, &$groupCache, &$created, &$updated, &$failed): void {
                 $now = now();
                 $rowStatusUpdates = [];
                 $entriesByPhone = [];
@@ -350,7 +368,7 @@ class ContactImportService
                         'created_at' => $row->created_at,
                     ];
 
-                    $normalized = is_array($row->normalized_data) ? $row->normalized_data : [];
+                    $normalized = $this->decodeJsonArray($row->normalized_data);
                     $phone = trim((string) ($normalized['phone'] ?? ''));
 
                     if ($phone === '') {
@@ -467,7 +485,7 @@ class ContactImportService
                 }
 
                 $phones = array_keys($entriesByPhone);
-                $existingContacts = Contact::withTrashed()
+                $existingContacts = DB::table('contacts')
                     ->where('organization_id', $organizationId)
                     ->whereIn('phone', $phones)
                     ->get(['id', 'uuid', 'organization_id', 'phone', 'first_name', 'last_name', 'created_by', 'created_at', 'metadata', 'deleted_at'])
@@ -575,7 +593,7 @@ class ContactImportService
                     foreach ((array) $entry['row_ids'] as $rowId) {
                         $rowStatusUpdates[] = [
                             'id' => (int) $rowId,
-                            'contact_import_batch_id' => (int) ($rowMetaById[(int) $rowId]['contact_import_batch_id'] ?? $batch->id),
+                            'contact_import_batch_id' => (int) ($rowMetaById[(int) $rowId]['contact_import_batch_id'] ?? $batchId),
                             'row_number' => (int) ($rowMetaById[(int) $rowId]['row_number'] ?? 0),
                             'is_removed' => (int) ($rowMetaById[(int) $rowId]['is_removed'] ?? 0),
                             'created_at' => $rowMetaById[(int) $rowId]['created_at'] ?? $now,
@@ -609,7 +627,7 @@ class ContactImportService
                     foreach ($failedRowIds as $rowId) {
                         $rowStatusUpdates[] = [
                             'id' => $rowId,
-                            'contact_import_batch_id' => (int) ($rowMetaById[(int) $rowId]['contact_import_batch_id'] ?? $batch->id),
+                            'contact_import_batch_id' => (int) ($rowMetaById[(int) $rowId]['contact_import_batch_id'] ?? $batchId),
                             'row_number' => (int) ($rowMetaById[(int) $rowId]['row_number'] ?? 0),
                             'is_removed' => (int) ($rowMetaById[(int) $rowId]['is_removed'] ?? 0),
                             'created_at' => $rowMetaById[(int) $rowId]['created_at'] ?? $now,
@@ -631,7 +649,7 @@ class ContactImportService
 
         $removedCount = ContactImportRow::query()
             ->where('contact_import_batch_id', $batch->id)
-            ->where('is_removed', true)
+            ->where('status', 'removed')
             ->count();
 
         $invalidRows = ContactImportRow::query()
@@ -658,6 +676,12 @@ class ContactImportService
             'failed_rows_details' => array_values(array_merge($invalidFailures, $failed)),
             'executed_at' => now()->toDateTimeString(),
         ];
+
+        $previousReport = (array) ($batch->report ?? []);
+
+        if (isset($previousReport['invalid_rows_report'])) {
+            $report['invalid_rows_report'] = $previousReport['invalid_rows_report'];
+        }
 
         $batch->update([
             'status' => 'committed',
@@ -907,7 +931,7 @@ class ContactImportService
         }
 
         $normalizedPhone = $this->normalizePhone($phoneRaw, $defaultCountryCode);
-        $e164Phone = $normalizedPhone ? PhoneService::getE164Format($normalizedPhone) : null;
+        $e164Phone = $normalizedPhone ? PhoneService::getE164FormatForImport($normalizedPhone) : null;
 
         if (! $e164Phone) {
             $errors[] = 'Invalid phone number format.';
@@ -993,7 +1017,7 @@ class ContactImportService
 
         // If the number looks international already but without "+", keep it as such.
         $candidateInternational = '+' . ltrim($phone, '+');
-        if (PhoneService::getE164Format($candidateInternational)) {
+        if (PhoneService::getE164FormatForImport($candidateInternational)) {
             return $candidateInternational;
         }
 
