@@ -765,7 +765,7 @@ const goToPreviousStep = () => {
 
                 <div v-else class="space-y-2 rounded-md border border-slate-200 p-3 text-sm">
                     <p class="font-medium text-slate-800">{{ $t('Execution Report') }}</p>
-                    <div class="grid grid-cols-2 gap-2 md:grid-cols-4">
+                    <div class="grid grid-cols-2 gap-2 md:grid-cols-5">
                         <div class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2">
                             <p class="text-[11px] text-emerald-700">{{ $t('success') }}</p>
                             <p class="text-sm font-semibold text-emerald-800">{{ report.success_count || 0 }}</p>
@@ -781,6 +781,10 @@ const goToPreviousStep = () => {
                         <div class="rounded-lg border border-indigo-200 bg-indigo-50 px-3 py-2">
                             <p class="text-[11px] text-indigo-700">{{ $t('Updated') }}</p>
                             <p class="text-sm font-semibold text-indigo-800">{{ report.updated_count || 0 }}</p>
+                        </div>
+                        <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
+                            <p class="text-[11px] text-amber-700">{{ $t('Duplicates') }}</p>
+                            <p class="text-sm font-semibold text-amber-800">{{ report.duplicates_count || 0 }}</p>
                         </div>
                     </div>
                     <a :href="`/contacts/import/${batch.uuid}/report.csv`" target="_blank" class="text-primary underline">{{ $t('Download failure report CSV') }}</a>

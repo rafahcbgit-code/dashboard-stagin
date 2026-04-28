@@ -345,6 +345,8 @@ class ContactImportService
         $created = 0;
         $updated = 0;
         $failed = [];
+        $totalValidRows = 0;
+        $uniquePhoneCount = 0;
 
         $batchId = (int) $batch->id;
 
@@ -354,11 +356,12 @@ class ContactImportService
             ->where('is_removed', false)
             ->where('status', 'valid')
             ->orderBy('id')
-            ->chunkById(self::PROCESSING_CHUNK_SIZE, function ($rows) use ($batchId, $organizationId, $userId, $selectedGroupIds, $assignmentMode, &$splitState, &$splitAssignmentByPhone, &$groupCache, &$created, &$updated, &$failed): void {
+            ->chunkById(self::PROCESSING_CHUNK_SIZE, function ($rows) use ($batchId, $organizationId, $userId, $selectedGroupIds, $assignmentMode, &$splitState, &$splitAssignmentByPhone, &$groupCache, &$created, &$updated, &$failed, &$totalValidRows, &$uniquePhoneCount): void {
                 $now = now();
                 $rowStatusUpdates = [];
                 $entriesByPhone = [];
                 $rowMetaById = [];
+                $chunkValidRows = 0;
 
                 foreach ($rows as $row) {
                     $rowMetaById[(int) $row->id] = [
@@ -390,7 +393,13 @@ class ContactImportService
                         continue;
                     }
 
-                    if (! isset($entriesByPhone[$phone])) {
+                    $chunkValidRows++;
+                    $isNewPhone = ! isset($entriesByPhone[$phone]);
+                    if ($isNewPhone) {
+                        $uniquePhoneCount++;
+                    }
+
+                    if ($isNewPhone) {
                         $entriesByPhone[$phone] = [
                             'phone' => $phone,
                             'first_name' => isset($normalized['first_name']) ? trim((string) $normalized['first_name']) : null,
@@ -435,8 +444,11 @@ class ContactImportService
                             ['status', 'errors', 'updated_at']
                         );
                     }
+                    $totalValidRows += $chunkValidRows;
                     return;
                 }
+                
+                $totalValidRows += $chunkValidRows;
 
                 $allGroupNames = collect($entriesByPhone)
                     ->flatMap(fn ($entry) => (array) ($entry['group_names'] ?? []))
@@ -665,6 +677,8 @@ class ContactImportService
             ];
         })->all();
 
+        $duplicatesCount = $totalValidRows - $uniquePhoneCount;
+
         $report = [
             'total_rows' => ContactImportRow::query()->where('contact_import_batch_id', $batch->id)->count(),
             'created_count' => $created,
@@ -673,6 +687,7 @@ class ContactImportService
             'removed_count' => $removedCount,
             'invalid_count' => $invalidRows->count(),
             'failed_count' => count($failed) + $invalidRows->count(),
+            'duplicates_count' => $duplicatesCount,
             'failed_rows_details' => array_values(array_merge($invalidFailures, $failed)),
             'executed_at' => now()->toDateTimeString(),
         ];
