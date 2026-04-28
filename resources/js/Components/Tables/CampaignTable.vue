@@ -37,6 +37,8 @@
     
     const params = ref({
         search: props.filters.search,
+        start_date: props.filters.start_date,
+        end_date: props.filters.end_date,
     });
 
     const isLastRow = (index) => {

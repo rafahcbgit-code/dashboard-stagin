@@ -18,11 +18,18 @@ class ContactResource extends JsonResource
     {
         $data = parent::toArray($request);
 
-        $data['unread_messages'] = $this->chats()
+        $data['unread_messages'] = $this->unread_messages_count ?? $this->chats()
             ->where('type', 'inbound')
             ->whereNull('deleted_at')
             ->where('is_read', 0)
             ->count();
+
+        if (method_exists($this->resource, 'shouldMaskPhoneForCurrentViewer')
+            && $this->resource->shouldMaskPhoneForCurrentViewer()) {
+            $maskedPhone = $this->resource->getMaskedPhoneForCurrentViewer();
+            $data['phone'] = $maskedPhone;
+            $data['formatted_phone_number'] = $maskedPhone;
+        }
         
         return $data;
     }

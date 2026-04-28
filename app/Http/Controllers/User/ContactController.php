@@ -5,22 +5,23 @@ namespace App\Http\Controllers\User;
 use App\Http\Controllers\Controller as BaseController;
 use App\Models\Contact;
 use App\Models\ContactField;
+use App\Models\ContactGroup;
+use App\Models\Label;
 use App\Models\Team;
 use App\Models\Organization;
 use App\Exports\ContactsExport;
 use App\Http\Requests\StoreContact;
 use App\Http\Resources\ContactResource;
 use App\Imports\ContactsImport;
-use App\Services\ContactFieldService;
 use App\Services\ContactService;
+use App\Support\Filters\ContactFilter;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Redirect;
-use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use Excel;
-use Validator;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ContactController extends BaseController
 {
@@ -37,38 +38,91 @@ class ContactController extends BaseController
     public function index(Request $request, $uuid = null)
     {
         $organizationId = $this->getCurrentOrganizationId();
-        $contactModel = new Contact;
 
         if ($uuid === 'export') {
             $format = $request->query('format', 'xlsx');
             return $this->exportContacts($format);
-        } else if ($uuid === 'template') {
-            return $this->downloadTemplate();
-        } else {
-            $searchTerm = $request->query('search');
-            $uuid = $request->query('id') ? $request->query('id') : $uuid;
-            $editContact = $request->query('edit') === 'true' ? true : false;
-
-            $contacts = $contactModel->getAllContacts($organizationId, $searchTerm);
-            $rowCount = $contactModel->countContacts($organizationId);
-            $contactGroups = $contactModel->getAllContactGroups($organizationId);
-            $contact = Contact::with('contactGroups')->where('uuid', $uuid)->where('deleted_at', null)->first();
-            $contactFields = ContactField::where('organization_id', $organizationId)->where('deleted_at', null)->get();
-            $team = Team::where('organization_id', $organizationId)->where('user_id', auth()->user()->id)->first();
-
-            return Inertia::render('User/Contact/Index', [
-                'title' => __('Contacts'),
-                'rows' => ContactResource::collection($contacts),
-                'rowCount' => $rowCount,
-                'contact' => $contact,
-                'fields' => $contactFields,
-                'contactGroups' => $contactGroups,
-                'filters' => request()->all(),
-                'locationSettings' => $this->getLocationSettings(),
-                'editContact' => $editContact,
-                'role' => $team->role
-            ]);
         }
+
+        if ($uuid === 'template') {
+            return $this->downloadTemplate();
+        }
+
+        $selectedUuid = $request->query('id') ?: $uuid;
+        $editContact = $request->query('edit') === 'true';
+        $perPage = max(10, min((int) $request->query('per_page', 20), 100));
+
+        $contactsQuery = Contact::query()
+            ->where('contacts.organization_id', $organizationId)
+            ->whereNull('contacts.deleted_at')
+            ->with(['contactGroups:id,name', 'labels:id,title,color'])
+            ->withCount([
+                'chats as unread_messages_count' => function (Builder $query): void {
+                    $query->where('type', 'inbound')
+                        ->whereNull('deleted_at')
+                        ->where('is_read', 0);
+                },
+            ])
+            ->select('contacts.*');
+
+        $contactsQuery = (new ContactFilter())->apply($contactsQuery, $request);
+
+        $contacts = $contactsQuery
+            ->orderByDesc('contacts.is_favorite')
+            ->orderByDesc('contacts.created_at')
+            ->paginate($perPage)
+            ->withQueryString();
+
+        $rowCount = Contact::query()
+            ->where('organization_id', $organizationId)
+            ->whereNull('deleted_at')
+            ->count();
+
+        $contactGroups = ContactGroup::query()
+            ->where('organization_id', $organizationId)
+            ->whereNull('deleted_at')
+            ->withCount(['contacts as contacts_count' => function (Builder $query) use ($organizationId): void {
+                $query->where('contacts.organization_id', $organizationId)
+                    ->whereNull('contacts.deleted_at');
+            }])
+            ->orderBy('name')
+            ->get(['id', 'uuid', 'name']);
+
+        $labels = Label::query()
+            ->where('organization_id', $organizationId)
+            ->whereNull('deleted_at')
+            ->orderBy('title')
+            ->get(['id', 'title', 'color']);
+
+        $contact = Contact::with(['contactGroups:id,name', 'labels:id,title,color'])
+            ->where('uuid', $selectedUuid)
+            ->where('organization_id', $organizationId)
+            ->whereNull('deleted_at')
+            ->first();
+
+        $contactFields = ContactField::where('organization_id', $organizationId)
+            ->whereNull('deleted_at')
+            ->orderBy('position')
+            ->get(['id', 'name', 'type', 'value', 'required', 'uuid']);
+
+        $team = Team::where('organization_id', $organizationId)
+            ->where('user_id', auth()->user()->id)
+            ->first();
+
+        return Inertia::render('User/Contact/Index', [
+            'title' => __('Contacts'),
+            'rows' => ContactResource::collection($contacts),
+            'rowCount' => $rowCount,
+            'filteredCount' => $contacts->total(),
+            'contact' => $contact ? ContactResource::make($contact)->resolve() : null,
+            'fields' => $contactFields,
+            'contactGroups' => $contactGroups,
+            'labels' => $labels,
+            'filters' => request()->all(),
+            'locationSettings' => $this->getLocationSettings(),
+            'editContact' => $editContact,
+            'role' => $team->role ?? 'owner',
+        ]);
     }
 
     public function exportContacts($format = 'xlsx')
@@ -368,6 +422,229 @@ class ContactController extends BaseController
         );
     }
 
+    public function bulkDelete(Request $request)
+    {
+        $validated = $request->validate([
+            'ids' => ['required_without:select_all_filtered', 'array', 'min:1'],
+            'ids.*' => ['integer'],
+            'select_all_filtered' => ['nullable', 'boolean'],
+            'except_ids' => ['nullable', 'array'],
+            'except_ids.*' => ['integer'],
+        ]);
+
+        $organizationId = $this->getCurrentOrganizationId();
+        $selectAllFiltered = (bool) $request->boolean('select_all_filtered');
+        $exceptIds = collect($validated['except_ids'] ?? [])->map(fn ($id) => (int) $id)->filter()->values();
+
+        $query = Contact::query()
+            ->where('organization_id', $organizationId)
+            ->whereNull('deleted_at');
+
+        if ($selectAllFiltered) {
+            $query = (new ContactFilter())->apply($query, $this->toFilterRequest($request));
+            if ($exceptIds->isNotEmpty()) {
+                $query->whereNotIn('contacts.id', $exceptIds->all());
+            }
+        } else {
+            $query->whereIn('contacts.id', $validated['ids'] ?? []);
+        }
+
+        $this->contactService()->deleteByQuery($query);
+
+        return back()->with('status', [
+            'type' => 'success',
+            'message' => __('Selected contacts deleted successfully.'),
+        ]);
+    }
+
+    public function bulkUpdateAttribute(Request $request)
+    {
+        $validated = $request->validate([
+            'ids' => ['required_without:select_all_filtered', 'array', 'min:1'],
+            'ids.*' => ['integer'],
+            'select_all_filtered' => ['nullable', 'boolean'],
+            'except_ids' => ['nullable', 'array'],
+            'except_ids.*' => ['integer'],
+            'action' => ['required', 'in:add_group,remove_group,add_label,remove_label,change_subscription_status'],
+            'group_ids' => ['array'],
+            'group_ids.*' => ['integer'],
+            'label_ids' => ['array'],
+            'label_ids.*' => ['integer'],
+            'subscription_status' => ['nullable', 'in:0,1'],
+        ]);
+
+        $organizationId = $this->getCurrentOrganizationId();
+        $selectAllFiltered = (bool) $request->boolean('select_all_filtered');
+        $exceptIds = collect($validated['except_ids'] ?? [])->map(fn ($id) => (int) $id)->filter()->values();
+
+        $contactsQuery = Contact::query()
+            ->where('organization_id', $organizationId)
+            ->whereNull('deleted_at')
+            ->select('contacts.*');
+
+        if ($selectAllFiltered) {
+            $contactsQuery = (new ContactFilter())->apply($contactsQuery, $this->toFilterRequest($request));
+            if ($exceptIds->isNotEmpty()) {
+                $contactsQuery->whereNotIn('contacts.id', $exceptIds->all());
+            }
+        } else {
+            $contactsQuery->whereIn('contacts.id', $validated['ids'] ?? []);
+        }
+
+        if (!(clone $contactsQuery)->exists()) {
+            return back()->with('status', [
+                'type' => 'warning',
+                'message' => __('No contacts matched the selected rows.'),
+            ]);
+        }
+
+        $action = $validated['action'];
+        $groupIds = collect($validated['group_ids'] ?? [])->map(fn ($id) => (int) $id)->filter()->values();
+        $labelIds = collect($validated['label_ids'] ?? [])->map(fn ($id) => (int) $id)->filter()->values();
+
+        if ($groupIds->isNotEmpty()) {
+            $allowedGroupIds = ContactGroup::query()
+                ->where('organization_id', $organizationId)
+                ->whereIn('id', $groupIds->all())
+                ->pluck('id');
+            $groupIds = $allowedGroupIds->values();
+        }
+
+        if ($labelIds->isNotEmpty()) {
+            $allowedLabelIds = Label::query()
+                ->where('organization_id', $organizationId)
+                ->whereIn('id', $labelIds->all())
+                ->pluck('id');
+            $labelIds = $allowedLabelIds->values();
+        }
+
+        if ($action === 'change_subscription_status') {
+            (clone $contactsQuery)
+                ->update([
+                    'is_subscribed' => (int) ($validated['subscription_status'] ?? 1),
+                    'updated_at' => now(),
+                ]);
+        } else {
+            (clone $contactsQuery)->chunkById(500, function ($contacts) use ($action, $groupIds, $labelIds) {
+                foreach ($contacts as $contact) {
+                    if ($action === 'add_group' && $groupIds->isNotEmpty()) {
+                        $contact->contactGroups()->syncWithoutDetaching($groupIds->all());
+                    }
+
+                    if ($action === 'remove_group' && $groupIds->isNotEmpty()) {
+                        $contact->contactGroups()->detach($groupIds->all());
+                    }
+
+                    if ($action === 'add_label' && $labelIds->isNotEmpty()) {
+                        $contact->labels()->syncWithoutDetaching($labelIds->all());
+                    }
+
+                    if ($action === 'remove_label' && $labelIds->isNotEmpty()) {
+                        $contact->labels()->detach($labelIds->all());
+                    }
+                }
+            }, 'contacts.id', 'id');
+        }
+
+        return back()->with('status', [
+            'type' => 'success',
+            'message' => __('Bulk action applied successfully.'),
+        ]);
+    }
+
+    public function export(Request $request): StreamedResponse
+    {
+        $organizationId = $this->getCurrentOrganizationId();
+        $ids = collect($request->query('ids', []))->map(fn ($id) => (int) $id)->filter()->values();
+        $scope = (string) $request->query('scope', 'filtered');
+        $selectAllFiltered = (bool) $request->boolean('select_all_filtered');
+        $exceptIds = collect($request->query('except_ids', []))->map(fn ($id) => (int) $id)->filter()->values();
+
+        $query = Contact::query()
+            ->with(['contactGroups:id,name', 'labels:id,title'])
+            ->where('organization_id', $organizationId)
+            ->whereNull('deleted_at')
+            ->select([
+                'id',
+                'first_name',
+                'last_name',
+                'phone',
+                'email',
+                'is_subscribed',
+                'address',
+                'metadata',
+                'created_at',
+            ]);
+
+        if ($ids->isNotEmpty()) {
+            $query->whereIn('id', $ids->all());
+        } elseif ($selectAllFiltered) {
+            $query = (new ContactFilter())->apply($query, $request);
+            if ($exceptIds->isNotEmpty()) {
+                $query->whereNotIn('contacts.id', $exceptIds->all());
+            }
+        } elseif ($scope !== 'all') {
+            $query = (new ContactFilter())->apply($query, $request);
+        }
+
+        $contactFields = ContactField::query()
+            ->where('organization_id', $organizationId)
+            ->whereNull('deleted_at')
+            ->orderBy('id')
+            ->pluck('name')
+            ->all();
+
+        $headers = [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ];
+
+        $fileName = $scope === 'all'
+            ? 'contacts-all-export.csv'
+            : ($ids->isNotEmpty() ? 'contacts-selected-export.csv' : 'contacts-export.csv');
+
+        return response()->streamDownload(function () use ($query, $contactFields) {
+            $handle = fopen('php://output', 'w');
+            fputcsv($handle, array_merge([
+                'First Name',
+                'Last Name',
+                'Phone',
+                'Email',
+                'Subscription',
+                'Groups',
+                'Labels',
+                'Country',
+                'Created At',
+            ], $contactFields));
+
+            $query->orderBy('id')->chunkById(500, function ($contacts) use ($handle, $contactFields) {
+                foreach ($contacts as $contact) {
+                    $address = json_decode((string) $contact->address, true) ?: [];
+                    $metadata = json_decode((string) $contact->metadata, true) ?: [];
+
+                    $row = [
+                        $contact->first_name,
+                        $contact->last_name,
+                        $contact->formatted_phone_number,
+                        $contact->email,
+                        (int) $contact->is_subscribed === 1 ? 'Subscribed' : 'Unsubscribed',
+                        $contact->contactGroups->pluck('name')->implode('|'),
+                        $contact->labels->pluck('title')->implode('|'),
+                        $address['country'] ?? null,
+                        $contact->created_at,
+                    ];
+
+                    foreach ($contactFields as $fieldName) {
+                        $row[] = $metadata[$fieldName] ?? null;
+                    }
+
+                    fputcsv($handle, $row);
+                }
+            });
+
+            fclose($handle);
+        }, $fileName, $headers);
+    }
+
     private function getLocationSettings()
     {
         // Retrieve the settings for the current organization
@@ -463,6 +740,36 @@ class ContactController extends BaseController
         ]);
     }
 
+    private function toFilterRequest(Request $request): Request
+    {
+        return Request::create('/contacts', 'GET', $request->all());
+    }
+
+    public function toggleBlock(Request $request, $uuid)
+    {
+        $organizationId = $this->getCurrentOrganizationId();
+
+        $validated = $request->validate([
+            'is_blocked' => 'required|boolean',
+        ]);
+
+        $contact = Contact::where('uuid', $uuid)
+            ->where('organization_id', $organizationId)
+            ->whereNull('deleted_at')
+            ->firstOrFail();
+
+        $contact->is_blocked = $validated['is_blocked'];
+        $contact->updated_at = now();
+        $contact->save();
+
+        return back()->with('status', [
+            'type' => 'success',
+            'message' => $validated['is_blocked']
+                ? __('Contact blocked successfully.')
+                : __('Contact unblocked successfully.'),
+        ]);
+    }
+
     public function chatViewDetails(Request $request)
     {
         $organizationId = $this->getCurrentOrganizationId();
@@ -489,6 +796,7 @@ class ContactController extends BaseController
                 'organization_id' => $organizationId,
                 'phone'           => $phone,
                 'first_name'            => $validated['name'] ?? 'Unknown Contact',
+                'contact_source' => 'platform',
                 'is_subscribed' => 1,
                 'last_name' => null,
                 'email' => null,

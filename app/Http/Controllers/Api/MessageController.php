@@ -97,6 +97,13 @@ class MessageController extends Controller
                 ], 404);
             }
 
+            if ((bool) ($contact->is_blocked ?? false)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Contact is blocked'
+                ], 403);
+            }
+
             // PERMISSION CHECK: Agents can only send messages to assigned or unassigned chats
             $userRole = \App\Models\Team::where('organization_id', $organizationId)
                 ->where('user_id', $userId)
@@ -442,6 +449,13 @@ class MessageController extends Controller
                     'success' => false,
                     'message' => 'Contact not found'
                 ], 404);
+            }
+
+            if ((bool) ($contact->is_blocked ?? false)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Contact is blocked'
+                ], 403);
             }
 
             // Find template

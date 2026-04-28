@@ -131,6 +131,20 @@ const getCarouselCards = () => {
     return metadata.cards || [];
 };
 
+const interactiveType = computed(() => metadata.value?.interactive?.type || null);
+const interactiveBodyText = computed(() => metadata.value?.interactive?.body?.text || '');
+const interactiveButtons = computed(() => metadata.value?.interactive?.action?.buttons || []);
+const interactiveListSections = computed(() => metadata.value?.interactive?.action?.sections || []);
+const interactiveListRows = computed(() => {
+    return interactiveListSections.value.flatMap((section) => section?.rows || []);
+});
+const interactiveListButtonLabel = computed(() => metadata.value?.interactive?.action?.button || '');
+const interactiveCtaText = computed(() => {
+    return metadata.value?.interactive?.action?.parameters?.display_text
+        || metadata.value?.interactive?.action?.parameters?.flow_cta
+        || '';
+});
+
 const isModalOpen = ref(false);
 
 const getErrors = (logIndex = 0) => {
@@ -290,25 +304,59 @@ const viewContactDetails = async (data) => {
             </div>
 
             <!--Reply button formatting-->
-            <div v-if="JSON.parse(content.metadata).type === 'button'" class="max-w-[300px]">
-                <p class="normal-case whitespace-pre-wrap">{{ JSON.parse(content.metadata).button.text }}</p>
+            <div v-if="metadata.type === 'button'" class="max-w-[300px]">
+                <p class="normal-case whitespace-pre-wrap">{{ metadata.button?.text }}</p>
             </div>
 
             <!--Interactive button formatting-->
-            <div v-if="JSON.parse(content.metadata).type === 'interactive'" class="max-w-[300px]">
-                <div v-if="JSON.parse(content.metadata).interactive.type == 'button_reply'">
+            <div v-if="metadata.type === 'interactive'" class="max-w-[300px]">
+                <div v-if="interactiveType === 'button_reply'">
                     <p class="normal-case whitespace-pre-wrap">{{
-                        JSON.parse(content.metadata).interactive?.button_reply?.title }}</p>
+                        metadata.interactive?.button_reply?.title }}</p>
                 </div>
-                <p v-if="JSON.parse(content.metadata).interactive.type == 'list_reply'"
+                <p v-if="interactiveType === 'list_reply'"
                     class="normal-case whitespace-pre-wrap">{{
-                        JSON.parse(content.metadata).interactive?.list_reply?.title }}</p>
-                <p v-if="JSON.parse(content.metadata).interactive.type == 'list_reply'"
+                        metadata.interactive?.list_reply?.title }}</p>
+                <p v-if="interactiveType === 'list_reply'"
                     class="normal-case whitespace-pre-wrap">{{
-                        JSON.parse(content.metadata).interactive?.list_reply?.description }}</p>
+                        metadata.interactive?.list_reply?.description }}</p>
+
+                <div v-if="interactiveType === 'button'">
+                    <p v-if="interactiveBodyText" class="normal-case whitespace-pre-wrap mb-2">{{ interactiveBodyText }}</p>
+                    <div v-if="interactiveButtons.length" class="space-y-1">
+                        <div
+                            v-for="(item, index) in interactiveButtons"
+                            :key="`interactive-btn-${index}`"
+                            class="flex justify-center items-center space-x-2 rounded-lg bg-white h-10"
+                        >
+                            <img :src="'/images/icons/reply.png'" class="h-4" />
+                            <span>{{ item?.reply?.title || item?.text || item?.title }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <div v-if="interactiveType === 'list'" class="space-y-2">
+                    <p v-if="interactiveBodyText" class="normal-case whitespace-pre-wrap">{{ interactiveBodyText }}</p>
+                    <div v-if="interactiveListButtonLabel" class="text-xs text-slate-500">
+                        {{ interactiveListButtonLabel }}
+                    </div>
+                    <div
+                        v-for="(row, rowIndex) in interactiveListRows"
+                        :key="`interactive-row-${rowIndex}`"
+                        class="rounded-lg border border-slate-200 p-2 bg-white"
+                    >
+                        <p class="text-sm font-medium">{{ row?.title }}</p>
+                        <p v-if="row?.description" class="text-xs text-slate-500 mt-1">{{ row.description }}</p>
+                    </div>
+                </div>
+
+                <div v-if="interactiveType === 'cta_url'" class="space-y-2">
+                    <p v-if="interactiveBodyText" class="normal-case whitespace-pre-wrap">{{ interactiveBodyText }}</p>
+                    <div v-if="interactiveCtaText" class="text-sm text-[#00a5f4]">{{ interactiveCtaText }}</div>
+                </div>
 
                 <!-- Flow submission received from contact (nfm_reply) -->
-                <div v-if="JSON.parse(content.metadata).interactive?.type === 'nfm_reply'" class="min-w-[160px]">
+                <div v-if="interactiveType === 'nfm_reply'" class="min-w-[160px]">
                     <div class="flex items-center gap-1.5 text-sm text-slate-600">
                         <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-green-500 flex-shrink-0"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
                         <span class="font-medium">Flow submitted</span>
@@ -316,15 +364,15 @@ const viewContactDetails = async (data) => {
                 </div>
 
                 <!-- Meta Flow message sent from chat -->
-                <div v-if="JSON.parse(content.metadata).interactive?.type === 'flow'" class="min-w-[200px]">
-                    <p v-if="JSON.parse(content.metadata).flow_name" class="text-xs font-semibold text-slate-600 mb-1">
-                        {{ JSON.parse(content.metadata).flow_name }}
+                <div v-if="interactiveType === 'flow'" class="min-w-[200px]">
+                    <p v-if="metadata.flow_name" class="text-xs font-semibold text-slate-600 mb-1">
+                        {{ metadata.flow_name }}
                     </p>
                     <p class="text-sm normal-case whitespace-pre-wrap">
-                        {{ JSON.parse(content.metadata).interactive?.body?.text }}
+                        {{ metadata.interactive?.body?.text }}
                     </p>
                     <div class="mt-2 pt-2 border-t border-black/10 text-center text-sm text-[#00a5f4]">
-                        {{ JSON.parse(content.metadata).interactive?.action?.parameters?.flow_cta ?? 'Open' }}
+                        {{ metadata.interactive?.action?.parameters?.flow_cta ?? 'Open' }}
                     </div>
                 </div>
             </div>

@@ -284,12 +284,28 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::get('/reports/agent', [App\Http\Controllers\User\ReportController::class, 'agentReports'])->name('reports.agent');
                 Route::get('/reports/general', [App\Http\Controllers\User\ReportController::class, 'index'])->name('reports.general');
                 Route::get('/reports/label-count', [App\Http\Controllers\User\ReportController::class, 'countContactsByLabel']);
+                Route::get('/reports/campaign-analytics', [App\Http\Controllers\User\ReportController::class, 'campaignAnalytics'])->name('reports.campaign-analytics');
+                Route::get('/reports/campaign-analytics/export', [App\Http\Controllers\User\ReportController::class, 'exportCampaignAnalytics'])->name('reports.campaign-analytics.export');
 
                 Route::get('/tickets/{status}', [App\Http\Controllers\User\ChatTicketController::class, 'index']);
                 Route::put('/tickets/{uuid}/update', [App\Http\Controllers\User\ChatTicketController::class, 'update']);
                 Route::put('/tickets/{uuid}/assign', [App\Http\Controllers\User\ChatTicketController::class, 'assign']);
 
                 Route::post('/contacts/chat-view-details', [App\Http\Controllers\User\ContactController::class, 'chatViewDetails']);
+                Route::post('/contacts/bulk-delete', [App\Http\Controllers\User\ContactController::class, 'bulkDelete'])->name('contacts.bulk-delete');
+                Route::post('/contacts/bulk-update-attribute', [App\Http\Controllers\User\ContactController::class, 'bulkUpdateAttribute'])->name('contacts.bulk-update-attribute');
+                Route::get('/contacts/export', [App\Http\Controllers\User\ContactController::class, 'export'])->name('contacts.bulk-export');
+                Route::post('/contacts/import/preview', [App\Http\Controllers\User\ContactImportController::class, 'preview'])->name('contacts.import.preview');
+                Route::post('/contacts/import/{batchUuid}/mapping', [App\Http\Controllers\User\ContactImportController::class, 'map'])->name('contacts.import.mapping');
+                Route::post('/contacts/import/{batchUuid}/normalize', [App\Http\Controllers\User\ContactImportController::class, 'normalize'])->name('contacts.import.normalize');
+                Route::get('/contacts/import/{batchUuid}/rows', [App\Http\Controllers\User\ContactImportController::class, 'rows'])->name('contacts.import.rows');
+                Route::delete('/contacts/import/{batchUuid}/rows/clear-invalid', [App\Http\Controllers\User\ContactImportController::class, 'clearInvalidRows'])->name('contacts.import.rows.clear-invalid');
+                Route::patch('/contacts/import/{batchUuid}/rows/{rowId}', [App\Http\Controllers\User\ContactImportController::class, 'updateRow'])->name('contacts.import.rows.update');
+                Route::delete('/contacts/import/{batchUuid}/rows/{rowId}', [App\Http\Controllers\User\ContactImportController::class, 'deleteRow'])->name('contacts.import.rows.delete');
+                Route::post('/contacts/import/{batchUuid}/group-assignment', [App\Http\Controllers\User\ContactImportController::class, 'assignGroups'])->name('contacts.import.groups');
+                Route::post('/contacts/import/{batchUuid}/commit', [App\Http\Controllers\User\ContactImportController::class, 'commit'])->name('contacts.import.commit');
+                Route::get('/contacts/import/{batchUuid}/invalid-report.csv', [App\Http\Controllers\User\ContactImportController::class, 'invalidReportCsv'])->name('contacts.import.invalid-report.csv');
+                Route::get('/contacts/import/{batchUuid}/report.csv', [App\Http\Controllers\User\ContactImportController::class, 'reportCsv'])->name('contacts.import.report.csv');
 
                 Route::get('/contacts/{uuid?}', [App\Http\Controllers\User\ContactController::class, 'index'])->name('contacts');
                 Route::post('/contacts', [App\Http\Controllers\User\ContactController::class, 'store']);
@@ -303,15 +319,18 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::post('/contact-groups/import', [App\Http\Controllers\User\ContactGroupController::class, 'import']);
                 Route::post('/contact-groups/{uuid}', [App\Http\Controllers\User\ContactGroupController::class, 'update']);
                 Route::delete('/contact-groups', [App\Http\Controllers\User\ContactGroupController::class, 'delete']);
+                Route::delete('/contact-groups/{uuid}', [App\Http\Controllers\User\ContactGroupController::class, 'deleteSingle'])->name('contact-groups.delete-single');
 
                 Route::put('/contacts/{uuid}/labels', [App\Http\Controllers\User\ContactController::class, 'updateLabels'])->name('contacts.labels.update');
                 Route::get('/contacts/{uuid}/labels', [App\Http\Controllers\User\ContactController::class, 'getLabels']);
 
                 Route::put('/contacts/{uuid}/bot-toggle', [App\Http\Controllers\User\ContactController::class, 'toggleBot'])->name('contacts.bot.toggle');
+                Route::put('/contacts/{uuid}/block-toggle', [App\Http\Controllers\User\ContactController::class, 'toggleBlock'])->name('contacts.block.toggle');
 
                 Route::get('/campaigns/{uuid?}', [App\Http\Controllers\User\CampaignController::class, 'index'])->name('campaigns');
                 Route::post('/campaigns', [App\Http\Controllers\User\CampaignController::class, 'store']);
                 Route::get('/campaigns/export/{uuid?}', [App\Http\Controllers\User\CampaignController::class, 'export']);
+                Route::get('/campaigns/reports/export-statuses', [App\Http\Controllers\User\CampaignController::class, 'exportCampaignStatuses'])->name('campaigns.export-statuses');
                 Route::delete('/campaigns/{uuid?}', [App\Http\Controllers\User\CampaignController::class, 'delete']);
                 Route::post('/campaigns/{uuid}/cancel', [App\Http\Controllers\User\CampaignController::class, 'cancel'])->name('campaigns.cancel');
 

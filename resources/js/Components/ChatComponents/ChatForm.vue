@@ -10,6 +10,7 @@ import MetaFlowPickerModal from './MetaFlowPickerModal.vue';
 
 const recorder = ref(null);
 const props = defineProps(['contact', 'chatLimitReached', 'simpleForm']);
+const isContactBlocked = computed(() => Boolean(props.contact?.is_blocked));
 
 const showMetaFlowModal = ref(false);
 const metaFlowsModule   = computed(() => usePage().props.meta_flows_module ?? false);
@@ -52,10 +53,19 @@ watchEffect(() => {
 const emit = defineEmits(['response', 'viewTemplate']);
 
 const viewTemplate = () => {
+    if (isContactBlocked.value) {
+        return;
+    }
+
     emit('viewTemplate', true);
 }
 
 const sendMessage = async () => {
+    if (isContactBlocked.value) {
+        processingForm.value = false;
+        return;
+    }
+
     form.value.message = formTextInput.value;
     processingForm.value = true;
 
@@ -96,6 +106,11 @@ const sendMessage = async () => {
 }
 
 const sendPreCreatedReply = async (payload) => {
+    if (isContactBlocked.value) {
+        processingForm.value = false;
+        return;
+    }
+
     processingForm.value = true;
     try {
         await axios.post('/chats', payload);
@@ -109,6 +124,10 @@ const sendPreCreatedReply = async (payload) => {
 }
 
 const sendAudioMessage = async () => {
+    if (isContactBlocked.value) {
+        return;
+    }
+
     const formData = new FormData();
     formData.append('type', form2.value.type);
     formData.append('uuid', form2.value.uuid);
@@ -137,6 +156,10 @@ const adjustTextareaHeight = () => {
 };
 
 const handleEnterKey = (event) => {
+    if (isContactBlocked.value) {
+        return;
+    }
+
     if (formTextInput.value != null && formTextInput.value.trim() != '') {
         sendMessage();
     }
@@ -155,6 +178,10 @@ const isInboundChatWithin24Hours = computed(() => {
 });
 
 const handleFileUpload = (event) => {
+    if (isContactBlocked.value) {
+        return;
+    }
+
     const file = event.target.files[0];
     const reader = new FileReader();
     reader.onload = (e) => {
@@ -219,6 +246,10 @@ const handleClickOutside = (event) => {
 };
 
 const startRecording = async () => {
+    if (isContactBlocked.value) {
+        return;
+    }
+
     try {
         isAudioRecording.value = true;
         await recorder.value.start();
@@ -320,6 +351,10 @@ const handleAudioLoaded = () => {
 };
 
 const getSuggestion = async () => {
+    if (isContactBlocked.value) {
+        return;
+    }
+
     processingAISuggestions.value = true;
     try {
         const response = await axios.get('/automation/chat/suggestion', {
@@ -380,7 +415,20 @@ onBeforeUnmount(() => {
             </div>
         </div>
     </div>
-    <div v-if="!isInboundChatWithin24Hours && !props.chatLimitReached"
+    <div v-if="isContactBlocked && !props.chatLimitReached" class="flex justify-center items-center w-full px-6 md:px-4">
+        <div class="flex items-start space-x-4 bg-red-100 rounded-lg p-2 mb-2 px-4 border border-red-200">
+            <span class="text-red-700">
+                <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24">
+                    <path fill="currentColor" d="M12 2a10 10 0 1 0 10 10A10.011 10.011 0 0 0 12 2m4.293 12.879l-1.414 1.414L12 13.414l-2.879 2.879l-1.414-1.414L10.586 12L7.707 9.121l1.414-1.414L12 10.586l2.879-2.879l1.414 1.414L13.414 12Z"/>
+                </svg>
+            </span>
+            <div>
+                <div class="text-sm font-medium">{{ $t('Blocked contact') }}</div>
+                <div class="text-sm">{{ $t('This contact is blocked. Sending messages and templates is disabled.') }}</div>
+            </div>
+        </div>
+    </div>
+    <div v-if="!isContactBlocked && !isInboundChatWithin24Hours && !props.chatLimitReached"
         class="flex justify-center items-center w-full px-6 md:px-4">
         <div class="flex items-center justify-between space-x-4 bg-orange-100 rounded-lg p-2 mb-2 px-4">
             <div class="flex items-start justify-between space-x-4">
@@ -407,7 +455,7 @@ onBeforeUnmount(() => {
                 }}</button>
         </div>
     </div>
-    <form v-if="isInboundChatWithin24Hours && !props.chatLimitReached" @submit.prevent="sendMessage()"
+    <form v-if="!isContactBlocked && isInboundChatWithin24Hours && !props.chatLimitReached" @submit.prevent="sendMessage()"
         class="flex items-center px-2 md:px-10 space-x-2">
         <div class="bg-white rounded-md w-full p-4">
             <div>

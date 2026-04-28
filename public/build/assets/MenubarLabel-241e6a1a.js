@@ -1,0 +1,5 @@
+<<<<<<<< HEAD:public/build/assets/MenubarLabel-b6e24a95.js
+import{f as t}from"./index-2514de22.js";import{c as n}from"./utils-3f044a58.js";import{D as l,f as r,g as p,n as c,u as a,o as f,B as m}from"./app-0c421706.js";const _=l({__name:"MenubarLabel",props:{asChild:{type:Boolean},as:{},inset:{type:Boolean},class:{}},setup(e){const o=e;return(s,i)=>(f(),r(a(t),{class:c(a(n)("px-2 py-1.5 text-sm font-semibold",s.inset&&"pl-8",o.class))},{default:p(()=>[m(s.$slots,"default")]),_:3},8,["class"]))}});export{_ as default};
+========
+import{f as t}from"./index-b4e0690f.js";import{c as n}from"./utils-3f044a58.js";import{D as l,f as r,g as p,n as c,u as a,o as f,B as m}from"./app-9753bd4f.js";const _=l({__name:"MenubarLabel",props:{asChild:{type:Boolean},as:{},inset:{type:Boolean},class:{}},setup(e){const o=e;return(s,i)=>(f(),r(a(t),{class:c(a(n)("px-2 py-1.5 text-sm font-semibold",s.inset&&"pl-8",o.class))},{default:p(()=>[m(s.$slots,"default")]),_:3},8,["class"]))}});export{_ as default};
+>>>>>>>> 2a02b3dd809c6ff2d90b1d779b18efcc59f853c2:public/build/assets/MenubarLabel-241e6a1a.js

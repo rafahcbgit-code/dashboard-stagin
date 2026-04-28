@@ -1,4 +1,8 @@
+<<<<<<<< HEAD:public/build/assets/SelectTrigger-91903ea9.js
 import{E as n,H as c}from"./index-2514de22.js";import{c as l}from"./utils-3f044a58.js";import{c as d}from"./createLucideIcon-e34cdf69.js";import{D as i,f as u,g as s,E as p,u as e,o as f,B as m,j as a}from"./app-0c421706.js";/**
+========
+import{E as n,H as c}from"./index-b4e0690f.js";import{c as l}from"./utils-3f044a58.js";import{c as d}from"./createLucideIcon-52d0cb65.js";import{D as i,f as u,g as s,E as p,u as e,o as f,B as m,j as a}from"./app-9753bd4f.js";/**
+>>>>>>>> 2a02b3dd809c6ff2d90b1d779b18efcc59f853c2:public/build/assets/SelectTrigger-f13328cc.js
  * @license lucide-vue-next v0.454.0 - ISC
  *
  * This source code is licensed under the ISC license.

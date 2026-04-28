@@ -14,6 +14,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Config;
 use Inertia\Middleware;
+use libphonenumber\PhoneNumberUtil;
 use RobThree\Auth\Providers\Qr\BaconQrCodeProvider;
 use RobThree\Auth\TwoFactorAuth;
 
@@ -136,7 +137,61 @@ class HandleInertiaRequests extends Middleware
             'meta_flows_module' => fn() => $user && $user->role === 'user'
                 ? CustomHelper::isModuleEnabled('Meta Flows')
                 : false,
+            'contactConstants' => [
+                'countries' => config('formats.countries', []),
+                'staticCustomAttributes' => config('contact_management.static_custom_attributes', []),
+                'countryDialCodes' => $this->getCountryDialCodes(),
+            ],
         ]);
+    }
+
+    private function getCountryDialCodes(): array
+    {
+        static $options = null;
+
+        if (is_array($options)) {
+            return $options;
+        }
+
+        try {
+            $phoneUtil = PhoneNumberUtil::getInstance();
+            $regions = $phoneUtil->getSupportedRegions();
+            $items = [];
+
+            foreach ($regions as $region) {
+                $countryCode = (int) $phoneUtil->getCountryCodeForRegion($region);
+
+                if ($countryCode <= 0) {
+                    continue;
+                }
+
+                $countryName = class_exists(\Locale::class)
+                    ? (string) \Locale::getDisplayRegion('-' . $region, 'en')
+                    : (string) $region;
+
+                if ($countryName === '') {
+                    $countryName = (string) $region;
+                }
+
+                $items[] = [
+                    'value' => (string) $countryCode,
+                    'dial_code' => '+' . $countryCode,
+                    'country' => $countryName,
+                    'region' => $region,
+                    'label' => $countryName . ' (+' . $countryCode . ')',
+                ];
+            }
+
+            usort($items, static function (array $a, array $b): int {
+                return [$a['country'], $a['dial_code'], $a['region']] <=> [$b['country'], $b['dial_code'], $b['region']];
+            });
+
+            $options = $items;
+            return $options;
+        } catch (\Throwable $exception) {
+            $options = [];
+            return $options;
+        }
     }
 
     /**

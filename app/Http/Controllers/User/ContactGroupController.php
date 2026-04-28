@@ -215,11 +215,53 @@ class ContactGroupController extends BaseController
             'list' => $deletedGroups
         ]);
 
+        if ($request->expectsJson()) {
+            return response()->json([
+                'success' => true,
+                'message' => __('Group(s) deleted successfully'),
+                'deleted' => $deletedGroups,
+            ]);
+        }
+
         return redirect('/contact-groups')->with(
             'status', [
                 'type' => 'success',
                 'message' => __('Group(s) deleted successfully')
             ]
         );
+    }
+
+    public function deleteSingle(Request $request, string $uuid)
+    {
+        $organizationId = $this->getCurrentOrganizationId();
+
+        $group = ContactGroup::where('uuid', $uuid)
+            ->where('organization_id', $organizationId)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (! $group) {
+            return response()->json([
+                'success' => false,
+                'message' => __('Group not found'),
+            ], 404);
+        }
+
+        $group->contacts()->detach();
+        $group->delete();
+
+        WebhookHelper::triggerWebhookEvent('group.deleted', [
+            'list' => [
+                [
+                    'uuid' => $group->uuid,
+                    'deleted_at' => now()->toISOString(),
+                ],
+            ],
+        ]);
+
+        return response()->json([
+            'success' => true,
+            'message' => __('Group deleted successfully'),
+        ]);
     }
 }
