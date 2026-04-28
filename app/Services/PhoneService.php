@@ -8,6 +8,9 @@ use Illuminate\Support\Facades\Log;
 
 class PhoneService
 {
+    private static array $validationCache = [];
+    private static array $importE164Cache = [];
+
     /**
      * Validate and format a phone number
      * 
@@ -16,6 +19,11 @@ class PhoneService
      */
     public static function validateAndFormat($phoneNumber)
     {
+        $cacheKey = (string) $phoneNumber;
+        if (array_key_exists($cacheKey, self::$validationCache)) {
+            return self::$validationCache[$cacheKey];
+        }
+
         // Basic normalization: trim and remove common invisible chars
         $original = $phoneNumber;
         $phoneNumber = trim($phoneNumber);
@@ -50,14 +58,14 @@ class PhoneService
 
             if ($validation['is_valid']) {
                 $type = BrazilPhoneHelper::getPhoneType($phoneNumber);
-                return [
+                return self::$validationCache[$cacheKey] = [
                     'is_valid' => true,
                     'formatted' => $validation['formatted'],
                     'error' => null,
                     'type' => $type
                 ];
             } else {
-                return [
+                return self::$validationCache[$cacheKey] = [
                     'is_valid' => false,
                     'formatted' => null,
                     'error' => $validation['error'],
@@ -71,7 +79,7 @@ class PhoneService
             $phone = new PhoneNumber($phoneNumber);
 
             if ($phone->isValid()) {
-                return [
+                return self::$validationCache[$cacheKey] = [
                     'is_valid' => true,
                     'formatted' => $phone->formatE164(),
                     'error' => null,
@@ -90,7 +98,7 @@ class PhoneService
 
                     } catch (\Throwable $__t) {
                     }
-                    return [
+                    return self::$validationCache[$cacheKey] = [
                         'is_valid' => true,
                         'formatted' => $phoneNumber,
                         'error' => null,
@@ -98,7 +106,7 @@ class PhoneService
                     ];
                 }
 
-                return [
+                return self::$validationCache[$cacheKey] = [
                     'is_valid' => false,
                     'formatted' => null,
                     'error' => 'Invalid phone number format',
@@ -106,7 +114,7 @@ class PhoneService
                 ];
             }
         } catch (\Exception $e) {
-            return [
+            return self::$validationCache[$cacheKey] = [
                 'is_valid' => false,
                 'formatted' => null,
                 'error' => 'Invalid phone number format',
@@ -150,6 +158,75 @@ class PhoneService
         }
 
         return null;
+    }
+
+    /**
+     * Get E164 formatted phone number for imports.
+     *
+     * This keeps normal runtime validation strict, but allows imports to accept
+     * numbers that libphonenumber considers possible even when it cannot mark
+     * them as fully valid.
+     */
+    public static function getE164FormatForImport($phoneNumber): ?string
+    {
+        $cacheKey = (string) $phoneNumber;
+        if (array_key_exists($cacheKey, self::$importE164Cache)) {
+            return self::$importE164Cache[$cacheKey];
+        }
+
+        $validation = self::validateAndFormat($phoneNumber);
+
+        if ($validation['is_valid']) {
+            return self::$importE164Cache[$cacheKey] = $validation['formatted'];
+        }
+
+        $normalized = self::normalizePhoneInput($phoneNumber);
+
+        if ($normalized === '') {
+            return self::$importE164Cache[$cacheKey] = null;
+        }
+
+        try {
+            $phoneUtil = \libphonenumber\PhoneNumberUtil::getInstance();
+            $phone = $phoneUtil->parse($normalized, null);
+
+            if (! $phoneUtil->isPossibleNumber($phone)) {
+                return self::$importE164Cache[$cacheKey] = null;
+            }
+
+            return self::$importE164Cache[$cacheKey] = $phoneUtil->format($phone, \libphonenumber\PhoneNumberFormat::E164);
+        } catch (\Throwable $e) {
+            return self::$importE164Cache[$cacheKey] = null;
+        }
+    }
+
+    private static function normalizePhoneInput($phoneNumber): string
+    {
+        $phoneNumber = trim((string) $phoneNumber);
+        $phoneNumber = str_replace(["\xC2\xA0", "\xE2\x80\x8B", "\xEF\xBB\xBF"], '', $phoneNumber);
+
+        $arabicIndic = ['Ù ', 'Ù¡', 'Ù¢', 'Ù£', 'Ù¤', 'Ù¥', 'Ù¦', 'Ù§', 'Ù¨', 'Ù©'];
+        $extendedIndic = ['Û°', 'Û±', 'Û²', 'Û³', 'Û´', 'Ûµ', 'Û¶', 'Û·', 'Û¸', 'Û¹'];
+        $latin = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+        $phoneNumber = str_replace($arabicIndic, $latin, $phoneNumber);
+        $phoneNumber = str_replace($extendedIndic, $latin, $phoneNumber);
+        $phoneNumber = str_replace('\uFF0B', '+', $phoneNumber);
+        $phoneNumber = preg_replace('/[^\d+]/u', '', $phoneNumber) ?: '';
+
+        if (substr_count($phoneNumber, '+') > 1) {
+            $phoneNumber = preg_replace('/\++/', '+', $phoneNumber);
+            $phoneNumber = '+' . ltrim($phoneNumber, '+');
+        }
+
+        if (str_starts_with($phoneNumber, '00')) {
+            $phoneNumber = '+' . substr($phoneNumber, 2);
+        }
+
+        if (! str_starts_with($phoneNumber, '+') && preg_match('/^\d{6,}$/', $phoneNumber)) {
+            $phoneNumber = '+' . $phoneNumber;
+        }
+
+        return $phoneNumber;
     }
 
     /**

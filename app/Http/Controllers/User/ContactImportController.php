@@ -329,6 +329,59 @@ class ContactImportController extends BaseController
         ]);
     }
 
+    public function invalidReportCsv(string $batchUuid): StreamedResponse
+    {
+        $batch = $this->findBatch($batchUuid);
+        $storedReport = (array) ($batch->report['invalid_rows_report']['rows'] ?? []);
+        $batchId = (int) $batch->id;
+
+        return response()->streamDownload(function () use ($storedReport, $batchId) {
+            $handle = fopen('php://output', 'w');
+            fwrite($handle, "\xEF\xBB\xBF");
+            fputcsv($handle, ['Row', 'Phone', 'First Name', 'Last Name', 'Email', 'Audince', 'Errors']);
+
+            foreach ($storedReport as $item) {
+                $mappedData = (array) ($item['mapped_data'] ?? []);
+
+                fputcsv($handle, [
+                    $item['row_number'] ?? '',
+                    $mappedData['phone'] ?? '',
+                    $mappedData['first_name'] ?? '',
+                    $mappedData['last_name'] ?? '',
+                    $mappedData['email'] ?? '',
+                    $mappedData['group_name'] ?? '',
+                    implode(' | ', (array) ($item['errors'] ?? [])),
+                ]);
+            }
+
+            if (empty($storedReport)) {
+                ContactImportRow::query()
+                    ->where('contact_import_batch_id', $batchId)
+                    ->where('status', 'invalid')
+                    ->orderBy('row_number')
+                    ->chunk(1000, function ($rows) use ($handle): void {
+                        foreach ($rows as $row) {
+                            $mappedData = (array) ($row->mapped_data ?? []);
+
+                            fputcsv($handle, [
+                                $row->row_number,
+                                $mappedData['phone'] ?? '',
+                                $mappedData['first_name'] ?? '',
+                                $mappedData['last_name'] ?? '',
+                                $mappedData['email'] ?? '',
+                                $mappedData['group_name'] ?? '',
+                                implode(' | ', (array) ($row->errors ?? [])),
+                            ]);
+                        }
+                    });
+            }
+
+            fclose($handle);
+        }, 'contact-import-invalid-numbers.csv', [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
+    }
+
     private function buildBatchResponse(ContactImportBatch $batch, int $page = 1, int $perPage = 15, string $status = 'all'): array
     {
         $rows = $this->importService->paginateRows($batch, $page, max(1, min($perPage, 100)), $status);
@@ -367,15 +420,19 @@ class ContactImportController extends BaseController
             ->selectRaw('COUNT(*) as total')
             ->selectRaw("SUM(CASE WHEN status = 'valid' THEN 1 ELSE 0 END) as valid")
             ->selectRaw("SUM(CASE WHEN status = 'invalid' THEN 1 ELSE 0 END) as invalid")
-            ->selectRaw('SUM(CASE WHEN is_removed = 1 THEN 1 ELSE 0 END) as removed')
+            ->selectRaw("SUM(CASE WHEN status = 'removed' THEN 1 ELSE 0 END) as removed")
             ->selectRaw("SUM(CASE WHEN status = 'imported' THEN 1 ELSE 0 END) as imported")
             ->selectRaw("SUM(CASE WHEN status = 'failed' THEN 1 ELSE 0 END) as failed")
             ->first();
 
+        $storedInvalidCount = (int) data_get($batch->report, 'invalid_rows_report.count', 0);
+        $databaseInvalidCount = (int) ($stats->invalid ?? 0);
+        $deletedInvalidCount = max(0, $storedInvalidCount - $databaseInvalidCount);
+
         return [
-            'total' => (int) ($stats->total ?? 0),
+            'total' => (int) ($stats->total ?? 0) + $deletedInvalidCount,
             'valid' => (int) ($stats->valid ?? 0),
-            'invalid' => (int) ($stats->invalid ?? 0),
+            'invalid' => max($databaseInvalidCount, $storedInvalidCount),
             'removed' => (int) ($stats->removed ?? 0),
             'imported' => (int) ($stats->imported ?? 0),
             'failed' => (int) ($stats->failed ?? 0),

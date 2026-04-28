@@ -7,6 +7,7 @@ use App\Models\Chat;
 use App\Models\Contact;
 use App\Models\ContactGroup;
 use App\Models\Setting;
+use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -320,54 +321,66 @@ class ContactService
 
     public function delete($uuids)
     {
-        $deletedContacts = [];
+        $query = Contact::query()
+            ->where('organization_id', $this->organizationId)
+            ->whereNull('deleted_at');
 
-        if (empty($uuids)) {
-            // Delete all contacts (soft delete)
-            $contacts = Contact::where('organization_id', $this->organizationId)->get();
-            Contact::whereNotNull('id')->where('organization_id', $this->organizationId)->delete();
+        if (! empty($uuids)) {
+            $query->whereIn('uuid', $uuids);
+        }
 
-            // Prepare deleted contacts for the webhook
-            foreach ($contacts as $contact) {
-                $deletedContacts[] = [
-                    'uuid' => $contact->uuid,
-                    'deleted_at' => now()->toISOString(), // Assuming you're using Laravel's Carbon
-                ];
-            }
+        $this->deleteByQuery($query);
+    }
 
-            //Mark all unread chats as read
-            Chat::where('organization_id', $this->organizationId)
-                ->where('type', 'inbound')
-                ->whereNull('deleted_at')
-                ->where('is_read', 0)
-                ->update([
-                    'is_read' => 1,
-                ]);
-        } else {
-            // Delete contacts by UUIDs (soft delete)
-            foreach ($uuids as $uuid) {
-                $contact = Contact::where('uuid', $uuid)->firstOrFail();
+    public function deleteByQuery(EloquentBuilder $query): int
+    {
+        $deletedAt = now();
+        $deletedAtIso = $deletedAt->toISOString();
+        $deletedCount = 0;
+        $webhookContacts = [];
 
-                // Prepare deleted contact for the webhook
-                $deletedContacts[] = [
-                    'uuid' => $contact->uuid,
-                    'deleted_at' => now()->toISOString(),
-                ];
+        (clone $query)
+            ->select('contacts.id as id', 'contacts.uuid as uuid')
+            ->chunkById(1000, function ($contacts) use (&$deletedCount, &$webhookContacts, $deletedAt, $deletedAtIso) {
+                $contactIds = $contacts->pluck('id')->map(fn ($id) => (int) $id)->filter()->values()->all();
 
-                //Mark all unread chats as read
-                Chat::where('contact_id', $contact->id)
+                if (empty($contactIds)) {
+                    return;
+                }
+
+                Chat::whereIn('contact_id', $contactIds)
                     ->where('type', 'inbound')
                     ->whereNull('deleted_at')
                     ->where('is_read', 0)
-                    ->update([
-                        'is_read' => 1,
-                    ]);
-            }
+                    ->update(['is_read' => 1]);
 
-            Contact::whereIn('uuid', $uuids)->where('organization_id', $this->organizationId)->delete();
+                $deletedCount += Contact::where('organization_id', $this->organizationId)
+                    ->whereNull('deleted_at')
+                    ->whereIn('id', $contactIds)
+                    ->update(['deleted_at' => $deletedAt]);
+
+                foreach ($contacts as $contact) {
+                    $webhookContacts[] = [
+                        'uuid' => $contact->uuid,
+                        'deleted_at' => $deletedAtIso,
+                    ];
+                }
+
+                if (count($webhookContacts) >= 1000) {
+                    $this->triggerDeletedContactsWebhook($webhookContacts);
+                    $webhookContacts = [];
+                }
+            }, 'contacts.id', 'id');
+
+        if (! empty($webhookContacts)) {
+            $this->triggerDeletedContactsWebhook($webhookContacts);
         }
 
-        // Trigger webhook with deleted contacts
+        return $deletedCount;
+    }
+
+    private function triggerDeletedContactsWebhook(array $deletedContacts): void
+    {
         WebhookHelper::triggerWebhookEvent('contact.deleted', [
             'list' => $deletedContacts,
         ], $this->organizationId);

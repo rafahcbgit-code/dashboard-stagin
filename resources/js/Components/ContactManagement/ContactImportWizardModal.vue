@@ -75,10 +75,10 @@ const showAdvancedMapping = ref(false);
 const hasBatch = computed(() => !!batch.value?.uuid);
 const batchHeaders = computed(() => batch.value?.headers || []);
 const batchStats = computed(() => batch.value?.stats || {});
-const report = computed(() => batch.value?.report || null);
-const isImportCompleted = computed(() => Boolean(report.value));
-const requiresDefaultCountryCode = computed(() => Boolean(batch.value?.requires_default_country_code));
-const showDefaultCodeControls = computed(() => !normalizationApplied.value && requiresDefaultCountryCode.value);
+const rawReport = computed(() => batch.value?.report || null);
+const isImportCompleted = computed(() => batch.value?.status === 'committed' || Boolean(rawReport.value?.executed_at));
+const report = computed(() => (isImportCompleted.value ? rawReport.value : null));
+const invalidRowsReportUrl = computed(() => (batch.value?.uuid ? `/contacts/import/${batch.value.uuid}/invalid-report.csv` : '#'));
 
 watch(
     () => props.modelValue,
@@ -243,11 +243,7 @@ const mapColumns = async () => {
         applyRowsPayload(data.rows);
         wizardStep.value = 3;
         normalizationApplied.value = false;
-        if (!requiresDefaultCountryCode.value) {
-            await normalizeRows();
-        } else {
-            successMessage.value = t('Some numbers have no country code. Set default country code and apply normalization.');
-        }
+        await normalizeRows();
     } catch (error) {
         errorMessage.value = error?.response?.data?.message || t('Failed to save mapping.');
     } finally {
@@ -274,8 +270,8 @@ const normalizeRows = async () => {
         invalidRowsPreview.value = Array.isArray(data?.invalid_preview?.rows) ? data.invalid_preview.rows : [];
         invalidRowsPreviewLimited.value = Boolean(data?.invalid_preview?.limited);
         successMessage.value = invalidRowsCount.value > 0
-            ? t('Normalization completed. Invalid rows were excluded from import and shown below.')
-            : t('Normalization completed. No invalid rows found.');
+            ? t('Numbers checked. Invalid rows were excluded from import and shown below.')
+            : t('Numbers checked. No invalid rows found.');
     } catch (error) {
         errorMessage.value = error?.response?.data?.message || t('Failed to normalize rows.');
     } finally {
@@ -404,7 +400,11 @@ const executeImport = async () => {
 };
 
 const canContinueToGroups = computed(() => normalizationApplied.value);
-const hasInvalidRows = computed(() => invalidRowsCount.value > 0);
+const displayedInvalidRowsCount = computed(() => Math.max(
+    Number(invalidRowsCount.value || 0),
+    Number(batchStats.value?.invalid || 0)
+));
+const hasInvalidRows = computed(() => displayedInvalidRowsCount.value > 0);
 const filteredContactGroups = computed(() => {
     const keyword = String(groupSearch.value || '').trim().toLowerCase();
     if (keyword === '') {
@@ -432,7 +432,7 @@ const goToPreviousStep = () => {
             <div class="flex flex-wrap items-center gap-2 text-xs">
                 <span class="rounded-full px-2 py-1" :class="wizardStep >= 1 ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600'">{{ $t('1. Upload') }}</span>
                 <span class="rounded-full px-2 py-1" :class="wizardStep >= 2 ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600'">{{ $t('2. Mapping') }}</span>
-                <span class="rounded-full px-2 py-1" :class="wizardStep >= 3 ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600'">{{ $t('3. Normalize & Clean') }}</span>
+                <span class="rounded-full px-2 py-1" :class="wizardStep >= 3 ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600'">{{ $t('3. Review Invalid Numbers') }}</span>
                 <span class="rounded-full px-2 py-1" :class="wizardStep >= 4 ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600'">{{ $t('4. Audince') }}</span>
                 <span class="rounded-full px-2 py-1" :class="wizardStep >= 5 ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600'">{{ $t('5. Import Report') }}</span>
             </div>
@@ -566,7 +566,7 @@ const goToPreviousStep = () => {
                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                             <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 0 1 8-8v4a4 4 0 0 0-4 4z"></path>
                         </svg>
-                        <span>{{ $t('Normalizing and validating numbers...') }}</span>
+                        <span>{{ $t('Checking numbers and preparing report...') }}</span>
                     </div>
                 </div>
 
@@ -581,7 +581,7 @@ const goToPreviousStep = () => {
                     </div>
                     <div class="rounded-lg border border-rose-200 bg-rose-50 px-3 py-2">
                         <p class="text-[11px] text-rose-700">{{ $t('Invalid') }}</p>
-                        <p class="text-sm font-semibold text-rose-800">{{ invalidRowsCount }}</p>
+                        <p class="text-sm font-semibold text-rose-800">{{ displayedInvalidRowsCount }}</p>
                     </div>
                     <div class="rounded-lg border border-amber-200 bg-amber-50 px-3 py-2">
                         <p class="text-[11px] text-amber-700">{{ $t('Removed') }}</p>
@@ -590,11 +590,7 @@ const goToPreviousStep = () => {
                 </div>
 
                 <div class="rounded-lg border border-slate-200 bg-white p-3">
-                    <div v-if="showDefaultCodeControls">
-                        <label class="rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-600 block">{{ $t('Default Country Code (for numbers without code)') }}
-                            <input v-model="defaultCountryCode" type="text" class="mt-2 w-full rounded-md border border-slate-300 bg-white px-3 py-2 text-sm" placeholder="+966">
-                        </label>
-                    </div>
+                    
 
                     <div class="mt-3 flex flex-wrap gap-2">
                         <button
@@ -604,15 +600,6 @@ const goToPreviousStep = () => {
                             @click="goToPreviousStep"
                         >
                             {{ $t('Previous') }}
-                        </button>
-                        <button
-                            v-if="showDefaultCodeControls"
-                            type="button"
-                            class="inline-flex h-11 min-w-[12rem] flex-1 items-center justify-center rounded-md border border-primary/30 bg-primary/5 px-4 text-sm font-medium text-primary transition-colors hover:bg-primary/10 disabled:cursor-not-allowed disabled:opacity-60"
-                            :disabled="busy"
-                            @click="normalizeRows"
-                        >
-                            {{ busy ? $t('Processing...') : $t('Apply Normalization') }}
                         </button>
                         <button
                             type="button"
@@ -625,12 +612,26 @@ const goToPreviousStep = () => {
                     </div>
                     <p class="mt-2 text-xs" :class="canContinueToGroups ? 'text-emerald-700' : 'text-slate-500'">
                         {{ canContinueToGroups
-                            ? $t('Normalization applied successfully. You can continue to audince assignment.')
-                            : $t('Run normalization before continuing.') }}
+                            ? $t('Numbers are ready. You can continue to audince assignment.')
+                            : $t('Checking numbers before continuing.') }}
                     </p>
                 </div>
 
-                <div v-if="hasInvalidRows" class="overflow-x-auto rounded-lg border border-slate-200 bg-white">
+                <div v-if="hasInvalidRows" class="overflow-hidden rounded-lg border border-slate-200 bg-white">
+                    <div class="flex flex-wrap items-center justify-between gap-2 border-b border-slate-200 bg-rose-50 px-3 py-2">
+                        <div>
+                            <p class="text-sm font-semibold text-rose-800">{{ $t('Invalid numbers report') }}</p>
+                            <p class="text-xs text-rose-700">{{ $t('Download all invalid rows before continuing the import.') }}</p>
+                        </div>
+                        <a
+                            :href="invalidRowsReportUrl"
+                            target="_blank"
+                            class="rounded-md border border-rose-200 bg-white px-3 py-1.5 text-xs font-medium text-rose-700 transition hover:bg-rose-100"
+                        >
+                            {{ $t('Download invalid numbers report CSV') }}
+                        </a>
+                    </div>
+                    <div class="overflow-x-auto">
                     <table class="min-w-full divide-y divide-slate-200 text-xs">
                         <thead class="bg-slate-50">
                             <tr>
@@ -653,13 +654,12 @@ const goToPreviousStep = () => {
                             </tr>
                         </tbody>
                     </table>
+                    </div>
                     <div v-if="invalidRowsPreviewLimited" class="border-t border-slate-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
                         {{ $t('Only part of invalid rows is shown for preview.') }}
                     </div>
                 </div>
-                <div v-else class="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-700">
-                    {{ $t('No invalid rows found after normalization.') }}
-                </div>
+                
             </div>
 
             <div v-if="wizardStep === 4" class="space-y-3">

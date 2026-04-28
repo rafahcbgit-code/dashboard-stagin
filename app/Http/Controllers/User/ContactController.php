@@ -436,30 +436,20 @@ class ContactController extends BaseController
         $selectAllFiltered = (bool) $request->boolean('select_all_filtered');
         $exceptIds = collect($validated['except_ids'] ?? [])->map(fn ($id) => (int) $id)->filter()->values();
 
-        if ($selectAllFiltered) {
-            $query = Contact::query()
-                ->where('organization_id', $organizationId)
-                ->whereNull('deleted_at')
-                ->select('contacts.*');
+        $query = Contact::query()
+            ->where('organization_id', $organizationId)
+            ->whereNull('deleted_at');
 
+        if ($selectAllFiltered) {
             $query = (new ContactFilter())->apply($query, $this->toFilterRequest($request));
             if ($exceptIds->isNotEmpty()) {
                 $query->whereNotIn('contacts.id', $exceptIds->all());
             }
-
-            $uuids = $query->pluck('contacts.uuid')->all();
         } else {
-            $uuids = Contact::query()
-                ->where('organization_id', $organizationId)
-                ->whereNull('deleted_at')
-                ->whereIn('id', $validated['ids'] ?? [])
-                ->pluck('uuid')
-                ->all();
+            $query->whereIn('contacts.id', $validated['ids'] ?? []);
         }
 
-        if (! empty($uuids)) {
-            $this->contactService()->delete($uuids);
-        }
+        $this->contactService()->deleteByQuery($query);
 
         return back()->with('status', [
             'type' => 'success',

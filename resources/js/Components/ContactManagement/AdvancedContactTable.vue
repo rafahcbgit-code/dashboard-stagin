@@ -582,6 +582,10 @@ const clearGroupFilterSelection = () => {
 
 const groupContactsCount = (group) => Number(group?.contacts_count ?? group?.contact_count ?? 0);
 
+const isGroupSelectedForFilter = (groupId) => query.group_ids.includes(String(groupId));
+
+const isGroupSelectedForDeletion = (groupUuid) => selectedGroupUuidsForDeletion.value.includes(String(groupUuid));
+
 const clearGroupDeletionSelection = () => {
     selectedGroupUuidsForDeletion.value = [];
 };
@@ -1196,10 +1200,7 @@ const onImportCompleted = () => {
                                 </span>
                             </div>
 
-                            <button type="button" class="mt-6 inline-flex h-12 w-full items-center justify-center gap-2 rounded-full bg-[#25D366] px-4 text-sm font-extrabold text-white shadow-lg shadow-emerald-100 transition-all duration-300 hover:-translate-y-0.5 hover:bg-[#1fb85a]" @click.stop="openQuickWhatsapp(contact)">
-                                <MessageCircle class="h-5 w-5" />
-                                {{ $t('Quick WhatsApp') }}
-                            </button>
+                    
                         </article>
                     </div>
 
@@ -1549,15 +1550,16 @@ const onImportCompleted = () => {
 
             <div v-if="groups.length" class="mt-2 rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
                 <div class="flex flex-wrap items-center justify-between gap-2">
-                    <span class="text-xs text-slate-600">
-                        {{ $t('Selected for deletion') }}: {{ selectedGroupDeletionCount }}
-                    </span>
+                    <div class="flex flex-wrap items-center gap-3 text-xs text-slate-600">
+                        <span>{{ $t('Selected filters') }}: {{ query.group_ids.length }}</span>
+                        <span>{{ $t('Selected for deletion') }}: {{ selectedGroupDeletionCount }}</span>
+                    </div>
                     <div class="flex flex-wrap items-center gap-2">
                         <button type="button" class="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-700 disabled:cursor-not-allowed disabled:opacity-60" :disabled="isDeletingGroups" @click="selectAllGroupsForDeletion">
-                            {{ $t('Select All') }}
+                            {{ $t('Select All for deletion') }}
                         </button>
                         <button type="button" class="rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs text-slate-700 disabled:cursor-not-allowed disabled:opacity-60" :disabled="isDeletingGroups || !selectedGroupDeletionCount" @click="clearGroupDeletionSelection">
-                            {{ $t('Clear') }}
+                            {{ $t('Clear deletion') }}
                         </button>
                         <button type="button" class="rounded-md border border-rose-200 bg-white px-2.5 py-1 text-xs text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60" :disabled="isDeletingGroups || !selectedGroupDeletionCount" @click="deleteSelectedGroups">
                             {{ isDeletingGroups ? $t('Deleting...') : $t('Delete Selected') }}
@@ -1581,22 +1583,32 @@ const onImportCompleted = () => {
                     v-for="group in groups"
                     :key="group.id"
                     class="flex w-full items-center justify-between gap-2 rounded-md border px-3 py-2 text-sm"
-                    :class="query.group_ids.includes(String(group.id)) ? 'border-primary bg-primary/5 text-primary' : 'border-slate-300 text-slate-700'"
+                    :class="isGroupSelectedForFilter(group.id) ? 'border-primary bg-primary/5 text-primary' : 'border-slate-300 text-slate-700'"
                 >
                     <input
                         type="checkbox"
                         class="h-4 w-4 shrink-0 rounded border-slate-300 text-primary focus:ring-primary"
-                        :checked="selectedGroupUuidsForDeletion.includes(String(group.uuid))"
-                        :aria-label="`${$t('Select')} ${group.name}`"
-                        @change="toggleGroupDeletionSelection(group.uuid)"
+                        :checked="isGroupSelectedForFilter(group.id)"
+                        :aria-label="`${$t('Filter by')} ${group.name}`"
+                        @change="toggleGroupFilterSelection(group.id)"
                     >
-                    <button type="button" class="min-w-0 flex-1 text-left" @click="toggleGroupFilterSelection(group.id)">
+                    <button type="button" class="min-w-0 flex-1 text-left rtl:text-right" @click="toggleGroupFilterSelection(group.id)">
                         <span class="truncate">{{ group.name }}</span>
-                        <span v-if="query.group_ids.includes(String(group.id))" class="ml-2 text-xs">{{ $t('Selected') }}</span>
+                        <span v-if="isGroupSelectedForFilter(group.id)" class="ml-2 text-xs rtl:ml-0 rtl:mr-2">{{ $t('Selected') }}</span>
                     </button>
                     <span class="shrink-0 rounded-full bg-slate-100 px-2 py-0.5 text-xs text-slate-600">
                         {{ groupContactsCount(group) }}
                     </span>
+                    <label class="inline-flex shrink-0 items-center gap-1 rounded-md border border-rose-100 bg-white px-2 py-1 text-[11px] text-rose-600">
+                        <input
+                            type="checkbox"
+                            class="h-3.5 w-3.5 rounded border-rose-200 text-rose-500 focus:ring-rose-500"
+                            :checked="isGroupSelectedForDeletion(group.uuid)"
+                            :aria-label="`${$t('Select for deletion')} ${group.name}`"
+                            @change="toggleGroupDeletionSelection(group.uuid)"
+                        >
+                        <span>{{ $t('For deletion') }}</span>
+                    </label>
                     <button
                         type="button"
                         class="rounded-md border border-rose-200 px-2 py-1 text-xs text-rose-600 hover:bg-rose-50 disabled:cursor-not-allowed disabled:opacity-60"
