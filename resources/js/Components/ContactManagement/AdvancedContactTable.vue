@@ -879,8 +879,18 @@ const runBulkAction = () => {
         return;
     }
 
+    const filters = currentFilterPayload();
+    if (filters.group_ids) {
+        filters.filter_group_ids = filters.group_ids;
+        delete filters.group_ids;
+    }
+    if (bulkActionModal.value === 'change_subscription_status' && filters.subscription_status) {
+        filters.filter_subscription_status = filters.subscription_status;
+        delete filters.subscription_status;
+    }
+
     const payload = {
-        ...currentFilterPayload(),
+        ...filters,
         action: bulkActionModal.value,
         select_all_filtered: allFilteredSelected.value ? 1 : 0,
         except_ids: allFilteredSelected.value ? deselectedIds.value : [],
