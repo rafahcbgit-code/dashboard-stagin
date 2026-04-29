@@ -138,6 +138,8 @@ class ContactImportService
                             ? $currentMapped
                             : $this->buildMappedData($rawData, $batchMapping);
 
+                        $mappedData['phone'] = $this->sanitizePhoneForImportStorage((string) ($mappedData['phone'] ?? ''));
+
                         $evaluation = $this->evaluateMappedRow($mappedData, $defaultCountryCode);
 
                         if (! empty($evaluation['errors'])) {
@@ -227,6 +229,8 @@ class ContactImportService
             'country',
             'custom_attributes',
         ]));
+
+        $mapped['phone'] = $this->sanitizePhoneForImportStorage((string) ($mapped['phone'] ?? ''));
 
         $evaluation = $this->evaluateMappedRow($mapped, (string) ($batch->default_country_code ?: ''));
 
@@ -889,6 +893,8 @@ class ContactImportService
             $mapped[$field] = $sourceColumn !== '' ? trim((string) $this->valueForSourceColumn($rawData, $sourceColumn)) : null;
         }
 
+        $mapped['phone'] = $this->sanitizePhoneForImportStorage((string) ($mapped['phone'] ?? ''));
+
         $customAttributes = [];
         $customMapping = (array) ($mapping['custom_attributes'] ?? []);
         foreach ($customMapping as $customFieldName => $sourceColumn) {
@@ -1009,15 +1015,7 @@ class ContactImportService
 
     private function normalizePhone(string $phone, string $defaultCountryCode): ?string
     {
-        $phone = trim($phone);
-        if ($phone === '') {
-            return null;
-        }
-
-        $phone = $this->convertEasternArabicDigitsToAscii($phone);
-        $phone = ltrim($phone, "=\t\n\r\0\x0B ");
-
-        $phone = preg_replace('/[^\d+]/u', '', $phone) ?: '';
+        $phone = $this->sanitizePhoneForImportStorage($phone);
         if ($phone === '') {
             return null;
         }
@@ -1052,17 +1050,29 @@ class ContactImportService
         return null;
     }
 
-    private function phoneNeedsDefaultCountryCode(string $phone): bool
+    private function sanitizePhoneForImportStorage(string $phone): string
     {
         $phone = trim($phone);
         if ($phone === '') {
-            return false;
+            return '';
         }
 
         $phone = $this->convertEasternArabicDigitsToAscii($phone);
         $phone = ltrim($phone, "=\t\n\r\0\x0B ");
         $phone = preg_replace('/[^\d+]/u', '', $phone) ?: '';
 
+        if (str_starts_with($phone, '+')) {
+            $digits = preg_replace('/\D+/', '', substr($phone, 1)) ?: '';
+
+            return $digits !== '' ? '+' . $digits : '';
+        }
+
+        return preg_replace('/\D+/', '', $phone) ?: '';
+    }
+
+    private function phoneNeedsDefaultCountryCode(string $phone): bool
+    {
+        $phone = $this->sanitizePhoneForImportStorage($phone);
         if ($phone === '') {
             return false;
         }
