@@ -60,7 +60,6 @@
                             <FormInput v-model="form.campaign_limit" :name="$t('Campaign limit')" :error="form.errors.campaign_limit" :type="'number'" :class="'sm:col-span-3'"/>
                             <FormInput v-model="form.message_limit" :name="$t('Message limit')" :error="form.errors.message_limit" :type="'number'" :class="'sm:col-span-3'"/>
                             <FormInput v-model="form.contacts_limit" :name="$t('Contacts limit')" :error="form.errors.contacts_limit" :type="'number'" :class="'sm:col-span-3'"/>
-                            <FormInput v-model="form.canned_replies_limit" :name="$t('Canned replies limit')" :error="form.errors.canned_replies_limit" :type="'number'" :class="'sm:col-span-3'"/>
                             <FormInput v-model="form.team_limit" :name="$t('User limit')" :error="form.errors.team_limit" :type="'number'" :class="'sm:col-span-3'"/>
                         </div>
                     </div>
@@ -203,7 +202,6 @@
         campaign_limit: getDetail(props.plan?.metadata, 'campaign_limit') ?? '-1',
         message_limit: getDetail(props.plan?.metadata, 'message_limit') ?? '-1',
         contacts_limit: getDetail(props.plan?.metadata, 'contacts_limit') ?? '-1',
-        canned_replies_limit: getDetail(props.plan?.metadata, 'canned_replies_limit') ?? '-1',
         team_limit: getDetail(props.plan?.metadata, 'team_limit') ?? '-1',
         ai_text_response_limit: getDetail(props.plan?.metadata, 'ai_text_response_limit') ?? '-1',
     ai_audio_response_limit: getDetail(props.plan?.metadata, 'ai_audio_response_limit') ?? '-1',

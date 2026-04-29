@@ -22,7 +22,6 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
-use App\Services\WorkingHoursService;
 use Modules\MetaFlows\Services\MetaFlowService;
 
 /**
@@ -414,44 +413,8 @@ class ProcessWebhookJob implements ShouldQueue
         } else {
 
             try {
-                // Initialize required services
-                $workingHoursService = new WorkingHoursService();
-                
-                $autoReplyService    = new AutoReplyService($this->payload);
-
-                // Send greeting message and check if it was sent
-                $greetingSent = $autoReplyService->sendGrettingMessage($chat);
-
-                // If greeting message was sent, skip the rest of auto-reply logic
-                if ($greetingSent) {
-                    return;
-                }
-
-                // Check whether the current time is within the organization's working hours
-                $isWithinWorkingHours = $workingHoursService
-                    ->isWithinWorkingHours($this->organizationId);
-
-                if ($isWithinWorkingHours) {
-                    // Inside working hours:
-                    // Always allow normal auto-reply logic
-                    $autoReplyService->checkAutoReply($chat, $isNewContact);
-                } else {
-
-                    // Outside working hours:
-                    // Try to send the outside working hours notification
-                    $sent = $autoReplyService->sendOutsideWorkingHours($chat);
-
-                    // If the outside working hours message was NOT sent
-                    // (because it was already sent earlier),
-                    // then fall back to normal auto-reply logic
-                    if ($sent === false) {
-                        Log::warning('Outside working hours message already sent, running auto-reply instead', [
-                            'chat_id' => $chat->id,
-                        ]);
-
-                        $autoReplyService->checkAutoReply($chat, $isNewContact);
-                    }
-                }
+                $autoReplyService = new AutoReplyService($this->payload);
+                $autoReplyService->checkAutoReply($chat, $isNewContact);
             } catch (\Throwable $e) {
                 // Catch any unexpected exception to ensure the message flow
                 // is not interrupted by auto-reply logic failures

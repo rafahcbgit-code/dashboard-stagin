@@ -8,7 +8,6 @@ use Inertia\Inertia;
 use App\Models\Label;
 use App\Models\Contact;
 use App\Models\Team;
-use App\Models\AutoReply;
 use App\Models\Organization;
 use Illuminate\Http\Request;
 use App\Services\ChatService;

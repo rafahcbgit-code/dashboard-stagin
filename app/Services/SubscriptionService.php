@@ -4,7 +4,6 @@ namespace App\Services;
 
 use App\Helpers\Email;
 use App\Http\Resources\SubscriptionPlanResource;
-use App\Models\AutoReply;
 use App\Models\BillingCredit;
 use App\Models\BillingInvoice;
 use App\Models\BillingTaxRate;
@@ -371,21 +370,6 @@ class SubscriptionService
             }
 
             $featureLimit = $subscriptionPlanLimits[$feature];
-        }
-
-        if ($feature == 'canned_replies_limit') {
-            $count = AutoReply::where('organization_id', $organizationId)->whereNull('deleted_at')->count();
-
-            if($subscription->status === 'trial' && $subscription->valid_until > now()){
-                $limit = optional(Setting::where('key', 'trial_limits')->first())->value;
-                $usageLimit = $limit ? json_decode($limit, true)['automated_replies'] ?? '-1' : '-1';
-
-                return $usageLimit == -1 ? false : $count >= $usageLimit;
-            }
-
-            if ($subscriptionPlan) {
-                return $featureLimit == -1 ? false : $count >= $featureLimit;
-            }
         }
 
         if ($feature == 'contacts_limit') {

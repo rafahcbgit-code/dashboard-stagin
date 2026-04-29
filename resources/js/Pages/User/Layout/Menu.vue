@@ -174,7 +174,7 @@
                 </li>
                 <li v-if="!isAgent" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
                     :class="$page.url.startsWith('/automation') ? 'bg-slate-50 text-black' : ''">
-                    <Link rel="noopener noreferrer" href="/automation/basic"
+                    <Link rel="noopener noreferrer" href="/automation/triggers"
                         class="flex items-center p-2 space-s-3 rounded-md">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 32 32">
                             <path fill="currentColor"

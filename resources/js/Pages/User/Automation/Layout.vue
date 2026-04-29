@@ -14,12 +14,6 @@
             <div class="flex mt-4">
                 <div class="md:w-1/5 bg-white border border-slate-200 h-[fit-content] rounded-lg pb-10 md:block hidden">
                     <ul class="pt-2 space-y-1 text-sm mb-2 px-2">
-                        <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-1 truncate cursor-pointer" :class="$page.url === '/automation/basic' ? 'bg-slate-50 text-black' : ''">
-                            <Link rel="noopener noreferrer" href="/automation/basic" class="flex items-center p-2 space-s-3 rounded-md">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><path d="M12 15a3 3 0 1 0 0-6a3 3 0 0 0 0 6"/><path d="m19.622 10.395l-1.097-2.65L20 6l-2-2l-1.735 1.483l-2.707-1.113L12.935 2h-1.954l-.632 2.401l-2.645 1.115L6 4L4 6l1.453 1.789l-1.08 2.657L2 11v2l2.401.656L5.516 16.3L4 18l2 2l1.791-1.46l2.606 1.072L11 22h2l.604-2.387l2.651-1.098C16.697 18.832 18 20 18 20l2-2l-1.484-1.75l1.098-2.652l2.386-.62V11z"/></g></svg>
-                                <span>{{ $t('Basic Replies') }}</span>
-                            </Link>
-                        </li>
                         <li v-if="fbmodule" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-1 truncate cursor-pointer" :class="$page.url.startsWith('/automation/triggers') ? 'bg-slate-50 text-black' : ''">
                             <Link rel="noopener noreferrer" href="/automation/triggers" class="flex items-center p-2 space-s-3 rounded-md">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M2 12h3m14 0h3M12 2v3m0 14v3m-6.364-3.636l2.121-2.121m8.486-8.486l2.121-2.121M5.636 5.636l2.121 2.121m8.486 8.486l2.121 2.121"/><circle cx="12" cy="12" r="4" fill="none" stroke="currentColor" stroke-width="1.5"/></svg>

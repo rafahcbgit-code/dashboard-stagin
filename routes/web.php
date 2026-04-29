@@ -202,7 +202,6 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::post('/chat/{uuid}/send/template', [App\Http\Controllers\User\ChatController::class, 'sendTemplateMessage']);
                 Route::post('/chat/{uuid}/send/carousel-template', [App\Http\Controllers\User\ChatController::class, 'sendCarouselTemplateMessage']);
                 Route::post('/chat/{uuid}/send/meta-flow', [App\Http\Controllers\User\ChatController::class, 'sendMetaFlowMessage']);
-                Route::get('/chat/test/{id}', [App\Http\Controllers\User\ChatController::class, 'sendAutoReply']);
                 Route::post('/chats/update-sort-direction', [App\Http\Controllers\User\ChatController::class, 'updateChatSortDirection']);
                 Route::get('/chats/{contactId}/messages', [App\Http\Controllers\User\ChatController::class, 'loadMoreMessages']);
                 Route::get('/chats/labels/filter-data', [App\Http\Controllers\User\ChatController::class, 'getLabelsForFilter']);
@@ -340,13 +339,6 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::post('/templates/{uuid}', [App\Http\Controllers\User\TemplateController::class, 'update']);
                 Route::delete('/templates/{uuid}', [App\Http\Controllers\User\TemplateController::class, 'delete']);
 
-                Route::get('/automation/basic', [App\Http\Controllers\User\CannedReplyController::class, 'index'])->name('cannedReply');
-                Route::get('/automation/basic/create', [App\Http\Controllers\User\CannedReplyController::class, 'create'])->name('cannedReply.create');
-                Route::post('/automation/basic', [App\Http\Controllers\User\CannedReplyController::class, 'store'])->name('cannedReply.store');
-                Route::get('/automation/basic/{uuid}/edit', [App\Http\Controllers\User\CannedReplyController::class, 'edit'])->name('cannedReply.edit');
-                Route::put('/automation/basic/{uuid}', [App\Http\Controllers\User\CannedReplyController::class, 'update'])->name('cannedReply.update');
-                Route::delete('/automation/basic/{uuid}', [App\Http\Controllers\User\CannedReplyController::class, 'delete'])->name('cannedReply.destroy');
-
                 // Trigger Groups
                 Route::get('/automation/triggers', [App\Http\Controllers\User\TriggerGroupController::class, 'index'])->name('triggers.index');
                 Route::post('/automation/triggers', [App\Http\Controllers\User\TriggerGroupController::class, 'store'])->name('triggers.store');
@@ -421,8 +413,6 @@ Route::middleware(['auth:user'])->group(function () {
                     Route::delete('/settings/whatsapp/business-profile', [App\Http\Controllers\User\SettingController::class, 'deleteWhatsappIntegration']);
                     Route::post('/settings/whatsapp/update-coexistence', [App\Http\Controllers\User\SettingController::class, 'updateWhatsappForCoExistence']);
 
-                    Route::get('/settings/greeting-message', [App\Http\Controllers\User\SettingController::class, 'greetingMessageSettings']);
-                    Route::post('/settings/greeting-message', [App\Http\Controllers\User\SettingController::class, 'updateGreetingMessageSettings']);
 
                     Route::get('/settings/labels', [App\Http\Controllers\User\SettingController::class, 'labels'])->name('settings.labels');
                     Route::post('/settings/labels', [App\Http\Controllers\User\SettingController::class, 'labels']);
@@ -431,14 +421,8 @@ Route::middleware(['auth:user'])->group(function () {
                     Route::delete('/settings/labels/{label}', [App\Http\Controllers\User\SettingController::class, 'deleteLabel'])->name('settings.labels.delete');
 
 
-                    Route::get('/settings/global-reply', [App\Http\Controllers\User\SettingController::class, 'viewGlobalReplySettings']);
-                    Route::post('/settings/global-reply', [App\Http\Controllers\User\SettingController::class, 'updateGlobalReply']);
-
-                    Route::post('/settings/after-hours-reply', [App\Http\Controllers\User\SettingController::class, 'updateAfterHoursReply']);
-
                     Route::match(['get', 'post'], '/settings/contacts', [App\Http\Controllers\User\SettingController::class, 'contacts']);
                     Route::match(['get', 'post'], '/settings/tickets', [App\Http\Controllers\User\SettingController::class, 'tickets']);
-                    Route::match(['get', 'post'], '/settings/automation', [App\Http\Controllers\User\SettingController::class, 'automation']);
                     Route::get('/settings/notifications', [App\Http\Controllers\User\SettingController::class, 'emailSettings']);
                     Route::post('/settings/notifications/email', [App\Http\Controllers\User\SettingController::class, 'updateEmailSettings']);
                     Route::post('/settings/notifications/email/test', [App\Http\Controllers\User\SettingController::class, 'testEmailSettings']);

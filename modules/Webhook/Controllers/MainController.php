@@ -25,7 +25,7 @@ class MainController extends BaseController
         $data['apirequests'] = config('apiguide');
         $data['url'] = url('/');
         $data['rows'] = WebhookResource::collection(Webhook::with('events')->where('organization_id', session()->get('current_organization'))->paginate(10));
-        $data['events'] = ['message.received', 'message.sent', 'message.status.update', 'contact.created', 'contact.updated', 'contact.deleted', 'group.created', 'group.updated', 'group.deleted', 'autoreply.created', 'autoreply.updated', 'autoreply.deleted'];
+        $data['events'] = ['message.received', 'message.sent', 'message.status.update', 'contact.created', 'contact.updated', 'contact.deleted', 'group.created', 'group.updated', 'group.deleted'];
 
         return Inertia::render('Webhook::User/Index', $data);
     }
@@ -324,44 +324,6 @@ class MainController extends BaseController
                 'data' => [
                     "uuid" => "d3364ad4-fd92-47d7-9e6e-df7c2bf12164",
                     "deleted_at" => "2024-09-27T16:10:40.006437Z"
-                ],
-            ]);
-        } else if($event == 'autoreply.created'){
-            $this->sendNotification($webhookUrl, [
-                'event' => "autoreply.created",
-                'data' => [
-                    "name" => "About Us",
-                    "trigger" => "what do you do?",
-                    "match_criteria" => "contains",
-                    "metadata" => "{\"type\":\"text\",\"data\":{\"text\":\"We sell shoes\"}}",
-                    "updated_at" => "2024-09-27T16:31:18.192226Z",
-                    "created_at" => "2024-09-27T16:31:18.192271Z",
-                    "uuid" => "de6fe115-4c30-4c8d-9245-6ae31c1c820f"
-                ],
-            ]);
-        } else if($event == 'autoreply.updated'){
-            $this->sendNotification($webhookUrl, [
-                'event' => "autoreply.updated",
-                'data' => [
-                    "uuid" => "de6fe115-4c30-4c8d-9245-6ae31c1c820f",
-                    "name" => "About Us",
-                    "trigger" => "what do you do?",
-                    "match_criteria" => "contains",
-                    "metadata" => "{\"type\":\"text\",\"data\":{\"text\":\"We sell shoes and clothes\"}}",
-                    "deleted_by" => null,
-                    "deleted_at" => null,
-                    "created_at" => "2024-09-27 16:31:18",
-                    "updated_at" => "2024-09-27T16:31:51.547181Z"
-                ],
-            ]);
-        } else if($event == 'autoreply.deleted'){
-            $this->sendNotification($webhookUrl, [
-                'event' => "autoreply.deleted",
-                'data' => [
-                   "list" => [
-                        "uuid" => "de6fe115-4c30-4c8d-9245-6ae31c1c820f",
-                        "deleted_at" => "2024-09-27T16:32:26.673081Z"
-                   ]
                 ],
             ]);
         }
