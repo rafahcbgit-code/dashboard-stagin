@@ -169,12 +169,25 @@ class AutoReplyService
             return $buttonResult;
         }
 
-        // AI-Only Mode: skip all bot auto-replies, only agents handle messages
+        // AI-Only Mode: AI answers from KB directly, fallback menu for unanswered
         $aiSettingsService = new AiSettingsService();
         if ($aiSettingsService->isAiOnlyMode($organizationId)) {
-            Log::info('replySequence: AI-Only Mode active, skipping bot auto-reply', [
+            Log::info('replySequence: AI-Only Mode active, attempting AI answer', [
                 'organization_id' => $organizationId,
             ]);
+
+            // Try AI answer from knowledge base
+            $aiFallbackResult = $this->handleAiFallback($organizationId, $chat);
+            if ($aiFallbackResult) {
+                return $aiFallbackResult;
+            }
+
+            // AI couldn't answer — show fallback menu
+            $fallbackMenuResult = $this->handleFallbackMenu($organizationId, $chat);
+            if ($fallbackMenuResult) {
+                return $fallbackMenuResult;
+            }
+
             return null;
         }
 
