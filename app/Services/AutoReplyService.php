@@ -77,23 +77,31 @@ class AutoReplyService
         // AI-Only Mode: AI answers from KB directly, fallback menu for unanswered
         $aiSettingsService = new AiSettingsService();
         if ($aiSettingsService->isAiOnlyMode($organizationId)) {
-            Log::info('replySequence: AI-Only Mode active, attempting AI answer', [
-                'organization_id' => $organizationId,
-            ]);
+            // Guard: AI-only mode requires AI to be enabled
+            if (!$aiSettingsService->isEnabled($organizationId)) {
+                Log::warning('replySequence: AI-Only Mode active but AI is disabled, falling through to normal processing', [
+                    'organization_id' => $organizationId,
+                ]);
+                // Fall through to normal trigger/AI/fallback processing
+            } else {
+                Log::info('replySequence: AI-Only Mode active, attempting AI answer', [
+                    'organization_id' => $organizationId,
+                ]);
 
-            // Try AI answer from knowledge base
-            $aiFallbackResult = $this->handleAiFallback($organizationId, $chat);
-            if ($aiFallbackResult) {
-                return $aiFallbackResult;
+                // Try AI answer from knowledge base
+                $aiFallbackResult = $this->handleAiFallback($organizationId, $chat);
+                if ($aiFallbackResult) {
+                    return $aiFallbackResult;
+                }
+
+                // AI couldn't answer — show fallback menu
+                $fallbackMenuResult = $this->handleFallbackMenu($organizationId, $chat);
+                if ($fallbackMenuResult) {
+                    return $fallbackMenuResult;
+                }
+
+                return null;
             }
-
-            // AI couldn't answer — show fallback menu
-            $fallbackMenuResult = $this->handleFallbackMenu($organizationId, $chat);
-            if ($fallbackMenuResult) {
-                return $fallbackMenuResult;
-            }
-
-            return null;
         }
 
         // Check for active flow — if contact is in a flow, resume it
@@ -315,6 +323,9 @@ class AutoReplyService
                 return false;
             }
 
+            // Ensure system triggers (including fallback) are initialized
+            $this->triggerGroupService->initializeSystemTriggers($organizationId);
+
             $config = $this->botSettingsService->getFallbackMenuConfig($organizationId);
             $contact = Contact::where('id', $chat->contact_id)->first();
             if (!$contact) {
@@ -398,11 +409,23 @@ class AutoReplyService
 
             switch ($buttonId) {
                 case 'fallback_start_over':
+                    // Reset fallback counter so escalation counting restarts
+                    $this->rateLimitService->resetFallbackCounter($organizationId, $contact->id);
+
                     if ($config['start_over_flow_id']) {
                         return $flowExecutionService->startFlow($config['start_over_flow_id'], $chat);
                     }
                     // If no flow configured, try to trigger the first/new_contact trigger
                     $this->triggerGroupService->initializeSystemTriggers($organizationId);
+
+                    // Reset the new_contact trigger rate limit so it can re-fire
+                    $newContactTrigger = \App\Models\TriggerGroup::forOrganization($organizationId)
+                        ->byType('new_contact')
+                        ->first();
+                    if ($newContactTrigger) {
+                        $this->rateLimitService->resetTrigger($organizationId, $contact->id, $newContactTrigger->id);
+                    }
+
                     $result = $this->triggerEvaluationService->evaluate(
                         $organizationId,
                         $contact,

@@ -401,10 +401,29 @@ class ProcessWebhookJob implements ShouldQueue
                 'contact_id' => $contact->id,
             ]);
         } elseif (! $contact->bot_enable) {
-            Log::channel('webhook')->info('Auto-reply skipped - bot disabled for contact', [
-                'chat_id' => $chat->id,
-                'contact_id' => $contact->id,
-            ]);
+            // Bot is disabled for this contact, but interactive button clicks
+            // (fallback menu, AI feedback) must still be processed to avoid
+            // leaving users stuck with no way to interact.
+            $metadata = json_decode($chat->metadata, true);
+            $isInteractiveButton = isset($metadata['type']) && $metadata['type'] === 'interactive'
+                && isset($metadata['interactive']['type']) && $metadata['interactive']['type'] === 'button_reply';
+
+            if ($isInteractiveButton) {
+                try {
+                    $autoReplyService = new AutoReplyService($this->payload);
+                    $autoReplyService->checkAutoReply($chat, $isNewContact);
+                } catch (\Throwable $e) {
+                    Log::warning('Auto-reply for interactive button failed (non-blocking)', [
+                        'chat_id' => $chat->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            } else {
+                Log::channel('webhook')->info('Auto-reply skipped - bot disabled for contact', [
+                    'chat_id' => $chat->id,
+                    'contact_id' => $contact->id,
+                ]);
+            }
         } elseif (! in_array($messageType, $autoReplyTypes)) {
             Log::channel('webhook')->debug('Auto-reply skipped - unsupported message type', [
                 'chat_id' => $chat->id,

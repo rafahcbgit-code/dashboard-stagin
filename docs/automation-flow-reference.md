@@ -20,15 +20,18 @@ Every incoming message goes through `AutoReplyService::replySequence()` in this 
 
 Each step only runs if the previous step didn't handle the message.
 
+**Special case:** When `bot_enable` is off for a contact, regular auto-reply is skipped. However, interactive button clicks (fallback menu buttons, AI helpful feedback) are still processed so the user isn't stuck.
+
 ---
 
 ## 2. Setting Combinations & Outcomes
 
 | Settings | What Happens When a User Messages |
 |----------|-----------------------------------|
-| AI-Only Mode ON, no triggers, KB has data | AI answers from KB → "Was this helpful?" buttons. If AI can't answer → fallback menu |
-| AI-Only Mode ON, no triggers, no KB | Falls straight to fallback menu |
-| AI-Only Mode ON, triggers active | **AI-Only Mode skips triggers entirely.** Only AI KB answers + fallback menu |
+| AI-Only Mode ON, AI enabled, no triggers, KB has data | AI answers from KB → "Was this helpful?" buttons. If AI can't answer → fallback menu |
+| AI-Only Mode ON, AI enabled, no triggers, no KB | Falls straight to fallback menu |
+| AI-Only Mode ON, AI enabled, triggers active | **AI-Only Mode skips triggers entirely.** Only AI KB answers + fallback menu |
+| AI-Only Mode ON, AI disabled | Logs warning, falls through to normal processing (triggers → AI → fallback menu) |
 | AI-Only Mode OFF, active flow running | Flow resumes. If flow doesn't handle the message → falls through to triggers → AI → fallback menu |
 | AI-Only Mode OFF, no active flow, trigger matches | Trigger's linked flow starts |
 | AI-Only Mode OFF, no flow, no trigger, AI enabled | AI attempts KB answer. If escalation rule matches → routes to agent |
@@ -88,13 +91,16 @@ When nothing else handles the message and `bot_settings.fallback_menu_enabled = 
 **Default buttons:**
 | Button | Action |
 |--------|--------|
-| Start Over | Starts the configured flow, or re-triggers the new_contact trigger |
+| Start Over | Starts the configured flow, or re-triggers the new_contact trigger. Resets fallback counter and new_contact rate limit. |
 | Help | Starts the configured help flow |
 | Talk to Agent | Routes to agent via auto-assignment (only shown if `fallback_menu_route_to_agent = true`) |
 
 **Escalation counter:** Each fallback increments a counter. When counter ≥ `bot_settings.fallback_threshold` (default 3), the next unhandled message auto-assigns to an agent instead of showing the menu. Counter resets when:
 - Agent is assigned
+- User clicks "Start Over" in fallback menu
 - 24+ hours pass since last fallback
+
+**System trigger initialization:** The fallback menu handler ensures system triggers (including the `fallback` trigger group) are initialized before checking the escalation threshold. This prevents silent failures if triggers haven't been seeded yet.
 
 ---
 
@@ -166,19 +172,18 @@ Used inside flows to generate AI-powered replies:
 
 ```
 1. Fetch KB context for the organization
-2. Build system prompt (KB context + optional custom prompt from config)
+2. Build system prompt (KB context)
 3. Call AI → expects {"answer": "...", "confidence": 0.0-1.0}
-4. If answer is empty or "NONE" → send low_confidence_message (if set) → flow pauses (returns false)
-5. Send answer via WhatsApp
-6. If proceed_condition = "confidence_threshold" and confidence < threshold → send low_confidence_message → flow pauses
-7. If proceed_condition = "always" or confidence ≥ threshold → flow continues to next node
+4. If answer is empty or "NONE" → send low_confidence_message (if set) → flow pauses
+5. If confidence < 0.75 → send low_confidence_message (if set) → flow pauses (answer NOT sent)
+6. If confidence ≥ 0.75 → send answer via WhatsApp → flow continues to next node
 ```
 
+**Important:** When confidence is below the threshold, the answer is **not sent** — only the `low_confidence_message` is sent (if configured). The flow pauses.
+
 **Config fields:**
-- `prompt` — extra instructions appended to the system prompt (optional)
-- `proceed_condition` — `always` or `confidence_threshold`
-- `confidence_threshold` — minimum confidence to continue (default 0.75)
-- `low_confidence_message` — message sent when confidence is too low (optional)
+- `low_confidence_message` — message sent when confidence is too low or AI has no answer (optional)
+- Confidence threshold is fixed at 0.75
 
 ---
 
@@ -186,8 +191,9 @@ Used inside flows to generate AI-powered replies:
 
 | Scenario | Behavior |
 |----------|----------|
-| User clicks a fallback menu button | Handled as interactive reply. Start Over / Help / Talk to Agent — does not re-enter the main reply sequence |
+| User clicks a fallback menu button | Handled as interactive reply (step 1). Start Over resets fallback counter + new_contact rate limit. |
 | User clicks "No, I need more help" on AI feedback | Shows the fallback menu |
+| User's `bot_enable` is off | Regular auto-reply is skipped, but interactive button clicks still work (fallback menu, AI feedback) |
 | Flow times out (default 30 min) | `FlowUserData` expires. Next message starts fresh through the full sequence |
 | Contact has an active flow but sends unrelated message | Flow tries to resume. If flow can't handle it (no matching question/input), falls through to triggers → AI → fallback menu |
 | AI returns unparseable response | Treated as no answer. Falls through to next step |
@@ -196,8 +202,9 @@ Used inside flows to generate AI-powered replies:
 | Escalation counter reaches threshold | Next unhandled message auto-assigns to agent instead of showing fallback menu |
 | Agent assigned → counter resets | `RateLimitService::resetFallbackCounter` called on every agent assignment |
 | No KB entries exist | AI fallback returns null immediately. Falls through to fallback menu |
+| AI-only mode + AI disabled | Logs warning, falls through to normal processing (triggers → AI → fallback menu) |
 | AI-only mode + no KB data | Falls straight to fallback menu |
-| Trigger has no linked flow | Trigger matches but doesn't start anything. Falls through to next step |
+| Trigger has no linked flow | Trigger is skipped (doesn't match). Falls through to next step |
 | Trigger rate limit exceeded | Trigger is skipped as if it doesn't exist |
 | `greeting` trigger outside working hours | Skipped (only fires during working hours) |
 | `away` trigger during working hours | Skipped (only fires outside working hours) |

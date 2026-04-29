@@ -460,12 +460,9 @@ class ActionExecutionService
                 return false;
             }
 
-            // 5. Send the AI answer via WhatsApp
-            $this->whatsappService->sendMessage($contact->uuid, $answer);
-
-            // 6. Check confidence threshold
+            // 5. Check confidence threshold BEFORE sending the answer
             if ($confidence < $confidenceThreshold) {
-                Log::info("AI response action: confidence below threshold, pausing flow", [
+                Log::info("AI response action: confidence below threshold, sending low_confidence_message and pausing flow", [
                     'contact_id' => $contact->id,
                     'confidence' => $confidence,
                     'threshold' => $confidenceThreshold,
@@ -478,6 +475,9 @@ class ActionExecutionService
 
                 return false;
             }
+
+            // 6. Confidence is good — send the AI answer via WhatsApp
+            $this->whatsappService->sendMessage($contact->uuid, $answer);
 
             Log::info("AI response action: answer sent", [
                 'contact_id' => $contact->id,
