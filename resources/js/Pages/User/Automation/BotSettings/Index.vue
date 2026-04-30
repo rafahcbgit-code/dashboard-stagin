@@ -13,6 +13,36 @@
                         </div>
 
                         <form @submit.prevent="submitForm" class="mt-6 space-y-6">
+                            <!-- Automation Master Switch -->
+                            <div class="rounded-lg border-2 p-5" :class="form.automation_enabled ? 'border-primary/30 bg-primary/[0.02]' : 'border-red-200 bg-red-50/30'">
+                                <div class="flex items-start gap-3">
+                                    <div class="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center" :class="form.automation_enabled ? 'bg-primary/10' : 'bg-red-100'">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" :class="form.automation_enabled ? 'text-primary' : 'text-red-500'"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+                                    </div>
+                                    <div class="flex-1">
+                                        <label class="block text-sm font-semibold text-slate-800">{{ $t('Automation') }}</label>
+                                        <p class="text-xs text-slate-500 mt-0.5">
+                                            <span v-if="form.automation_enabled">{{ $t('Triggers, flows, AI fallback, and the fallback menu are all active.') }}</span>
+                                            <span v-else class="text-red-600">{{ $t('All automation is paused. Incoming messages will not trigger any flows or AI responses.') }}</span>
+                                        </p>
+                                    </div>
+                                    <!-- Toggle -->
+                                    <button
+                                        type="button"
+                                        @click="form.automation_enabled = !form.automation_enabled"
+                                        class="relative inline-flex h-6 w-11 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-1 shrink-0"
+                                        :class="form.automation_enabled ? 'bg-primary' : 'bg-red-400'"
+                                    >
+                                        <span
+                                            class="inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform duration-200"
+                                            :class="form.automation_enabled ? 'translate-x-[22px]' : 'translate-x-[3px]'"
+                                        />
+                                    </button>
+                                </div>
+                            </div>
+
+                            <!-- Settings dimmed when automation is off -->
+                            <div :class="{ 'opacity-50 pointer-events-none': !form.automation_enabled }">
                             <!-- Fallback Threshold -->
                             <div class="rounded-lg border border-slate-200 p-5">
                                 <div class="flex items-start gap-3">
@@ -280,6 +310,8 @@
                                 </div>
                             </div>
 
+                            </div><!-- end dimmed wrapper -->
+
                             <!-- Save -->
                             <div class="flex justify-end pt-2">
                                 <button type="submit" class="inline-flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-[#045a47] transition-colors">
@@ -303,6 +335,7 @@ import { router } from '@inertiajs/vue3';
 const props = defineProps(['settings', 'workingHours', 'kbEntryCount', 'flows', 'aimodule', 'fbmodule']);
 
 const form = ref({
+    automation_enabled: props.settings?.automation_enabled ?? true,
     fallback_threshold: props.settings?.fallback_threshold || 3,
     flow_timeout_minutes: props.settings?.flow_timeout_minutes || 30,
     ai_fallback_enabled: props.settings?.ai_fallback_enabled || false,

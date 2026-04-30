@@ -7,6 +7,7 @@ use App\Models\Organization;
 class BotSettingsService
 {
     const DEFAULTS = [
+        'automation_enabled' => true,
         'fallback_threshold' => 3,
         'flow_timeout_minutes' => 30,
         'ai_fallback_enabled' => false,
@@ -66,6 +67,14 @@ class BotSettingsService
     {
         $settings = $this->get($organizationId);
         return $settings[$key] ?? $default ?? self::DEFAULTS[$key] ?? null;
+    }
+
+    /**
+     * Check if automation is enabled for an organization.
+     */
+    public function isAutomationEnabled(int $organizationId): bool
+    {
+        return (bool) $this->getSetting($organizationId, 'automation_enabled', self::DEFAULTS['automation_enabled']);
     }
 
     /**

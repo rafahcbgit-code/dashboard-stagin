@@ -10,6 +10,7 @@ use App\Models\MissedChatStatusUpdate;
 use App\Models\Organization;
 use App\Models\WebhookFailure;
 use App\Services\AutoReplyService;
+use App\Services\BotSettingsService;
 use App\Services\ChatService;
 use App\Services\ContactService;
 use App\Services\SubscriptionService;
@@ -394,12 +395,38 @@ class ProcessWebhookJob implements ShouldQueue
         // Only process auto-reply for supported message types (text, button, audio, interactive)
         $autoReplyTypes = ['text', 'button', 'audio', 'interactive'];
 
+        $botSettingsService = new BotSettingsService();
+        $automationEnabled = $botSettingsService->isAutomationEnabled($this->organizationId);
+
         if ($isMessageLimitReached) {
             Log::channel('webhook')->info('Auto-reply skipped - message limit reached', [
                 'organization_id' => $this->organizationId,
                 'chat_id' => $chat->id,
                 'contact_id' => $contact->id,
             ]);
+        } elseif (! $automationEnabled) {
+            // Org-level automation is off — skip all auto-reply, but still
+            // process interactive button clicks so users aren't stuck.
+            $metadata = json_decode($chat->metadata, true);
+            $isInteractiveButton = isset($metadata['type']) && $metadata['type'] === 'interactive'
+                && isset($metadata['interactive']['type']) && $metadata['interactive']['type'] === 'button_reply';
+
+            if ($isInteractiveButton) {
+                try {
+                    $autoReplyService = new AutoReplyService($this->payload);
+                    $autoReplyService->checkAutoReply($chat, $isNewContact);
+                } catch (\Throwable $e) {
+                    Log::warning('Auto-reply for interactive button failed (non-blocking)', [
+                        'chat_id' => $chat->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            } else {
+                Log::channel('webhook')->info('Auto-reply skipped - automation disabled for organization', [
+                    'organization_id' => $this->organizationId,
+                    'chat_id' => $chat->id,
+                ]);
+            }
         } elseif (! $contact->bot_enable) {
             // Bot is disabled for this contact, but interactive button clicks
             // (fallback menu, AI feedback) must still be processed to avoid
