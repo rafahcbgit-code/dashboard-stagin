@@ -63,19 +63,14 @@ class FlowService
         $flow->update($data);
 
         $flow = Flow::where('uuid', $uuid)->firstOrFail();
-        
+
         if(isset($flow->metadata)){
             $metadataArray = json_decode($flow->metadata, true);
-            $data2['trigger'] = \Arr::get($metadataArray, 'nodes.0.data.metadata.fields.type', null);
-            $data2['keywords'] = \Arr::get($metadataArray, 'nodes.0.data.metadata.fields.keywords', null);
-
             $result = $validator->validateMessageNodes($metadataArray);
 
             if(is_array($result)){
-                $data2['status'] = 'inactive';
+                $flow->update(['status' => 'inactive']);
             }
-
-            $flow->update($data2);
         }
 
         if(isset($publish)){
@@ -277,13 +272,10 @@ class FlowService
             if (isset($node['data'])) {
                 $simpleNode['data'] = [];
                 
-                // For start nodes
+                // For start nodes — just pass through, no trigger/keywords
                 if ($node['type'] === 'start') {
                     $simpleNode['data']['metadata'] = [
-                        'fields' => [
-                            'type' => $node['data']['metadata']['fields']['type'] ?? null,
-                            'keywords' => $node['data']['metadata']['fields']['keywords'] ?? null
-                        ]
+                        'fields' => $node['data']['metadata']['fields'] ?? []
                     ];
                 }
                 // For message nodes (text, buttons, etc.)

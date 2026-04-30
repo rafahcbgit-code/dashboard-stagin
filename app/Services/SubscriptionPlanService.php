@@ -65,7 +65,6 @@ class SubscriptionPlanService
                 'campaign_limit' => $request->input('campaign_limit'),
                 'message_limit' => $request->input('message_limit'),
                 'contacts_limit' => $request->input('contacts_limit'),
-                'canned_replies_limit' => $request->input('canned_replies_limit'),
                 'team_limit' => $request->input('team_limit'),
                 'receive_messages_after_expiration' => $request->input('receive_messages_after_expiration') == true ? 1 : 0,
                 'ai_text_response_limit' => $request->input('ai_text_response_limit'),
@@ -105,7 +104,6 @@ class SubscriptionPlanService
         $metadata['campaign_limit'] = $request->input('campaign_limit');
         $metadata['message_limit'] = $request->input('message_limit');
         $metadata['contacts_limit'] = $request->input('contacts_limit');
-        $metadata['canned_replies_limit'] = $request->input('canned_replies_limit');
         $metadata['team_limit'] = $request->input('team_limit');
         $metadata['receive_messages_after_expiration'] = $request->input('receive_messages_after_expiration') == true ? 1 : 0;
         $metadata['ai_text_response_limit'] = $request->input('ai_text_response_limit');

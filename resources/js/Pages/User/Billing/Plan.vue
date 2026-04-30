@@ -61,14 +61,6 @@
                                     <span>
                                         <svg xmlns="http://www.w3.org/2000/svg" width="16px" height="16px" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><path d="M14.25 8.75c-.5 2.5-2.385 4.854-5.03 5.38A6.25 6.25 0 0 1 3.373 3.798C5.187 1.8 8.25 1.25 10.75 2.25"/><path d="m5.75 7.75l2.5 2.5l6-6.5"/></g></svg>
                                     </span>
-                                    <h3>{{ getDetail(item?.metadata, 'canned_replies_limit') == '-1' ?  $t('Unlimited') : getDetail(item?.metadata, 'canned_replies_limit') }} {{ $t('Canned replies') }}</h3>
-                                </div>
-                            </div>
-                            <div class="flex justify-between text-sm">
-                                <div class="flex space-s-1">
-                                    <span>
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="16px" height="16px" viewBox="0 0 16 16"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><path d="M14.25 8.75c-.5 2.5-2.385 4.854-5.03 5.38A6.25 6.25 0 0 1 3.373 3.798C5.187 1.8 8.25 1.25 10.75 2.25"/><path d="m5.75 7.75l2.5 2.5l6-6.5"/></g></svg>
-                                    </span>
                                     <h3>{{ getDetail(item?.metadata, 'team_limit') == '-1' ?  $t('Unlimited') : getDetail(item?.metadata, 'team_limit') }} {{ $t('Users') }}</h3>
                                 </div>
                             </div>

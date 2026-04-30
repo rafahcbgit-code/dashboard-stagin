@@ -9,7 +9,6 @@ use App\Models\ChatLog;
 use App\Models\Contact;
 use App\Models\Setting;
 use App\Models\Template;
-use App\Models\AutoReply;
 use App\Models\ChatMedia;
 use App\Events\NewChatEvent;
 use App\Models\Organization;

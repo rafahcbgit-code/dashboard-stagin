@@ -4,16 +4,13 @@ namespace App\Http\Controllers;
 
 use App\Helpers\WebhookHelper;
 use App\Http\Requests\StoreContact;
-use App\Http\Resources\AutoReplyResource;
 use App\Http\Resources\ContactResource;
 use App\Http\Resources\ContactGroupResource;
 use App\Http\Resources\TemplateResource;
-use App\Models\AutoReply;
 use App\Models\Contact;
 use App\Models\ContactGroup;
 use App\Models\Organization;
 use App\Models\Template;
-use App\Rules\CannedReplyLimit;
 use App\Rules\ContactLimit;
 use App\Rules\UniquePhone;
 use App\Services\ChatService;
@@ -290,154 +287,6 @@ class ApiController extends Controller
         }
     }
 
-    public function listCannedReplies(Request $request){
-        $validator = Validator::make($request->all(), [
-            'page' => 'integer|min:1',
-            'per_page' => 'integer|min:1|max:100', // Adjust max per_page limit as needed
-        ]);
-
-        if ($validator->fails()) {
-            return response()->json(['error' => $validator->errors()], 400);
-        }
-
-        $page = $request->input('page', 1);
-        $perPage = $request->input('per_page', 10);
-
-        $rows = AutoReply::where('organization_id', $request->organization)
-            ->where('deleted_at', NULL)
-            ->paginate($perPage, ['*'], 'page', $page);
-
-        return AutoReplyResource::collection($rows);
-    }
-
-    /**
-     * Create a new canned reply.
-     *
-     * @param  \App\Http\Requests\CreateCannedReplyRequest  $request
-     * @return \Illuminate\Http\Response
-     */
-    public function storeCannedReply(Request $request, $uuid = NULL){
-        $rules = [
-            'name' => 'required',
-            'trigger' => 'required',
-            'match_criteria' => 'required|in:exact match,contains',
-            'response_type' => 'required|in:text,image,audio',
-            'response' => 'required',
-        ];
-
-        $validator = Validator::make($request->all(), $rules);
-
-        if ($validator->fails()) {
-            return response()->json([
-                'statusCode' => 400,
-                'message' => __('The given data was invalid.'),
-                'errors' => $validator->errors()
-            ], 400);
-        }
-
-        if(!SubscriptionService::isSubscriptionActive($request->organization)){
-            return response()->json([
-                'statusCode' => 403,
-                'message' => __('Please renew or subscribe to a plan to continue!'),
-            ], 403);
-        }
-
-        if ($request->isMethod('post')) {
-            if(!SubscriptionService::isSubscriptionFeatureLimitReached($request->organizationId, 'canned_replies_limit')){
-                return response()->json([
-                    'statusCode' => 403,
-                    'message' => __('You\'ve reached your limit. Upgrade your account'),
-                ], 403);
-            }
-        }
-
-        try {
-            $model = $uuid == null ? new AutoReply : AutoReply::where('uuid', $uuid)->first();
-            $model['name'] = $request->name;
-            $model['trigger'] = $request->trigger;
-            $model['match_criteria'] = $request->match_criteria;
-
-            $metadata['type'] = $request->response_type;
-            if($request->response_type === 'image' || $request->response_type === 'audio'){
-                if($request->hasFile('response')){
-                    $uploadedMedia = MediaService::upload($request->file('response'));
-
-                    $metadata['data']['file']['name'] = $uploadedMedia['name'];
-                    $metadata['data']['file']['location'] = $uploadedMedia['path'];
-                } else {
-                    $media = json_decode($model->metadata)->data;
-                    $metadata['data']['file']['name'] = $media->file->name;
-                    $metadata['data']['file']['location'] = $media->file->location;
-                }
-            } else if($request->response_type === 'text') {
-                $metadata['data']['text'] = $request->response;
-            } else {
-                $metadata['data']['template'] = $request->response;
-            }
-
-            $model['metadata'] = json_encode($metadata);
-            $model['updated_at'] = now();
-
-            if($uuid === null){
-                $model['organization_id'] = $request->organization;
-                $model['created_by'] = 0;
-                $model['created_at'] = now();
-            }
-
-            $model->save();
-
-            // Prepare a clean contact object for webhook
-            $cleanModel = $model->makeHidden(['id', 'organization_id', 'created_by']);
-
-            // Trigger webhook
-            WebhookHelper::triggerWebhookEvent($uuid === null ? 'autoreply.created' : 'autoreply.updated', $cleanModel, $request->organization);
-
-            return response()->json([
-                'statusCode' => 200,
-                'id' => $model->uuid,
-                'message' => __('Request processed successfully')
-            ], 200);
-        } catch (\Exception $e) {
-            return response()->json([
-                'statusCode' => 500,
-                'message' => __('Request unable to be processed')
-            ], 500);
-        }
-    }
-
-    /**
-     * Delete a canned reply.
-     *
-     * @param  \App\Models\CannedReply  $cannedReply
-     * @return \Illuminate\Http\Response
-     */
-    public function destroyCannedReply(Request $request, $uuid){
-        try {
-            $autoreply = AutoReply::where('organization_id', $request->organization)->where('uuid', $uuid)->firstOrFail();
-            $autoreply->deleted_at = now();
-            $autoreply->deleted_by = 0;
-            $autoreply->save();
-
-            // Trigger webhook
-            WebhookHelper::triggerWebhookEvent('autoreply.deleted', [
-                'list' => [
-                    'uuid' => $uuid,
-                    'deleted_at' => now()->toISOString()
-                ],
-            ], $request->organization);
-
-            return response()->json([
-                'statusCode' => 200,
-                'id' => $uuid,
-                'message' => __('Request processed successfully')
-            ], 200);
-        } catch (\Exception $e) {
-            return response()->json([
-                'statusCode' => 500,
-                'message' => __('Request unable to be processed')
-            ], 500);
-        }
-    }
 
     /**
      * Send a chat message.

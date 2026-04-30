@@ -17,6 +17,7 @@ class NotificationLog extends Model
         'fcm_response',
         'delivered',
         'clicked',
+        'read_at',
     ];
 
     protected $casts = [
@@ -24,5 +25,22 @@ class NotificationLog extends Model
         'fcm_response' => 'array',
         'delivered' => 'boolean',
         'clicked' => 'boolean',
+        'read_at' => 'datetime',
     ];
+
+    public function scopeUnread($query)
+    {
+        return $query->where('clicked', false);
+    }
+
+    public function scopeForUserOrg($query, int $userId, int $organizationId)
+    {
+        return $query->where('user_id', $userId)
+            ->where('organization_id', $organizationId);
+    }
+
+    public function markAsRead(): void
+    {
+        $this->update(['clicked' => true, 'read_at' => now()]);
+    }
 }

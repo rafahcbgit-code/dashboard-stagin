@@ -10,6 +10,7 @@ use App\Models\MissedChatStatusUpdate;
 use App\Models\Organization;
 use App\Models\WebhookFailure;
 use App\Services\AutoReplyService;
+use App\Services\BotSettingsService;
 use App\Services\ChatService;
 use App\Services\ContactService;
 use App\Services\SubscriptionService;
@@ -22,7 +23,6 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
-use App\Services\WorkingHoursService;
 use Modules\MetaFlows\Services\MetaFlowService;
 
 /**
@@ -395,17 +395,62 @@ class ProcessWebhookJob implements ShouldQueue
         // Only process auto-reply for supported message types (text, button, audio, interactive)
         $autoReplyTypes = ['text', 'button', 'audio', 'interactive'];
 
+        $botSettingsService = new BotSettingsService();
+        $automationEnabled = $botSettingsService->isAutomationEnabled($this->organizationId);
+
         if ($isMessageLimitReached) {
             Log::channel('webhook')->info('Auto-reply skipped - message limit reached', [
                 'organization_id' => $this->organizationId,
                 'chat_id' => $chat->id,
                 'contact_id' => $contact->id,
             ]);
+        } elseif (! $automationEnabled) {
+            // Org-level automation is off — skip all auto-reply, but still
+            // process interactive button clicks so users aren't stuck.
+            $metadata = json_decode($chat->metadata, true);
+            $isInteractiveButton = isset($metadata['type']) && $metadata['type'] === 'interactive'
+                && isset($metadata['interactive']['type']) && $metadata['interactive']['type'] === 'button_reply';
+
+            if ($isInteractiveButton) {
+                try {
+                    $autoReplyService = new AutoReplyService($this->payload);
+                    $autoReplyService->checkAutoReply($chat, $isNewContact);
+                } catch (\Throwable $e) {
+                    Log::warning('Auto-reply for interactive button failed (non-blocking)', [
+                        'chat_id' => $chat->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            } else {
+                Log::channel('webhook')->info('Auto-reply skipped - automation disabled for organization', [
+                    'organization_id' => $this->organizationId,
+                    'chat_id' => $chat->id,
+                ]);
+            }
         } elseif (! $contact->bot_enable) {
-            Log::channel('webhook')->info('Auto-reply skipped - bot disabled for contact', [
-                'chat_id' => $chat->id,
-                'contact_id' => $contact->id,
-            ]);
+            // Bot is disabled for this contact, but interactive button clicks
+            // (fallback menu, AI feedback) must still be processed to avoid
+            // leaving users stuck with no way to interact.
+            $metadata = json_decode($chat->metadata, true);
+            $isInteractiveButton = isset($metadata['type']) && $metadata['type'] === 'interactive'
+                && isset($metadata['interactive']['type']) && $metadata['interactive']['type'] === 'button_reply';
+
+            if ($isInteractiveButton) {
+                try {
+                    $autoReplyService = new AutoReplyService($this->payload);
+                    $autoReplyService->checkAutoReply($chat, $isNewContact);
+                } catch (\Throwable $e) {
+                    Log::warning('Auto-reply for interactive button failed (non-blocking)', [
+                        'chat_id' => $chat->id,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            } else {
+                Log::channel('webhook')->info('Auto-reply skipped - bot disabled for contact', [
+                    'chat_id' => $chat->id,
+                    'contact_id' => $contact->id,
+                ]);
+            }
         } elseif (! in_array($messageType, $autoReplyTypes)) {
             Log::channel('webhook')->debug('Auto-reply skipped - unsupported message type', [
                 'chat_id' => $chat->id,
@@ -414,44 +459,8 @@ class ProcessWebhookJob implements ShouldQueue
         } else {
 
             try {
-                // Initialize required services
-                $workingHoursService = new WorkingHoursService();
-                
-                $autoReplyService    = new AutoReplyService($this->payload);
-
-                // Send greeting message and check if it was sent
-                $greetingSent = $autoReplyService->sendGrettingMessage($chat);
-
-                // If greeting message was sent, skip the rest of auto-reply logic
-                if ($greetingSent) {
-                    return;
-                }
-
-                // Check whether the current time is within the organization's working hours
-                $isWithinWorkingHours = $workingHoursService
-                    ->isWithinWorkingHours($this->organizationId);
-
-                if ($isWithinWorkingHours) {
-                    // Inside working hours:
-                    // Always allow normal auto-reply logic
-                    $autoReplyService->checkAutoReply($chat, $isNewContact);
-                } else {
-
-                    // Outside working hours:
-                    // Try to send the outside working hours notification
-                    $sent = $autoReplyService->sendOutsideWorkingHours($chat);
-
-                    // If the outside working hours message was NOT sent
-                    // (because it was already sent earlier),
-                    // then fall back to normal auto-reply logic
-                    if ($sent === false) {
-                        Log::warning('Outside working hours message already sent, running auto-reply instead', [
-                            'chat_id' => $chat->id,
-                        ]);
-
-                        $autoReplyService->checkAutoReply($chat, $isNewContact);
-                    }
-                }
+                $autoReplyService = new AutoReplyService($this->payload);
+                $autoReplyService->checkAutoReply($chat, $isNewContact);
             } catch (\Throwable $e) {
                 // Catch any unexpected exception to ensure the message flow
                 // is not interrupted by auto-reply logic failures

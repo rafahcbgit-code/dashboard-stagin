@@ -3,7 +3,6 @@
 namespace App\Http\Controllers\User;
 
 use App\Http\Controllers\Controller as BaseController;
-use App\Models\AutoReply;
 use App\Models\Chat;
 use App\Models\ChatLog;
 use App\Models\ChatTicket;

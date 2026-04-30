@@ -10,6 +10,7 @@ import ButtonsNode from '@modules/FlowBuilder/Pages/User/Components/vue-flow/nod
 import ListNode from '@modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/List-node.vue'
 import MediaNode from '@modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/Media-node.vue'
 import TextNode from '@modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/Text-node.vue'
+import QuestionNode from '@modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/Question-node.vue'
 import ActionNode from '@modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/Action-node.vue'
 import { Test_data } from '@/lib/constant'
 
@@ -30,6 +31,7 @@ const nodeTypes = {
   buttons: markRaw(ButtonsNode),
   media: markRaw(MediaNode),
   text: markRaw(TextNode),
+  question: markRaw(QuestionNode),
   action: markRaw(ActionNode),
 }
 
@@ -150,38 +152,34 @@ const getDefaultConfig = (actionType: string) => {
         }
       }
     case 'send_email':
-      return { 
-        subject: '', 
+      return {
+        subject: '',
         body: '',
         smtp_host: '',
         smtp_port: 587,
         smtp_username: '',
         smtp_password: '',
         smtp_encryption: 'tls',
-        from_name: ''
+        from_name: '',
+        from_email: ''
       }
     case 'delay':
-      return { duration: 5 }
+      return { duration: 5, duration_unit: 'minutes' }
     case 'webhook':
-      return { url: '', method: 'POST' }
+      return { url: '', method: 'POST', headers: [], body: '', response_mapping: [] }
     case 'ai_response':
-      return { 
-        prompt: '',
-        proceed_condition: 'always',
-        confidence_threshold: 0.8,
+      return {
         low_confidence_message: ''
       }
     case 'conditional':
-      return { 
+      return {
         condition_type: 'message_contains',
         field_name: '',
         field_operator: 'equals',
-        variable_name: '',
-        variable_operator: 'equals',
         conditions: []
       }
     case 'assign_to_agent':
-      return { agent_id: '' }
+      return { assignment_type: 'specific_agent', agent_id: '' }
     default:
       return {}
   }
@@ -236,6 +234,20 @@ function handleOnDrop(event: DragEvent) {
       }
     }
   } else {
+    // Set default fields based on node type
+    let defaultFields = []
+    if (type === 'question') {
+      defaultFields = {
+        type: 'question',
+        question_text: '',
+        variable_name: '',
+        input_type: 'text',
+        max_retries: 3,
+        retry_message: '',
+        validation_pattern: '',
+      }
+    }
+
     newNode = {
       id: (lastNodeId + 1).toString(),
       type,
@@ -245,7 +257,7 @@ function handleOnDrop(event: DragEvent) {
         uuid: props.uuid,
         title: type,
         metadata: {
-          fields: [],
+          fields: defaultFields,
         },
       }
     }

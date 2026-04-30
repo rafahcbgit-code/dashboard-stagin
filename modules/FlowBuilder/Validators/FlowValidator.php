@@ -22,11 +22,7 @@ class FlowValidator
             // Validate based on node type
             switch ($node['type']) {
                 case 'start':
-                    if (isset($data['type']) && $data['type'] == 'keywords') {
-                        if (empty($data['keywords'])) {
-                            $errors['keywords'] = 'Keywords field is required and cannot be empty.';
-                        }
-                    }
+                    // Start node validation — triggers are now managed via TriggerGroups
                     break;
 
                 case 'text':
@@ -54,6 +50,13 @@ class FlowValidator
                     $listValidation = $this->validateList($data);
                     if ($listValidation !== true) {
                         $errors['list'] = $listValidation;
+                    }
+                    break;
+
+                case 'question':
+                    $questionValidation = $this->validateQuestion($data);
+                    if ($questionValidation !== true) {
+                        $errors['question'] = $questionValidation;
                     }
                     break;
 
@@ -217,6 +220,24 @@ class FlowValidator
         }
         
         // Additional checks can be added for other media fields like 'caption'
+        return !empty($errors) ? $errors : true;
+    }
+
+    /**
+     * Validate a question node.
+     */
+    private function validateQuestion(array $data)
+    {
+        $errors = [];
+
+        if (empty($data['question_text'])) {
+            $errors[] = 'Question text is required.';
+        }
+
+        if (empty($data['variable_name'])) {
+            $errors[] = 'Variable name is required.';
+        }
+
         return !empty($errors) ? $errors : true;
     }
 

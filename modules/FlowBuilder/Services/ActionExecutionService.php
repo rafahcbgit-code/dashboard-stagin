@@ -9,6 +9,8 @@ use App\Services\WhatsappService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Http;
+use Modules\FlowBuilder\Models\FlowUserData;
+use App\Services\AgentRoutingService;
 
 class ActionExecutionService
 {
@@ -66,19 +68,19 @@ class ActionExecutionService
                     return $this->executeUpdateContact($config, $contact, $userMessage);
                 
                 case 'send_email':
-                    return $this->executeSendEmail($config, $contact);
+                    return $this->executeSendEmail($config, $contact, $flowData);
                 
                 case 'delay':
                     return $this->executeDelay($config, $contact, $flowData, $contactId);
                 
                 case 'webhook':
-                    return $this->executeWebhook($config, $contact, $userMessage);
-                
+                    return $this->executeWebhook($config, $contact, $userMessage, $flowData);
+
                 case 'ai_response':
-                    return $this->executeAIResponse($config, $contact, $userMessage);
-                
+                    return $this->executeAIResponse($config, $contact, $userMessage, $flowData);
+
                 case 'conditional':
-                    return $this->executeConditional($config, $contact, $userMessage);
+                    return $this->executeConditional($config, $contact, $userMessage, $flowData);
                 
                 case 'assign_to_agent':
                     return $this->executeAssignToAgent($config, $contact);
@@ -213,7 +215,7 @@ class ActionExecutionService
     /**
      * Send email to contact
      */
-    private function executeSendEmail($config, $contact)
+    private function executeSendEmail($config, $contact, $flowData = null)
     {
         if (!$contact->email) {
             Log::warning("Contact {$contact->id} has no email address");
@@ -246,8 +248,8 @@ class ActionExecutionService
         }
 
         // Replace placeholders in subject and body
-        $subject = $this->replacePlaceholders($contact, $subject);
-        $body = $this->replacePlaceholders($contact, $body);
+        $subject = $this->replacePlaceholders($contact, $subject, $flowData);
+        $body = $this->replacePlaceholders($contact, $body, $flowData);
 
         try {
             // Configure mail settings
@@ -259,13 +261,18 @@ class ActionExecutionService
                 'mail.mailers.smtp.encryption' => $smtpEncryption,
             ]);
 
+            // Purge cached SMTP transport so new config takes effect
+            app('mail.manager')->purge('smtp');
+
             Mail::raw($body, function ($message) use ($contact, $subject, $fromName, $fromEmail) {
                 $message->to($contact->email)
                         ->subject($subject)
                         ->from($fromEmail, $fromName);
             });
 
-            // Log::info("Email sent to {$contact->email}: {$subject}");
+            // Purge again so global config is used for subsequent emails
+            app('mail.manager')->purge('smtp');
+
             return true;
         } catch (\Exception $e) {
             Log::error("Failed to send email: " . $e->getMessage());
@@ -278,29 +285,39 @@ class ActionExecutionService
      */
     private function executeDelay($config, $contact, $flowData = null, $contactId = null)
     {
-        $duration = $config['duration'] ?? 5; // in minutes
-        
-        // If we have flow data, schedule a delayed job to continue the flow
+        $duration = (int) ($config['duration'] ?? 5);
+        $unit = $config['duration_unit'] ?? 'minutes';
+
+        // Convert duration to seconds based on unit
+        $delaySeconds = match ($unit) {
+            'seconds' => max(1, $duration),
+            'hours' => $duration * 3600,
+            default => $duration * 60, // minutes
+        };
+
+        // Clamp to 1 second minimum, 24 hours maximum
+        $delaySeconds = max(1, min($delaySeconds, 86400));
+
+        // Schedule a delayed job to continue the flow after the delay
         if ($flowData && $contactId) {
-            // Create a delayed job that will continue the flow after the delay
             \Modules\FlowBuilder\Jobs\ProcessDelayedFlowJob::dispatch($contactId, $flowData->flow_id, $flowData->current_step, $this->organizationId)
-                ->delay(now()->addMinutes($duration));
-            
-            // Log::info("Delay action scheduled for {$duration} minutes for contact {$contactId}");
+                ->delay(now()->addSeconds($delaySeconds));
+
             return 'delayed'; // Return special value to indicate the flow is paused
         }
-        
-        // Fallback: simple sleep for testing (not recommended for production)
-        // Log::info("Delay action executed for {$duration} minutes (fallback mode)");
-        sleep($duration * 60);
-        
+
+        // Fallback: if no flow data, log warning and proceed without blocking
+        Log::warning('Delay action executed without flow data, skipping delay', [
+            'contact_id' => $contactId,
+        ]);
+
         return true;
     }
 
     /**
      * Execute webhook action
      */
-    private function executeWebhook($config, $contact, $userMessage)
+    private function executeWebhook($config, $contact, $userMessage, $flowData = null)
     {
         $url = trim($config['url'] ?? '');
         $method = strtoupper(trim($config['method'] ?? 'POST'));
@@ -310,7 +327,10 @@ class ActionExecutionService
             return false;
         }
 
-        // Prepare payload
+        // Resolve {{flow.*}} and {{contact.*}} placeholders in URL
+        $url = $this->replacePlaceholders($contact, $url, $flowData);
+
+        // Prepare payload with contact data and flow variables
         $payload = [
             'contact' => [
                 'uuid' => $contact->uuid,
@@ -323,15 +343,53 @@ class ActionExecutionService
             ],
             'message' => $userMessage,
             'timestamp' => now()->toISOString(),
+            'flow_variables' => $flowData ? ($flowData->variables ?? []) : [],
         ];
 
+        // Resolve placeholders in custom body if provided
+        $customBody = $config['body'] ?? null;
+        if ($customBody) {
+            $customBody = $this->replacePlaceholders($contact, $customBody, $flowData);
+            $decodedBody = json_decode($customBody, true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decodedBody)) {
+                $payload = array_merge($payload, $decodedBody);
+            }
+        }
+
         try {
-            $response = Http::timeout(30)->send($method, $url, [
-                'json' => $this->metaPayload,
+            $headers = [];
+            $customHeaders = $config['headers'] ?? [];
+            if (is_array($customHeaders)) {
+                foreach ($customHeaders as $header) {
+                    $key = $header['key'] ?? '';
+                    $value = $header['value'] ?? '';
+                    if ($key && $value) {
+                        $headers[$key] = $value;
+                    }
+                }
+            }
+
+            $response = Http::timeout(30)->withHeaders($headers)->send($method, $url, [
+                'json' => $payload,
             ]);
 
             if ($response->successful()) {
-                // Log::info("Webhook executed successfully: {$url}");
+                // Map response fields to flow variables
+                $mapping = $config['response_mapping'] ?? [];
+                if (!empty($mapping) && $flowData) {
+                    $responseData = $response->json();
+                    $vars = $flowData->variables ?? [];
+                    foreach ($mapping as $map) {
+                        $field = $map['response_field'] ?? '';
+                        $varName = $map['save_to_variable'] ?? '';
+                        if ($field && $varName) {
+                            $vars[$varName] = data_get($responseData, $field, '');
+                        }
+                    }
+                    $flowData->variables = $vars;
+                    $flowData->save();
+                }
+
                 return true;
             } else {
                 Log::warning("Webhook failed with status {$response->status()}: {$url}");
@@ -344,49 +402,146 @@ class ActionExecutionService
     }
 
     /**
-     * Execute AI response action
+     * Execute AI response action.
+     * Uses org's KB automatically. Confidence threshold fixed at 0.75.
+     * If confident: send answer, flow continues. If not: send low_confidence_message, flow pauses.
      */
-    private function executeAIResponse($config, $contact, $userMessage)
+    private function executeAIResponse($config, $contact, $userMessage, $flowData = null)
     {
-        $prompt = $config['prompt'] ?? '';
-        $proceedCondition = $config['proceed_condition'] ?? 'always';
-        $confidenceThreshold = $config['confidence_threshold'] ?? 0.8;
-
-        if (!$prompt) {
-            Log::warning("No prompt specified for ai_response action");
-            return false;
-        }
-
-        // Replace placeholders in prompt
-        $prompt = $this->replacePlaceholders($contact, $prompt);
+        $lowConfidenceMessage = $config['low_confidence_message'] ?? '';
+        $confidenceThreshold = 0.75;
 
         try {
-            // Here you would integrate with your AI service
-            // For now, we'll simulate an AI response
-            $aiResponse = "AI Response: " . substr($prompt, 0, 100) . "...";
-            $confidence = 0.9; // Simulated confidence score
+            // 1. Get KB context (auto from org)
+            $kbService = new \App\Services\AiKnowledgeBaseService();
+            $kbContext = $kbService->getEnabledForContext($this->organizationId);
 
-            // Send AI response via WhatsApp
-            $this->whatsappService->sendMessage($contact->uuid, $aiResponse);
+            // 2. Build system prompt with KB context
+            $systemPrompt = $this->buildAiSystemPrompt($kbContext);
 
-            // Check if we should proceed based on confidence
-            if ($proceedCondition === 'confidence_threshold' && $confidence < $confidenceThreshold) {
-                // Log::info("AI response confidence below threshold, stopping flow");
+            // 3. Call AI
+            $aiService = new \App\Services\AiService();
+            $response = $aiService->chat($systemPrompt, $userMessage, [
+                'temperature' => 0.3,
+                'max_tokens' => 500,
+            ]);
+
+            if (!$response || !$response->success || empty(trim($response->content))) {
+                Log::warning("AI response action: AI call failed or empty", [
+                    'contact_id' => $contact->id,
+                ]);
                 return false;
             }
 
-            // Log::info("AI response sent to contact {$contact->id}");
+            // 4. Parse structured JSON response
+            $parsed = $this->parseAiStructuredResponse(trim($response->content));
+
+            if ($parsed === null) {
+                Log::warning("AI response action: Could not parse structured response", [
+                    'contact_id' => $contact->id,
+                    'raw_content' => mb_substr($response->content, 0, 200),
+                ]);
+                return false;
+            }
+
+            $answer = $parsed['answer'] ?? '';
+            $confidence = (float) ($parsed['confidence'] ?? 0);
+
+            if (empty(trim($answer)) || strtoupper(trim($answer)) === 'NONE') {
+                Log::info("AI response action: AI returned NONE, no answer available", [
+                    'contact_id' => $contact->id,
+                ]);
+
+                if (!empty($lowConfidenceMessage)) {
+                    $lowConfidenceMessage = $this->replacePlaceholders($contact, $lowConfidenceMessage, $flowData);
+                    $this->whatsappService->sendMessage($contact->uuid, $lowConfidenceMessage);
+                }
+
+                return false;
+            }
+
+            // 5. Check confidence threshold BEFORE sending the answer
+            if ($confidence < $confidenceThreshold) {
+                Log::info("AI response action: confidence below threshold, sending low_confidence_message and pausing flow", [
+                    'contact_id' => $contact->id,
+                    'confidence' => $confidence,
+                    'threshold' => $confidenceThreshold,
+                ]);
+
+                if (!empty($lowConfidenceMessage)) {
+                    $lowConfidenceMessage = $this->replacePlaceholders($contact, $lowConfidenceMessage, $flowData);
+                    $this->whatsappService->sendMessage($contact->uuid, $lowConfidenceMessage);
+                }
+
+                return false;
+            }
+
+            // 6. Confidence is good — send the AI answer via WhatsApp
+            $this->whatsappService->sendMessage($contact->uuid, $answer);
+
+            Log::info("AI response action: answer sent", [
+                'contact_id' => $contact->id,
+                'confidence' => $confidence,
+            ]);
+
             return true;
         } catch (\Exception $e) {
-            Log::error("AI response execution error: " . $e->getMessage());
+            Log::error("AI response action error: " . $e->getMessage());
             return false;
         }
     }
 
     /**
+     * Build the system prompt for AI response action.
+     * Same structured JSON format as AiFallbackService.
+     */
+    private function buildAiSystemPrompt(string $kbContext): string
+    {
+        return "You are a customer support assistant. Answer the user's question using ONLY the information from the knowledge base below.\n\n"
+            . "RULES:\n"
+            . "- You MUST respond with valid JSON in this exact format:\n"
+            . '  {"answer": "your answer here", "confidence": 0.0_to_1.0}' . "\n"
+            . "- ONLY answer if the user is asking a genuine question that can be answered from the knowledge base.\n"
+            . "- If the user's message is NOT a question, set answer to \"NONE\" and confidence to 0.\n"
+            . "- If you cannot find the answer in the knowledge base, set answer to \"NONE\" and confidence to 0.\n"
+            . "- Be strict: confidence must reflect how well the knowledge base answers THIS specific question.\n"
+            . "- Never guess or infer answers not explicitly in the knowledge base.\n"
+            . "- Keep answers under 3 sentences.\n"
+            . "- Respond in the same language as the user's message.\n"
+            . "- Do not mention the knowledge base or that you are an AI.\n\n"
+            . "KNOWLEDGE BASE:\n" . $kbContext;
+    }
+
+    /**
+     * Parse a structured JSON response from the AI.
+     * Same logic as AiFallbackService::parseStructuredResponse().
+     */
+    private function parseAiStructuredResponse(string $content): ?array
+    {
+        $content = trim($content);
+        $content = preg_replace('/^```(?:json)?\s*/m', '', $content);
+        $content = preg_replace('/\s*```$/m', '', $content);
+        $content = trim($content);
+
+        $decoded = json_decode($content, true);
+        if (json_last_error() === JSON_ERROR_NONE && isset($decoded['answer'])) {
+            return $decoded;
+        }
+
+        if (preg_match('/\{[^{}]*"answer"[^{}]*\}/s', $content, $matches)) {
+            $decoded = json_decode($matches[0], true);
+            if (json_last_error() === JSON_ERROR_NONE && isset($decoded['answer'])) {
+                return $decoded;
+            }
+        }
+
+        return null;
+    }
+
+    /**
      * Execute conditional action
      */
-    private function executeConditional($config, $contact, $userMessage)
+    private function executeConditional($config, $contact, $userMessage, $flowData = null)
     {
         $conditionType = $config['condition_type'] ?? 'message_contains';
         $conditions = $config['conditions'] ?? [];
@@ -397,8 +552,13 @@ class ActionExecutionService
         // The actual flow branching logic is handled in FlowExecutionService
         foreach ($conditions as $index => $condition) {
             $conditionValue = $condition['value'] ?? '';
-            
-            if ($this->evaluateCondition($conditionType, $conditionValue, $userMessage, $contact, $fieldName, $fieldOperator)) {
+
+            // Resolve {{flow.*}} and {{contact.*}} placeholders in condition values
+            if ($flowData) {
+                $conditionValue = $this->replacePlaceholders($contact, $conditionValue, $flowData);
+            }
+
+            if ($this->evaluateCondition($conditionType, $conditionValue, $userMessage, $contact, $fieldName, $fieldOperator, $flowData)) {
                 // Log::info("Conditional action: condition {$index} matched");
                 return $index; // Return the condition index that matched
             }
@@ -411,23 +571,28 @@ class ActionExecutionService
     /**
      * Evaluate a single condition
      */
-    private function evaluateCondition($conditionType, $conditionValue, $userMessage, $contact, $fieldName, $fieldOperator)
+    private function evaluateCondition($conditionType, $conditionValue, $userMessage, $contact, $fieldName, $fieldOperator, $flowData = null)
     {
         switch ($conditionType) {
             case 'message_contains':
                 return stripos($userMessage, $conditionValue) !== false;
-            
+
             case 'message_equals':
                 return strtolower(trim($userMessage)) === strtolower(trim($conditionValue));
-            
+
             case 'contact_field':
                 if (!$fieldName) return false;
-                
+
                 $fieldValue = $this->getContactFieldValue($contact, $fieldName);
                 return $this->compareValues($fieldValue, $fieldOperator, $conditionValue);
-            
 
-            
+            case 'flow_variable':
+                if (!$fieldName || !$flowData) return false;
+
+                $flowVars = $flowData->variables ?? [];
+                $fieldValue = $flowVars[$fieldName] ?? '';
+                return $this->compareValues($fieldValue, $fieldOperator, $conditionValue);
+
             default:
                 return false;
         }
@@ -481,6 +646,12 @@ class ActionExecutionService
             
             case 'is_not_empty':
                 return !empty(trim($fieldValue));
+
+            case 'greater_than':
+                return is_numeric($fieldValue) && is_numeric($conditionValue) && floatval($fieldValue) > floatval($conditionValue);
+
+            case 'less_than':
+                return is_numeric($fieldValue) && is_numeric($conditionValue) && floatval($fieldValue) < floatval($conditionValue);
             
             default:
                 return false;
@@ -490,36 +661,63 @@ class ActionExecutionService
     /**
      * Replace placeholders in text
      */
-    private function replacePlaceholders($contact, $text)
+    private function replacePlaceholders($contact, $text, ?FlowUserData $flowData = null)
     {
         $address = $contact->address ? json_decode($contact->address, true) : [];
         $metadata = $contact->metadata ? json_decode($contact->metadata, true) : [];
-        
+
         $fullAddress = ($address['street'] ?? '') . ', ' .
                       ($address['city'] ?? '') . ', ' .
                       ($address['state'] ?? '') . ', ' .
                       ($address['zip'] ?? '') . ', ' .
                       ($address['country'] ?? '');
 
-        $placeholders = [
-            '{first_name}' => $contact->first_name ?? '',
-            '{last_name}' => $contact->last_name ?? '',
-            '{full_name}' => $contact->full_name ?? '',
-            '{email}' => $contact->email ?? '',
-            '{phone}' => $contact->phone ?? '',
-            '{organization_name}' => $this->organization->name ?? '',
-            '{full_address}' => $fullAddress,
-            '{street}' => $address['street'] ?? '',
-            '{city}' => $address['city'] ?? '',
-            '{state}' => $address['state'] ?? '',
-            '{zip_code}' => $address['zip'] ?? '',
-            '{country}' => $address['country'] ?? '',
+        $contactData = [
+            'first_name' => $contact->first_name ?? '',
+            'last_name' => $contact->last_name ?? '',
+            'full_name' => $contact->full_name ?? '',
+            'email' => $contact->email ?? '',
+            'phone' => $contact->phone ?? '',
+            'organization_name' => $this->organization->name ?? '',
+            'full_address' => $fullAddress,
+            'street' => $address['street'] ?? '',
+            'city' => $address['city'] ?? '',
+            'state' => $address['state'] ?? '',
+            'zip_code' => $address['zip'] ?? '',
+            'country' => $address['country'] ?? '',
         ];
 
-        // Add metadata placeholders
+        // Add metadata
         foreach ($metadata as $key => $value) {
-            $transformedKey = strtolower(str_replace(' ', '_', $key));
-            $placeholders['{' . $transformedKey . '}'] = $value;
+            $contactData[strtolower(str_replace(' ', '_', $key))] = $value;
+        }
+
+        $flowVariables = ($flowData?->variables) ?? [];
+        $systemData = [
+            'current_date' => now()->format('Y-m-d'),
+            'current_time' => now()->format('H:i'),
+            'organization_name' => $this->organization->name ?? '',
+        ];
+
+        // Replace {{system.*}}
+        $text = preg_replace_callback('/\{\{system\.(\w+)\}\}/', function ($m) use ($systemData) {
+            return $systemData[$m[1]] ?? $m[0];
+        }, $text);
+
+        // Replace {{flow.*}}
+        $text = preg_replace_callback('/\{\{flow\.(\w+)\}\}/', function ($m) use ($flowVariables) {
+            return $flowVariables[$m[1]] ?? $m[0];
+        }, $text);
+
+        // Replace {{contact.*}}
+        $text = preg_replace_callback('/\{\{contact\.(\w+)\}\}/', function ($m) use ($contactData) {
+            return $contactData[$m[1]] ?? $m[0];
+        }, $text);
+
+        // Replace legacy {flat} placeholders
+        $placeholders = [];
+        foreach ($contactData as $key => $value) {
+            $placeholders['{' . $key . '}'] = $value;
         }
 
         return str_replace(array_keys($placeholders), array_values($placeholders), $text);
@@ -531,75 +729,33 @@ class ActionExecutionService
      */
     private function executeAssignToAgent($config, $contact)
     {
-        $agentUserId = $config['agent_id'] ?? null;
-        
-        if (!$agentUserId) {
-            Log::warning("No agent_id specified for assign_to_agent action");
-            return false;
-        }
+        $assignmentType = $config['assignment_type'] ?? 'specific_agent';
+        $agentId = isset($config['agent_id']) ? (int) $config['agent_id'] : null;
 
         try {
-            // Check if already assigned to this agent
-            $existingTicket = \App\Models\ChatTicket::where('contact_id', $contact->id)->first();
-            
-            if ($existingTicket && $existingTicket->assigned_to == $agentUserId) {
-                Log::info("Contact already assigned to this agent, skipping duplicate assignment", [
-                    'contact_id' => $contact->id,
-                    'agent_id' => $agentUserId
-                ]);
-                return true; // Return success but don't re-assign
-            }
-
-            // Find or create chat ticket for this contact
-            $ticket = \App\Models\ChatTicket::firstOrCreate(
-                ['contact_id' => $contact->id],
-                [
-                    'status' => 'open',
-                    'created_at' => now(),
-                    'updated_at' => now()
-                ]
+            $routingService = new AgentRoutingService();
+            $ticket = $routingService->assignToAgent(
+                $this->organizationId,
+                $contact->id,
+                $assignmentType,
+                $assignmentType === 'specific_agent' ? $agentId : null
             );
 
-            // Rest of the code stays the same...
-            $ticket->assigned_to = $agentUserId;
-            $ticket->status = 'open';
-            $ticket->updated_at = now();
-            $ticket->save();
-
-            // Create ticket log
-            $ticketId = \App\Models\ChatTicketLog::insertGetId([
-                'contact_id' => $contact->id,
-                'description' => 'Conversation assigned to agent via automation flow',
-                'created_at' => now()
-            ]);
-
-            \App\Models\ChatLog::insert([
-                'contact_id' => $contact->id,
-                'entity_type' => 'ticket',
-                'entity_id' => $ticketId,
-                'created_at' => now()
-            ]);
-
-            // Send notification to assigned agent
-            try {
-                $notificationService = new \App\Services\ApiNotificationService();
-                $notificationService->sendAssignmentNotification(
-                    $contact->id,
-                    $agentUserId,
-                    0,
-                    $this->organizationId
-                );
-            } catch (\Exception $e) {
-                Log::error('Failed to send agent assignment notification: ' . $e->getMessage());
+            if ($ticket) {
+                Log::info("Contact assigned to agent via flow", [
+                    'contact_id' => $contact->id,
+                    'assignment_type' => $assignmentType,
+                    'assigned_to' => $ticket->assigned_to,
+                    'ticket_id' => $ticket->id
+                ]);
+                return true;
             }
 
-            Log::info("Contact assigned to agent via flow", [
+            Log::warning("Agent routing returned no ticket", [
                 'contact_id' => $contact->id,
-                'agent_id' => $agentUserId,
-                'ticket_id' => $ticket->id
+                'assignment_type' => $assignmentType,
             ]);
-
-            return true;
+            return false;
         } catch (\Exception $e) {
             Log::error("Failed to assign contact to agent: " . $e->getMessage());
             return false;

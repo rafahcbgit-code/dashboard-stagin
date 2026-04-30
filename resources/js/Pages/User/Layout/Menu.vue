@@ -76,6 +76,20 @@
                     </Link>
                 </li>
                 <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
+                    :class="$page.url.startsWith('/notifications') ? 'bg-slate-50 text-black' : ''">
+                    <Link rel="noopener noreferrer" href="/notifications"
+                        class="flex items-center justify-between p-2 space-s-3 rounded-md">
+                        <div class="flex items-center space-s-3">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+                                <path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M18 8A6 6 0 0 0 6 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 0 1-3.46 0"/>
+                            </svg>
+                            <span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Notifications') }}</span>
+                        </div>
+                        <span v-if="parseInt(unreadNotifications) > 0" class="bg-red-500 text-white px-2 text-[11px] rounded-md">{{
+                            unreadNotifications }}</span>
+                    </Link>
+                </li>
+                <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
                     :class="$page.url.startsWith('/contact') ? 'bg-slate-50 text-black' : ''">
                     <Link rel="noopener noreferrer" href="/contacts" class="flex items-center p-2 space-s-3 rounded-md">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
@@ -160,7 +174,7 @@
                 </li>
                 <li v-if="!isAgent" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
                     :class="$page.url.startsWith('/automation') ? 'bg-slate-50 text-black' : ''">
-                    <Link rel="noopener noreferrer" href="/automation/basic"
+                    <Link rel="noopener noreferrer" href="/automation/triggers"
                         class="flex items-center p-2 space-s-3 rounded-md">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 32 32">
                             <path fill="currentColor"
@@ -360,7 +374,7 @@ import ProfileModal from '@/Components/ProfileModal.vue';
 import LangToggle from '@/Components/LangToggle.vue';
 import OrganizationModal from '@/Components/OrganizationModal.vue';
 
-const props = defineProps(['config', 'user', 'organization', 'organizations', 'isSidebarOpen', 'menuIconsOnly', 'unreadMessages']);
+const props = defineProps(['config', 'user', 'organization', 'organizations', 'isSidebarOpen', 'menuIconsOnly', 'unreadMessages', 'unreadNotifications']);
 
 const languages = computed(() => usePage().props.languages);
 const currentLanguage = computed(() => usePage().props.currentLanguage);
