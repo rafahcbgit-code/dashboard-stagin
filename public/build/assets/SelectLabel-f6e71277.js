@@ -1,5 +1,0 @@
-<<<<<<<< HEAD:public/build/assets/SelectLabel-f6e71277.js
-import{A as t}from"./index-2514de22.js";import{c as r}from"./utils-3f044a58.js";import{D as l,f as n,g as c,n as p,u as s,o as f,B as m}from"./app-0c421706.js";const B=l({__name:"SelectLabel",props:{for:{},asChild:{type:Boolean},as:{},class:{}},setup(a){const e=a;return(o,i)=>(f(),n(s(t),{class:p(s(r)("py-1.5 pl-8 pr-2 text-sm font-semibold",e.class))},{default:c(()=>[m(o.$slots,"default")]),_:3},8,["class"]))}});export{B as default};
-========
-import{A as t}from"./index-b4e0690f.js";import{c as r}from"./utils-3f044a58.js";import{D as l,f as n,g as c,n as p,u as s,o as f,B as m}from"./app-9753bd4f.js";const B=l({__name:"SelectLabel",props:{for:{},asChild:{type:Boolean},as:{},class:{}},setup(a){const e=a;return(o,i)=>(f(),n(s(t),{class:p(s(r)("py-1.5 pl-8 pr-2 text-sm font-semibold",e.class))},{default:c(()=>[m(o.$slots,"default")]),_:3},8,["class"]))}});export{B as default};
->>>>>>>> 2a02b3dd809c6ff2d90b1d779b18efcc59f853c2:public/build/assets/SelectLabel-96a831af.js
