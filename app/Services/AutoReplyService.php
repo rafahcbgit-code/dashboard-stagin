@@ -351,24 +351,36 @@ class AutoReplyService
                 return true;
             }
 
-            $buttons = [
-                ['id' => 'fallback_start_over', 'title' => 'Start Over'],
-                ['id' => 'fallback_help', 'title' => 'Help'],
-            ];
-
-            if ($config['route_to_agent']) {
-                $buttons[] = ['id' => 'fallback_talk_to_agent', 'title' => 'Talk to Agent'];
+            $buttons = [];
+            if ($config['button_1_enabled']) {
+                $buttons[] = ['id' => 'fallback_start_over', 'title' => $config['button_1_label']];
+            }
+            if ($config['button_2_enabled']) {
+                $buttons[] = ['id' => 'fallback_help', 'title' => $config['button_2_label']];
+            }
+            if ($config['button_3_enabled']) {
+                $buttons[] = ['id' => 'fallback_talk_to_agent', 'title' => $config['button_3_label']];
             }
 
             $message = $config['message'] ?: "I didn't quite understand that. What would you like to do?";
 
-            $this->initializeWhatsappService($organizationId)->sendMessage(
-                $contact->uuid,
-                $message,
-                null,
-                'interactive buttons',
-                $buttons
-            );
+            if (empty($buttons)) {
+                // Text-only mode: no buttons enabled, send plain text
+                $this->initializeWhatsappService($organizationId)->sendMessage(
+                    $contact->uuid,
+                    $message,
+                    null,
+                    'text'
+                );
+            } else {
+                $this->initializeWhatsappService($organizationId)->sendMessage(
+                    $contact->uuid,
+                    $message,
+                    null,
+                    'interactive buttons',
+                    $buttons
+                );
+            }
 
             // Record fallback trigger for rate limiting / escalation counting
             $this->rateLimitService->recordFallback($organizationId, $contact->id);
