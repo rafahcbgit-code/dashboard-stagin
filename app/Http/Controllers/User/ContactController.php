@@ -466,6 +466,9 @@ class ContactController extends BaseController
             'except_ids' => ['nullable', 'array'],
             'except_ids.*' => ['integer'],
             'action' => ['required', 'in:add_group,remove_group,add_label,remove_label,change_subscription_status'],
+            'filter_group_ids' => ['nullable', 'array'],
+            'filter_group_ids.*' => ['integer'],
+            'filter_subscription_status' => ['nullable', 'in:subscribed,unsubscribed,0,1'],
             'group_ids' => ['array'],
             'group_ids.*' => ['integer'],
             'label_ids' => ['array'],
@@ -742,7 +745,32 @@ class ContactController extends BaseController
 
     private function toFilterRequest(Request $request): Request
     {
-        return Request::create('/contacts', 'GET', $request->all());
+        $filters = $request->all();
+        $action = (string) $request->input('action', '');
+
+        if ($request->has('filter_group_ids')) {
+            $filters['group_ids'] = $request->input('filter_group_ids');
+        } elseif (in_array($action, ['add_group', 'remove_group'], true)) {
+            unset($filters['group_ids']);
+        }
+
+        if ($request->has('filter_subscription_status')) {
+            $filters['subscription_status'] = $request->input('filter_subscription_status');
+        } elseif ($action === 'change_subscription_status') {
+            unset($filters['subscription_status']);
+        }
+
+        unset(
+            $filters['action'],
+            $filters['ids'],
+            $filters['except_ids'],
+            $filters['select_all_filtered'],
+            $filters['filter_group_ids'],
+            $filters['filter_subscription_status'],
+            $filters['label_ids']
+        );
+
+        return Request::create('/contacts', 'GET', $filters);
     }
 
     public function toggleBlock(Request $request, $uuid)
