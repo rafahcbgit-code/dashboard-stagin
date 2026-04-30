@@ -156,7 +156,7 @@ class FlowExecutionService
                 'message' => $message,
             ]);
 
-            $result = $this->processFlow($chat, $flowData, strtolower(trim($message)));
+            $result = $this->processFlow($chat, $flowData, '');
 
             Log::info('FlowExecution::startFlow - processFlow result', [
                 'result' => is_string($result) ? $result : ($result === false ? 'false' : 'true'),
@@ -374,13 +374,37 @@ class FlowExecutionService
                 return true;
             }
 
-            // Message node: send the message
-            $sent = $this->sendNodeMessage($node, $contact, $flowData->variables ?? []);
-
-            // Determine if this node type requires user input (buttons, lists, CTAs)
+            // Message node: if this is an interactive node (buttons/list/CTA) and we're
+            // resuming with user input, route to the correct branch instead of resending.
             $fields = \Arr::get($node, 'data.metadata.fields', []);
             $msgType = $fields['type'] ?? null;
             $needsUserInput = in_array($msgType, ['interactive buttons', 'interactive list', 'interactive call to action url']);
+
+            if ($needsUserInput && !empty($message)) {
+                // User clicked a button/list item — route to the matching branch
+                $nextNode = $parser->getNextNode($currentNodeId, $message);
+                if ($nextNode) {
+                    $this->updateStep($chat->contact_id, (string) $nextNode['id']);
+                    $currentNodeId = (string) $nextNode['id'];
+                    Log::info('FlowExecution: interactive input routed', [
+                        'from_node' => $currentNodeId,
+                        'message' => $message,
+                        'next_node' => $currentNodeId,
+                    ]);
+                    $flowData = $this->refreshFlowData($chat->contact_id);
+                    continue;
+                }
+                // No matching branch found — end flow or fall through
+                Log::warning('FlowExecution: no matching branch for interactive input', [
+                    'node_id' => $currentNodeId,
+                    'message' => $message,
+                ]);
+                $this->endFlow($chat->contact_id);
+                return false;
+            }
+
+            // Send the message (first visit to this node, no user input yet)
+            $sent = $this->sendNodeMessage($node, $contact, $flowData->variables ?? []);
 
             Log::info('FlowExecution: message node send result', [
                 'node_id' => $currentNodeId,
@@ -389,15 +413,15 @@ class FlowExecutionService
                 'sent' => $sent ? 'true' : 'false',
             ]);
 
-            // Advance step regardless of send success to avoid getting stuck
-            $this->advanceToNextStep($parser, $currentNodeId, $chat->contact_id);
-
             if ($needsUserInput) {
-                // Interactive node: stop and wait for user response
+                // Interactive node: stay on this node and wait for user response.
+                // Do NOT advance — getNextNode can't resolve multi-edge nodes
+                // without a button/list selection, and advancing would end the flow.
                 return true;
             }
 
-            // Plain text/media: send and continue to next node
+            // Plain text/media: send and advance to next node
+            $this->advanceToNextStep($parser, $currentNodeId, $chat->contact_id);
             $flowData = $this->refreshFlowData($chat->contact_id);
             if (!$flowData) {
                 // Flow was completed (no more steps) — endFlow already called by advanceToNextStep
