@@ -72,12 +72,21 @@ class BotSettingsController extends BaseController
             'fallback_menu_start_over_flow_id' => 'nullable|integer|exists:flows,id',
             'fallback_menu_help_flow_id' => 'nullable|integer|exists:flows,id',
             'fallback_menu_route_to_agent' => 'nullable|boolean',
+            'fallback_menu_button_1_label' => 'nullable|string|max:20',
+            'fallback_menu_button_2_label' => 'nullable|string|max:20',
+            'fallback_menu_button_3_label' => 'nullable|string|max:20',
+            'fallback_menu_button_1_enabled' => 'nullable|boolean',
+            'fallback_menu_button_2_enabled' => 'nullable|boolean',
+            'fallback_menu_button_3_enabled' => 'nullable|boolean',
         ]);
 
         // Convert checkboxes to booleans
         $validated['ai_fallback_enabled'] = isset($validated['ai_fallback_enabled']) ? (bool) $validated['ai_fallback_enabled'] : false;
         $validated['fallback_menu_enabled'] = isset($validated['fallback_menu_enabled']) ? (bool) $validated['fallback_menu_enabled'] : false;
         $validated['fallback_menu_route_to_agent'] = isset($validated['fallback_menu_route_to_agent']) ? (bool) $validated['fallback_menu_route_to_agent'] : false;
+        $validated['fallback_menu_button_1_enabled'] = isset($validated['fallback_menu_button_1_enabled']) ? (bool) $validated['fallback_menu_button_1_enabled'] : false;
+        $validated['fallback_menu_button_2_enabled'] = isset($validated['fallback_menu_button_2_enabled']) ? (bool) $validated['fallback_menu_button_2_enabled'] : false;
+        $validated['fallback_menu_button_3_enabled'] = isset($validated['fallback_menu_button_3_enabled']) ? (bool) $validated['fallback_menu_button_3_enabled'] : false;
 
         $organizationId = session()->get('current_organization');
         $this->botSettingsService->update($organizationId, $validated);

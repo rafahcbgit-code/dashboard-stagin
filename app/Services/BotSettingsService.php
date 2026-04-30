@@ -17,6 +17,12 @@ class BotSettingsService
         'fallback_menu_start_over_flow_id' => null,
         'fallback_menu_help_flow_id' => null,
         'fallback_menu_route_to_agent' => true,
+        'fallback_menu_button_1_label' => 'Start Over',
+        'fallback_menu_button_2_label' => 'Help',
+        'fallback_menu_button_3_label' => 'Talk to Agent',
+        'fallback_menu_button_1_enabled' => true,
+        'fallback_menu_button_2_enabled' => true,
+        'fallback_menu_button_3_enabled' => true,
     ];
 
     /**
@@ -111,7 +117,22 @@ class BotSettingsService
             'message' => $this->getSetting($organizationId, 'fallback_menu_message', self::DEFAULTS['fallback_menu_message']),
             'start_over_flow_id' => $this->getSetting($organizationId, 'fallback_menu_start_over_flow_id'),
             'help_flow_id' => $this->getSetting($organizationId, 'fallback_menu_help_flow_id'),
-            'route_to_agent' => (bool) $this->getSetting($organizationId, 'fallback_menu_route_to_agent', self::DEFAULTS['fallback_menu_route_to_agent']),
+            'route_to_agent' => $this->getButton3Enabled($organizationId),
+            'button_1_label' => $this->getSetting($organizationId, 'fallback_menu_button_1_label', self::DEFAULTS['fallback_menu_button_1_label']),
+            'button_2_label' => $this->getSetting($organizationId, 'fallback_menu_button_2_label', self::DEFAULTS['fallback_menu_button_2_label']),
+            'button_3_label' => $this->getSetting($organizationId, 'fallback_menu_button_3_label', self::DEFAULTS['fallback_menu_button_3_label']),
+            'button_1_enabled' => (bool) $this->getSetting($organizationId, 'fallback_menu_button_1_enabled', self::DEFAULTS['fallback_menu_button_1_enabled']),
+            'button_2_enabled' => (bool) $this->getSetting($organizationId, 'fallback_menu_button_2_enabled', self::DEFAULTS['fallback_menu_button_2_enabled']),
+            'button_3_enabled' => $this->getButton3Enabled($organizationId),
         ];
+    }
+
+    private function getButton3Enabled(int $organizationId): bool
+    {
+        $explicit = $this->getSetting($organizationId, 'fallback_menu_button_3_enabled');
+        if ($explicit !== null) {
+            return (bool) $explicit;
+        }
+        return (bool) $this->getSetting($organizationId, 'fallback_menu_route_to_agent', self::DEFAULTS['fallback_menu_route_to_agent']);
     }
 }

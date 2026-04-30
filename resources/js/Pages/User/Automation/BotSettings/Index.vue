@@ -217,7 +217,7 @@
                                     </div>
                                     <div class="flex-1">
                                         <label class="block text-sm font-semibold text-slate-800">{{ $t('Fallback Menu') }}</label>
-                                        <p class="text-xs text-slate-500 mt-0.5">{{ $t('When no trigger, AI, or basic reply matches, show a 3-button menu: Start Over, Help, Talk to Agent.') }}</p>
+                                        <p class="text-xs text-slate-500 mt-0.5">{{ $t('When no trigger or AI matches, show a customizable menu with up to 3 buttons.') }}</p>
                                     </div>
                                     <!-- Toggle -->
                                     <button
@@ -244,7 +244,97 @@
                                             class="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-primary focus:ring-1 focus:ring-primary/30 focus:outline-none transition-colors resize-none"
                                             :placeholder="$t('e.g., I didn\'t quite understand that. What would you like to do?')"
                                         />
-                                        <p class="text-[10px] text-slate-400 mt-1">{{ $t('This message appears above the 3 buttons on WhatsApp.') }}</p>
+                                        <p class="text-[10px] text-slate-400 mt-1">{{ $t('This message appears above the buttons on WhatsApp. Disable all buttons below for text-only mode.') }}</p>
+                                    </div>
+
+                                    <!-- Button configuration -->
+                                    <div class="space-y-3">
+                                        <label class="block text-sm font-medium text-slate-700">{{ $t('Buttons') }}</label>
+
+                                        <!-- Button 1: Start Over -->
+                                        <div class="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-3">
+                                            <button
+                                                type="button"
+                                                @click="form.fallback_menu_button_1_enabled = !form.fallback_menu_button_1_enabled"
+                                                class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-1 shrink-0"
+                                                :class="form.fallback_menu_button_1_enabled ? 'bg-primary' : 'bg-slate-300'"
+                                            >
+                                                <span class="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform duration-200" :class="form.fallback_menu_button_1_enabled ? 'translate-x-[18px]' : 'translate-x-[3px]'" />
+                                            </button>
+                                            <div class="flex-1" :class="{ 'opacity-40': !form.fallback_menu_button_1_enabled }">
+                                                <div class="flex items-center gap-2 mb-1">
+                                                    <span class="text-xs font-medium text-slate-600">{{ $t('Button 1 — starts a flow') }}</span>
+                                                    <select
+                                                        v-model.number="form.fallback_menu_start_over_flow_id"
+                                                        class="flex-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 focus:border-primary focus:ring-1 focus:ring-primary/30 focus:outline-none transition-colors"
+                                                    >
+                                                        <option :value="null">{{ $t('— Select flow —') }}</option>
+                                                        <option v-for="flow in flows" :key="flow.id" :value="flow.id">{{ flow.name }}</option>
+                                                    </select>
+                                                </div>
+                                                <input
+                                                    v-model="form.fallback_menu_button_1_label"
+                                                    maxlength="20"
+                                                    class="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-primary focus:ring-1 focus:ring-primary/30 focus:outline-none transition-colors"
+                                                    :placeholder="$t('Start Over')"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <!-- Button 2: Help -->
+                                        <div class="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-3">
+                                            <button
+                                                type="button"
+                                                @click="form.fallback_menu_button_2_enabled = !form.fallback_menu_button_2_enabled"
+                                                class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-1 shrink-0"
+                                                :class="form.fallback_menu_button_2_enabled ? 'bg-primary' : 'bg-slate-300'"
+                                            >
+                                                <span class="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform duration-200" :class="form.fallback_menu_button_2_enabled ? 'translate-x-[18px]' : 'translate-x-[3px]'" />
+                                            </button>
+                                            <div class="flex-1" :class="{ 'opacity-40': !form.fallback_menu_button_2_enabled }">
+                                                <div class="flex items-center gap-2 mb-1">
+                                                    <span class="text-xs font-medium text-slate-600">{{ $t('Button 2 — help flow') }}</span>
+                                                    <select
+                                                        v-model.number="form.fallback_menu_help_flow_id"
+                                                        class="flex-1 rounded-md border border-slate-200 bg-white px-2 py-1 text-xs text-slate-800 focus:border-primary focus:ring-1 focus:ring-primary/30 focus:outline-none transition-colors"
+                                                    >
+                                                        <option :value="null">{{ $t('— Select flow —') }}</option>
+                                                        <option v-for="flow in flows" :key="flow.id" :value="flow.id">{{ flow.name }}</option>
+                                                    </select>
+                                                </div>
+                                                <input
+                                                    v-model="form.fallback_menu_button_2_label"
+                                                    maxlength="20"
+                                                    class="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-primary focus:ring-1 focus:ring-primary/30 focus:outline-none transition-colors"
+                                                    :placeholder="$t('Help')"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <!-- Button 3: Talk to Agent -->
+                                        <div class="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-3">
+                                            <button
+                                                type="button"
+                                                @click="form.fallback_menu_button_3_enabled = !form.fallback_menu_button_3_enabled"
+                                                class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-1 shrink-0"
+                                                :class="form.fallback_menu_button_3_enabled ? 'bg-primary' : 'bg-slate-300'"
+                                            >
+                                                <span class="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform duration-200" :class="form.fallback_menu_button_3_enabled ? 'translate-x-[18px]' : 'translate-x-[3px]'" />
+                                            </button>
+                                            <div class="flex-1" :class="{ 'opacity-40': !form.fallback_menu_button_3_enabled }">
+                                                <div class="mb-1">
+                                                    <span class="text-xs font-medium text-slate-600">{{ $t('Button 3 — route to agent') }}</span>
+                                                </div>
+                                                <input
+                                                    v-model="form.fallback_menu_button_3_label"
+                                                    maxlength="20"
+                                                    class="w-full rounded-md border border-slate-200 bg-white px-2.5 py-1.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-primary focus:ring-1 focus:ring-primary/30 focus:outline-none transition-colors"
+                                                    :placeholder="$t('Talk to Agent')"
+                                                />
+                                            </div>
+                                        </div>
+
+                                        <p class="text-[10px] text-slate-400">{{ $t('WhatsApp allows up to 3 buttons, each max 20 characters. Disable all buttons for text-only mode.') }}</p>
                                     </div>
 
                                     <!-- Preview -->
@@ -252,57 +342,11 @@
                                         <p class="text-xs font-medium text-slate-500 mb-2">{{ $t('WhatsApp Preview') }}</p>
                                         <div class="bg-white rounded-lg border border-slate-200 p-3 shadow-sm max-w-[280px]">
                                             <p class="text-sm text-slate-700">{{ form.fallback_menu_message || $t("I didn't quite understand that. What would you like to do?") }}</p>
-                                            <div class="mt-3 flex flex-col gap-1.5">
-                                                <div class="rounded-md bg-primary/10 border border-primary/20 px-3 py-1.5 text-center text-xs font-medium text-primary">{{ $t('Start Over') }}</div>
-                                                <div class="rounded-md bg-primary/10 border border-primary/20 px-3 py-1.5 text-center text-xs font-medium text-primary">{{ $t('Help') }}</div>
-                                                <div class="rounded-md bg-primary/10 border border-primary/20 px-3 py-1.5 text-center text-xs font-medium text-primary">{{ $t('Talk to Agent') }}</div>
+                                            <div v-if="activeButtons.length > 0" class="mt-3 flex flex-col gap-1.5">
+                                                <div v-for="btn in activeButtons" :key="btn.id" class="rounded-md bg-primary/10 border border-primary/20 px-3 py-1.5 text-center text-xs font-medium text-primary truncate">{{ btn.title }}</div>
                                             </div>
+                                            <div v-else class="mt-2 text-xs text-slate-400 italic">{{ $t('(Text only — no buttons)') }}</div>
                                         </div>
-                                    </div>
-
-                                    <!-- Start Over flow -->
-                                    <div>
-                                        <label class="block text-sm font-medium text-slate-700 mb-1.5">{{ $t('Start Over Flow') }}</label>
-                                        <p class="text-xs text-slate-500 mb-1.5">{{ $t('Which flow to trigger when the contact taps "Start Over".') }}</p>
-                                        <select
-                                            v-model.number="form.fallback_menu_start_over_flow_id"
-                                            class="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 focus:border-primary focus:ring-1 focus:ring-primary/30 focus:outline-none transition-colors"
-                                        >
-                                            <option :value="null">{{ $t('— Select a flow —') }}</option>
-                                            <option v-for="flow in flows" :key="flow.id" :value="flow.id">{{ flow.name }}</option>
-                                        </select>
-                                    </div>
-
-                                    <!-- Help flow -->
-                                    <div>
-                                        <label class="block text-sm font-medium text-slate-700 mb-1.5">{{ $t('Help Flow') }}</label>
-                                        <p class="text-xs text-slate-500 mb-1.5">{{ $t('Which flow to trigger when the contact taps "Help".') }}</p>
-                                        <select
-                                            v-model.number="form.fallback_menu_help_flow_id"
-                                            class="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 focus:border-primary focus:ring-1 focus:ring-primary/30 focus:outline-none transition-colors"
-                                        >
-                                            <option :value="null">{{ $t('— Select a flow —') }}</option>
-                                            <option v-for="flow in flows" :key="flow.id" :value="flow.id">{{ flow.name }}</option>
-                                        </select>
-                                    </div>
-
-                                    <!-- Talk to Agent toggle -->
-                                    <div class="flex items-center justify-between rounded-lg border border-slate-200 bg-white p-3.5">
-                                        <div>
-                                            <span class="text-sm font-medium text-slate-700">{{ $t('"Talk to Agent" routing') }}</span>
-                                            <p class="text-xs text-slate-500 mt-0.5">{{ $t('When enabled, the "Talk to Agent" button assigns the conversation to a human agent.') }}</p>
-                                        </div>
-                                        <button
-                                            type="button"
-                                            @click="form.fallback_menu_route_to_agent = !form.fallback_menu_route_to_agent"
-                                            class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-1 shrink-0"
-                                            :class="form.fallback_menu_route_to_agent ? 'bg-primary' : 'bg-slate-300'"
-                                        >
-                                            <span
-                                                class="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform duration-200"
-                                                :class="form.fallback_menu_route_to_agent ? 'translate-x-[18px]' : 'translate-x-[3px]'"
-                                            />
-                                        </button>
                                     </div>
                                 </div>
                                 <div v-else class="mt-2 text-xs text-slate-400">
@@ -345,6 +389,26 @@ const form = ref({
     fallback_menu_start_over_flow_id: props.settings?.fallback_menu_start_over_flow_id || null,
     fallback_menu_help_flow_id: props.settings?.fallback_menu_help_flow_id || null,
     fallback_menu_route_to_agent: props.settings?.fallback_menu_route_to_agent ?? true,
+    fallback_menu_button_1_label: props.settings?.fallback_menu_button_1_label || 'Start Over',
+    fallback_menu_button_2_label: props.settings?.fallback_menu_button_2_label || 'Help',
+    fallback_menu_button_3_label: props.settings?.fallback_menu_button_3_label || 'Talk to Agent',
+    fallback_menu_button_1_enabled: props.settings?.fallback_menu_button_1_enabled ?? true,
+    fallback_menu_button_2_enabled: props.settings?.fallback_menu_button_2_enabled ?? true,
+    fallback_menu_button_3_enabled: props.settings?.fallback_menu_button_3_enabled ?? (props.settings?.fallback_menu_route_to_agent ?? true),
+});
+
+const activeButtons = computed(() => {
+    const buttons = [];
+    if (form.value.fallback_menu_button_1_enabled) {
+        buttons.push({ id: 'fallback_start_over', title: form.value.fallback_menu_button_1_label || 'Start Over' });
+    }
+    if (form.value.fallback_menu_button_2_enabled) {
+        buttons.push({ id: 'fallback_help', title: form.value.fallback_menu_button_2_label || 'Help' });
+    }
+    if (form.value.fallback_menu_button_3_enabled) {
+        buttons.push({ id: 'fallback_talk_to_agent', title: form.value.fallback_menu_button_3_label || 'Talk to Agent' });
+    }
+    return buttons;
 });
 
 const hasKbEntries = computed(() => (props.kbEntryCount || 0) > 0);
