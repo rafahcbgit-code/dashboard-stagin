@@ -10,8 +10,20 @@
     import Modal from '@/Components/Modal.vue';
     import Pagination from '@/Components/Pagination.vue';
     import { trans } from 'laravel-vue-i18n';
+    import { useI18n } from 'vue-i18n';
 
     const props = defineProps(['rows', 'filters', 'type', 'role']);
+    const { t } = useI18n();
+    const groupHelp = computed(() => ({
+        search: t('Search for an audience or group by name so you can quickly reach the needed classification.'),
+        selectAll: t('Select all audiences visible on this page to perform a bulk action such as deletion.'),
+        row: t('Click the audience to view its details and the number of customers inside it.'),
+        actions: t('From here you can import audiences, export them, or delete selected ones.'),
+        importRows: t('Upload an audience file instead of adding audiences manually.'),
+        exportRows: t('Export audiences to an external file for backup or review.'),
+        deleteSelected: t('Delete selected audiences only after making sure they are not used in important campaigns.'),
+        deleteAll: t('Delete all audiences very carefully because this affects customer database organization.'),
+    }));
 
     const params = ref({
         id: props.filters?.id,
@@ -186,6 +198,7 @@
                 type="text" 
                 class="w-full outline-none rounded-xl py-2 pl-2 mr-2 text-sm" 
                 :placeholder="type === 'contact' ? $t('Search name or phone or email') : $t('Search name')"
+                :title="type === 'group' ? groupHelp.search : undefined"
             >
             <button v-if="isSearching === false && params.search" @click="clearSearch" type="button" class="pr-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10s10-4.5 10-10S17.5 2 12 2zm3.7 12.3c.4.4.4 1 0 1.4c-.4.4-1 .4-1.4 0L12 13.4l-2.3 2.3c-.4.4-1 .4-1.4 0c-.4-.4-.4-1 0-1.4l2.3-2.3l-2.3-2.3c-.4-.4-.4-1 0-1.4c.4-.4 1-.4 1.4 0l2.3 2.3l2.3-2.3c.4-.4 1-.4 1.4 0c.4.4.4 1 0 1.4L13.4 12l2.3 2.3z"/></svg>
@@ -197,14 +210,14 @@
     </div>
     <div class="flex justify-between px-4 border-b">
         <div class="flex items-center space-x-2">
-            <label @click="toggleAllCheckboxes($event)" for="myCheckbox" class="cursor-pointer">
+            <label @click="toggleAllCheckboxes($event)" for="myCheckbox" class="cursor-pointer" :title="type === 'group' ? groupHelp.selectAll : undefined" :data-help-icon="type === 'group' ? '' : null">
                 <div class="w-4 h-4 border border-gray-400 rounded-md flex items-center justify-center" :class="{ 'bg-secondary': bulkCheckbox }">
                     <svg v-if="bulkCheckbox" class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7"></path>
                     </svg>
                 </div>
             </label>
-            <label @click="toggleAllCheckboxes($event)" class="cursor-pointer text-sm">
+            <label @click="toggleAllCheckboxes($event)" class="cursor-pointer text-sm" :title="type === 'group' ? groupHelp.selectAll : undefined" :data-help-icon="type === 'group' ? '' : null">
                 <span v-if="selectedCount == 0">{{ $t('Select all') }} ({{ selectedCount }})</span>
                 <span v-else-if="selectedCount > 0">{{ selectedCount }} {{ $t('selected') }}</span>
             </label>
@@ -212,17 +225,17 @@
         <div>
             <div class="float-right">
                 <Dropdown :align="'right'" class="mt-2">
-                    <button class="inline-flex w-full justify-center rounded-md text-sm font-medium text-black hbg-opacity-30 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-opacity-75">
+                    <button class="inline-flex w-full justify-center rounded-md text-sm font-medium text-black hbg-opacity-30 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-opacity-75" :title="type === 'group' ? groupHelp.actions : undefined" :data-help-icon="type === 'group' ? '' : null">
                         <span class="hover:shadow-md bg-slate-50 rounded-full w-[fit-content] p-2">
                             <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 16 16"><path fill="black" d="M8 2.5a1.22 1.22 0 0 1 1.25 1.17A1.21 1.21 0 0 1 8 4.84a1.21 1.21 0 0 1-1.25-1.17A1.22 1.22 0 0 1 8 2.5m0 8.66a1.17 1.17 0 1 1-1.25 1.17A1.21 1.21 0 0 1 8 11.16m0-4.33a1.17 1.17 0 1 1 0 2.34a1.17 1.17 0 1 1 0-2.34"/></svg>
                         </span>
                     </button>
                     <template #items>
                         <DropdownItemGroup v-if="props.role !== 'agent'">
-                            <DropdownItem as="button" @click="isOpenModal = true">{{ $t('Import rows') }}</DropdownItem>
-                            <DropdownItem as="button" @click="isExportModalOpen = true">{{ $t('Export') }}</DropdownItem>
-                            <DropdownItem v-if="selectedCount > 0" as="button" @click="deleteItems()">{{ $t('Delete selected') }}</DropdownItem>
-                            <DropdownItem as="button" @click="deleteItems('all')">{{ $t('Delete all') }}</DropdownItem>
+                            <DropdownItem as="button" @click="isOpenModal = true" :title="type === 'group' ? groupHelp.importRows : undefined" :data-help-icon="type === 'group' ? '' : null">{{ $t('Import rows') }}</DropdownItem>
+                            <DropdownItem as="button" @click="isExportModalOpen = true" :title="type === 'group' ? groupHelp.exportRows : undefined" :data-help-icon="type === 'group' ? '' : null">{{ $t('Export') }}</DropdownItem>
+                            <DropdownItem v-if="selectedCount > 0" as="button" @click="deleteItems()" :title="type === 'group' ? groupHelp.deleteSelected : undefined" :data-help-icon="type === 'group' ? '' : null">{{ $t('Delete selected') }}</DropdownItem>
+                            <DropdownItem as="button" @click="deleteItems('all')" :title="type === 'group' ? groupHelp.deleteAll : undefined" :data-help-icon="type === 'group' ? '' : null">{{ $t('Delete all') }}</DropdownItem>
                         </DropdownItemGroup>
                     </template>
                 </Dropdown>
@@ -258,7 +271,7 @@
                 <svg v-if="contact.is_favorite" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="#FFD700" d="M9.153 5.408C10.42 3.136 11.053 2 12 2c.947 0 1.58 1.136 2.847 3.408l.328.588c.36.646.54.969.82 1.182c.28.213.63.292 1.33.45l.636.144c2.46.557 3.689.835 3.982 1.776c.292.94-.546 1.921-2.223 3.882l-.434.507c-.476.557-.715.836-.822 1.18c-.107.345-.071.717.001 1.46l.066.677c.253 2.617.38 3.925-.386 4.506c-.766.582-1.918.051-4.22-1.009l-.597-.274c-.654-.302-.981-.452-1.328-.452c-.347 0-.674.15-1.328.452l-.596.274c-2.303 1.06-3.455 1.59-4.22 1.01c-.767-.582-.64-1.89-.387-4.507l.066-.676c.072-.744.108-1.116 0-1.46c-.106-.345-.345-.624-.821-1.18l-.434-.508c-1.677-1.96-2.515-2.941-2.223-3.882c.293-.941 1.523-1.22 3.983-1.776l.636-.144c.699-.158 1.048-.237 1.329-.45c.28-.213.46-.536.82-1.182z"/></svg>
             </div>
         </div>
-        <div v-else-if="type === 'group'" @click="getRow(row.uuid)" class="flex space-x-2 hover:bg-gray-50 cursor-pointer px-4 py-3 border-b" :class="row.isChecked ? 'bg-gray-50' : ''" v-for="(row, key) in rows.data" :key="key">
+        <div v-else-if="type === 'group'" @click="getRow(row.uuid)" class="flex space-x-2 hover:bg-gray-50 cursor-pointer px-4 py-3 border-b" :class="row.isChecked ? 'bg-gray-50' : ''" v-for="(row, key) in rows.data" :key="key" :title="groupHelp.row">
             <div>
                 <label @click.stop="toggleCheckbox(row.uuid)" for="myCheckbox" class="cursor-pointer">
                     <div class="w-4 h-4 border border-gray-400 rounded-md flex items-center justify-center mt-1" :class="{ 'bg-secondary': row.isChecked }">
@@ -272,7 +285,7 @@
                 <div class="rounded-full bg-secondary/10 text-secondary flex justify-center items-center h-12 w-12 capitalize">{{ row.name.substring(0, 1) }}</div>
             </div>
             <div class="w-[85%] flex items-center">
-                <h3>{{ row.name }}</h3>
+                <h3 data-help-icon>{{ row.name }}</h3>
             </div>
         </div>
     </div>
@@ -282,4 +295,27 @@
     <ContactImportModal :type="type" v-model:modelValue="isOpenModal"/>
     <ExportModal :type="type" v-model:modelValue="isExportModalOpen"/>
 </template>
+<style>
+[data-help-icon] {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+[data-help-icon]::after {
+    content: '?';
+    display: inline-flex;
+    width: 0.95rem;
+    height: 0.95rem;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    border: 1.5px solid #94a3b8;
+    border-radius: 9999px;
+    color: #64748b;
+    font-size: 0.62rem;
+    font-weight: 800;
+    line-height: 1;
+}
+</style>
   

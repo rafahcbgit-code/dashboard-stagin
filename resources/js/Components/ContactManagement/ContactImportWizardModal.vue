@@ -53,6 +53,19 @@ const groupForm = reactive({
     split_group_prefix: 'audince',
 });
 const groupSearch = ref('');
+const audienceHelp = computed(() => ({
+    step: t('In this step, choose which audience imported customers should be added to, so you do not send generic messages to all customers without segmentation.'),
+    allSelected: t('Choose this option if you want to place all imported customers inside one or more audiences.'),
+    split: t('Choose this option if the file is large and you want to automatically split customers into smaller audiences.'),
+    search: t('Search for an existing audience to use instead of creating a new one.'),
+    visible: t('The number of audiences visible after the current search.'),
+    selected: t('The number of audiences you selected to add customers to.'),
+    chooseAudience: t('Choose the right audience based on the campaign goal or customer type.'),
+    newAudience: t('Create a new audience if you cannot find a suitable classification for the imported customers.'),
+    contactsPerAudience: t('Set how many customers should be placed in each new audience during automatic splitting.'),
+    prefix: t('Type the beginning of the audience name. Sequential names such as audience_1 and audience_2 will be created.'),
+    save: t('Save the customer-to-audience assignment before running the final import.'),
+}));
 
 const rowEditor = reactive({
     id: null,
@@ -734,12 +747,14 @@ const goToPreviousStep = () => {
             </div>
 
             <div v-if="wizardStep === 4" class="space-y-3">
-                <p class="text-sm text-slate-600">{{ $t('Choose how to assign imported contacts to audince.') }}</p>
+                <p class="text-sm text-slate-600" :title="audienceHelp.step" data-help-icon>{{ $t('Choose how to assign imported contacts to audince.') }}</p>
 
                 <div class="rounded-xl border border-slate-200 bg-slate-50/60 p-3 space-y-3">
                     <label
                         class="flex cursor-pointer items-start gap-2 rounded-lg border p-3 transition"
                         :class="groupForm.assignment_mode === 'all_selected' ? 'border-primary bg-primary/5 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300'"
+                        :title="audienceHelp.allSelected"
+                        data-help-icon
                     >
                         <input v-model="groupForm.assignment_mode" type="radio" value="all_selected" class="mt-0.5">
                         <div>
@@ -750,6 +765,8 @@ const goToPreviousStep = () => {
                     <label
                         class="flex cursor-pointer items-start gap-2 rounded-lg border p-3 transition"
                         :class="groupForm.assignment_mode === 'split' ? 'border-primary bg-primary/5 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300'"
+                        :title="audienceHelp.split"
+                        data-help-icon
                     >
                         <input v-model="groupForm.assignment_mode" type="radio" value="split" class="mt-0.5">
                         <div>
@@ -770,12 +787,13 @@ const goToPreviousStep = () => {
                                 type="text"
                                 class="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm outline-none ring-primary/20 transition focus:border-primary focus:ring"
                                 :placeholder="$t('Search audince...')"
+                                :title="audienceHelp.search"
                             >
                         </div>
 
                         <div class="mt-2 flex items-center gap-2 text-xs">
-                            <span class="rounded-full bg-slate-100 px-2 py-1 text-slate-600">{{ $t('Visible') }}: {{ filteredContactGroups.length }}</span>
-                            <span class="rounded-full bg-emerald-50 px-2 py-1 text-emerald-700">{{ $t('Selected') }}: {{ selectedGroupsCount }}</span>
+                            <span class="rounded-full bg-slate-100 px-2 py-1 text-slate-600" :title="audienceHelp.visible" data-help-icon>{{ $t('Visible') }}: {{ filteredContactGroups.length }}</span>
+                            <span class="rounded-full bg-emerald-50 px-2 py-1 text-emerald-700" :title="audienceHelp.selected" data-help-icon>{{ $t('Selected') }}: {{ selectedGroupsCount }}</span>
                         </div>
 
                         <div class="mt-2 max-h-56 overflow-auto rounded-lg border border-slate-200 bg-slate-50/40 p-2">
@@ -784,6 +802,8 @@ const goToPreviousStep = () => {
                                 :key="`assign-${group.id}`"
                                 class="mb-1 flex cursor-pointer items-center gap-2 rounded-md border px-2 py-2 text-sm transition last:mb-0"
                                 :class="groupForm.group_ids.includes(group.id) ? 'border-primary bg-primary/5 text-primary' : 'border-transparent bg-white text-slate-700 hover:border-slate-200'"
+                                :title="audienceHelp.chooseAudience"
+                                data-help-icon
                             >
                                 <input v-model="groupForm.group_ids" type="checkbox" :value="group.id">
                                 <span class="truncate">{{ group.name }}</span>
@@ -794,17 +814,20 @@ const goToPreviousStep = () => {
                         </div>
                     </div>
 
-                    <label class="text-xs text-slate-600">{{ $t('Create New Audince') }}
-                        <input v-model="groupForm.new_group_name" type="text" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-primary/20 focus:border-primary focus:ring" :placeholder="$t('New audince name')">
+                    <label class="text-xs text-slate-600" :title="audienceHelp.newAudience">
+                        <span data-help-icon>{{ $t('Create New Audince') }}</span>
+                        <input v-model="groupForm.new_group_name" type="text" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-primary/20 focus:border-primary focus:ring" :placeholder="$t('New audince name')" :title="audienceHelp.newAudience">
                     </label>
                 </div>
 
                 <div v-else class="grid gap-3 md:grid-cols-2">
-                    <label class="text-xs text-slate-600">{{ $t('Contacts per audince') }}
-                        <input v-model.number="groupForm.split_group_size" min="1" type="number" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-primary/20 focus:border-primary focus:ring" :placeholder="$t('100')">
+                    <label class="text-xs text-slate-600" :title="audienceHelp.contactsPerAudience">
+                        <span data-help-icon>{{ $t('Contacts per audince') }}</span>
+                        <input v-model.number="groupForm.split_group_size" min="1" type="number" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-primary/20 focus:border-primary focus:ring" :placeholder="$t('100')" :title="audienceHelp.contactsPerAudience">
                     </label>
-                    <label class="text-xs text-slate-600">{{ $t('Audince name prefix') }}
-                        <input v-model="groupForm.split_group_prefix" type="text" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-primary/20 focus:border-primary focus:ring" :placeholder="$t('audince')">
+                    <label class="text-xs text-slate-600" :title="audienceHelp.prefix">
+                        <span data-help-icon>{{ $t('Audince name prefix') }}</span>
+                        <input v-model="groupForm.split_group_prefix" type="text" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-primary/20 focus:border-primary focus:ring" :placeholder="$t('audince')" :title="audienceHelp.prefix">
                     </label>
                 </div>
 
@@ -813,7 +836,7 @@ const goToPreviousStep = () => {
                         <button type="button" class="rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-700 disabled:opacity-60" :disabled="busy || uploadBusy" @click="goToPreviousStep">
                             {{ $t('Previous') }}
                         </button>
-                        <button type="button" class="rounded-md bg-primary px-4 py-2 text-sm text-white disabled:opacity-60" :disabled="busy || (groupForm.assignment_mode === 'split' && (!groupForm.split_group_size || groupForm.split_group_size < 1 || !String(groupForm.split_group_prefix || '').trim()))" @click="saveGroupAssignment">
+                        <button type="button" class="rounded-md bg-primary px-4 py-2 text-sm text-white disabled:opacity-60" :title="audienceHelp.save" data-help-icon :disabled="busy || (groupForm.assignment_mode === 'split' && (!groupForm.split_group_size || groupForm.split_group_size < 1 || !String(groupForm.split_group_prefix || '').trim()))" @click="saveGroupAssignment">
                             {{ busy ? $t('Saving...') : $t('Save Audince Assignment') }}
                         </button>
                     </div>
@@ -898,3 +921,26 @@ const goToPreviousStep = () => {
         </div>
     </Modal>
 </template>
+<style>
+[data-help-icon] {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+[data-help-icon]::after {
+    content: '?';
+    display: inline-flex;
+    width: 0.95rem;
+    height: 0.95rem;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    border: 1.5px solid #94a3b8;
+    border-radius: 9999px;
+    color: #64748b;
+    font-size: 0.62rem;
+    font-weight: 800;
+    line-height: 1;
+}
+</style>
