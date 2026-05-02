@@ -12,9 +12,9 @@
                                 </span>
                             </div>
                             <div class="ml-auto">
-                                <EmbeddedSignupBtn v-if="embeddedSignupActive == 1" :appId="props.appId" :configId="props.configId" :graphAPIVersion="props.graphAPIVersion"/>
-                                <CoExistacneSignupBtn v-if="embeddedSignupActive == 1" :appId="props.appId" :configId="props.configId" :graphAPIVersion="props.graphAPIVersion"/>
-                                <button v-else  @click="openModal()" class="bg-primary text-white p-2 rounded-lg text-sm mt-5 flex px-3 w-fit">
+                                <EmbeddedSignupBtn v-if="showEmbeddedSignupBtn" :appId="props.appId" :configId="props.configId" :graphAPIVersion="props.graphAPIVersion"/>
+                                <CoExistacneSignupBtn v-if="showCoexistenceSignupBtn" :appId="props.appId" :configId="props.configId" :graphAPIVersion="props.graphAPIVersion"/>
+                                <button v-if="showManualSetupBtn"  @click="openModal()" class="bg-primary text-white p-2 rounded-lg text-sm mt-5 flex px-3 w-fit">
                                     {{ $t('Setup whatsapp') }}
                                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20"><g fill="currentColor" fill-rule="evenodd" clip-rule="evenodd"><g opacity=".2"><path d="M12.206 5.848a1.5 1.5 0 0 1 2.113.192l3.333 4a1.5 1.5 0 1 1-2.304 1.92l-3.334-4a1.5 1.5 0 0 1 .192-2.112Z"/><path d="M12.206 16.152a1.5 1.5 0 0 1-.192-2.112l3.334-4a1.5 1.5 0 0 1 2.304 1.92l-3.333 4a1.5 1.5 0 0 1-2.113.192Z"/><path d="M16 11a1.5 1.5 0 0 1-1.5 1.5h-8a1.5 1.5 0 0 1 0-3h8A1.5 1.5 0 0 1 16 11Z"/></g><path d="M11.347 5.616a.5.5 0 0 1 .704.064l3.333 4a.5.5 0 0 1-.768.64l-3.333-4a.5.5 0 0 1 .064-.704Z"/><path d="M11.347 14.384a.5.5 0 0 1-.064-.704l3.333-4a.5.5 0 0 1 .768.64l-3.333 4a.5.5 0 0 1-.704.064Z"/><path d="M15.5 10a.5.5 0 0 1-.5.5H5a.5.5 0 0 1 0-1h20a.5.5 0 0 1 .5.5Z"/></g></svg>
                                 </button>
@@ -296,9 +296,13 @@
     import FormTextArea from '@/Components/FormTextArea.vue';
     import Modal from '@/Components/Modal.vue';
     import { trans } from 'laravel-vue-i18n';
-    import { router, useForm } from "@inertiajs/vue3";
+    import { router, useForm, usePage } from "@inertiajs/vue3";
 
     const props = defineProps(['settings', 'embeddedSignupActive', 'appId', 'configId', 'graphAPIVersion', 'modules']);
+    const isTrialAccount = Number(usePage().props.is_trial) === 1;
+    const showEmbeddedSignupBtn = isTrialAccount || props.embeddedSignupActive == 1;
+    const showCoexistenceSignupBtn = isTrialAccount || props.embeddedSignupActive == 1;
+    const showManualSetupBtn = !isTrialAccount && props.embeddedSignupActive != 1;
     const statusView = ref(false);
     const config = ref(props.settings.metadata);
     const currentURL = ref(window.location.origin);
