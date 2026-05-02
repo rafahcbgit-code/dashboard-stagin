@@ -122,63 +122,6 @@ return [
     ],
   ],
   [
-    'title' => 'Automated replies',
-    'value' => [
-      [
-        'title' => 'Get automated replies list',
-        'method' => 'get',
-        'route' => '/api/canned-replies',
-        'request' => [
-          'curl' => "curl -X GET \n {{base_url}}/api/canned-replies \n &nbsp; -H 'Authorization: Bearer your-bearer-token' \n &nbsp; -H 'Content-Type: application/json'",
-          'php' => "<?php\n\$client = new Client();\n\$request = new Request('GET', '{{base_url}}/api/canned-replies');\n\$res = \$client->sendAsync(\$request)->wait();\n\$responseBody = \$res->getBody();\necho \$responseBody;\n?>",
-          'nodejs' => "var axios = require('axios');\n\nvar config = {\n  method: 'get',\n  maxBodyLength: Infinity,\n  url: '{{base_url}}/api/canned-replies',\n  headers: { }\n};\n\naxios(config)\n  .then(function (response) {\n    console.log(JSON.stringify(response.data));\n  })\n  .catch(function (error) {\n    console.log(error);\n  });",
-          'python' => "import requests\n\nurl = \"{{base_url}}/api/canned-replies\"\n\npayload={}\nheaders = {}\n\nresponse = requests.request(\"GET\", url, headers=headers, data=payload)\n\nprint(response.text)",
-          'java' => "OkHttpClient client = new OkHttpClient().newBuilder()\n  .build();\nMediaType mediaType = MediaType.parse(\"text/plain\");\nRequestBody body = RequestBody.create(mediaType, \"\");\nRequest request = new Request.Builder()\n  .url(\"{{base_url}}/api/canned-replies\")\n  .method(\"GET\", body)\n  .build();\nResponse response = client.newCall(request).execute();",
-          'ruby' => "require \"uri\"\nrequire \"net/http\"\n\nurl = URI(\"{{base_url}}/api/canned-replies\")\n\nhttp = Net::HTTP.new(url.host, url.port);\nrequest = Net::HTTP::Get.new(url)\n\nresponse = http.request(request)\nputs response.read_body",
-        ]
-      ],
-      [
-        'title' => 'Add automated reply',
-        'method' => 'post',
-        'route' => '/api/canned-replies',
-        'request' => [
-          'curl' => "curl -X POST \n {{base_url}}/api/canned-replies \n &nbsp; -H 'Authorization: Bearer your-bearer-token' \n &nbsp; -H 'Content-Type: application/json'",
-          'php' => "<?php\n\$client = new Client();\n\$body = '{\n    \"name\":\"About Us\",\n    \"trigger\": \"what do you do?\",\n    \"match_criteria\": \"contains\",\n    \"response_type\": \"text\",\n    \"response\": \"We sell shoes\"\n}';\n\$request = new Request('POST', '{{base_url}}/api/canned-replies', [], \$body);\n\$res = \$client->sendAsync(\$request)->wait();\n\$responseBody = \$res->getBody();\necho \$responseBody;\n?>",
-          'nodejs' => "var axios = require('axios');\nvar data = '{\n    \"name\":\"About Us\",\n    \"trigger\": \"what do you do?\",\n    \"match_criteria\": \"contains\",\n    \"response_type\": \"text\",\n    \"response\": \"We sell shoes\"\n}';\n\nvar config = {\n  method: 'post',\n  maxBodyLength: Infinity,\n  url: '{{base_url}}/api/canned-replies',\n  headers: { },\n  data: data\n};\n\naxios(config)\n  .then(function (response) {\n    console.log(JSON.stringify(response.data));\n  })\n  .catch(function (error) {\n    console.log(error);\n  });",
-          'python' => "import requests\n\nurl = \"{{base_url}}/api/canned-replies\"\n\npayload = \"{\n    \"name\":\"About Us\",\n    \"trigger\": \"what do you do?\",\n    \"match_criteria\": \"contains\",\n    \"response_type\": \"text\",\n    \"response\": \"We sell shoes\"\n}\"\nheaders = {}\n\nresponse = requests.request(\"POST\", url, headers=headers, data=payload)\n\nprint(response.text)",
-          'java' => "OkHttpClient client = new OkHttpClient().newBuilder()\n  .build();\nMediaType mediaType = MediaType.parse(\"text/plain\");\nRequestBody body = RequestBody.create(mediaType, \"{\n    \"name\":\"About Us\",\n    \"trigger\": \"what do you do?\",\n    \"match_criteria\": \"contains\",\n    \"response_type\": \"text\",\n    \"response\": \"We sell shoes\"\n}\");\nRequest request = new Request.Builder()\n  .url(\"{{base_url}}/api/canned-replies\")\n  .method(\"POST\", body)\n  .build();\nResponse response = client.newCall(request).execute();",
-          'ruby' => "require \"uri\"\nrequire \"net/http\"\n\nurl = URI(\"{{base_url}}/api/canned-replies\")\n\nhttp = Net::HTTP.new(url.host, url.port);\nrequest = Net::HTTP::Post.new(url)\nrequest.body = \"{\n    \"name\":\"About Us\",\n    \"trigger\": \"what do you do?\",\n    \"match_criteria\": \"contains\",\n    \"response_type\": \"text\",\n    \"response\": \"We sell shoes\"\n}\"\n\nresponse = http.request(request)\nputs response.read_body",
-        ]
-      ],
-      [
-        'title' => 'Edit automated reply',
-        'method' => 'put',
-        'route' => '/api/canned-replies/{uuid}',
-        'request' => [
-          'curl' => "curl -X PUT \n {{base_url}}/api/canned-replies/{uuid} \n &nbsp; -H 'Authorization: Bearer your-bearer-token' \n &nbsp; -H 'Content-Type: application/json'",
-          'php' => "<?php\n\$client = new Client();\n\$body = '{\n    \"name\":\"About Us\",\n    \"trigger\": \"what do you do?\",\n    \"match_criteria\": \"contains\",\n    \"response_type\": \"text\",\n    \"response\": \"We sell shoes and clothes\"\n}';\n\$request = new Request('PUT', '{{base_url}}/api/canned-replies/{{uuid}}', [], \$body);\n\$res = \$client->sendAsync(\$request)->wait();\n\$responseBody = \$res->getBody();\necho \$responseBody;\n?>",
-          'nodejs' => "var axios = require('axios');\nvar data = '{\n    \"name\":\"About Us\",\n    \"trigger\": \"what do you do?\",\n    \"match_criteria\": \"contains\",\n    \"response_type\": \"text\",\n    \"response\": \"We sell shoes and clothes\"\n}';\n\nvar config = {\n  method: 'put',\n  maxBodyLength: Infinity,\n  url: '{{base_url}}/api/canned-replies/{{uuid}}',\n  headers: { },\n  data: data\n};\n\naxios(config)\n  .then(function (response) {\n    console.log(JSON.stringify(response.data));\n  })\n  .catch(function (error) {\n    console.log(error);\n  });",
-          'python' => "import requests\n\nurl = \"{{base_url}}/api/canned-replies/{{id}}\"\n\npayload = \"{\n    \"name\":\"About Us\",\n    \"trigger\": \"what do you do?\",\n    \"match_criteria\": \"contains\",\n    \"response_type\": \"text\",\n    \"response\": \"We sell shoes and clothes\"\n}\"\nheaders = {}\n\nresponse = requests.request(\"PUT\", url, headers=headers, data=payload)\n\nprint(response.text)",
-          'java' => "OkHttpClient client = new OkHttpClient().newBuilder()\n  .build();\nMediaType mediaType = MediaType.parse(\"text/plain\");\nRequestBody body = RequestBody.create(mediaType, \"{\n    \"name\":\"About Us\",\n    \"trigger\": \"what do you do?\",\n    \"match_criteria\": \"contains\",\n    \"response_type\": \"text\",\n    \"response\": \"We sell shoes and clothes\"\n}\");\nRequest request = new Request.Builder()\n  .url(\"{{base_url}}/api/canned-replies/{{id}}\")\n  .method(\"PUT\", body)\n  .build();\nResponse response = client.newCall(request).execute();",
-          'ruby' => "require \"uri\"\nrequire \"net/http\"\n\nurl = URI(\"{{base_url}}/api/canned-replies/{{id}}\")\n\nhttp = Net::HTTP.new(url.host, url.port);\nrequest = Net::HTTP::Put.new(url)\nrequest.body = \"{\n    \"name\":\"About Us\",\n    \"trigger\": \"what do you do?\",\n    \"match_criteria\": \"contains\",\n    \"response_type\": \"text\",\n    \"response\": \"We sell shoes and clothes\"\n}\"\n\nresponse = http.request(request)\nputs response.read_body",
-        ]
-      ],
-      [
-        'title' => 'Delete automated reply',
-        'method' => 'del',
-        'route' => '/api/canned-replies/{uuid}',
-        'request' => [
-          'curl' => "curl -X DELETE \n {{base_url}}/api/canned-replies/{uuid} \n &nbsp; -H 'Authorization: Bearer your-bearer-token' \n &nbsp; -H 'Content-Type: application/json'",
-          'php' => "<?php\n\$client = new Client();\n\$request = new Request('DELETE', '{{base_url}}/api/canned-replies/{{uuid}}');\n\$res = \$client->sendAsync(\$request)->wait();\n\$responseBody = \$res->getBody();\necho \$responseBody;\n?>",
-          'nodejs' => "var axios = require('axios');\n\nvar config = {\n  method: 'delete',\n  maxBodyLength: Infinity,\n  url: '{{base_url}}/api/canned-replies/{{id}}',\n  headers: { }\n};\n\naxios(config)\n  .then(function (response) {\n    console.log(JSON.stringify(response.data));\n  })\n  .catch(function (error) {\n    console.log(error);\n  });",
-          'python' => "import requests\n\nurl = \"{{base_url}}/api/canned-replies/{{id}}\"\n\npayload={}\nheaders = {}\n\nresponse = requests.request(\"DELETE\", url, headers=headers, data=payload)\n\nprint(response.text)",
-          'java' => "OkHttpClient client = new OkHttpClient().newBuilder()\n  .build();\nMediaType mediaType = MediaType.parse(\"text/plain\");\nRequestBody body = RequestBody.create(mediaType, \"\");\nRequest request = new Request.Builder()\n  .url(\"{{base_url}}/api/canned-replies/{{id}}\")\n  .method(\"DELETE\", body)\n  .build();\nResponse response = client.newCall(request).execute();",
-          'ruby' => "require \"uri\"\nrequire \"net/http\"\n\nurl = URI(\"{{base_url}}/api/canned-replies/{{id}}\")\n\nhttp = Net::HTTP.new(url.host, url.port);\nrequest = Net::HTTP::Delete.new(url)\n\nresponse = http.request(request)\nputs response.read_body",
-        ]
-      ],
-    ],
-  ],
-  [
     'title' => 'Messages',
     'value' => [
       [

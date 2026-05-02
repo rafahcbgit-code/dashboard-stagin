@@ -69,12 +69,13 @@ The `FlowExecutionService` has been extended to:
 - **Payload**: Includes contact data, organization info, and user message
 
 ### 7. AI Response (`ai_response`)
-- **Purpose**: Generates AI-powered responses
+- **Purpose**: Generates AI-powered responses from the organization's knowledge base
 - **Configuration**:
-  - `prompt` (required)
-  - `proceed_condition` (optional, default: 'always')
-  - `confidence_threshold` (optional, default: 0.8)
-- **Features**: Placeholder replacement, confidence-based flow control
+  - `low_confidence_message` (optional): Message sent when AI can't answer confidently
+- **Behavior**: 
+  - AI auto-uses the org's knowledge base
+  - If confident (≥75%): sends answer, flow continues
+  - If not confident: sends low_confidence_message (if set), flow pauses
 
 ### 8. Conditional (`conditional`)
 - **Purpose**: Branches flow based on conditions

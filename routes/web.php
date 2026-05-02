@@ -202,7 +202,6 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::post('/chat/{uuid}/send/template', [App\Http\Controllers\User\ChatController::class, 'sendTemplateMessage']);
                 Route::post('/chat/{uuid}/send/carousel-template', [App\Http\Controllers\User\ChatController::class, 'sendCarouselTemplateMessage']);
                 Route::post('/chat/{uuid}/send/meta-flow', [App\Http\Controllers\User\ChatController::class, 'sendMetaFlowMessage']);
-                Route::get('/chat/test/{id}', [App\Http\Controllers\User\ChatController::class, 'sendAutoReply']);
                 Route::post('/chats/update-sort-direction', [App\Http\Controllers\User\ChatController::class, 'updateChatSortDirection']);
                 Route::get('/chats/{contactId}/messages', [App\Http\Controllers\User\ChatController::class, 'loadMoreMessages']);
                 Route::get('/chats/labels/filter-data', [App\Http\Controllers\User\ChatController::class, 'getLabelsForFilter']);
@@ -340,12 +339,37 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::post('/templates/{uuid}', [App\Http\Controllers\User\TemplateController::class, 'update']);
                 Route::delete('/templates/{uuid}', [App\Http\Controllers\User\TemplateController::class, 'delete']);
 
-                Route::get('/automation/basic', [App\Http\Controllers\User\CannedReplyController::class, 'index'])->name('cannedReply');
-                Route::get('/automation/basic/create', [App\Http\Controllers\User\CannedReplyController::class, 'create'])->name('cannedReply.create');
-                Route::post('/automation/basic', [App\Http\Controllers\User\CannedReplyController::class, 'store'])->name('cannedReply.store');
-                Route::get('/automation/basic/{uuid}/edit', [App\Http\Controllers\User\CannedReplyController::class, 'edit'])->name('cannedReply.edit');
-                Route::put('/automation/basic/{uuid}', [App\Http\Controllers\User\CannedReplyController::class, 'update'])->name('cannedReply.update');
-                Route::delete('/automation/basic/{uuid}', [App\Http\Controllers\User\CannedReplyController::class, 'delete'])->name('cannedReply.destroy');
+                // Trigger Groups
+                Route::get('/automation/triggers', [App\Http\Controllers\User\TriggerGroupController::class, 'index'])->name('triggers.index');
+                Route::post('/automation/triggers', [App\Http\Controllers\User\TriggerGroupController::class, 'store'])->name('triggers.store');
+                Route::put('/automation/triggers/{uuid}', [App\Http\Controllers\User\TriggerGroupController::class, 'update'])->name('triggers.update');
+                Route::delete('/automation/triggers/{uuid}', [App\Http\Controllers\User\TriggerGroupController::class, 'destroy'])->name('triggers.destroy');
+                Route::post('/automation/triggers/reorder', [App\Http\Controllers\User\TriggerGroupController::class, 'reorder'])->name('triggers.reorder');
+                Route::post('/automation/triggers/{uuid}/toggle', [App\Http\Controllers\User\TriggerGroupController::class, 'toggle'])->name('triggers.toggle');
+                Route::post('/automation/triggers/{uuid}/link', [App\Http\Controllers\User\TriggerGroupController::class, 'linkFlow'])->name('triggers.linkFlow');
+
+                // Knowledge Base
+                Route::get('/automation/knowledge-base', [App\Http\Controllers\User\AiKnowledgeBaseController::class, 'index'])->name('knowledge-base.index');
+                Route::post('/automation/knowledge-base', [App\Http\Controllers\User\AiKnowledgeBaseController::class, 'store'])->name('knowledge-base.store');
+                Route::put('/automation/knowledge-base/{uuid}', [App\Http\Controllers\User\AiKnowledgeBaseController::class, 'update'])->name('knowledge-base.update');
+                Route::delete('/automation/knowledge-base/{uuid}', [App\Http\Controllers\User\AiKnowledgeBaseController::class, 'destroy'])->name('knowledge-base.destroy');
+                Route::post('/automation/knowledge-base/{uuid}/toggle', [App\Http\Controllers\User\AiKnowledgeBaseController::class, 'toggle'])->name('knowledge-base.toggle');
+
+                // Bot Settings
+                Route::get('/automation/bot-settings', [App\Http\Controllers\User\BotSettingsController::class, 'index'])->name('bot-settings.index');
+                Route::put('/automation/bot-settings', [App\Http\Controllers\User\BotSettingsController::class, 'update'])->name('bot-settings.update');
+
+                // AI Settings
+                Route::get('/automation/ai-settings', [App\Http\Controllers\User\AiSettingsController::class, 'index'])->name('ai-settings.index');
+                Route::put('/automation/ai-settings', [App\Http\Controllers\User\AiSettingsController::class, 'update'])->name('ai-settings.update');
+
+                // Escalation Instructions
+                Route::get('/automation/escalation', [App\Http\Controllers\User\AiEscalationInstructionController::class, 'index'])->name('escalation.index');
+                Route::post('/automation/escalation', [App\Http\Controllers\User\AiEscalationInstructionController::class, 'store'])->name('escalation.store');
+                Route::put('/automation/escalation/{uuid}', [App\Http\Controllers\User\AiEscalationInstructionController::class, 'update'])->name('escalation.update');
+                Route::delete('/automation/escalation/{uuid}', [App\Http\Controllers\User\AiEscalationInstructionController::class, 'destroy'])->name('escalation.destroy');
+                Route::post('/automation/escalation/reorder', [App\Http\Controllers\User\AiEscalationInstructionController::class, 'reorder'])->name('escalation.reorder');
+                Route::post('/automation/escalation/{uuid}/toggle', [App\Http\Controllers\User\AiEscalationInstructionController::class, 'toggle'])->name('escalation.toggle');
 
                 Route::resource('pre-created-replies', App\Http\Controllers\User\PreCreatedReplyController::class)->parameters([
                     'pre-created-replies' => 'uuid',
@@ -389,8 +413,6 @@ Route::middleware(['auth:user'])->group(function () {
                     Route::delete('/settings/whatsapp/business-profile', [App\Http\Controllers\User\SettingController::class, 'deleteWhatsappIntegration']);
                     Route::post('/settings/whatsapp/update-coexistence', [App\Http\Controllers\User\SettingController::class, 'updateWhatsappForCoExistence']);
 
-                    Route::get('/settings/greeting-message', [App\Http\Controllers\User\SettingController::class, 'greetingMessageSettings']);
-                    Route::post('/settings/greeting-message', [App\Http\Controllers\User\SettingController::class, 'updateGreetingMessageSettings']);
 
                     Route::get('/settings/labels', [App\Http\Controllers\User\SettingController::class, 'labels'])->name('settings.labels');
                     Route::post('/settings/labels', [App\Http\Controllers\User\SettingController::class, 'labels']);
@@ -399,14 +421,15 @@ Route::middleware(['auth:user'])->group(function () {
                     Route::delete('/settings/labels/{label}', [App\Http\Controllers\User\SettingController::class, 'deleteLabel'])->name('settings.labels.delete');
 
 
-                    Route::get('/settings/global-reply', [App\Http\Controllers\User\SettingController::class, 'viewGlobalReplySettings']);
-                    Route::post('/settings/global-reply', [App\Http\Controllers\User\SettingController::class, 'updateGlobalReply']);
-
-                    Route::post('/settings/after-hours-reply', [App\Http\Controllers\User\SettingController::class, 'updateAfterHoursReply']);
-
                     Route::match(['get', 'post'], '/settings/contacts', [App\Http\Controllers\User\SettingController::class, 'contacts']);
                     Route::match(['get', 'post'], '/settings/tickets', [App\Http\Controllers\User\SettingController::class, 'tickets']);
-                    Route::match(['get', 'post'], '/settings/automation', [App\Http\Controllers\User\SettingController::class, 'automation']);
+                    Route::get('/settings/notifications', [App\Http\Controllers\User\SettingController::class, 'emailSettings']);
+                    Route::post('/settings/notifications/email', [App\Http\Controllers\User\SettingController::class, 'updateEmailSettings']);
+                    Route::post('/settings/notifications/email/test', [App\Http\Controllers\User\SettingController::class, 'testEmailSettings']);
+                    Route::get('/notifications', [App\Http\Controllers\User\NotificationController::class, 'index']);
+                    Route::get('/notifications/unread-count', [App\Http\Controllers\User\NotificationController::class, 'unreadCount']);
+                    Route::post('/notifications/{id}/click', [App\Http\Controllers\User\NotificationController::class, 'markClicked']);
+                    Route::post('/notifications/mark-all-read', [App\Http\Controllers\User\NotificationController::class, 'markAllRead']);
                     Route::resource('contact-fields', App\Http\Controllers\User\ContactFieldController::class);
                     Route::post('/contact-fields/update-positions', [App\Http\Controllers\User\ContactFieldController::class, 'updatePositions']);
 

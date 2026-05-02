@@ -5,7 +5,7 @@
       :position="Position.Top"
       class="w-3 h-3 !bg-teal-500"
     />
-    
+
     <div class="bg-white border-2 border-teal-200 rounded-lg p-4 shadow-sm w-[400px]" style="min-width: 400px;">
       <div class="flex items-center mb-3">
         <div class="flex items-center gap-2 flex-1">
@@ -43,17 +43,17 @@
           </button>
         </div>
       </div>
-      
+
       <div class="text-xs text-gray-600 mb-2">
         <div>
-          <span class="font-medium">Delay:</span> {{ config.duration }} minutes
+          <span class="font-medium">Delay:</span> {{ displayDuration }}
         </div>
       </div>
-      
+
       <div class="flex items-center justify-between text-xs">
         <span class="text-gray-500">Action</span>
         <div class="flex items-center gap-1">
-          <span 
+          <span
             :class="isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'"
             class="px-2 py-1 rounded-full text-xs"
           >
@@ -76,35 +76,44 @@
         <div class="px-6 py-4 border-b border-gray-200">
           <h3 class="text-lg font-semibold text-gray-900">Edit Delay Action</h3>
         </div>
-        
+
         <form @submit.prevent="saveAction" class="p-6">
           <div class="space-y-4">
-            <!-- Configuration Fields -->
+            <!-- Duration and Unit -->
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-2">Configuration</label>
-              <div class="space-y-3">
-                <!-- Delay -->
-                <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">Duration</label>
+              <div class="flex gap-3">
+                <div class="flex-1">
                   <FormInput
                     v-model="editForm.config.duration"
-                    label="Duration (minutes)"
                     type="number"
                     min="1"
-                    max="1440"
                     required
                   />
                 </div>
-
-                <!-- What happens explanation -->
-                <div class="bg-gray-50 border border-blue-200 rounded-lg p-3">
-                  <p class="text-xs text-gray-600 mb-1">
-                    <strong>What happens:</strong> The flow will pause for the specified duration before continuing to the next action.
-                  </p>
-                  <p class="text-xs text-gray-500">
-                    This is useful for creating time-based delays in your automation flow.
-                  </p>
+                <div class="w-32">
+                  <FormSelect
+                    v-model="editForm.config.duration_unit"
+                    name="Unit"
+                    :options="[
+                      { value: 'seconds', label: 'Seconds' },
+                      { value: 'minutes', label: 'Minutes' },
+                      { value: 'hours', label: 'Hours' }
+                    ]"
+                    required
+                  />
                 </div>
               </div>
+            </div>
+
+            <!-- What happens explanation -->
+            <div class="bg-gray-50 border border-blue-200 rounded-lg p-3">
+              <p class="text-xs text-gray-600 mb-1">
+                <strong>What happens:</strong> The flow will pause for the specified duration before continuing to the next action.
+              </p>
+              <p class="text-xs text-gray-500">
+                Minimum: 1 second. Maximum: 24 hours. The flow resumes automatically after the delay.
+              </p>
             </div>
 
             <!-- Active Status -->
@@ -118,14 +127,14 @@
           </div>
 
           <div class="flex justify-end space-x-3 mt-6">
-            <button 
+            <button
               type="button"
               @click="closeEditModal"
               class="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
             >
               Cancel
             </button>
-            <button 
+            <button
               type="submit"
               class="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
             >
@@ -143,6 +152,7 @@ import { ref, reactive, computed, onMounted } from 'vue'
 import { Handle, Position, useVueFlow, useNode } from '@vue-flow/core'
 import FormCheckbox from '../../../../../../../../resources/js/Components/FormCheckbox.vue'
 import FormInput from '../../../../../../../../resources/js/Components/FormInput.vue'
+import FormSelect from '../../../../../../../../resources/js/Components/FormSelect.vue'
 
 const props = defineProps({
   id: String,
@@ -158,9 +168,24 @@ const isActive = computed(() => props.data?.is_active !== false)
 
 const showEditModal = ref(false)
 
+const unitLabels = {
+  seconds: 'second(s)',
+  minutes: 'minute(s)',
+  hours: 'hour(s)',
+}
+
 const actionName = computed(() => {
-  const actionConfig = config.value
-  return actionConfig.duration ? `Delay: ${actionConfig.duration} minutes` : 'Delay'
+  const duration = config.value.duration
+  const unit = config.value.duration_unit || 'minutes'
+  if (!duration) return 'Delay'
+  return `Delay: ${duration} ${unitLabels[unit] || unit}`
+})
+
+const displayDuration = computed(() => {
+  const duration = config.value.duration
+  const unit = config.value.duration_unit || 'minutes'
+  if (!duration) return 'Not set'
+  return `${duration} ${unitLabels[unit] || unit}`
 })
 
 const editForm = reactive({
@@ -169,10 +194,10 @@ const editForm = reactive({
 })
 
 const toggleEdit = () => {
-  // Initialize edit form with current values
   const currentConfig = config.value || {}
   editForm.config = {
-    duration: currentConfig.duration || 5
+    duration: currentConfig.duration || 5,
+    duration_unit: currentConfig.duration_unit || 'minutes',
   }
   editForm.is_active = isActive.value
   showEditModal.value = true
@@ -183,14 +208,13 @@ const closeEditModal = () => {
 }
 
 const saveAction = () => {
-  // Update the node data directly using useNode
   node.node.data = {
     ...node.node.data,
     actionType: 'delay',
     config: editForm.config,
     is_active: editForm.is_active
   }
-  
+
   closeEditModal()
 }
 
@@ -213,4 +237,4 @@ onMounted(() => {
 .delay-node:hover {
   z-index: 10;
 }
-</style> 
+</style>

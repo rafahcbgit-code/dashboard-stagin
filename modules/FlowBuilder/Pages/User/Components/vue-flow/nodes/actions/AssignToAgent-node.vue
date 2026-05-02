@@ -47,7 +47,11 @@
       </div>
       
       <div class="text-xs text-gray-600 mb-2">
-        <div>
+        <div v-if="config.assignment_type === 'auto_assignment'">
+          <span class="font-medium">Auto-Assign</span>
+          <span class="text-gray-400 ml-1">(system selects agent)</span>
+        </div>
+        <div v-else>
           <span class="font-medium">Assign to:</span> {{ getAgentName(config.agent_id) }}
         </div>
       </div>
@@ -85,8 +89,21 @@
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-2">Configuration</label>
               <div class="space-y-3">
-                <!-- Agent Selection -->
+                <!-- Assignment Type Toggle -->
                 <div>
+                  <FormSelect
+                    v-model="editForm.config.assignment_type"
+                    name="Assignment Type"
+                    :options="[
+                      { value: 'specific_agent', label: 'Specific Agent' },
+                      { value: 'auto_assignment', label: 'Auto-Assign' }
+                    ]"
+                    required
+                  />
+                </div>
+
+                <!-- Specific Agent: agent dropdown -->
+                <div v-if="editForm.config.assignment_type === 'specific_agent'">
                   <label class="block text-sm font-medium text-gray-700">Select Agent</label>
                   <FormSelect
                     v-model="editForm.config.agent_id"
@@ -99,19 +116,37 @@
                   </div>
                 </div>
 
-                <!-- What happens explanation -->
-                <div class="bg-gray-50 border border-blue-200 rounded-lg p-3">
+                <!-- Auto-Assign: info message -->
+                <div v-if="editForm.config.assignment_type === 'auto_assignment'">
+                  <div class="bg-gray-50 border border-teal-200 rounded-lg p-3">
+                    <p class="text-xs text-gray-600 mb-1">
+                      <strong>Auto-Assign:</strong> The system will automatically select the best available agent.
+                    </p>
+                    <p class="text-xs text-gray-500 mb-2">
+                      &bull; Uses your organization's routing rules (round-robin or least-loaded)
+                    </p>
+                    <p class="text-xs text-gray-500 mb-2">
+                      &bull; Ticket will be created/updated with the assigned agent
+                    </p>
+                    <p class="text-xs text-gray-500">
+                      &bull; Agent will receive a push notification
+                    </p>
+                  </div>
+                </div>
+
+                <!-- What happens explanation (specific_agent mode only) -->
+                <div v-if="editForm.config.assignment_type === 'specific_agent'" class="bg-gray-50 border border-blue-200 rounded-lg p-3">
                   <p class="text-xs text-gray-600 mb-1">
                     <strong>What happens:</strong> The conversation will be assigned to the selected agent.
                   </p>
                   <p class="text-xs text-gray-500 mb-2">
-                    • Chat ticket will be created/updated with the selected agent
+                    &bull; Chat ticket will be created/updated with the selected agent
                   </p>
                   <p class="text-xs text-gray-500 mb-2">
-                    • Ticket status will be set to "open"
+                    &bull; Ticket status will be set to "open"
                   </p>
                   <p class="text-xs text-gray-500">
-                    • Agent will receive a push notification (if enabled)
+                    &bull; Agent will receive a push notification (if enabled)
                   </p>
                 </div>
               </div>
@@ -173,7 +208,11 @@ const loadingAgents = ref(false)
 
 const actionName = computed(() => {
   const actionConfig = config.value
-  
+
+  if (actionConfig.assignment_type === 'auto_assignment') {
+    return 'Auto-Assign to Agent'
+  }
+
   if (actionConfig.agent_id) {
     const agent = availableAgents.value.find(a => a.value == actionConfig.agent_id)
     return agent ? `Assign to ${agent.label}` : `Assign to Agent (ID: ${actionConfig.agent_id})`
@@ -216,6 +255,7 @@ const toggleEdit = async () => {
   
   // Initialize edit form with current values
   editForm.config = {
+    assignment_type: config.value.assignment_type || 'specific_agent',
     agent_id: config.value.agent_id || ''
   }
   editForm.is_active = isActive.value

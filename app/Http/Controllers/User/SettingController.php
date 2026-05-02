@@ -248,35 +248,6 @@ public function campaign(Request $request)
         }
     }
 
-    public function automation(Request $request){
-        if ($request->isMethod('get')) {
-            $settings = Organization::where('id', session()->get('current_organization'))->first();
-
-            return Inertia::render('User/Settings/Automation', [
-                'title' => __('Settings'),
-                'settings' => $settings,
-                'modules' => Addon::get(),
-            ]);
-        } else if($request->isMethod('post')) {
-            $currentOrganizationId = session()->get('current_organization');
-            $organizationConfig = Organization::where('id', $currentOrganizationId)->first();
-    
-            $metadataArray = $organizationConfig->metadata ? json_decode($organizationConfig->metadata, true) : [];
-            $metadataArray['automation']['response_sequence'] = $request->response_sequence;
-
-            $updatedMetadataJson = json_encode($metadataArray);
-            $organizationConfig->metadata = $updatedMetadataJson;
-            $organizationConfig->save();
-
-            /*return back()->with(
-                'status', [
-                    'type' => 'success', 
-                    'message' => __('Settings updated successfully')
-                ]
-            );*/
-        }
-    }
-
     public function whatsappBusinessProfileUpdate(StoreWhatsappProfile $request){
         if ($response = $this->abortIfDemo()) {
             return $response;
@@ -582,219 +553,6 @@ public function campaign(Request $request)
         
     }
 
-    public function viewGlobalReplySettings(Request $request){
-        $organizationId = session()->get('current_organization');
-        $settings = Organization::where('id', $organizationId)->first();
-
-        // Compose defaults for frontend without touching DB
-        $metadata = $settings->metadata ? json_decode($settings->metadata, true) : [];
-        if (!isset($metadata['global_reply'])) {
-            $metadata['global_reply'] = [
-                'active'  => 0,
-                'message' => '',
-                'buttons' => [],
-            ];
-        }
-
-        if (!isset($metadata['working_hour_reply'])) {
-            $metadata['working_hour_reply'] = [
-                'active'  => 0,
-                'message' => '',
-                'buttons' => [],
-            ];
-        }
-
-        $settings->metadata = json_encode($metadata, JSON_UNESCAPED_UNICODE);
-
-        return Inertia::render('User/Settings/GlobalReply', [
-            'title'    => __('Settings'),
-            'settings' => $settings,
-            'modules'  => Addon::get(),
-        ]);
-    }
-
-    public function greetingMessageSettings(){
-        $organizationId = session()->get('current_organization');
-        $settings = Organization::where('id', $organizationId)->first();
-
-        // Compose defaults for frontend without touching DB
-        $metadata = $settings->metadata ? json_decode($settings->metadata, true) : [];
-        if (!isset($metadata['greeting_message'])) {
-            $metadata['greeting_message'] = [
-                'active'  => 0,
-                'message' => '',
-                'buttons' => [],
-            ];
-        }
-
-
-        $settings->metadata = json_encode($metadata, JSON_UNESCAPED_UNICODE);
-
-        return Inertia::render('User/Settings/GreetingMessage', [
-            'title'    => __('Settings'),
-            'settings' => $settings,
-            'modules'  => Addon::get(),
-        ]);
-    }
-
-
-    public function updateGlobalReply(Request $request){
-        // Validation
-        $rules = [
-            'active'                 => ['required', 'boolean'],
-            'message'                => ['required_if:active,1', 'nullable', 'string', 'max:1000'],
-            'buttons'                => ['required_if:active,1', 'array', 'min:1', 'max:3'],
-            'buttons.*.title'        => ['required', 'string', 'max:20'],
-            //  'buttons.*.payload'      => ['required', 'string', 'max:256'],
-        ];
-
-        $messages = [
-            'buttons.required_if' => __('At least one button is required when global reply is active.'),
-            'buttons.min'         => __('Add at least one button.'),
-            'buttons.max'         => __('Maximum 3 buttons allowed.'),
-        ];
-
-        $this->validate($request, $rules, $messages);
-
-        $organizationId   = session()->get('current_organization');
-        $organization     = Organization::where('id', $organizationId)->firstOrFail();
-        $metadataArray    = $organization->metadata ? json_decode($organization->metadata, true) : [];
-
-        // Sanitize & clamp to 3 buttons
-        $buttons = collect($request->input('buttons', []))
-            ->take(3)
-            ->map(function ($btn) {
-                return [
-                    'title'   => trim(mb_substr((string)($btn['title'] ?? ''), 0, 20)),
-                    'payload' => trim(mb_substr((string)($btn['title'] ?? ''), 0, 256)),
-                ];
-            })
-            ->values()
-            ->all();
-
-        $metadataArray['global_reply'] = [
-            'active'  => $request->boolean('active') ? 1 : 0,
-            'message' => trim((string)$request->input('message', '')),
-            'buttons' => $buttons,
-        ];
-
-        $organization->metadata = json_encode($metadataArray, JSON_UNESCAPED_UNICODE);
-        $organization->save();
-
-        return back()->with(
-            'status',
-            [
-                'type'    => 'success',
-                'message' => __('Global reply settings updated successfully.'),
-            ]
-        );
-    }
-
-        public function updateAfterHoursReply(Request $request){
-        // Validation
-        $rules = [
-            'active'                 => ['required', 'boolean'],
-            'message'                => ['required_if:active,1', 'nullable', 'string', 'max:1000'],
-            'buttons'                => ['required_if:active,1', 'array', 'min:1', 'max:3'],
-            'buttons.*.title'        => ['required', 'string', 'max:20'],
-            //  'buttons.*.payload'      => ['required', 'string', 'max:256'],
-        ];
-
-        $messages = [
-            'buttons.required_if' => __('At least one button is required when global reply is active.'),
-            'buttons.min'         => __('Add at least one button.'),
-            'buttons.max'         => __('Maximum 3 buttons allowed.'),
-        ];
-
-        $this->validate($request, $rules, $messages);
-
-        $organizationId   = session()->get('current_organization');
-        $organization     = Organization::where('id', $organizationId)->firstOrFail();
-        $metadataArray    = $organization->metadata ? json_decode($organization->metadata, true) : [];
-
-        // Sanitize & clamp to 3 buttons
-        $buttons = collect($request->input('buttons', []))
-            ->take(3)
-            ->map(function ($btn) {
-                return [
-                    'title'   => trim(mb_substr((string)($btn['title'] ?? ''), 0, 20)),
-                    'payload' => trim(mb_substr((string)($btn['title'] ?? ''), 0, 256)),
-                ];
-            })
-            ->values()
-            ->all();
-
-        $metadataArray['working_hour_reply'] = [
-            'active'  => $request->boolean('active') ? 1 : 0,
-            'message' => trim((string)$request->input('message', '')),
-            'buttons' => $buttons,
-        ];
-
-        $organization->metadata = json_encode($metadataArray, JSON_UNESCAPED_UNICODE);
-        $organization->save();
-
-        return back()->with(
-            'status',
-            [
-                'type'    => 'success',
-                'message' => __('Working Hour reply settings updated successfully.'),
-            ]
-        );
-    }
-
-        public function updateGreetingMessageSettings(Request $request){
-        // Validation
-        $rules = [
-            'active'                 => ['required', 'boolean'],
-            'message'                => ['required_if:active,1', 'nullable', 'string', 'max:1000'],
-            'buttons'                => ['required_if:active,1', 'array', 'min:1', 'max:3'],
-            'buttons.*.title'        => ['required', 'string', 'max:20'],
-            //  'buttons.*.payload'      => ['required', 'string', 'max:256'],
-        ];
-
-        $messages = [
-            'buttons.required_if' => __('At least one button is required when global reply is active.'),
-            'buttons.min'         => __('Add at least one button.'),
-            'buttons.max'         => __('Maximum 3 buttons allowed.'),
-        ];
-
-        $this->validate($request, $rules, $messages);
-
-        $organizationId   = session()->get('current_organization');
-        $organization     = Organization::where('id', $organizationId)->firstOrFail();
-        $metadataArray    = $organization->metadata ? json_decode($organization->metadata, true) : [];
-
-        // Sanitize & clamp to 3 buttons
-        $buttons = collect($request->input('buttons', []))
-            ->take(3)
-            ->map(function ($btn) {
-                return [
-                    'title'   => trim(mb_substr((string)($btn['title'] ?? ''), 0, 20)),
-                    'payload' => trim(mb_substr((string)($btn['title'] ?? ''), 0, 256)),
-                ];
-            })
-            ->values()
-            ->all();
-
-        $metadataArray['greeting_message'] = [
-            'active'  => $request->boolean('active') ? 1 : 0,
-            'message' => trim((string)$request->input('message', '')),
-            'buttons' => $buttons,
-        ];
-
-        $organization->metadata = json_encode($metadataArray, JSON_UNESCAPED_UNICODE);
-        $organization->save();
-
-        return back()->with(
-            'status',
-            [
-                'type'    => 'success',
-                'message' => __('Greeting message settings updated successfully.'),
-            ]
-        );
-    }
-
-
     public function labels(Request $request){
         $organizationId = session()->get('current_organization');
         $organization = Organization::findOrFail($organizationId);
@@ -907,7 +665,7 @@ public function campaign(Request $request)
     }
 
     private function syncAssignedAgents($organizationId, array $selectedAgents)
-    { 
+    {
         DB::table('assigned_agents')
             ->where('organization_id', $organizationId)
             ->delete();
@@ -927,5 +685,61 @@ public function campaign(Request $request)
         if (!empty($data)) {
             DB::table('assigned_agents')->insert($data);
         }
+    }
+
+    public function emailSettings(Request $request)
+    {
+        $settings = Organization::where('id', session()->get('current_organization'))->first();
+
+        return Inertia::render('User/Settings/Email', [
+            'title' => __('Settings'),
+            'settings' => $settings,
+            'modules' => Addon::get(),
+        ]);
+    }
+
+    public function updateEmailSettings(Request $request)
+    {
+        $currentOrganizationId = session()->get('current_organization');
+        $organizationConfig = Organization::where('id', $currentOrganizationId)->first();
+        $metadataArray = $organizationConfig->metadata ? json_decode($organizationConfig->metadata, true) : [];
+
+        $metadataArray['email_settings'] = [
+            'active' => $request->input('active', false),
+            'host' => $request->input('host', ''),
+            'port' => (int) $request->input('port', 587),
+            'username' => $request->input('username', ''),
+            'password' => $request->input('password', ''),
+            'encryption' => $request->input('encryption', 'tls'),
+            'from_name' => $request->input('from_name', ''),
+            'from_address' => $request->input('from_address', ''),
+        ];
+
+        // Keep existing password if new one is empty
+        if (empty($metadataArray['email_settings']['password']) && !empty($organizationConfig->metadata)) {
+            $existing = json_decode($organizationConfig->metadata, true);
+            if (!empty($existing['email_settings']['password'])) {
+                $metadataArray['email_settings']['password'] = $existing['email_settings']['password'];
+            }
+        }
+
+        $organizationConfig->metadata = json_encode($metadataArray);
+        $organizationConfig->save();
+
+        return response()->json([
+            'success' => true,
+            'message' => __('Email settings saved successfully'),
+        ]);
+    }
+
+    public function testEmailSettings(Request $request)
+    {
+        $organizationId = session()->get('current_organization');
+        $user = $request->user();
+
+        $mailService = new \App\Services\OrganizationMailConfigService();
+        $result = $mailService->sendTestEmail($organizationId, $user->email);
+
+        return response()->json($result);
     }
 }

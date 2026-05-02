@@ -8,8 +8,8 @@ return [
     'send_email'        => true,
     'delay'             => true,
     'webhook'           => true,
-    'ai_response'       => false, // Disabled
-    'conditional'       => false,
+    'ai_response'       => true,
+    'conditional'       => true,
     'assign_to_agent'   => true,
 
     // Add more actions as needed

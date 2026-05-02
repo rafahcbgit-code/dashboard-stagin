@@ -11,17 +11,29 @@
                     d="M208.49 199.51a12 12 0 0 1-17 17l-80-80a12 12 0 0 1 0-17l80-80a12 12 0 0 1 17 17L137 128ZM57 128l71.52-71.51a12 12 0 0 0-17-17l-80 80a12 12 0 0 0 0 17l80 80a12 12 0 0 0 17-17Z" />
             </svg>
         </button>
-        <Menu :config="props.config" :user="props.user" :unreadMessages="unreadMessages"
+        <Menu :config="props.config" :user="props.user" :unreadMessages="unreadMessages" :unreadNotifications="unreadNotifications"
             :organization="props.organization" :organizations="props.organizations" :menuIconsOnly="menuIconsOnly">
         </Menu>
     </aside>
 </template>
 <script setup>
 import { Link, useForm } from "@inertiajs/vue3";
-import { defineProps, ref } from "vue";
+import { defineProps, ref, onMounted } from "vue";
+import axios from "axios";
 import Menu from "./Menu.vue";
 
 const props = defineProps(['user', 'organization', 'organizations', 'config', 'unreadMessages']);
+
+const unreadNotifications = ref(0);
+
+onMounted(async () => {
+    try {
+        const response = await axios.get('/notifications/unread-count');
+        unreadNotifications.value = response.data.count || 0;
+    } catch (e) {
+        // Silently fail — notification count is non-critical
+    }
+});
 
 const menuIconsOnly = ref(localStorage.getItem('MenuOpen') === 'true' ?? false);
 

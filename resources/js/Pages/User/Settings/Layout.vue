@@ -63,25 +63,6 @@
                         </li>
                     
                         <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-1 truncate cursor-pointer"
-                            :class="$page.url.startsWith('/settings/global-reply') ? 'bg-slate-50 text-black' : ''">
-                            <Link rel="noopener noreferrer" href="/settings/global-reply"
-                                class="flex items-center p-2 space-s-3 rounded-md">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"
-                                    aria-label="Speech bubble with stars">
-                                    <path fill="#fff" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"
-                                        d="M4 4h12a4 4 0 0 1 4 4v6a4 4 0 0 1-4 4H9l-4 3v-3H4a4 4 0 0 1-4-4V8a4 4 0 0 1 4-4z" />
-                                    <path fill="currentColor"
-                                        d="M12 7l.8 2.4 2.4.8-2.4.8-.8 2.4-.8-2.4-2.4-.8 2.4-.8z" />
-                                    <path fill="currentColor"
-                                        d="M16 5l.5 1.5 1.5.5-1.5.5-.5 1.5-.5-1.5-1.5-.5 1.5-.5z" />
-                                </svg>
-                                <span>{{ $t('System replies') }}</span>
-                            </Link>
-                        </li>
-
-
-
-                        <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-1 truncate cursor-pointer"
                             :class="$page.url.startsWith('/settings/contacts') ? 'bg-slate-50 text-black' : ''">
                             <Link rel="noopener noreferrer" href="/settings/contacts"
                                 class="flex items-center p-2 space-s-3 rounded-md">
@@ -118,21 +99,15 @@
                             </Link>
                         </li>
 
-                        <li v-if="moduleActive('AI Assistant') || moduleActive('Flow builder')"
-                            class="hover:bg-slate-50 hover:text-black rounded-[5px] px-1 truncate cursor-pointer"
-                            :class="$page.url.startsWith('/settings/automation') ? 'bg-slate-50 text-black' : ''">
-                            <Link rel="noopener noreferrer" href="/settings/automation"
+                        <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-1 truncate cursor-pointer"
+                            :class="$page.url.startsWith('/settings/notifications') ? 'bg-slate-50 text-black' : ''">
+                            <Link rel="noopener noreferrer" href="/settings/notifications"
                                 class="flex items-center p-2 space-s-3 rounded-md">
-                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 32 32"
-                                    fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"
-                                    stroke-linejoin="round">
-
-                                    <path
-                                        d="M16 27c-3.6 0-7.1-1.8-9.2-5H12v-2H4v8h2v-3.7c2.5 3 6.1 4.7 10 4.7zm15-4v-2h-2.1c-.1-.6-.4-1.2-.7-1.8l1.5-1.5l-1.4-1.4l-1.5 1.5c-.5-.3-1.1-.6-1.8-.7V15h-2v2.1c-.6.1-1.2.4-1.8.7l-1.5-1.5l-1.4 1.4l1.5 1.5c-.3.5-.6 1.1-.7 1.8H17v2h2.1c.1.6.4 1.2.7 1.8l-1.5 1.5l1.4 1.4l1.5-1.5c.5.3 1.1.6 1.8.7V29h2v-2.1c.6-.1 1.2-.4 1.8-.7l1.5 1.5l1.4-1.4l-1.5-1.5c.3-.5.6-1.1.7-1.8zm-7 2c-1.7 0-3-1.3-3-3s1.3-3 3-3s3 1.3 3 3s-1.3 3-3 3m-4-15h5.2C21.9 4.9 15.1 3.5 10 6.8c-3.1 2-5 5.5-5 9.2H3C3 8.8 8.8 3 16 3c3.9 0 7.5 1.7 10 4.7V4h2v8h-8z" />
-
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+                                    <path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
+                                    <polyline fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" points="22,6 12,13 2,6" />
                                 </svg>
-
-                                <span>{{ $t('Automation settings') }}</span>
+                                <span>{{ $t('Notifications') }}</span>
                             </Link>
                         </li>
                         <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-1 truncate cursor-pointer"

@@ -28,7 +28,6 @@ class StoreSubscriptionPlan extends FormRequest
             'campaign_limit' => 'required|numeric|gte:-1',
             'message_limit' => 'required|numeric|gte:-1',
             'contacts_limit' => 'required|numeric|gte:-1',
-            'canned_replies_limit' => 'required|numeric|gte:-1',
             'status' => 'required',
             'salla_integration_enabled' => 'sometimes|boolean',
             'shopify_integration_enabled' => 'sometimes|boolean',
