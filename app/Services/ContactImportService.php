@@ -282,7 +282,7 @@ class ContactImportService
     {
         $assignedGroupIds = collect($groupIds)->map(fn ($id) => (int) $id)->filter()->values();
 
-        $normalizedMode = in_array($assignmentMode, ['all_selected', 'split'], true) ? $assignmentMode : 'all_selected';
+        $normalizedMode = in_array($assignmentMode, ['all_selected', 'split', 'file_group_name'], true) ? $assignmentMode : 'all_selected';
 
         if ($normalizedMode === 'all_selected') {
             $name = trim((string) $newGroupName);
@@ -334,6 +334,7 @@ class ContactImportService
             'prefix' => trim((string) ($groupAssignment['split_group_prefix'] ?? '')),
             'current_index' => 1,
             'current_count' => 0,
+            'group_counts' => [],
         ];
         $splitAssignmentByPhone = [];
         $groupCacheRaw = ContactGroup::query()
@@ -351,6 +352,9 @@ class ContactImportService
         $failed = [];
         $totalValidRows = 0;
         $uniquePhoneCount = 0;
+        $fileGroupIdsByPhone = $assignmentMode === 'file_group_name'
+            ? $this->buildFileGroupIdsByPhone($batch, $organizationId, $userId, $groupCache)
+            : [];
 
         $batchId = (int) $batch->id;
 
@@ -360,7 +364,7 @@ class ContactImportService
             ->where('is_removed', false)
             ->where('status', 'valid')
             ->orderBy('id')
-            ->chunkById(self::PROCESSING_CHUNK_SIZE, function ($rows) use ($batchId, $organizationId, $userId, $selectedGroupIds, $assignmentMode, &$splitState, &$splitAssignmentByPhone, &$groupCache, &$created, &$updated, &$failed, &$totalValidRows, &$uniquePhoneCount): void {
+            ->chunkById(self::PROCESSING_CHUNK_SIZE, function ($rows) use ($batchId, $organizationId, $userId, $selectedGroupIds, $assignmentMode, $fileGroupIdsByPhone, &$splitState, &$splitAssignmentByPhone, &$groupCache, &$created, &$updated, &$failed, &$totalValidRows, &$uniquePhoneCount): void {
                 $now = now();
                 $rowStatusUpdates = [];
                 $entriesByPhone = [];
@@ -454,21 +458,22 @@ class ContactImportService
                 
                 $totalValidRows += $chunkValidRows;
 
-                $allGroupNames = collect($entriesByPhone)
-                    ->flatMap(fn ($entry) => (array) ($entry['group_names'] ?? []))
-                    ->map(fn ($name) => trim((string) $name))
-                    ->filter()
-                    ->unique()
-                    ->values()
-                    ->all();
+                $allGroupNames = $assignmentMode === 'file_group_name'
+                    ? collect($entriesByPhone)
+                        ->flatMap(fn ($entry) => (array) ($entry['group_names'] ?? []))
+                        ->map(fn ($name) => trim((string) $name))
+                        ->filter()
+                        ->unique()
+                        ->values()
+                        ->all()
+                    : [];
 
                 $this->ensureGroupIdsForNames($allGroupNames, $organizationId, $userId, $groupCache, $now);
 
                 foreach ($entriesByPhone as $phone => $entry) {
-                    $groupIdsFromFile = collect($entry['group_names'])
-                        ->map(fn ($name) => $groupCache[$this->groupCacheKey((string) $name)] ?? null)
-                        ->filter()
-                        ->values();
+                    $groupIdsFromFile = $assignmentMode === 'file_group_name'
+                        ? collect($fileGroupIdsByPhone[$phone] ?? [])
+                        : collect();
 
                     $manualGroupIds = $assignmentMode === 'all_selected' ? $selectedGroupIds : collect();
                     $splitGroupId = null;
@@ -725,35 +730,85 @@ class ContactImportService
 
     public function hasRowsMissingCountryCode(ContactImportBatch $batch): bool
     {
+        return $this->countRowsMissingCountryCode($batch) > 0;
+    }
+
+    public function countRowsMissingCountryCode(ContactImportBatch $batch): int
+    {
         $mapping = (array) ($batch->mapping ?? []);
         $phoneColumn = trim((string) ($mapping['phone'] ?? ''));
 
         if ($phoneColumn === '') {
-            return false;
+            return 0;
         }
 
-        $found = false;
+        $count = 0;
 
         DB::table('contact_import_rows')
             ->select(['id', 'raw_data'])
             ->where('contact_import_batch_id', $batch->id)
             ->where('is_removed', false)
             ->orderBy('id')
-            ->chunkById(1000, function ($rows) use ($phoneColumn, &$found) {
+            ->chunkById(1000, function ($rows) use ($phoneColumn, &$count) {
                 foreach ($rows as $row) {
                     $rawData = $this->decodeJsonArray($row->raw_data);
                     $phoneRaw = trim((string) $this->valueForSourceColumn($rawData, $phoneColumn));
 
                     if ($this->phoneNeedsDefaultCountryCode($phoneRaw)) {
-                        $found = true;
-                        return false;
+                        $count++;
                     }
                 }
 
                 return true;
             });
 
-        return $found;
+        return $count;
+    }
+
+    public function existingGroupedContactsSummary(ContactImportBatch $batch, int $organizationId): array
+    {
+        $phones = [];
+
+        DB::table('contact_import_rows')
+            ->select(['id', 'normalized_data'])
+            ->where('contact_import_batch_id', $batch->id)
+            ->where('is_removed', false)
+            ->where('status', 'valid')
+            ->orderBy('id')
+            ->chunkById(1000, function ($rows) use (&$phones) {
+                foreach ($rows as $row) {
+                    $normalized = $this->decodeJsonArray($row->normalized_data);
+                    $phone = trim((string) ($normalized['phone'] ?? ''));
+                    if ($phone !== '') {
+                        $phones[$phone] = true;
+                    }
+                }
+
+                return true;
+            });
+
+        $phones = array_keys($phones);
+        if (empty($phones)) {
+            return [
+                'count' => 0,
+                'sample_phones' => [],
+            ];
+        }
+
+        $matchedPhones = DB::table('contacts')
+            ->join('contact_contact_group', 'contacts.id', '=', 'contact_contact_group.contact_id')
+            ->where('contacts.organization_id', $organizationId)
+            ->whereNull('contacts.deleted_at')
+            ->whereIn('contacts.phone', $phones)
+            ->distinct()
+            ->orderBy('contacts.phone')
+            ->pluck('contacts.phone')
+            ->all();
+
+        return [
+            'count' => count($matchedPhones),
+            'sample_phones' => array_slice($matchedPhones, 0, 5),
+        ];
     }
 
     private function parseUploadedFile(UploadedFile $file): array
@@ -1117,6 +1172,64 @@ class ContactImportService
             ->all();
     }
 
+    private function buildFileGroupIdsByPhone(ContactImportBatch $batch, int $organizationId, int $userId, array &$groupCache): array
+    {
+        $groupNamesByPhone = [];
+
+        DB::table('contact_import_rows')
+            ->select(['id', 'normalized_data'])
+            ->where('contact_import_batch_id', $batch->id)
+            ->where('is_removed', false)
+            ->where('status', 'valid')
+            ->orderBy('id')
+            ->chunkById(self::PROCESSING_CHUNK_SIZE, function ($rows) use (&$groupNamesByPhone): void {
+                foreach ($rows as $row) {
+                    $normalized = $this->decodeJsonArray($row->normalized_data);
+                    $phone = trim((string) ($normalized['phone'] ?? ''));
+
+                    if ($phone === '') {
+                        continue;
+                    }
+
+                    if (! isset($groupNamesByPhone[$phone])) {
+                        $groupNamesByPhone[$phone] = [];
+                    }
+
+                    foreach ((array) ($normalized['group_names'] ?? []) as $groupName) {
+                        $groupName = trim((string) $groupName);
+
+                        if ($groupName !== '') {
+                            $groupNamesByPhone[$phone][$this->groupCacheKey($groupName)] = $groupName;
+                        }
+                    }
+                }
+            }, 'id');
+
+        $allGroupNames = collect($groupNamesByPhone)
+            ->flatMap(fn ($names) => array_values((array) $names))
+            ->map(fn ($name) => trim((string) $name))
+            ->filter()
+            ->unique(fn ($name) => $this->groupCacheKey((string) $name))
+            ->values()
+            ->all();
+
+        $this->ensureGroupIdsForNames($allGroupNames, $organizationId, $userId, $groupCache, now());
+
+        return collect($groupNamesByPhone)
+            ->mapWithKeys(function (array $names, string $phone) use ($groupCache): array {
+                $groupIds = collect($names)
+                    ->map(fn ($name) => $groupCache[$this->groupCacheKey((string) $name)] ?? null)
+                    ->filter()
+                    ->map(fn ($id) => (int) $id)
+                    ->unique()
+                    ->values()
+                    ->all();
+
+                return [$phone => $groupIds];
+            })
+            ->all();
+    }
+
     private function ensureGroupIdsForNames(array $groupNames, int $organizationId, int $userId, array &$groupCache, $now): void
     {
         $missingNames = [];
@@ -1189,22 +1302,45 @@ class ContactImportService
             return null;
         }
 
-        if (($splitState['current_count'] ?? 0) >= ($splitState['size'] ?? 1)) {
-            $splitState['current_index'] = (int) ($splitState['current_index'] ?? 1) + 1;
-            $splitState['current_count'] = 0;
-        }
-
         $prefix = trim((string) ($splitState['prefix'] ?? 'group'));
         $prefix = rtrim($prefix, "_ \t\n\r\0\x0B");
         $prefix = $prefix === '' ? 'group' : $prefix;
-        $groupName = $prefix . '_' . ((int) ($splitState['current_index'] ?? 1));
+        $size = max(1, (int) ($splitState['size'] ?? 1));
 
-        $this->ensureGroupIdsForNames([$groupName], $organizationId, $userId, $groupCache, $now);
-        $groupId = $groupCache[$this->groupCacheKey($groupName)] ?? null;
+        while (true) {
+            if (($splitState['current_count'] ?? 0) >= $size) {
+                $splitState['current_index'] = (int) ($splitState['current_index'] ?? 1) + 1;
+                $splitState['current_count'] = 0;
+            }
 
-        $splitState['current_count'] = (int) ($splitState['current_count'] ?? 0) + 1;
+            $groupName = $prefix . '_' . ((int) ($splitState['current_index'] ?? 1));
+            $groupKey = $this->groupCacheKey($groupName);
 
-        return $groupId ? (int) $groupId : null;
+            $this->ensureGroupIdsForNames([$groupName], $organizationId, $userId, $groupCache, $now);
+            $groupId = $groupCache[$groupKey] ?? null;
+
+            if (! $groupId) {
+                return null;
+            }
+
+            if (! isset($splitState['group_counts'][$groupKey])) {
+                $splitState['group_counts'][$groupKey] = DB::table('contact_contact_group')
+                    ->where('contact_group_id', (int) $groupId)
+                    ->distinct('contact_id')
+                    ->count('contact_id');
+            }
+
+            if ((int) $splitState['group_counts'][$groupKey] >= $size) {
+                $splitState['current_index'] = (int) ($splitState['current_index'] ?? 1) + 1;
+                $splitState['current_count'] = 0;
+                continue;
+            }
+
+            $splitState['group_counts'][$groupKey] = (int) $splitState['group_counts'][$groupKey] + 1;
+            $splitState['current_count'] = (int) $splitState['group_counts'][$groupKey];
+
+            return (int) $groupId;
+        }
     }
 
     private function decodeJsonArray(mixed $value): array

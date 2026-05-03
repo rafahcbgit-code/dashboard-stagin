@@ -870,5 +870,20 @@
   "Upload an audience file instead of adding audiences manually.": "Upload an audience file instead of adding audiences manually.",
   "Export audiences to an external file for backup or review.": "Export audiences to an external file for backup or review.",
   "Delete selected audiences only after making sure they are not used in important campaigns.": "Delete selected audiences only after making sure they are not used in important campaigns.",
-  "Delete all audiences very carefully because this affects customer database organization.": "Delete all audiences very carefully because this affects customer database organization."
+  "Delete all audiences very carefully because this affects customer database organization.": "Delete all audiences very carefully because this affects customer database organization.",
+  "Numbers needing a country code": "Numbers needing a country code",
+  "Some uploaded numbers already exist in audiences": "Some uploaded numbers already exist in audiences",
+  "These contacts are already assigned to one or more audiences. Review them before adding them again to avoid duplicated segmentation.": "These contacts are already assigned to one or more audiences. Review them before adding them again to avoid duplicated segmentation.",
+  "Existing numbers in audiences": "Existing numbers in audiences",
+  "Examples": "Examples",
+  "Use this option when your file already has a group_name column. Each contact will be added to the audience name written in its row.": "Use this option when your file already has a group_name column. Each contact will be added to the audience name written in its row.",
+  "All imported contacts will be added to selected/manual audince only. File audince names are used only when choosing audiences from file.": "All imported contacts will be added to selected/manual audince only. File audince names are used only when choosing audiences from file.",
+  "Use audiences from file": "Use audiences from file",
+  "Contacts will be assigned using the group_name value in each row. Existing audiences are reused and missing audiences are created automatically.": "Contacts will be assigned using the group_name value in each row. Existing audiences are reused and missing audiences are created automatically.",
+  "Map the Audince Name field to enable this option.": "Map the Audince Name field to enable this option.",
+  "Audience names will come from your file": "Audience names will come from your file",
+  "Each imported contact will be added to the audience written in its group_name column. If an audience does not exist yet, it will be created automatically.": "Each imported contact will be added to the audience written in its group_name column. If an audience does not exist yet, it will be created automatically.",
+  "Import XLSX/CSV": "Import XLSX/CSV",
+  "No groups available": "No audiences available",
+  "No labels available": "No labels available"
 }

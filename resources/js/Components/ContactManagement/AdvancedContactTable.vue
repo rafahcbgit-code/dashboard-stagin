@@ -10,7 +10,6 @@ import {
     Check,
     ChevronLeft,
     ChevronRight,
-    Download,
     Filter,
     Grid2X2,
     HelpCircle,
@@ -23,6 +22,7 @@ import {
     Tags,
     Table2,
     Trash2,
+    Upload,
     UserPlus,
     Users,
     X,
@@ -53,6 +53,10 @@ const NO_LABEL_OPTION = '__no_label__';
 const selectionStorageKey = computed(() => {
     const organizationId = page.props?.organization?.id ?? 'default';
     return `advanced-contact-selected-ids-${organizationId}`;
+});
+const columnsStorageKey = computed(() => {
+    const organizationId = page.props?.organization?.id ?? 'default';
+    return `advanced-contact-columns-${organizationId}`;
 });
 const contactManagementTourStorageKey = computed(() => {
     const organizationId = page.props?.organization?.id ?? 'default';
@@ -127,20 +131,20 @@ const selectedGroupDeletionCount = computed(() => selectedGroupUuidsForDeletion.
 const defaultColumns = {
     name: true,
     phone: true,
-    email: true,
-    groups: true,
-    labels: true,
-    subscription: true,
-    contact_source: true,
-    country: true,
-    created_at: true,
+    email: false,
+    groups: false,
+    labels: false,
+    subscription: false,
+    contact_source: false,
+    country: false,
+    created_at: false,
 };
 
 const customColumnKey = (field) => `custom_attr_${field.uuid ?? field.name}`;
 
 const buildDefaultColumns = () => ({
     ...defaultColumns,
-    ...Object.fromEntries((props.fields || []).map((field) => [customColumnKey(field), true])),
+    ...Object.fromEntries((props.fields || []).map((field) => [customColumnKey(field), false])),
 });
 
 const columns = ref(loadColumns());
@@ -153,7 +157,7 @@ function loadColumns() {
     }
 
     try {
-        const cached = localStorage.getItem('advanced-contact-columns');
+        const cached = localStorage.getItem(columnsStorageKey.value);
         if (!cached) {
             return defaults;
         }
@@ -184,7 +188,7 @@ watch(
 
         keys.forEach((key) => {
             if (typeof nextColumns[key] === 'undefined') {
-                nextColumns[key] = true;
+                nextColumns[key] = false;
             }
         });
 
@@ -204,8 +208,12 @@ watch(columns, (value) => {
         return;
     }
 
-    localStorage.setItem('advanced-contact-columns', JSON.stringify(value));
+    localStorage.setItem(columnsStorageKey.value, JSON.stringify(value));
 }, { deep: true });
+
+watch(columnsStorageKey, () => {
+    columns.value = loadColumns();
+});
 
 watch(
     () => props.contactGroups,
@@ -272,6 +280,8 @@ const allOnPageSelected = computed(() => idsOnPage.value.length > 0 && idsOnPage
 const someOnPageSelected = computed(() => !allOnPageSelected.value && idsOnPage.value.some((id) => isRowSelected(id)));
 const totalPages = computed(() => props.rows.meta?.last_page ?? 1);
 const currentPage = computed(() => props.rows.meta?.current_page ?? 1);
+const previousPageIcon = computed(() => (isRtl.value ? ChevronRight : ChevronLeft));
+const nextPageIcon = computed(() => (isRtl.value ? ChevronLeft : ChevronRight));
 const selectedContactsOnPage = computed(() => props.rows.data.filter((contact) => isRowSelected(contact.id)));
 
 const avatarPalette = [
@@ -305,7 +315,8 @@ const contactPhone = (contact) => contact.formatted_phone_number || contact.phon
 
 const contactGroupNames = (contact) => (Array.isArray(contact.contact_groups) ? contact.contact_groups : [])
     .map((group) => group?.name)
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter((name, index, names) => names.indexOf(name) === index);
 
 const visibleGroupNames = (contact) => contactGroupNames(contact).slice(0, 3);
 const remainingGroupCount = (contact) => Math.max(contactGroupNames(contact).length - 3, 0);
@@ -1195,10 +1206,11 @@ const onImportCompleted = () => {
                         </button>
                         <button type="button" class="btn-import inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md" :title="helpText.import" data-help-icon @click="isImportWizardOpen = true">
                             <Import class="h-4 w-4" />
-                            {{ $t('Import') }}
+                            <span>{{ $t('Import') }}</span>
+                            <span class="text-[10px] font-extrabold uppercase tracking-normal text-slate-400">XLSX/CSV</span>
                         </button>
                         <button type="button" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md" :title="helpText.exportAll" data-help-icon @click="runExportAll">
-                            <Download class="h-4 w-4" />
+                            <Upload class="h-4 w-4" />
                             {{ $t('Export All') }}
                         </button>
                         <Link href="/contacts/add" class="inline-flex items-center gap-2 rounded-full bg-slate-950 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-slate-300 transition-all duration-300 hover:-translate-y-0.5 hover:bg-slate-800" :title="helpText.addContact" data-help-icon>
@@ -1367,10 +1379,10 @@ const onImportCompleted = () => {
                         >
                             <div
                                 class="absolute left-5 top-5 flex h-9 w-9 items-center justify-center rounded-full border-2 bg-white shadow-sm transition-all duration-300"
-                                :class="isRowSelected(contact.id) ? 'border-blue-600 bg-blue-600 text-white shadow-lg shadow-blue-200' : 'border-slate-200 text-transparent group-hover:border-blue-300 group-hover:bg-blue-50'"
+                                :class="isRowSelected(contact.id) ? 'border-blue-600 bg-white text-blue-600 shadow-lg shadow-blue-100' : 'border-slate-200 text-slate-300 group-hover:border-blue-300 group-hover:bg-blue-50'"
                                 :aria-label="isRowSelected(contact.id) ? $t('Selected') : $t('Select contact')"
                             >
-                                <Check class="h-4 w-4" />
+                                <Check v-if="isRowSelected(contact.id)" class="h-4 w-4 stroke-[3]" />
                             </div>
 
                             <div class="flex items-start gap-4">
@@ -1471,10 +1483,10 @@ const onImportCompleted = () => {
                                 </div>
                                 <div
                                     class="flex h-8 w-8 items-center justify-center rounded-full border-2 bg-white shadow-sm transition-all duration-300"
-                                    :class="isRowSelected(contact.id) ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-200 text-transparent group-hover:border-blue-300 group-hover:bg-blue-50'"
+                                    :class="isRowSelected(contact.id) ? 'border-blue-600 bg-white text-blue-600 shadow-blue-100' : 'border-slate-200 text-slate-300 group-hover:border-blue-300 group-hover:bg-blue-50'"
                                     :aria-label="isRowSelected(contact.id) ? $t('Selected') : $t('Select contact')"
                                 >
-                                    <Check class="h-4 w-4" />
+                                    <Check v-if="isRowSelected(contact.id)" class="h-4 w-4 stroke-[3]" />
                                 </div>
                             </div>
 
@@ -1552,8 +1564,8 @@ const onImportCompleted = () => {
                                         @click="toggleRow(contact.id)"
                                     >
                                         <td class="sticky right-0 z-10 bg-inherit px-4 py-4">
-                                            <div class="flex h-8 w-8 items-center justify-center rounded-full border-2 bg-white shadow-sm transition-all duration-300" :class="isRowSelected(contact.id) ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-200 text-transparent group-hover:border-blue-300 group-hover:bg-blue-50'">
-                                                <Check class="h-4 w-4" />
+                                            <div class="flex h-8 w-8 items-center justify-center rounded-full border-2 bg-white shadow-sm transition-all duration-300" :class="isRowSelected(contact.id) ? 'border-blue-600 bg-white text-blue-600 shadow-blue-100' : 'border-slate-200 text-slate-300 group-hover:border-blue-300 group-hover:bg-blue-50'">
+                                                <Check v-if="isRowSelected(contact.id)" class="h-4 w-4 stroke-[3]" />
                                             </div>
                                         </td>
                                         <td v-for="column in visibleTableColumns" :key="`cell-${contact.id}-${column.key}`" class="whitespace-nowrap px-4 py-4 align-top text-sm">
@@ -1627,14 +1639,14 @@ const onImportCompleted = () => {
                 <div class="flex flex-col gap-3 rounded-[2rem] border border-white bg-white px-4 py-3 text-sm shadow-sm shadow-slate-200/70 sm:flex-row sm:items-center sm:justify-between" :title="helpText.pagination">
                     <p class="font-medium text-slate-500">{{ rows.meta?.from || 0 }}-{{ rows.meta?.to || 0 }} / {{ rows.meta?.total || 0 }}</p>
                     <div class="flex items-center justify-between gap-2 sm:justify-end">
-                        <button type="button" class="inline-flex h-10 items-center gap-2 rounded-full border border-slate-200 px-4 font-bold text-slate-700 transition-all duration-300 disabled:opacity-40" :title="helpText.pagination" :disabled="currentPage <= 1" @click="goToPage(currentPage - 1)">
-                            <ChevronRight class="h-4 w-4" />
+                        <button type="button" class="inline-flex h-10 min-w-[7.5rem] items-center justify-center gap-2 rounded-full border border-slate-200 px-4 font-bold text-slate-700 transition-all duration-300 hover:border-blue-200 hover:text-blue-700 disabled:cursor-not-allowed disabled:text-slate-400 disabled:opacity-50" :title="helpText.pagination" :disabled="currentPage <= 1" @click="goToPage(currentPage - 1)">
+                            <component :is="previousPageIcon" class="h-4 w-4 stroke-[2.5]" />
                             {{ $t('Previous') }}
                         </button>
-                        <span class="rounded-full bg-[#F8FAFC] px-4 py-2 font-extrabold text-slate-700">{{ currentPage }} / {{ totalPages }}</span>
-                        <button type="button" class="inline-flex h-10 items-center gap-2 rounded-full border border-slate-200 px-4 font-bold text-slate-700 transition-all duration-300 disabled:opacity-40" :title="helpText.pagination" :disabled="currentPage >= totalPages" @click="goToPage(currentPage + 1)">
+                        <span class="inline-flex h-10 min-w-[5.5rem] items-center justify-center rounded-full bg-[#F8FAFC] px-4 font-extrabold text-slate-700" dir="ltr">{{ currentPage }} / {{ totalPages }}</span>
+                        <button type="button" class="inline-flex h-10 min-w-[7.5rem] items-center justify-center gap-2 rounded-full border border-slate-200 px-4 font-bold text-slate-700 transition-all duration-300 hover:border-blue-200 hover:text-blue-700 disabled:cursor-not-allowed disabled:text-slate-400 disabled:opacity-50" :title="helpText.pagination" :disabled="currentPage >= totalPages" @click="goToPage(currentPage + 1)">
                             {{ $t('Next') }}
-                            <ChevronLeft class="h-4 w-4" />
+                            <component :is="nextPageIcon" class="h-4 w-4 stroke-[2.5]" />
                         </button>
                     </div>
                 </div>
@@ -1682,7 +1694,7 @@ const onImportCompleted = () => {
                         {{ $t('Delete') }}
                     </button>
                     <button type="button" class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-bold text-slate-200 transition-all duration-300 hover:bg-white/10" :title="$t('Export only the selected customers to an external file.')" data-help-icon @click="runExport">
-                        <Download class="h-4 w-4" />
+                        <Upload class="h-4 w-4" />
                         {{ $t('Export Selected') }}
                     </button>
                     <button type="button" class="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-slate-200 transition-all duration-300 hover:bg-white/20" :aria-label="$t('Clear Selection')" :title="$t('Clear the current selection and filters to return to the starting view.')" @click="clearSelectionAndFilters">
@@ -1698,18 +1710,48 @@ const onImportCompleted = () => {
             <div class="rounded-lg border border-slate-200 p-3">
                <div class="space-y-3">
                     <div>
-                        <label class="mb-1 text-xs font-medium text-slate-500" :title="helpText.groupsColumn" data-help-icon>{{ $t('Group') }}</label>
-                        <select v-model="query.group_ids" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" multiple :title="helpText.groupsColumn">
-                            <option :value="NO_GROUP_OPTION">{{ $t('No Group') }}</option>
-                            <option v-for="group in groups" :key="group.id" :value="String(group.id)">{{ group.name }}</option>
-                        </select>
+                        <div class="mb-1 flex items-center justify-between gap-2">
+                            <label class="text-xs font-medium text-slate-500" :title="helpText.groupsColumn" data-help-icon>{{ $t('Group') }}</label>
+                            <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-500">
+                                {{ $t('Selected') }}: {{ query.group_ids.length }}
+                            </span>
+                        </div>
+                        <div class="max-h-52 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2" :title="helpText.groupsColumn">
+                            <label class="mb-1 flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm text-slate-700 transition hover:bg-slate-50">
+                                <input v-model="query.group_ids" type="checkbox" :value="NO_GROUP_OPTION" class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                                <span>{{ $t('No Group') }}</span>
+                            </label>
+                            <label
+                                v-for="group in groups"
+                                :key="`filter-group-${group.id}`"
+                                class="mb-1 flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm text-slate-700 transition last:mb-0 hover:bg-slate-50"
+                            >
+                                <input v-model="query.group_ids" type="checkbox" :value="String(group.id)" class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                                <span class="truncate">{{ group.name }}</span>
+                            </label>
+                        </div>
                     </div>
                     <div>
-                        <label class="mb-1 text-xs font-medium text-slate-500" :title="helpText.labelsColumn" data-help-icon>{{ $t('Label') }}</label>
-                        <select v-model="query.label_ids" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" multiple :title="helpText.labelsColumn">
-                            <option :value="NO_LABEL_OPTION">{{ $t('No Label') }}</option>
-                            <option v-for="label in labels" :key="label.id" :value="String(label.id)">{{ label.title }}</option>
-                        </select>
+                        <div class="mb-1 flex items-center justify-between gap-2">
+                            <label class="text-xs font-medium text-slate-500" :title="helpText.labelsColumn" data-help-icon>{{ $t('Label') }}</label>
+                            <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-500">
+                                {{ $t('Selected') }}: {{ query.label_ids.length }}
+                            </span>
+                        </div>
+                        <div class="max-h-52 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2" :title="helpText.labelsColumn">
+                            <label class="mb-1 flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm text-slate-700 transition hover:bg-slate-50">
+                                <input v-model="query.label_ids" type="checkbox" :value="NO_LABEL_OPTION" class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                                <span>{{ $t('No Label') }}</span>
+                            </label>
+                            <label
+                                v-for="label in labels"
+                                :key="`filter-label-${label.id}`"
+                                class="mb-1 flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm text-slate-700 transition last:mb-0 hover:bg-slate-50"
+                            >
+                                <input v-model="query.label_ids" type="checkbox" :value="String(label.id)" class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                                <span class="truncate">{{ label.title }}</span>
+                            </label>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1889,17 +1931,49 @@ const onImportCompleted = () => {
     <Modal :label="$t('Bulk Action')" :isOpen="!!bulkActionModal" :closeBtn="true" @close="bulkActionModal = ''">
         <div class="grid gap-3 pt-4">
             <template v-if="bulkActionModal === 'add_group' || bulkActionModal === 'remove_group'">
-                <label class="text-xs font-medium text-slate-500">{{ $t('Select Groups') }}</label>
-                <select v-model="bulkForm.group_ids" class="rounded-md border border-slate-300 px-3 py-2 text-sm" multiple>
-                    <option v-for="group in groups" :key="group.id" :value="group.id">{{ group.name }}</option>
-                </select>
+                <div class="flex items-center justify-between gap-2">
+                    <label class="text-xs font-medium text-slate-500">{{ $t('Select Groups') }}</label>
+                    <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-500">
+                        {{ $t('Selected') }}: {{ bulkForm.group_ids.length }}
+                    </span>
+                </div>
+                <div class="max-h-64 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2">
+                    <label
+                        v-for="group in groups"
+                        :key="`bulk-group-${group.id}`"
+                        class="mb-1 flex cursor-pointer items-center gap-3 rounded-md border px-3 py-2 text-sm transition last:mb-0"
+                        :class="bulkForm.group_ids.includes(String(group.id)) ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-transparent text-slate-700 hover:bg-slate-50'"
+                    >
+                        <input v-model="bulkForm.group_ids" type="checkbox" :value="String(group.id)" class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                        <span class="truncate">{{ group.name }}</span>
+                    </label>
+                    <p v-if="!groups.length" class="px-3 py-4 text-center text-sm font-medium text-slate-400">
+                        {{ $t('No groups available') }}
+                    </p>
+                </div>
             </template>
 
             <template v-if="bulkActionModal === 'add_label' || bulkActionModal === 'remove_label'">
-                <label class="text-xs font-medium text-slate-500">{{ $t('Select Labels') }}</label>
-                <select v-model="bulkForm.label_ids" class="rounded-md border border-slate-300 px-3 py-2 text-sm" multiple>
-                    <option v-for="label in labels" :key="label.id" :value="label.id">{{ label.title }}</option>
-                </select>
+                <div class="flex items-center justify-between gap-2">
+                    <label class="text-xs font-medium text-slate-500">{{ $t('Select Labels') }}</label>
+                    <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-500">
+                        {{ $t('Selected') }}: {{ bulkForm.label_ids.length }}
+                    </span>
+                </div>
+                <div class="max-h-64 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2">
+                    <label
+                        v-for="label in labels"
+                        :key="`bulk-label-${label.id}`"
+                        class="mb-1 flex cursor-pointer items-center gap-3 rounded-md border px-3 py-2 text-sm transition last:mb-0"
+                        :class="bulkForm.label_ids.includes(String(label.id)) ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-transparent text-slate-700 hover:bg-slate-50'"
+                    >
+                        <input v-model="bulkForm.label_ids" type="checkbox" :value="String(label.id)" class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                        <span class="truncate">{{ label.title }}</span>
+                    </label>
+                    <p v-if="!labels.length" class="px-3 py-4 text-center text-sm font-medium text-slate-400">
+                        {{ $t('No labels available') }}
+                    </p>
+                </div>
             </template>
 
             <template v-if="bulkActionModal === 'change_subscription_status'">

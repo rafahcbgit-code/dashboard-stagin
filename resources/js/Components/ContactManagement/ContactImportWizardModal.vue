@@ -19,6 +19,7 @@ const wizardStep = ref(1);
 const busy = ref(false);
 const uploadBusy = ref(false);
 const errorMessage = ref('');
+const warningMessage = ref('');
 const successMessage = ref('');
 
 const fileName = ref('');
@@ -28,6 +29,10 @@ const rowsMeta = reactive({ current_page: 1, last_page: 1, per_page: 10, total: 
 const invalidRowsPreview = ref([]);
 const invalidRowsCount = ref(0);
 const invalidRowsPreviewLimited = ref(false);
+const existingGroupedContacts = reactive({
+    count: 0,
+    sample_phones: [],
+});
 
 const mapping = reactive({
     first_name: '',
@@ -57,6 +62,7 @@ const audienceHelp = computed(() => ({
     step: t('In this step, choose which audience imported customers should be added to, so you do not send generic messages to all customers without segmentation.'),
     allSelected: t('Choose this option if you want to place all imported customers inside one or more audiences.'),
     split: t('Choose this option if the file is large and you want to automatically split customers into smaller audiences.'),
+    fromFile: t('Use this option when your file already has a group_name column. Each contact will be added to the audience name written in its row.'),
     search: t('Search for an existing audience to use instead of creating a new one.'),
     visible: t('The number of audiences visible after the current search.'),
     selected: t('The number of audiences you selected to add customers to.'),
@@ -143,6 +149,7 @@ const resetWizard = () => {
     busy.value = false;
     uploadBusy.value = false;
     errorMessage.value = '';
+    warningMessage.value = '';
     successMessage.value = '';
     fileName.value = '';
     batch.value = null;
@@ -150,6 +157,8 @@ const resetWizard = () => {
     invalidRowsPreview.value = [];
     invalidRowsCount.value = 0;
     invalidRowsPreviewLimited.value = false;
+    existingGroupedContacts.count = 0;
+    existingGroupedContacts.sample_phones = [];
     rowsMeta.current_page = 1;
     rowsMeta.last_page = 1;
     rowsMeta.per_page = 10;
@@ -217,6 +226,7 @@ const uploadAndPreview = async (event) => {
     }
 
     errorMessage.value = '';
+    warningMessage.value = '';
     successMessage.value = '';
     busy.value = true;
     uploadBusy.value = true;
@@ -269,6 +279,7 @@ const mapColumns = async () => {
 
     busy.value = true;
     errorMessage.value = '';
+    warningMessage.value = '';
 
     try {
         const { data } = await axios.post(`/contacts/import/${batch.value.uuid}/mapping`, { mapping });
@@ -277,7 +288,7 @@ const mapColumns = async () => {
         wizardStep.value = 3;
         normalizationApplied.value = false;
         if (requiresDefaultCountryCode.value) {
-            successMessage.value = t('Local phone numbers were detected. Choose a default country code before checking numbers.');
+            warningMessage.value = t('Local phone numbers were detected. Choose a default country code before checking numbers.');
         } else {
             await normalizeRows();
         }
@@ -295,6 +306,7 @@ const normalizeRows = async () => {
 
     busy.value = true;
     errorMessage.value = '';
+    warningMessage.value = '';
 
     try {
         const { data } = await axios.post(`/contacts/import/${batch.value.uuid}/normalize`, {
@@ -306,6 +318,10 @@ const normalizeRows = async () => {
         invalidRowsCount.value = Number(data?.invalid_preview?.count || 0);
         invalidRowsPreview.value = Array.isArray(data?.invalid_preview?.rows) ? data.invalid_preview.rows : [];
         invalidRowsPreviewLimited.value = Boolean(data?.invalid_preview?.limited);
+        existingGroupedContacts.count = Number(data?.existing_grouped_contacts?.count || 0);
+        existingGroupedContacts.sample_phones = Array.isArray(data?.existing_grouped_contacts?.sample_phones)
+            ? data.existing_grouped_contacts.sample_phones
+            : [];
         successMessage.value = invalidRowsCount.value > 0
             ? t('Numbers checked. Invalid rows were excluded from import and shown below.')
             : t('Numbers checked. No invalid rows found.');
@@ -410,6 +426,7 @@ const saveGroupAssignment = async () => {
 
     busy.value = true;
     errorMessage.value = '';
+    warningMessage.value = '';
 
     try {
         const { data } = await axios.post(`/contacts/import/${batch.value.uuid}/group-assignment`, {
@@ -436,6 +453,7 @@ const executeImport = async () => {
 
     busy.value = true;
     errorMessage.value = '';
+    warningMessage.value = '';
     successMessage.value = '';
 
     try {
@@ -458,6 +476,10 @@ const executeImport = async () => {
 };
 
 const canContinueToGroups = computed(() => normalizationApplied.value);
+const hasGroupNameMapping = computed(() => String(mapping.group_name || '').trim() !== '');
+const missingDefaultCountryCodeCount = computed(() => Number(batch.value?.missing_default_country_code_count || 0));
+const existingGroupedContactsCount = computed(() => Number(existingGroupedContacts.count || 0));
+const hasExistingGroupedContacts = computed(() => existingGroupedContactsCount.value > 0);
 const displayedInvalidRowsCount = computed(() => Math.max(
     Number(invalidRowsCount.value || 0),
     Number(batchStats.value?.invalid || 0)
@@ -474,6 +496,10 @@ const filteredContactGroups = computed(() => {
     );
 });
 const selectedGroupsCount = computed(() => (groupForm.group_ids || []).length);
+const groupAssignmentIsInvalid = computed(() => (
+    (groupForm.assignment_mode === 'split' && (!groupForm.split_group_size || groupForm.split_group_size < 1 || !String(groupForm.split_group_prefix || '').trim()))
+    || (groupForm.assignment_mode === 'file_group_name' && !hasGroupNameMapping.value)
+));
 
 const goToPreviousStep = () => {
     if (busy.value || uploadBusy.value) {
@@ -496,6 +522,7 @@ const goToPreviousStep = () => {
             </div>
 
             <div v-if="errorMessage" class="rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">{{ errorMessage }}</div>
+            <div v-if="warningMessage" class="rounded-md border border-orange-200 bg-orange-50 px-3 py-2 text-sm font-medium text-orange-800">{{ warningMessage }}</div>
             <div v-if="successMessage" class="rounded-md bg-emerald-50 px-3 py-2 text-sm text-emerald-700">{{ successMessage }}</div>
 
             <div v-if="wizardStep === 1" class="space-y-3">
@@ -623,6 +650,9 @@ const goToPreviousStep = () => {
                     <p class="mt-1 text-xs text-amber-800">
                         {{ $t('Some phone numbers do not include a country code. Choose the default country code that should be applied only to those local numbers.') }}
                     </p>
+                    <div class="mt-2 inline-flex items-center rounded-full bg-amber-100 px-3 py-1 text-xs font-semibold text-amber-900 ring-1 ring-amber-200">
+                        {{ $t('Numbers needing a country code') }}: {{ missingDefaultCountryCodeCount }}
+                    </div>
                     <div class="mt-3 grid grid-cols-1 gap-2 md:grid-cols-[1fr_auto]">
                         <select
                             v-model="defaultCountryCode"
@@ -652,6 +682,19 @@ const goToPreviousStep = () => {
                         </svg>
                         <span>{{ $t('Checking numbers and preparing report...') }}</span>
                     </div>
+                </div>
+
+                <div v-if="hasExistingGroupedContacts" class="rounded-xl border border-orange-200 bg-orange-50 px-3 py-3 text-sm text-orange-900">
+                    <p class="font-semibold">{{ $t('Some uploaded numbers already exist in audiences') }}</p>
+                    <p class="mt-1 text-xs leading-5 text-orange-800">
+                        {{ $t('These contacts are already assigned to one or more audiences. Review them before adding them again to avoid duplicated segmentation.') }}
+                    </p>
+                    <p class="mt-2 text-xs font-semibold text-orange-900">
+                        {{ $t('Existing numbers in audiences') }}: {{ existingGroupedContactsCount }}
+                    </p>
+                    <p v-if="existingGroupedContacts.sample_phones.length" class="mt-1 text-xs text-orange-800">
+                        {{ $t('Examples') }}: {{ existingGroupedContacts.sample_phones.join(', ') }}
+                    </p>
                 </div>
 
                 <div class="grid grid-cols-2 gap-2 md:grid-cols-4">
@@ -759,7 +802,7 @@ const goToPreviousStep = () => {
                         <input v-model="groupForm.assignment_mode" type="radio" value="all_selected" class="mt-0.5">
                         <div>
                             <p class="text-sm font-semibold text-slate-800">{{ $t('Add all contacts to selected audince') }}</p>
-                            <p class="text-xs text-slate-500">{{ $t('All imported contacts will be added to selected/manual audince. File audince names will also be merged.') }}</p>
+                            <p class="text-xs text-slate-500">{{ $t('All imported contacts will be added to selected/manual audince only. File audince names are used only when choosing audiences from file.') }}</p>
                         </div>
                     </label>
                     <label
@@ -772,6 +815,24 @@ const goToPreviousStep = () => {
                         <div>
                             <p class="text-sm font-semibold text-slate-800">{{ $t('Split contacts across generated audince') }}</p>
                             <p class="text-xs text-slate-500">{{ $t('Create sequential audince like prefix_1, prefix_2 and distribute contacts by batch size.') }}</p>
+                        </div>
+                    </label>
+                    <label
+                        class="flex items-start gap-2 rounded-lg border p-3 transition"
+                        :class="[
+                            groupForm.assignment_mode === 'file_group_name' ? 'border-primary bg-primary/5 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300',
+                            hasGroupNameMapping ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'
+                        ]"
+                        :title="audienceHelp.fromFile"
+                        data-help-icon
+                    >
+                        <input v-model="groupForm.assignment_mode" type="radio" value="file_group_name" class="mt-0.5" :disabled="!hasGroupNameMapping">
+                        <div>
+                            <p class="text-sm font-semibold text-slate-800">{{ $t('Use audiences from file') }}</p>
+                            <p class="text-xs text-slate-500">{{ $t('Contacts will be assigned using the group_name value in each row. Existing audiences are reused and missing audiences are created automatically.') }}</p>
+                            <p v-if="!hasGroupNameMapping" class="mt-1 text-xs font-medium text-orange-700">
+                                {{ $t('Map the Audince Name field to enable this option.') }}
+                            </p>
                         </div>
                     </label>
                 </div>
@@ -820,7 +881,7 @@ const goToPreviousStep = () => {
                     </label>
                 </div>
 
-                <div v-else class="grid gap-3 md:grid-cols-2">
+                <div v-else-if="groupForm.assignment_mode === 'split'" class="grid gap-3 md:grid-cols-2">
                     <label class="text-xs text-slate-600" :title="audienceHelp.contactsPerAudience">
                         <span data-help-icon>{{ $t('Contacts per audince') }}</span>
                         <input v-model.number="groupForm.split_group_size" min="1" type="number" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-primary/20 focus:border-primary focus:ring" :placeholder="$t('100')" :title="audienceHelp.contactsPerAudience">
@@ -831,12 +892,19 @@ const goToPreviousStep = () => {
                     </label>
                 </div>
 
+                <div v-else-if="groupForm.assignment_mode === 'file_group_name'" class="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-900" :title="audienceHelp.fromFile" data-help-icon>
+                    <p class="font-semibold">{{ $t('Audience names will come from your file') }}</p>
+                    <p class="mt-1 text-xs leading-5 text-emerald-800">
+                        {{ $t('Each imported contact will be added to the audience written in its group_name column. If an audience does not exist yet, it will be created automatically.') }}
+                    </p>
+                </div>
+
                 <div class="flex justify-end">
                     <div class="flex items-center gap-2">
                         <button type="button" class="rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-700 disabled:opacity-60" :disabled="busy || uploadBusy" @click="goToPreviousStep">
                             {{ $t('Previous') }}
                         </button>
-                        <button type="button" class="rounded-md bg-primary px-4 py-2 text-sm text-white disabled:opacity-60" :title="audienceHelp.save" data-help-icon :disabled="busy || (groupForm.assignment_mode === 'split' && (!groupForm.split_group_size || groupForm.split_group_size < 1 || !String(groupForm.split_group_prefix || '').trim()))" @click="saveGroupAssignment">
+                        <button type="button" class="rounded-md bg-primary px-4 py-2 text-sm text-white disabled:opacity-60" :title="audienceHelp.save" data-help-icon :disabled="busy || groupAssignmentIsInvalid" @click="saveGroupAssignment">
                             {{ busy ? $t('Saving...') : $t('Save Audince Assignment') }}
                         </button>
                     </div>

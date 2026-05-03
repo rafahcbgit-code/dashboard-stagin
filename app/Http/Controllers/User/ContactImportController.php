@@ -156,6 +156,10 @@ class ContactImportController extends BaseController
                     'rows' => (array) ($normalization['invalid_rows_preview'] ?? []),
                     'limited' => (bool) ($normalization['invalid_rows_preview_limited'] ?? false),
                 ],
+                'existing_grouped_contacts' => $this->importService->existingGroupedContactsSummary(
+                    $batch,
+                    $this->organizationId()
+                ),
             ]
         ));
     }
@@ -240,7 +244,7 @@ class ContactImportController extends BaseController
             'group_ids' => ['nullable', 'array'],
             'group_ids.*' => ['integer'],
             'new_group_name' => ['nullable', 'string', 'max:255'],
-            'assignment_mode' => ['required', 'string', 'in:all_selected,split'],
+            'assignment_mode' => ['required', 'string', 'in:all_selected,split,file_group_name'],
             'split_group_size' => ['nullable', 'integer', 'min:1', 'max:50000'],
             'split_group_prefix' => ['nullable', 'string', 'max:120'],
         ]);
@@ -395,10 +399,10 @@ class ContactImportController extends BaseController
     private function buildBatchResponse(ContactImportBatch $batch, int $page = 1, int $perPage = 15, string $status = 'all'): array
     {
         $rows = $this->importService->paginateRows($batch, $page, max(1, min($perPage, 100)), $status);
-        $requiresDefaultCountryCode = false;
+        $missingDefaultCountryCodeCount = 0;
 
         if ($batch->status === 'mapped') {
-            $requiresDefaultCountryCode = $this->importService->hasRowsMissingCountryCode($batch);
+            $missingDefaultCountryCodeCount = $this->importService->countRowsMissingCountryCode($batch);
         }
 
         return [
@@ -411,7 +415,8 @@ class ContactImportController extends BaseController
                 'selected_group_ids' => $batch->selected_group_ids ?? [],
                 'group_assignment' => $batch->group_assignment ?? null,
                 'report' => $batch->report,
-                'requires_default_country_code' => $requiresDefaultCountryCode,
+                'requires_default_country_code' => $missingDefaultCountryCodeCount > 0,
+                'missing_default_country_code_count' => $missingDefaultCountryCodeCount,
                 'stats' => $this->batchStats($batch),
             ],
             'rows' => $rows,
