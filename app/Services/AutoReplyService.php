@@ -258,6 +258,14 @@ class AutoReplyService
                     $instruction->target_agent_id
                 );
 
+                // Notify the user they're being connected to an agent
+                $this->initializeWhatsappService($organizationId)->sendMessage(
+                    $contact->uuid,
+                    "You're being connected to a team member who can help. Please hold on a moment.",
+                    null,
+                    'text'
+                );
+
                 return true;
             }
 
