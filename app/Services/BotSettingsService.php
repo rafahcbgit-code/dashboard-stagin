@@ -23,6 +23,7 @@ class BotSettingsService
         'fallback_menu_button_1_enabled' => true,
         'fallback_menu_button_2_enabled' => true,
         'fallback_menu_button_3_enabled' => true,
+        'escalation_transfer_message' => "You're being connected to a team member who can help. Please hold on a moment.",
     ];
 
     /**
