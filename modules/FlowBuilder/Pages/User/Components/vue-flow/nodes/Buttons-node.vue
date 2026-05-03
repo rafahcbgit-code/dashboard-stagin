@@ -249,7 +249,7 @@ function getCharsCount(input: string): number {
         <label class="text-sm mb-2">CTA Button</label>
         <div class="mb-4">
           <label class="text-sm mb-2">Display text</label>
-          <FormInput v-model="fields.ctaUrlButton.displayText" :type="'text'" :class="'col-span-4'"/>
+          <FormInput v-model="fields.ctaUrlButton.displayText" :type="'text'" :maxLength="maxButtonLength" :class="'col-span-4'"/>
         </div>
 
         <div class="mb-4">
