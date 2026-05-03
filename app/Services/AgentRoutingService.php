@@ -27,7 +27,6 @@ class AgentRoutingService
             // Reset fallback counter — escalation served its purpose
             app(RateLimitService::class)->resetFallbackCounter($organizationId, $contactId);
 
-            // If a ticket is already open and assigned, don't reassign
             $existingTicket = ChatTicket::where('contact_id', $contactId)
                 ->where('organization_id', $organizationId)
                 ->where('status', 'open')
@@ -35,10 +34,26 @@ class AgentRoutingService
                 ->first();
 
             if ($existingTicket) {
-                Log::info('AgentRoutingService: Ticket already open and assigned', [
-                    'contact_id' => $contactId,
-                    'assigned_to' => $existingTicket->assigned_to,
-                ]);
+                // For specific_agent escalation, reassign to the target agent
+                if ($targetType === 'specific_agent' && $targetAgentId && $existingTicket->assigned_to !== $targetAgentId) {
+                    $previousAgent = $existingTicket->assigned_to;
+                    $existingTicket->assigned_to = $targetAgentId;
+                    $existingTicket->updated_at = now();
+                    $existingTicket->save();
+                    $this->sendNotification($contactId, $targetAgentId, $organizationId);
+
+                    Log::info('AgentRoutingService: Reassigned to specific agent', [
+                        'contact_id' => $contactId,
+                        'previous_agent' => $previousAgent,
+                        'new_agent' => $targetAgentId,
+                    ]);
+                } else {
+                    Log::info('AgentRoutingService: Ticket already open and assigned', [
+                        'contact_id' => $contactId,
+                        'assigned_to' => $existingTicket->assigned_to,
+                    ]);
+                }
+
                 return $existingTicket;
             }
 
