@@ -201,7 +201,7 @@ function getCharsCount(input: string): number {
 
       <div class="mb-4">
         <label class="text-sm mb-2"><span class="text-red-500">*</span> Button Label</label>
-        <FormInput v-model="fields.buttonLabel" :name="''" :placeholder="'Enter footer text'" :type="'text'" :class="'col-span-4'"/>
+        <FormInput v-model="fields.buttonLabel" :name="''" :placeholder="'Enter button label'" :type="'text'" :maxLength="20" :class="'col-span-4'"/>
       </div>
 
       <div class="flex justify-between items-center mb-4">

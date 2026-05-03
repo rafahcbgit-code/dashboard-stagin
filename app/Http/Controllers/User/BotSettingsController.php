@@ -79,6 +79,7 @@ class BotSettingsController extends BaseController
             'fallback_menu_button_1_enabled' => 'nullable|boolean',
             'fallback_menu_button_2_enabled' => 'nullable|boolean',
             'fallback_menu_button_3_enabled' => 'nullable|boolean',
+            'escalation_transfer_message' => 'nullable|string|max:500',
         ]);
 
         // Convert checkboxes to booleans
