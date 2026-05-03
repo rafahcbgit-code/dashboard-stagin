@@ -29,6 +29,7 @@ class AgentRoutingService
 
             // If a ticket is already open and assigned, don't reassign
             $existingTicket = ChatTicket::where('contact_id', $contactId)
+                ->where('organization_id', $organizationId)
                 ->where('status', 'open')
                 ->whereNotNull('assigned_to')
                 ->first();
@@ -85,7 +86,7 @@ class AgentRoutingService
             return $this->assignByOrgMode($organizationId, $contactId);
         }
 
-        $ticket = $this->createOrReopenTicket($contactId, $agentId);
+        $ticket = $this->createOrReopenTicket($organizationId, $contactId, $agentId);
         $this->sendNotification($contactId, $agentId, $organizationId);
 
         Log::info('AgentRoutingService: Assigned to specific agent', [
@@ -125,7 +126,7 @@ class AgentRoutingService
             'organization_id' => $organizationId,
         ]);
 
-        return $this->createOrReopenTicket($contactId, null);
+        return $this->createOrReopenTicket($organizationId, $contactId, null);
     }
 
     /**
@@ -141,11 +142,12 @@ class AgentRoutingService
 
         if (empty($agents)) {
             Log::warning('AgentRoutingService: No agents in round-robin pool');
-            return $this->createOrReopenTicket($contactId, null);
+            return $this->createOrReopenTicket($organizationId, $contactId, null);
         }
 
         // Find the last ticket assigned among these agents
         $lastTicket = ChatTicket::whereIn('assigned_to', $agents)
+            ->where('organization_id', $organizationId)
             ->latest()
             ->first();
 
@@ -158,7 +160,7 @@ class AgentRoutingService
 
         $agentId = $agents[$nextIndex];
 
-        $ticket = $this->createOrReopenTicket($contactId, $agentId);
+        $ticket = $this->createOrReopenTicket($organizationId, $contactId, $agentId);
         $this->sendNotification($contactId, $agentId, $organizationId);
 
         Log::info('AgentRoutingService: Round-robin assignment', [
@@ -179,8 +181,9 @@ class AgentRoutingService
             ->where('teams.organization_id', $organizationId)
             ->where('teams.status', 'active')
             ->whereNull('teams.deleted_at')
-            ->leftJoin('chat_tickets', function ($join) {
+            ->leftJoin('chat_tickets', function ($join) use ($organizationId) {
                 $join->on('teams.user_id', '=', 'chat_tickets.assigned_to')
+                    ->where('chat_tickets.organization_id', '=', $organizationId)
                     ->where('chat_tickets.status', '=', 'open');
             })
             ->groupBy('teams.user_id')
@@ -189,12 +192,12 @@ class AgentRoutingService
 
         if (!$agent) {
             Log::warning('AgentRoutingService: No active agents found for least-loaded assignment');
-            return $this->createOrReopenTicket($contactId, null);
+            return $this->createOrReopenTicket($organizationId, $contactId, null);
         }
 
         $agentId = $agent->user_id;
 
-        $ticket = $this->createOrReopenTicket($contactId, $agentId);
+        $ticket = $this->createOrReopenTicket($organizationId, $contactId, $agentId);
         $this->sendNotification($contactId, $agentId, $organizationId);
 
         Log::info('AgentRoutingService: Least-loaded assignment', [
@@ -208,9 +211,11 @@ class AgentRoutingService
     /**
      * Create a new ticket or reopen an existing one.
      */
-    private function createOrReopenTicket(int $contactId, ?int $agentId): ChatTicket
+    private function createOrReopenTicket(int $organizationId, int $contactId, ?int $agentId): ChatTicket
     {
-        $ticket = ChatTicket::where('contact_id', $contactId)->first();
+        $ticket = ChatTicket::where('contact_id', $contactId)
+            ->where('organization_id', $organizationId)
+            ->first();
 
         if ($ticket) {
             // Reopen if closed
@@ -224,6 +229,7 @@ class AgentRoutingService
             $this->logTicketEvent($contactId, 'Conversation was moved from closed to open');
         } else {
             $ticket = new ChatTicket();
+            $ticket->organization_id = $organizationId;
             $ticket->contact_id = $contactId;
             $ticket->status = 'open';
             $ticket->assigned_to = $agentId;
