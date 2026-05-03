@@ -1,0 +1,20 @@
+            .-/+oossssoo+/-.               root@Ubuntu-2404-noble-amd64-base
+        `:+ssssssssssssssssss+:`           ---------------------------------
+      -+ssssssssssssssssssyyssss+-         OS: Ubuntu 24.04.3 LTS x86_64
+    .ossssssssssssssssssdMMMNysssso.       Host: 1.0
+   /ssssssssssshdmmNNmmyNMMMMhssssss/      Kernel: 6.8.0-85-generic
+  +ssssssssshmydMMMMMMMNddddyssssssss+     Uptime: 126 days, 6 hours, 9 mins
+ /sssssssshNMMMyhhyyyyhmNMMMNhssssssss/    Packages: 1370 (dpkg)
+.ssssssssdMMMNhsssssssssshNMMMdssssssss.   Shell: bash 5.2.21
++sssshhhyNMMNyssssssssssssyNMMMysssssss+   Terminal: /dev/pts/1
+ossyNMMMNyMMhsssssssssssssshmmmhssssssso   CPU: Intel Ultra 7 265 (20) @ 4.800GHz
+ossyNMMMNyMMhsssssssssssssshmmmhssssssso   GPU: Intel Graphics]
++sssshhhyNMMNyssssssssssssyNMMMysssssss+   Memory: 3255MiB / 63895MiB
+.ssssssssdMMMNhsssssssssshNMMMdssssssss.
+ /sssssssshNMMMyhhyyyyhdNMMMNhssssssss/
+  +sssssssssdmydMMMMMMMMddddyssssssss+
+   /ssssssssssshdmNNNNmyNMMMMhssssss/
+    .ossssssssssssssssssdMMMNysssso.
+      -+sssssssssssssssssyyyssss+-
+        `:+ssssssssssssssssss+:`
+            .-/+oossssoo+/-.
