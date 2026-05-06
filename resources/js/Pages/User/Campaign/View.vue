@@ -141,43 +141,66 @@
                     <!-- Table Component-->
                     <CampaignLogTable :rows="props.rows" :filters="props.filters" :uuid="props.campaign.uuid"/>
                 </div>
-                <div class="md:w-[30%]">
-                    <div class="w-full rounded-lg bg-white pt-4 pb-8 border px-4 space-y-1 capitalize">
-                        <h2 class="mb-2">{{ $t('Campaign details') }}</h2>
-                        <div class="text-sm bg-slate-100 p-3 rounded-lg">
-                            <h3>{{ $t('Campaign name') }}</h3>
-                            <p>{{ props.campaign?.name }}</p>
+                <div class="md:w-[30%] mt-6 md:mt-0">
+                    <div class="w-full rounded-lg bg-white border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="px-4 py-4 border-b border-slate-100">
+                            <div class="flex items-start justify-between gap-3">
+                                <div>
+                                    <p class="text-[11px] uppercase tracking-wide text-slate-500">{{ $t('Campaign') }}</p>
+                                    <h2 class="text-base font-semibold text-slate-900 leading-6 normal-case">{{ props.campaign?.name }}</h2>
+                                </div>
+                                <span class="shrink-0 rounded-full px-2.5 py-1 text-xs font-medium capitalize" :class="statusBadgeClass">
+                                    {{ props.campaign.status }}
+                                </span>
+                            </div>
                         </div>
-                        <div class="text-sm bg-slate-100 p-3 rounded-lg">
-                            <h3>{{ $t('Template') }}</h3>
-                            <p>{{ props.campaign?.template?.name }}</p>
-                        </div>
-                        <div class="text-sm bg-slate-100 p-3 rounded-lg">
-                            <h3>{{ $t('Recipients') }}</h3>
-                            <p>{{ props.campaign.contact_group_id === '0' ? 'All Contacts' : props.campaign?.contact_group?.name }}</p>
-                        </div>
-                        <div class="text-sm bg-slate-100 p-3 rounded-lg">
-                            <h3>{{ $t('Time scheduled') }}</h3>
-                            <p>{{ props.campaign.scheduled_at }}</p>
-                        </div>
-                        <div class="text-sm bg-slate-100 p-3 rounded-lg">
-                            <h3>{{ $t('Status') }}</h3>
-                            <p class="capitalize">{{ props.campaign.status }}</p>
+                        <div class="divide-y divide-slate-100">
+                            <div class="px-4 py-3">
+                                <p class="text-xs text-slate-500">{{ $t('Template') }}</p>
+                                <p class="mt-1 text-sm font-medium text-slate-900 break-words normal-case">{{ props.campaign?.template?.name }}</p>
+                            </div>
+                            <div class="px-4 py-3">
+                                <p class="text-xs text-slate-500">{{ $t('Recipients') }}</p>
+                                <p class="mt-1 text-sm font-medium text-slate-900 break-words">{{ recipientsLabel }}</p>
+                            </div>
+                            <div class="px-4 py-3">
+                                <p class="text-xs text-slate-500">{{ $t('Time scheduled') }}</p>
+                                <p class="mt-1 text-sm font-medium text-slate-900">{{ props.campaign.scheduled_at }}</p>
+                            </div>
                         </div>
                     </div>
 
-                    <!-- Carousel Preview -->
-                    <div v-if="isCarouselCampaign">
-                        <!-- Message body bubble -->
-                        <div class="bg-white rounded-lg rounded-tl-none p-3 shadow-sm mb-2 speech-bubble-left">
-                            <p class="text-sm">{{ carouselMessageBody }}</p>
+                    <div class="mt-4 rounded-lg bg-white border border-slate-200 shadow-sm overflow-hidden">
+                        <div class="px-4 py-3 border-b border-slate-100">
+                            <div class="flex items-center justify-between gap-3">
+                                <div>
+                                    <h3 class="text-sm font-semibold text-slate-900">{{ $t('Template preview') }}</h3>
+                                    <p class="mt-0.5 text-xs text-slate-500">{{ isCarouselCampaign ? $t('Carousel message') : $t('Message as recipients received it') }}</p>
+                                </div>
+                                <span class="rounded-full bg-slate-100 px-2.5 py-1 text-[11px] font-medium text-slate-600">
+                                    {{ props.campaign?.template?.language }}
+                                </span>
+                            </div>
                         </div>
-                        <!-- Import and use CarouselPreview -->
-                        <CarouselPreview :cards="carouselCards" />
-                    </div>
 
-                    <!-- Standard Template Preview -->
-                    <WhatsappTemplate v-else :parameters="JSON.parse(props.campaign.metadata)" :placeholder="false" :visible="true"/>
+                        <div class="template-preview-surface">
+                            <div class="preview-phone-bar">
+                                <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
+                                <span>{{ $t('WhatsApp preview') }}</span>
+                            </div>
+
+                            <!-- Carousel Preview -->
+                            <div v-if="isCarouselCampaign" class="space-y-2">
+                                <div class="bg-white rounded-lg rounded-tl-none p-3 shadow-sm speech-bubble-left max-w-[25em]">
+                                    <p class="text-sm leading-6 text-slate-800 whitespace-pre-line">{{ carouselMessageBody }}</p>
+                                </div>
+                                <CarouselPreview :cards="carouselCards" />
+                            </div>
+
+                            <!-- Standard Template Preview -->
+                            <WhatsappTemplate v-else :parameters="campaignSendMetadata" :placeholder="false" :visible="true"/>
+                        </div>
+                    </div>
                 </div>
             </div>
         </div>
@@ -245,9 +268,37 @@
     });
 
     const campaignMetadata = computed(() => JSON.parse(props.campaign.template.metadata));
+    const campaignSendMetadata = computed(() => JSON.parse(props.campaign.metadata));
+
+    const recipientsLabel = computed(() => {
+        return String(props.campaign.contact_group_id) === '0'
+            ? 'All Contacts'
+            : props.campaign?.contact_group?.name;
+    });
+
+    const statusBadgeClass = computed(() => {
+        const status = String(props.campaign.status || '').toLowerCase();
+
+        if (status === 'completed') {
+            return 'bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200';
+        }
+
+        if (status === 'ongoing') {
+            return 'bg-blue-50 text-blue-700 ring-1 ring-blue-200';
+        }
+
+        if (status === 'cancelled') {
+            return 'bg-amber-50 text-amber-700 ring-1 ring-amber-200';
+        }
+
+        if (status === 'failed') {
+            return 'bg-red-50 text-red-700 ring-1 ring-red-200';
+        }
+
+        return 'bg-slate-100 text-slate-700 ring-1 ring-slate-200';
+    });
 
     const isCarouselCampaign = computed(() => {
-        console.log(campaignMetadata);
         return campaignMetadata.value?.template_type === 'carousel';
     });
 
@@ -353,3 +404,49 @@
         }
     });
 </script>
+<style scoped>
+.template-preview-surface {
+    min-height: 360px;
+    padding: 14px;
+    background-color: #efe7dd;
+    background-image:
+        radial-gradient(circle at 18px 18px, rgba(17, 24, 39, 0.045) 1px, transparent 1.6px),
+        radial-gradient(circle at 42px 38px, rgba(17, 24, 39, 0.035) 1px, transparent 1.4px);
+    background-size: 52px 52px;
+}
+
+.preview-phone-bar {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    width: fit-content;
+    max-width: 100%;
+    margin-bottom: 12px;
+    padding: 6px 10px;
+    border-radius: 999px;
+    background: rgba(255, 255, 255, 0.78);
+    color: #475569;
+    font-size: 11px;
+    font-weight: 600;
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+:deep(.speech-bubble-left) {
+    box-shadow: 0 1px 2px rgba(15, 23, 42, 0.08);
+}
+
+:deep(.template-preview-surface > div:not(.preview-phone-bar)),
+:deep(.template-preview-surface .mr-auto) {
+    max-width: 100%;
+}
+
+:deep(.template-preview-surface p) {
+    line-height: 1.75;
+    color: #1f2937;
+    word-break: break-word;
+}
+
+:deep(.template-preview-surface .text-\[\#00a5f4\]) {
+    width: 100%;
+}
+</style>
