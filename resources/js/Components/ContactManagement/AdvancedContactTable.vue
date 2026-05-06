@@ -1051,7 +1051,7 @@ const onImportCompleted = () => {
     <div :dir="uiDirection" class="-m-4 min-h-screen bg-[#F8FAFC] px-4 py-5 text-slate-950 md:-m-6 md:px-6 md:py-6" :class="uiTextAlignmentClass">
         <div class="mx-auto max-w-[1800px] space-y-5 pb-24">
             <section class="rounded-[2rem] border border-white bg-white/90 p-5 shadow-sm shadow-slate-200/70">
-                <div class="flex flex-col gap-5 xl:flex-row xl:items-start xl:justify-between">
+                <div class="flex flex-col gap-5">
                     <div class="max-w-2xl">
                         <div class="mb-3 inline-flex items-center gap-2 rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-100">
                             <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
