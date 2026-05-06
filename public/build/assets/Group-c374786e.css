@@ -1,0 +1,1 @@
+[data-help-icon]{display:inline-flex;align-items:center;gap:.35rem}[data-help-icon]:after{content:"?";display:inline-flex;width:.95rem;height:.95rem;flex:0 0 auto;align-items:center;justify-content:center;border:1.5px solid #94a3b8;border-radius:9999px;color:#64748b;font-size:.62rem;font-weight:800;line-height:1}
