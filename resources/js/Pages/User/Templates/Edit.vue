@@ -116,12 +116,13 @@
                                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M17.707 7.707a1 1 0 0 0-1.414-1.414L12 10.586L7.707 6.293a1 1 0 0 0-1.414 1.414L10.586 12l-4.293 4.293a1 1 0 1 0 1.414 1.414L12 13.414l4.293 4.293a1 1 0 1 0 1.414-1.414L13.414 12l4.293-4.293Z" clip-rule="evenodd"/></svg>
                                     </button>
                                 </div>
-                                <div class="flex space-s-1 border-t pt-2">
-                                    <FormInput v-model="button.text" :name="$t('Button text')" :type="'text'" :class="button.type === 'QUICK_REPLY' ? 'w-full' :'sm:col-span-2'" :labelClass="'mb-0'"/>
-                                    <FormInput v-model="button.url" v-if="button.type === 'URL'" :name="$t('Website url')" :type="'text'" :class="'w-full'" :labelClass="'mb-0'"/>
+                                <div class="flex flex-wrap gap-2 border-t pt-2">
+                                    <FormInput v-if="button.type !== 'COPY_CODE'" v-model="button.text" :name="$t('Button text')" :type="'text'" :class="button.type === 'QUICK_REPLY' ? 'w-full' :'sm:col-span-2'" :labelClass="'mb-0'"/>
+                                    <FormInput v-model="button.url" v-if="button.type === 'URL'" :name="$t('Website URL')" :type="'text'" :class="'w-full'" :labelClass="'mb-0'"/>
+                                    <FormInput v-model="button.example" v-if="button.type === 'URL' && isDynamicUrl(button.url)" :name="$t('Example full URL')" :type="'text'" :class="'w-full'" :labelClass="'mb-0'" :placeholder="buildDynamicUrlExample(button.url)"/>
                                     <FormInput v-model="button.country" v-if="button.type === 'PHONE_NUMBER'" :name="$t('Country')" :type="'text'" :class="'sm:col-span-2'" :labelClass="'mb-0'"/>
                                     <FormInput v-model="button.phone_number" v-if="button.type === 'PHONE_NUMBER'" :name="$t('Phone number')" :type="'text'" :class="'sm:col-span-2'" :labelClass="'mb-0'"/>
-                                    <FormInput v-model="button.example" v-if="button.type === 'COPY_CODE'" :name="$t('Sample code')" :type="'text'" :class="'w-full'" :labelClass="'mb-0'"/>
+                                    <FormInput v-model="button.example" v-if="button.type === 'COPY_CODE'" :name="$t('Coupon code')" :type="'text'" :class="'w-full'" :labelClass="'mb-0'" :maxLength="15"/>
                                 </div>
                             </div>
                         </div>
@@ -331,7 +332,7 @@
             code_expiration_minutes: extractComponent('FOOTER', 'code_expiration_minutes'),
         },
         code_expiration: extractComponent('FOOTER', 'code_expiration_minutes') ? true : false,
-        buttons: extractComponent('BUTTONS', 'buttons'),
+        buttons: normalizeTemplateButtons(extractComponent('BUTTONS', 'buttons')),
         authentication_button: {
             type: 'OTP',
             otp_type: null,
@@ -405,6 +406,14 @@
 
         // Standard: body text required
         if (!form.value.body?.text?.trim()) return false;
+
+        if ((form.value.buttons || []).some(btn => btn.type === 'URL' && isDynamicUrl(btn.url) && !getButtonExampleValue(btn.example))) {
+            return false;
+        }
+
+        if ((form.value.buttons || []).some(btn => btn.type === 'COPY_CODE' && (!getButtonExampleValue(btn.example) || getButtonExampleValue(btn.example).length > 15))) {
+            return false;
+        }
 
         return true;
     });
@@ -494,6 +503,31 @@
 
     function formatText(text) {
         return text.toLowerCase().replace(/_/g, ' ').replace(/^\w/, (c) => c.toUpperCase());
+    }
+
+    function normalizeTemplateButtons(buttons) {
+        if (!Array.isArray(buttons)) return [];
+
+        return buttons.map(button => ({
+            ...button,
+            example: Array.isArray(button.example) ? (button.example[0] ?? '') : button.example,
+        }));
+    }
+
+    function isDynamicUrl(url) {
+        return typeof url === 'string' && /\{\{\d+\}\}/.test(url);
+    }
+
+    function buildDynamicUrlExample(url) {
+        if (!isDynamicUrl(url)) return '';
+
+        return url.replace(/\{\{\d+\}\}/g, 'sample');
+    }
+
+    function getButtonExampleValue(example) {
+        const value = Array.isArray(example) ? example[0] : example;
+
+        return typeof value === 'string' ? value.trim() : '';
     }
 
     const closeModal = () => {
