@@ -1201,7 +1201,7 @@ const onImportCompleted = () => {
 
                     <div class="flex flex-wrap items-center gap-2">
                         
-                        <button type="button" class="btn-import inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md" :title="helpText.import" data-help-icon @click="isImportWizardOpen = true">
+                        <button type="button" class="btn-import inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md" :title="helpText.import" @click="isImportWizardOpen = true">
                             <Import class="h-4 w-4" />
                             <span>{{ $t('Import') }}</span>
                             <span class="text-[10px] font-extrabold uppercase tracking-normal text-slate-400">XLSX/CSV</span>
