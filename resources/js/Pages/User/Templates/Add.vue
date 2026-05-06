@@ -217,21 +217,33 @@
                                     <span>{{ $t('Open Flow (1)') }}</span>
                                 </button>
                             </div>
-                            <div v-if="form.buttons.length > 0" class="mt-3 mb-8">
-                                <div v-for="(button, index) in form.buttons" :key="index" class="bg-[#f9f9fa] p-3 rounded-lg mb-3">
-                                    <div class="flex items-center justify-between pb-1">
-                                        <span class="text-sm">{{ $t(formatText(button.type)) }}</span>
-                                        <button @click="removeButton(index)" class="bg-slate-200 hover:shadow rounded-full p-1">
+                            <div v-if="form.buttons.length > 0" class="mt-3 mb-8 space-y-3">
+                                <div v-for="(button, index) in form.buttons" :key="index" class="rounded-lg border border-slate-200 bg-white shadow-sm overflow-hidden">
+                                    <div class="flex items-center justify-between border-b border-slate-100 bg-slate-50 px-3 py-2">
+                                        <div class="flex min-w-0 items-center gap-x-2">
+                                            <span class="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-white text-[#00a5f4] ring-1 ring-slate-200">
+                                                <svg v-if="button.type === 'URL'" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"><path fill="currentColor" d="M10.59 13.41a1 1 0 0 1 0-1.41l2.83-2.83a3 3 0 0 1 4.24 4.24l-1.41 1.42a1 1 0 0 1-1.42-1.42l1.42-1.41a1 1 0 1 0-1.42-1.42L12 13.41a1 1 0 0 1-1.41 0Zm2.82-2.82a1 1 0 0 1 0 1.41l-2.83 2.83a3 3 0 0 1-4.24-4.24l1.41-1.42a1 1 0 0 1 1.42 1.42L7.75 12a1 1 0 1 0 1.42 1.42L12 10.59a1 1 0 0 1 1.41 0Z"/></svg>
+                                                <svg v-else-if="button.type === 'PHONE_NUMBER'" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"><path fill="currentColor" d="M20 16v4c-2.76 0-5.07-.5-7-1.33C9.16 17.02 6.82 14.05 5.5 11C4.4 8.47 4 5.9 4 4h4l1 4l-3.5 3c1.32 3.05 3.66 6.02 7.5 7.67L16 15l4 1Z"/></svg>
+                                                <svg v-else-if="button.type === 'COPY_CODE'" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"><path fill="currentColor" d="M19 21H8V7h11m0-2H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2m-3-4H4a2 2 0 0 0-2 2v14h2V3h12V1Z"/></svg>
+                                                <svg v-else xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"><path fill="currentColor" d="M4 4h16a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H8l-4 4v-4a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2Z"/></svg>
+                                            </span>
+                                            <div class="min-w-0">
+                                                <span class="block truncate text-sm font-medium text-slate-700">{{ $t(buttonTypeLabel(button.type)) }}</span>
+                                                <span v-if="button.type === 'URL' && isDynamicUrl(button.url)" class="block text-[11px] text-slate-500">{{ $t('Dynamic URL') }}</span>
+                                            </div>
+                                        </div>
+                                        <button @click="removeButton(index)" class="flex h-7 w-7 items-center justify-center rounded-full bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100 hover:text-slate-700">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M17.707 7.707a1 1 0 0 0-1.414-1.414L12 10.586L7.707 6.293a1 1 0 0 0-1.414 1.414L10.586 12l-4.293 4.293a1 1 0 1 0 1.414 1.414L12 13.414l4.293 4.293a1 1 0 1 0 1.414-1.414L13.414 12l4.293-4.293Z" clip-rule="evenodd"/></svg>
                                         </button>
                                     </div>
-                                    <div class="flex space-s-1 border-t pt-2">
-                                        <FormInput v-if="button.type !== 'copy_code'" v-model="button.text" :name="$t('Button text')" :type="'text'" :class="button.type === 'QUICK_REPLY' || button.type === 'FLOW' ? 'w-full' :'sm:col-span-2'" :labelClass="'mb-0'"/>
-                                        <FormInput v-model="button.url" v-if="button.type === 'URL'" :name="$t('Website url')" :type="'url'" :class="'w-full'" :labelClass="'mb-0'"/>
+                                    <div class="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2">
+                                        <FormInput v-if="button.type !== 'COPY_CODE'" v-model="button.text" :name="$t('Button text')" :type="'text'" :class="button.type === 'URL' || button.type === 'QUICK_REPLY' || button.type === 'FLOW' ? 'w-full sm:col-span-2' :'w-full'" :labelClass="'mb-0 text-xs text-slate-600'"/>
+                                        <FormInput v-model="button.url" v-if="button.type === 'URL'" :name="$t('Website URL')" :type="'text'" :class="'w-full sm:col-span-2'" :labelClass="'mb-0 text-xs text-slate-600'"/>
+                                        <FormInput v-model="button.example" v-if="button.type === 'URL' && isDynamicUrl(button.url)" :name="$t('Example full URL')" :type="'text'" :class="'w-full sm:col-span-2'" :labelClass="'mb-0 text-xs text-slate-600'" :placeholder="buildDynamicUrlExample(button.url)"/>
                                         <FormInput v-model="button.country" v-if="button.type === 'PHONE_NUMBER'" :name="$t('Country')" :type="'text'" :class="'sm:col-span-2'" :labelClass="'mb-0'"/>
                                         <FormInput v-model="button.phone_number" v-if="button.type === 'PHONE_NUMBER'" :name="$t('Phone number')" :type="'text'" :class="'sm:col-span-2'" :labelClass="'mb-0'"/>
-                                        <FormInput v-model="button.example" v-if="button.type === 'copy_code'" :name="$t('Sample code')" :type="'text'" :class="'w-full'" :labelClass="'mb-0'"/>
-                                        <div v-if="button.type === 'FLOW'" class="w-full mt-2">
+                                        <FormInput v-model="button.example" v-if="button.type === 'COPY_CODE'" :name="$t('Coupon code')" :type="'text'" :class="'w-full sm:col-span-2'" :labelClass="'mb-0 text-xs text-slate-600'" :maxLength="15"/>
+                                        <div v-if="button.type === 'FLOW'" class="w-full sm:col-span-2">
                                             <label class="text-xs text-slate-500 block mb-1">{{ $t('Select Flow') }}</label>
                                             <select
                                                 v-model="button.flow_id"
@@ -435,13 +447,13 @@
                     <div v-if="form.buttons.length > 0" class="mr-auto text-sm text-[#00a5f4] flex flex-col relative max-w-[25em]">
                         <div v-for="(item, index) in form.buttons" :key="index" class="flex justify-center items-center space-s-2 rounded-lg bg-white h-10 my-[0.1em]">
                             <span>
-                                <svg v-if="item.type === 'copy_code'" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"><path fill="currentColor" d="M19 21H8V7h11m0-2H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2m-3-4H4a2 2 0 0 0-2 2v14h2V3h12V1Z"/></svg>
+                                <svg v-if="item.type === 'COPY_CODE'" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"><path fill="currentColor" d="M19 21H8V7h11m0-2H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2m-3-4H4a2 2 0 0 0-2 2v14h2V3h12V1Z"/></svg>
                                 <svg v-else-if="item.type === 'PHONE_NUMBER'" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"><g fill="none"><path fill="currentColor" d="M20 16v4c-2.758 0-5.07-.495-7-1.325c-3.841-1.652-6.176-4.63-7.5-7.675C4.4 8.472 4 5.898 4 4h4l1 4l-3.5 3c1.324 3.045 3.659 6.023 7.5 7.675L16 15l4 1z"/><path stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 18.675c1.93.83 4.242 1.325 7 1.325v-4l-4-1l-3 3.675zm0 0C9.159 17.023 6.824 14.045 5.5 11m0 0C4.4 8.472 4 5.898 4 4h4l1 4l-3.5 3z"/></g></svg>
                                 <svg v-else-if="item.type === 'FLOW'" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>
                                 <img v-else-if="item.type === 'URL'" :src="'/images/icons/link.png'" class="h-4">
                                 <img v-else :src="'/images/icons/reply.png'" class="h-4">
                             </span>
-                            <span>{{ item.text }}</span>
+                            <span>{{ item.type === 'COPY_CODE' ? $t('Copy code') : item.text }}</span>
                         </div>
                     </div>
                     <div v-if="form.category == 'AUTHENTICATION' && form.authentication_button.otp_type != 'zero_tap'" class="mr-auto text-sm text-[#00a5f4] flex flex-col relative max-w-[25em]">
@@ -799,11 +811,11 @@
                 });
             }
         } else if($type === 'offer'){
-            const buttonsCount = form.value.buttons.filter(button => button.type === 'copy_code').length;
+            const buttonsCount = form.value.buttons.filter(button => button.type === 'COPY_CODE').length;
 
             if(buttonsCount < 1){
                 form.value.buttons.push({
-                    'type' : 'copy_code',
+                    'type' : 'COPY_CODE',
                     'example' : null,
                 });
             }
@@ -871,6 +883,14 @@
         if (form.value.buttons.some(btn => btn.type === 'FLOW' && (!btn.flow_id || !btn.text))) {
             return false;
         } 
+
+        if (form.value.buttons.some(btn => btn.type === 'COPY_CODE' && (!btn.example || btn.example.trim() === '' || btn.example.trim().length > 15))) {
+            return false;
+        }
+
+        if (form.value.buttons.some(btn => btn.type === 'URL' && isDynamicUrl(btn.url) && (!btn.example || btn.example.trim() === ''))) {
+            return false;
+        }
         
         // Carousel validation
         if (templateType.value === 'carousel') {
@@ -1115,6 +1135,28 @@
             .toLowerCase()
             .replace(/_/g, ' ')
             .replace(/^\w/, (c) => c.toUpperCase());
+    }
+
+    function buttonTypeLabel(type) {
+        const labels = {
+            URL: 'Visit website',
+            PHONE_NUMBER: 'Call phone number',
+            COPY_CODE: 'Copy code',
+            QUICK_REPLY: 'Custom button',
+            FLOW: 'Open Flow',
+        };
+
+        return labels[type] ?? formatText(type);
+    }
+
+    function isDynamicUrl(url) {
+        return typeof url === 'string' && /\{\{\d+\}\}/.test(url);
+    }
+
+    function buildDynamicUrlExample(url) {
+        if (!isDynamicUrl(url)) return '';
+
+        return url.replace(/\{\{\d+\}\}/g, 'sample');
     }
 
     const closeModal = () => {

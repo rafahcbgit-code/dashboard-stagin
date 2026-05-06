@@ -1371,8 +1371,8 @@ class WhatsappService
                 if (!isset($requestData['components'])) {
                     $requestData['components'] = [];
                 }
-            
-                $requestData['components'][] = [
+
+                $buttonsComponent = [
                     'type' => 'BUTTONS',
                     'buttons' => []
                 ];
@@ -1380,35 +1380,47 @@ class WhatsappService
                 $quickReplyButtons = [];
 
                 foreach ($request->buttons as $button) {
-                    if ($button['type'] === 'QUICK_REPLY') {
+                    $buttonType = strtoupper($button['type'] ?? '');
+
+                    if ($buttonType === 'QUICK_REPLY') {
                         $quickReplyButtons[] = [
-                            'type' => $button['type'],
+                            'type' => $buttonType,
                             'text' => $button['text'],
                         ];
                     }
                 }
             
                 foreach ($request->buttons as $button) {
-                    if ($button['type'] !== 'QUICK_REPLY') {
-                        if ($button['type'] === 'URL') {
-                            $requestData['components'][count($requestData['components']) - 1]['buttons'][] = [
-                                'type' => $button['type'],
+                    $buttonType = strtoupper($button['type'] ?? '');
+
+                    if ($buttonType !== 'QUICK_REPLY') {
+                        if ($buttonType === 'URL') {
+                            $urlButton = [
+                                'type' => $buttonType,
                                 'text' => $button['text'],
                                 'url' => $button['url'],
                             ];
-                        } elseif ($button['type'] === 'PHONE_NUMBER') {
-                            $requestData['components'][count($requestData['components']) - 1]['buttons'][] = [
-                                'type' => $button['type'],
+
+                            if (str_contains($button['url'] ?? '', '{{') && !empty($button['example'])) {
+                                $urlButton['example'] = is_array($button['example'])
+                                    ? array_values($button['example'])
+                                    : [$button['example']];
+                            }
+
+                            $buttonsComponent['buttons'][] = $urlButton;
+                        } elseif ($buttonType === 'PHONE_NUMBER') {
+                            $buttonsComponent['buttons'][] = [
+                                'type' => $buttonType,
                                 'text' => $button['text'],
-                                'phone_number' => $button['country'].$button['phone_number'],
+                                'phone_number' => ($button['country'] ?? '') . ($button['phone_number'] ?? ''),
                             ];
-                        } elseif ($button['type'] === 'COPY_CODE') {
-                            $requestData['components'][count($requestData['components']) - 1]['buttons'][] = [
-                                'type' => $button['type'],
-                                'example' => $button['example'],
+                        } elseif ($buttonType === 'COPY_CODE') {
+                            $buttonsComponent['buttons'][] = [
+                                'type' => $buttonType,
+                                'example' => $button['example'] ?? '',
                             ];
-                        } elseif ($button['type'] === 'FLOW') {
-                            $requestData['components'][count($requestData['components']) - 1]['buttons'][] = [
+                        } elseif ($buttonType === 'FLOW') {
+                            $buttonsComponent['buttons'][] = [
                                 'type'            => 'FLOW',
                                 'text'            => $button['text'],
                                 'flow_id'         => $button['flow_id'],
@@ -1420,7 +1432,11 @@ class WhatsappService
 
                 // Add the quick reply buttons at the start
                 if (!empty($quickReplyButtons)) {
-                    $requestData['components'][count($requestData['components']) - 1]['buttons'] = array_merge($quickReplyButtons, $requestData['components'][count($requestData['components']) - 1]['buttons']);
+                    $buttonsComponent['buttons'] = array_merge($quickReplyButtons, $buttonsComponent['buttons']);
+                }
+
+                if (!empty($buttonsComponent['buttons'])) {
+                    $requestData['components'][] = $buttonsComponent;
                 }
             }
         } else {
@@ -1788,8 +1804,8 @@ class WhatsappService
                 if (!isset($requestData['components'])) {
                     $requestData['components'] = [];
                 }
-            
-                $requestData['components'][] = [
+
+                $buttonsComponent = [
                     'type' => 'BUTTONS',
                     'buttons' => []
                 ];
@@ -1797,35 +1813,47 @@ class WhatsappService
                 $quickReplyButtons = [];
 
                 foreach ($request->buttons as $button) {
-                    if ($button['type'] === 'QUICK_REPLY') {
+                    $buttonType = strtoupper($button['type'] ?? '');
+
+                    if ($buttonType === 'QUICK_REPLY') {
                         $quickReplyButtons[] = [
-                            'type' => $button['type'],
+                            'type' => $buttonType,
                             'text' => $button['text'],
                         ];
                     }
                 }
             
                 foreach ($request->buttons as $button) {
-                    if ($button['type'] !== 'QUICK_REPLY') {
-                        if ($button['type'] === 'URL') {
-                            $requestData['components'][count($requestData['components']) - 1]['buttons'][] = [
-                                'type' => $button['type'],
+                    $buttonType = strtoupper($button['type'] ?? '');
+
+                    if ($buttonType !== 'QUICK_REPLY') {
+                        if ($buttonType === 'URL') {
+                            $urlButton = [
+                                'type' => $buttonType,
                                 'text' => $button['text'],
                                 'url' => $button['url'],
                             ];
-                        } elseif ($button['type'] === 'PHONE_NUMBER') {
-                            $requestData['components'][count($requestData['components']) - 1]['buttons'][] = [
-                                'type' => $button['type'],
+
+                            if (str_contains($button['url'] ?? '', '{{') && !empty($button['example'])) {
+                                $urlButton['example'] = is_array($button['example'])
+                                    ? array_values($button['example'])
+                                    : [$button['example']];
+                            }
+
+                            $buttonsComponent['buttons'][] = $urlButton;
+                        } elseif ($buttonType === 'PHONE_NUMBER') {
+                            $buttonsComponent['buttons'][] = [
+                                'type' => $buttonType,
                                 'text' => $button['text'],
-                                'phone_number' => $button['country'] ?? '' . $button['phone_number'],
+                                'phone_number' => ($button['country'] ?? '') . ($button['phone_number'] ?? ''),
                             ];
-                        } elseif ($button['type'] === 'COPY_CODE') {
-                            $requestData['components'][count($requestData['components']) - 1]['buttons'][] = [
-                                'type' => $button['type'],
-                                'example' => $button['example'],
+                        } elseif ($buttonType === 'COPY_CODE') {
+                            $buttonsComponent['buttons'][] = [
+                                'type' => $buttonType,
+                                'example' => $button['example'] ?? '',
                             ];
-                        } elseif ($button['type'] === 'FLOW') {
-                            $requestData['components'][count($requestData['components']) - 1]['buttons'][] = [
+                        } elseif ($buttonType === 'FLOW') {
+                            $buttonsComponent['buttons'][] = [
                                 'type'            => 'FLOW',
                                 'text'            => $button['text'],
                                 'flow_id'         => $button['flow_id'],
@@ -1837,7 +1865,11 @@ class WhatsappService
 
                 // Add the quick reply buttons at the start
                 if (!empty($quickReplyButtons)) {
-                    $requestData['components'][count($requestData['components']) - 1]['buttons'] = array_merge($quickReplyButtons, $requestData['components'][count($requestData['components']) - 1]['buttons']);
+                    $buttonsComponent['buttons'] = array_merge($quickReplyButtons, $buttonsComponent['buttons']);
+                }
+
+                if (!empty($buttonsComponent['buttons'])) {
+                    $requestData['components'][] = $buttonsComponent;
                 }
             }
         } else {
@@ -1881,7 +1913,7 @@ class WhatsappService
             if ($template) {
                 $template->organization_id = session()->get('current_organization');
                 $template->category = $template->status == 'APPROVED' ? $template->category : $request->category;
-                //$template->metadata = json_encode($requestData);
+                $template->metadata = json_encode($requestData);
                 $template->status = 'PENDING';
                 $template->created_by = auth()->user()->id;
                 $template->updated_at = now(); // No need to set `created_at` when updating
