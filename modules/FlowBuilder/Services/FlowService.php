@@ -122,7 +122,7 @@ class FlowService
         $flow = Flow::where('uuid', $uuid)->first();
 
         if (!$flow) {
-            return; // Exit early if the flow doesn't exist
+            return;
         }
 
         // Get the base name without any existing (number) suffix
@@ -140,6 +140,42 @@ class FlowService
         $duplicate = $flow->replicate(['uuid']);
         $duplicate->name = $newName;
         $duplicate->save();
+
+        // Duplicate FlowMedia records for the new flow
+        $oldFlowId = $flow->id;
+        $newFlowId = $duplicate->id;
+        $mediaIdMap = []; // old media id => new FlowMedia model
+
+        $originalMediaRows = FlowMedia::where('flow_id', $oldFlowId)->get();
+        foreach ($originalMediaRows as $originalMedia) {
+            $newMedia = $originalMedia->replicate(['uuid']);
+            $newMedia->flow_id = $newFlowId;
+            $newMedia->save();
+            $mediaIdMap[$originalMedia->id] = $newMedia;
+        }
+
+        // Update flow_id references in the duplicated metadata JSON
+        if (!empty($mediaIdMap)) {
+            $metadata = json_decode($duplicate->metadata, true);
+            if ($metadata && isset($metadata['nodes'])) {
+                foreach ($metadata['nodes'] as &$node) {
+                    $mediaRef = $node['data']['metadata']['fields']['media'] ?? null;
+                    if (is_array($mediaRef) && isset($mediaRef['flow_id']) && $mediaRef['flow_id'] == $oldFlowId) {
+                        $mediaRef['flow_id'] = $newFlowId;
+                        // Update the media id to point to the new FlowMedia record
+                        if (isset($mediaRef['id']) && isset($mediaIdMap[$mediaRef['id']])) {
+                            $newMediaModel = $mediaIdMap[$mediaRef['id']];
+                            $mediaRef['id'] = $newMediaModel->id;
+                            $mediaRef['uuid'] = $newMediaModel->uuid;
+                        }
+                        $node['data']['metadata']['fields']['media'] = $mediaRef;
+                    }
+                }
+                unset($node);
+                $duplicate->metadata = json_encode($metadata, JSON_UNESCAPED_UNICODE);
+                $duplicate->save();
+            }
+        }
     }
 
     public function uploadMedia($request, $uuid, $stepId)
