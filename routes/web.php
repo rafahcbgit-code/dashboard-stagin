@@ -295,6 +295,7 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::post('/contacts/bulk-update-attribute', [App\Http\Controllers\User\ContactController::class, 'bulkUpdateAttribute'])->name('contacts.bulk-update-attribute');
                 Route::get('/contacts/export', [App\Http\Controllers\User\ContactController::class, 'export'])->name('contacts.bulk-export');
                 Route::post('/contacts/import/preview', [App\Http\Controllers\User\ContactImportController::class, 'preview'])->name('contacts.import.preview');
+                Route::get('/contacts/import/{batchUuid}/status', [App\Http\Controllers\User\ContactImportController::class, 'status'])->name('contacts.import.status');
                 Route::post('/contacts/import/{batchUuid}/mapping', [App\Http\Controllers\User\ContactImportController::class, 'map'])->name('contacts.import.mapping');
                 Route::post('/contacts/import/{batchUuid}/normalize', [App\Http\Controllers\User\ContactImportController::class, 'normalize'])->name('contacts.import.normalize');
                 Route::get('/contacts/import/{batchUuid}/rows', [App\Http\Controllers\User\ContactImportController::class, 'rows'])->name('contacts.import.rows');

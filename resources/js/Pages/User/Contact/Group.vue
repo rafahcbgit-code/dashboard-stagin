@@ -5,11 +5,11 @@
                 <div class="px-4 pt-4">
                     <div class="flex justify-between mt-2">
                         <div class="flex space-s-1 text-xl">
-                            <h2>{{ $t('Groups') }}</h2>
-                            <span class="text-slate-500 ">{{ props.rowCount }}</span>
+                            <h2 :title="audienceHelp.page" data-help-icon>{{ $t('Groups') }}</h2>
+                            <span class="text-slate-500" :title="audienceHelp.totalAudiences" data-help-icon>{{ props.rowCount }}</span>
                         </div>
                         <div class="flex space-s-2 items-center">
-                            <span @click="openModal()" class="cursor-pointer" title="Add Contact">
+                            <span @click="openModal()" class="cursor-pointer" :title="audienceHelp.addAudience" data-help-icon>
                                 <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24"><g fill="currentColor" fill-rule="evenodd" clip-rule="evenodd"><path d="M2 12C2 6.477 6.477 2 12 2s10 4.477 10 10s-4.477 10-10 10S2 17.523 2 12Zm10-8a8 8 0 1 0 0 16a8 8 0 0 0 0-16Z"/><path d="M13 7a1 1 0 1 0-2 0v4H7a1 1 0 1 0 0 2h4v4a1 1 0 1 0 2 0v-4h4a1 1 0 1 0 0-2h-4V7Z"/></g></svg>
                             </span>
                         </div>
@@ -23,7 +23,7 @@
                 </div>
                 <div v-else class="md:block pt-20 hidden">
                     <div class="border py-10 w-[30em] rounded-xl bg-white">
-                        <h2 class="text-center text-2xl text-slate-500 mb-6">{{ $t('Select group') }}</h2>
+                        <h2 class="text-center text-2xl text-slate-500 mb-6" :title="audienceHelp.selectAudience" data-help-icon>{{ $t('Select group') }}</h2>
                         <div class="flex justify-center">
                             <div class="border-r border-slate-500 h-10"></div>
                         </div>
@@ -32,8 +32,8 @@
                             <div class="border-r border-slate-500 h-10"></div>
                         </div>
                         <div class="flex justify-center space-s-4 mt-6">
-                            <button @click="openModal()" class="bg-primary rounded-lg text-sm text-white p-2 px-8 text-center capitalize">{{ $t('Add group') }}</button>
-                            <button @click="isOpenModal = true" class="bg-primary rounded-lg text-sm text-white p-2 px-8 text-center">{{ $t('Bulk upload') }}</button>
+                            <button @click="openModal()" class="bg-primary rounded-lg text-sm text-white p-2 px-8 text-center capitalize" :title="audienceHelp.addAudience" data-help-icon>{{ $t('Add group') }}</button>
+                            <button @click="isOpenModal = true" class="bg-primary rounded-lg text-sm text-white p-2 px-8 text-center" :title="audienceHelp.bulkUpload" data-help-icon>{{ $t('Bulk upload') }}</button>
                         </div>
                     </div>
                 </div>
@@ -54,7 +54,7 @@
 </template>
 <script setup>
     import AppLayout from "./../Layout/App.vue";
-    import { ref } from 'vue';
+    import { computed, ref } from 'vue';
     import ContactGroupInfo from '@/Components/ContactGroupInfo.vue';
     import ContactGroupImportModal from '@/Components/ContactImportModal.vue';
     import ContactTable from '@/Components/Tables/ContactTable.vue';
@@ -64,8 +64,17 @@
     import FormModal from '@/Components/FormModal.vue';
     import { router } from '@inertiajs/vue3';
     import { trans } from 'laravel-vue-i18n';
+    import { useI18n } from 'vue-i18n';
 
     const props = defineProps({ rows: Object, filters: Object, rowCount: Number, group: Object });
+    const { t } = useI18n();
+    const audienceHelp = computed(() => ({
+        page: t('Audiences are customer groups you use to segment your customer database before sending WhatsApp messages or marketing campaigns.'),
+        totalAudiences: t('This is the number of audiences or groups currently available in your account.'),
+        addAudience: t('Create a new audience such as interested customers, VIP, or pending payment.'),
+        bulkUpload: t('Upload a file containing multiple audience names instead of adding them manually one by one.'),
+        selectAudience: t('Choose an audience from the list to view its details and the number of customers inside it.'),
+    }));
     const isOpenModal = ref(false);
     const currentUrl = window.location.href;
     const isOpenFormModal = ref(false);
@@ -103,3 +112,26 @@
         form.value.name = res.data.name;
     }
 </script>
+<style>
+[data-help-icon] {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+[data-help-icon]::after {
+    content: '?';
+    display: inline-flex;
+    width: 0.95rem;
+    height: 0.95rem;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    border: 1.5px solid #94a3b8;
+    border-radius: 9999px;
+    color: #64748b;
+    font-size: 0.62rem;
+    font-weight: 800;
+    line-height: 1;
+}
+</style>

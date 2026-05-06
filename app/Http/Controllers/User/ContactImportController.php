@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\User;
 
 use App\Http\Controllers\Controller as BaseController;
+use App\Jobs\ProcessLargeContactImportJob;
 use App\Models\ContactField;
 use App\Models\ContactImportBatch;
 use App\Models\ContactImportRow;
@@ -43,11 +44,30 @@ class ContactImportController extends BaseController
         ]);
 
         try {
-            $batch = $this->importService->createPreview(
-                $file,
-                $organizationId,
-                $userId
-            );
+            $inspection = $this->importService->inspectUploadedFile($file);
+
+            if ($this->importService->shouldUseBackgroundImport($inspection)) {
+                $this->importService->assertLargeImportRequiredHeaders((array) ($inspection['headers'] ?? []));
+
+                $batch = $this->importService->createBackgroundImportBatch(
+                    $file,
+                    $inspection,
+                    $organizationId,
+                    $userId
+                );
+
+                ProcessLargeContactImportJob::dispatch($batch->id);
+
+                return response()->json([
+                    'background_import' => true,
+                    'message' => 'This file is large, so the import will continue in the background. You can track the progress from this screen.',
+                    'batch' => $this->statusBatchPayload($batch->fresh()),
+                ]);
+            }
+
+            $batch = $this->importService->createPreview($file, $organizationId, $userId);
+        } catch (ValidationException $exception) {
+            throw $exception;
         } catch (Throwable $exception) {
             Log::error('Contact import preview failed', [
                 'organization_id' => $organizationId,
@@ -156,6 +176,10 @@ class ContactImportController extends BaseController
                     'rows' => (array) ($normalization['invalid_rows_preview'] ?? []),
                     'limited' => (bool) ($normalization['invalid_rows_preview_limited'] ?? false),
                 ],
+                'existing_grouped_contacts' => $this->importService->existingGroupedContactsSummary(
+                    $batch,
+                    $this->organizationId()
+                ),
             ]
         ));
     }
@@ -240,7 +264,7 @@ class ContactImportController extends BaseController
             'group_ids' => ['nullable', 'array'],
             'group_ids.*' => ['integer'],
             'new_group_name' => ['nullable', 'string', 'max:255'],
-            'assignment_mode' => ['required', 'string', 'in:all_selected,split'],
+            'assignment_mode' => ['required', 'string', 'in:all_selected,split,file_group_name'],
             'split_group_size' => ['nullable', 'integer', 'min:1', 'max:50000'],
             'split_group_prefix' => ['nullable', 'string', 'max:120'],
         ]);
@@ -339,6 +363,16 @@ class ContactImportController extends BaseController
         ]);
     }
 
+    public function status(string $batchUuid)
+    {
+        $batch = $this->findBatch($batchUuid);
+
+        return response()->json([
+            'background_import' => $batch->mode === 'background',
+            'batch' => $this->statusBatchPayload($batch),
+        ]);
+    }
+
     public function invalidReportCsv(string $batchUuid): StreamedResponse
     {
         $batch = $this->findBatch($batchUuid);
@@ -395,10 +429,10 @@ class ContactImportController extends BaseController
     private function buildBatchResponse(ContactImportBatch $batch, int $page = 1, int $perPage = 15, string $status = 'all'): array
     {
         $rows = $this->importService->paginateRows($batch, $page, max(1, min($perPage, 100)), $status);
-        $requiresDefaultCountryCode = false;
+        $missingDefaultCountryCodeCount = 0;
 
         if ($batch->status === 'mapped') {
-            $requiresDefaultCountryCode = $this->importService->hasRowsMissingCountryCode($batch);
+            $missingDefaultCountryCodeCount = $this->importService->countRowsMissingCountryCode($batch);
         }
 
         return [
@@ -411,7 +445,8 @@ class ContactImportController extends BaseController
                 'selected_group_ids' => $batch->selected_group_ids ?? [],
                 'group_assignment' => $batch->group_assignment ?? null,
                 'report' => $batch->report,
-                'requires_default_country_code' => $requiresDefaultCountryCode,
+                'requires_default_country_code' => $missingDefaultCountryCodeCount > 0,
+                'missing_default_country_code_count' => $missingDefaultCountryCodeCount,
                 'stats' => $this->batchStats($batch),
             ],
             'rows' => $rows,
@@ -446,6 +481,50 @@ class ContactImportController extends BaseController
             'removed' => (int) ($stats->removed ?? 0),
             'imported' => (int) ($stats->imported ?? 0),
             'failed' => (int) ($stats->failed ?? 0),
+        ];
+    }
+
+    private function statusBatchPayload(ContactImportBatch $batch): array
+    {
+        if ($batch->mode !== 'background') {
+            return $this->buildBatchResponse($batch)['batch'];
+        }
+
+        $duplicatesCount = (int) data_get($batch->report, 'duplicates_count', 0);
+        $importedContactsCount = (int) $batch->created_count + (int) $batch->updated_count;
+
+        return [
+            'uuid' => $batch->uuid,
+            'status' => $batch->status,
+            'mode' => $batch->mode,
+            'headers' => $batch->headers ?? [],
+            'mapping' => $batch->mapping ?? [],
+            'default_country_code' => $batch->default_country_code,
+            'selected_group_ids' => $batch->selected_group_ids ?? [],
+            'group_assignment' => $batch->group_assignment ?? null,
+            'report' => $batch->report,
+            'original_file_name' => $batch->original_file_name,
+            'total_rows' => (int) $batch->total_rows,
+            'processed_rows' => (int) $batch->processed_rows,
+            'valid_rows' => (int) $batch->valid_rows,
+            'invalid_rows' => (int) $batch->invalid_rows,
+            'created_count' => (int) $batch->created_count,
+            'updated_count' => (int) $batch->updated_count,
+            'failed_count' => (int) $batch->failed_count,
+            'duplicates_count' => $duplicatesCount,
+            'imported_contacts_count' => $importedContactsCount,
+            'started_at' => optional($batch->started_at)->toDateTimeString(),
+            'finished_at' => optional($batch->finished_at)->toDateTimeString(),
+            'error_message' => $batch->error_message,
+            'stats' => [
+                'total' => (int) $batch->total_rows,
+                'valid' => (int) $batch->valid_rows,
+                'invalid' => (int) $batch->invalid_rows,
+                'removed' => 0,
+                'imported' => $importedContactsCount,
+                'failed' => (int) $batch->failed_count,
+                'duplicates' => $duplicatesCount,
+            ],
         ];
     }
 

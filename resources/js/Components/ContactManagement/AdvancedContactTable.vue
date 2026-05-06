@@ -1,16 +1,18 @@
 <script setup>
-import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue';
 import axios from 'axios';
 import { Link, router, usePage } from '@inertiajs/vue3';
 import debounce from 'lodash/debounce';
 import { useI18n } from 'vue-i18n';
+import introJs from 'intro.js';
+import 'intro.js/introjs.css';
 import {
     Check,
     ChevronLeft,
     ChevronRight,
-    Download,
     Filter,
     Grid2X2,
+    HelpCircle,
     Import,
     List,
     MessageCircle,
@@ -20,6 +22,7 @@ import {
     Tags,
     Table2,
     Trash2,
+    Upload,
     UserPlus,
     Users,
     X,
@@ -50,6 +53,14 @@ const NO_LABEL_OPTION = '__no_label__';
 const selectionStorageKey = computed(() => {
     const organizationId = page.props?.organization?.id ?? 'default';
     return `advanced-contact-selected-ids-${organizationId}`;
+});
+const columnsStorageKey = computed(() => {
+    const organizationId = page.props?.organization?.id ?? 'default';
+    return `advanced-contact-columns-${organizationId}`;
+});
+const contactManagementTourStorageKey = computed(() => {
+    const organizationId = page.props?.organization?.id ?? 'default';
+    return `contact-management-tour-seen-${organizationId}`;
 });
 
 const query = reactive({
@@ -102,6 +113,7 @@ const selectedIds = ref([]);
 const deselectedIds = ref([]);
 const allFilteredSelected = ref(false);
 const bulkActionModal = ref('');
+const activeTour = ref(null);
 const bulkForm = reactive({
     group_ids: [],
     label_ids: [],
@@ -119,20 +131,20 @@ const selectedGroupDeletionCount = computed(() => selectedGroupUuidsForDeletion.
 const defaultColumns = {
     name: true,
     phone: true,
-    email: true,
-    groups: true,
-    labels: true,
-    subscription: true,
-    contact_source: true,
-    country: true,
-    created_at: true,
+    email: false,
+    groups: false,
+    labels: false,
+    subscription: false,
+    contact_source: false,
+    country: false,
+    created_at: false,
 };
 
 const customColumnKey = (field) => `custom_attr_${field.uuid ?? field.name}`;
 
 const buildDefaultColumns = () => ({
     ...defaultColumns,
-    ...Object.fromEntries((props.fields || []).map((field) => [customColumnKey(field), true])),
+    ...Object.fromEntries((props.fields || []).map((field) => [customColumnKey(field), false])),
 });
 
 const columns = ref(loadColumns());
@@ -145,7 +157,7 @@ function loadColumns() {
     }
 
     try {
-        const cached = localStorage.getItem('advanced-contact-columns');
+        const cached = localStorage.getItem(columnsStorageKey.value);
         if (!cached) {
             return defaults;
         }
@@ -176,7 +188,7 @@ watch(
 
         keys.forEach((key) => {
             if (typeof nextColumns[key] === 'undefined') {
-                nextColumns[key] = true;
+                nextColumns[key] = false;
             }
         });
 
@@ -196,8 +208,12 @@ watch(columns, (value) => {
         return;
     }
 
-    localStorage.setItem('advanced-contact-columns', JSON.stringify(value));
+    localStorage.setItem(columnsStorageKey.value, JSON.stringify(value));
 }, { deep: true });
+
+watch(columnsStorageKey, () => {
+    columns.value = loadColumns();
+});
 
 watch(
     () => props.contactGroups,
@@ -264,6 +280,8 @@ const allOnPageSelected = computed(() => idsOnPage.value.length > 0 && idsOnPage
 const someOnPageSelected = computed(() => !allOnPageSelected.value && idsOnPage.value.some((id) => isRowSelected(id)));
 const totalPages = computed(() => props.rows.meta?.last_page ?? 1);
 const currentPage = computed(() => props.rows.meta?.current_page ?? 1);
+const previousPageIcon = computed(() => (isRtl.value ? ChevronRight : ChevronLeft));
+const nextPageIcon = computed(() => (isRtl.value ? ChevronLeft : ChevronRight));
 const selectedContactsOnPage = computed(() => props.rows.data.filter((contact) => isRowSelected(contact.id)));
 
 const avatarPalette = [
@@ -297,7 +315,8 @@ const contactPhone = (contact) => contact.formatted_phone_number || contact.phon
 
 const contactGroupNames = (contact) => (Array.isArray(contact.contact_groups) ? contact.contact_groups : [])
     .map((group) => group?.name)
-    .filter(Boolean);
+    .filter(Boolean)
+    .filter((name, index, names) => names.indexOf(name) === index);
 
 const visibleGroupNames = (contact) => contactGroupNames(contact).slice(0, 3);
 const remainingGroupCount = (contact) => Math.max(contactGroupNames(contact).length - 3, 0);
@@ -416,12 +435,185 @@ const activeFilterCount = computed(() => {
     return count;
 });
 
-const contactSourceOptions = [
-    { value: 'platform', label: 'Platform' },
-    { value: 'imported', label: 'Imported' },
-    { value: 'whatsapp', label: 'WhatsApp' },
-    { value: 'api', label: 'API' },
-];
+const contactSourceOptions = computed(() => [
+    {
+        value: 'platform',
+        label: 'Platform',
+        description: t('Platform means the contact was added manually inside the system by your team.'),
+    },
+    {
+        value: 'imported',
+        label: 'Imported',
+        description: t('Imported means the contact came from an uploaded file. Always make sure WhatsApp consent exists before using it in campaigns.'),
+    },
+    {
+        value: 'whatsapp',
+        label: 'WhatsApp',
+        description: t('WhatsApp means the contact came from an interaction or conversation on WhatsApp.'),
+    },
+    {
+        value: 'api',
+        label: 'API',
+        description: t('API means the contact was added automatically from an external system connected to the platform, such as a store or another CRM.'),
+    },
+]);
+
+const selectedContactSourceHelp = computed(() => {
+    const selectedSource = contactSourceOptions.value.find((source) => source.value === query.contact_source);
+    return selectedSource?.description || helpText.value.sourceColumn;
+});
+
+const helpText = computed(() => ({
+    page: t('This page brings together all your WhatsApp customers: you can search, classify, filter, import, and manage multiple contacts at once.'),
+   // tour: t('Start a quick interactive guide that introduces the key parts of this page step by step.'),
+    import: t('Use this to upload a customer file. Always make sure customers agreed to receive your WhatsApp messages before adding them.'),
+    exportAll: t('Download a copy of all contacts for reports or backup.'),
+    addContact: t('Add one customer manually when you do not need to upload a full file.'),
+    totalContacts: t('The total number of contacts stored in your account, whether they appear in the current results or not.'),
+    filteredContacts: t('The number of customers matching the current search and filters. This is the audience size you may target now.'),
+    activeFilters: t('The number of filtering conditions currently applied to the list.'),
+    search: t('Quickly search by customer name, phone number, email, or country.'),
+    countryFilter: t('Choose a country code to show customers from a specific region and personalize campaigns by market.'),
+    gridView: t('A visual view for quickly reviewing each customer as a card.'),
+    listView: t('A medium-density view that shows the most important customer data in a clear row.'),
+    tableView: t('A table view for careful review and comparison between fields.'),
+    columns: t('Choose which columns you want to see in the table to reduce distraction.'),
+    groups: t('Groups help you divide customers into audiences such as interested customers, subscribers, or VIP customers.'),
+    advancedFilters: t('Use advanced filters to create a precise segment by group, label, subscription status, source, date, or custom data.'),
+    selectAllResults: t('Select all results matching the current filters, not only the visible page, to run a bulk action.'),
+    activeFilterBanner: t('A filter is applied; the displayed results are not your full customer database.'),
+    resetFilters: t('Clear all filtering conditions and return to the full list.'),
+    contacts: t('This is your current customer list. Review labels and subscription status before sending any campaign.'),
+    selectPage: t('Select or deselect only the customers visible on this page.'),
+    contactCard: t('Click the card to select the customer, or open the name to view details.'),
+    contactName: t('Open the customer profile to view their data and history.'),
+    whatsappMessage: t('Open a WhatsApp conversation with this customer. Use personal messages instead of generic messages whenever possible.'),
+    groupsColumn: t('The group shows the customer audience or general classification.'),
+    labelsColumn: t('Labels help your team understand the customer status, such as paid, pending payment, or interested.'),
+    subscriptionColumn: t('Subscription status is very important: do not send campaigns to a customer who unsubscribed.'),
+    blockedStatus: t('Block status shows contacts that have been blocked. Use it to exclude blocked customers from follow-up or campaigns.'),
+    sourceColumn: t('The customer source shows whether they came from an import, WhatsApp, API, or inside the platform.'),
+    countryColumn: t('Country helps you personalize language, offers, and timing.'),
+    createdAtColumn: t('The creation date helps you understand how recently the customer was added to the database.'),
+    dateAttributes: t('Use this section to filter by the contact creation date, or by the value of existing contact attributes such as language, stage, or any custom field.'),
+    pagination: t('Move between pages of the current results without changing the search or filters.'),
+    bulkBar: t('After selecting customers, use this bar to add labels or groups, change subscription status, or export.'),
+}));
+
+const contactManagementTourSteps = computed(() => [
+    {
+        element: '.btn-import',
+        title: t('Import Contacts'),
+        intro: t("Start here to upload your customer list. Ensure you have collected 'Opt-in' consent from your customers first to comply with WhatsApp's official policies."),
+        position: isRtl.value ? 'left' : 'right',
+    },
+    {
+        element: '.stats-container',
+        title: t('Database Overview'),
+        intro: t("Track your database growth at a glance. 'Filtered Contacts' shows you the exact size of the segment you are about to target."),
+        position: 'bottom',
+    },
+    {
+        element: '.search-bar-container',
+        title: t('Search and Filters'),
+        intro: t('Quickly find any customer by name, phone number, or email. You can also filter by country to localize your marketing campaigns.'),
+        position: 'bottom',
+    },
+    {
+        element: '.btn-advanced-filters',
+        title: t('Audience Segmentation'),
+        intro: t('The power of segmentation. Create specific groups based on behavior or attributes. Remember: Personalized messages have a 3x higher conversion rate than generic broadcasts.'),
+        position: isRtl.value ? 'right' : 'left',
+    },
+    {
+        element: '.contacts-table',
+        title: t('Contact Health'),
+        intro: t("Monitor your contacts' health. Use 'Labels' to tag customers (e.g., 'Paid', 'Pending') and pay close attention to the 'Subscription' status to avoid sending messages to opted-out users."),
+        position: 'top',
+    },
+    {
+        element: '.checkbox-select-all',
+        title: t('Bulk Actions'),
+        intro: t('Ready to launch? Select multiple contacts to perform bulk actions like assigning them to a new Audience or starting a broadcast campaign.'),
+        position: isRtl.value ? 'right' : 'left',
+    },
+]);
+
+const contactManagementTourConfig = computed(() => ({
+    showButtons: true,
+    showBullets: true,
+    showProgress: true,
+    exitOnOverlayClick: true,
+    scrollToElement: true,
+    scrollPadding: 80,
+    nextLabel: t('Next'),
+    prevLabel: t('Back'),
+    skipLabel: t('Skip'),
+    doneLabel: t('Done'),
+    tooltipClass: 'contact-management-tour-tooltip',
+    highlightClass: 'contact-management-tour-highlight',
+    disableInteraction: false,
+    steps: contactManagementTourSteps.value,
+}));
+
+const getAvailableTourSteps = () => contactManagementTourConfig.value.steps
+    .map((step) => ({
+        ...step,
+        element: document.querySelector(step.element),
+    }))
+    .filter((step) => step.element);
+
+const markContactManagementTourSeen = () => {
+    if (typeof window === 'undefined') {
+        return;
+    }
+
+    localStorage.setItem(contactManagementTourStorageKey.value, '1');
+};
+
+const hasSeenContactManagementTour = () => {
+    if (typeof window === 'undefined') {
+        return true;
+    }
+
+    return localStorage.getItem(contactManagementTourStorageKey.value) === '1';
+};
+
+const startContactManagementTour = async ({ markSeen = false } = {}) => {
+    if (typeof window === 'undefined') {
+        return;
+    }
+
+    await nextTick();
+    const steps = getAvailableTourSteps();
+    if (!steps.length) {
+        return;
+    }
+
+    if (activeTour.value) {
+        activeTour.value.exit(true);
+    }
+
+    const tour = introJs();
+    activeTour.value = tour;
+    tour.setOptions({
+        ...contactManagementTourConfig.value,
+        steps,
+    });
+    tour.oncomplete(() => {
+        if (markSeen) {
+            markContactManagementTourSeen();
+        }
+        activeTour.value = null;
+    });
+    tour.onexit(() => {
+        if (markSeen) {
+            markContactManagementTourSeen();
+        }
+        activeTour.value = null;
+    });
+    tour.start();
+};
 
 const runFilterRequest = (extra = {}) => {
     const payload = {
@@ -630,7 +822,7 @@ const createGroup = async () => {
     const name = (createGroupForm.name || '').trim();
 
     if (!name) {
-        createGroupError.value = t('Audince name is required.');
+        createGroupError.value = t('Audience name is required.');
         return;
     }
 
@@ -673,7 +865,7 @@ const createGroup = async () => {
             runFilterRequest({ page: undefined });
             isGroupsModalOpen.value = false;
         } else {
-            throw new Error(t('Failed to create audince.'));
+            throw new Error(t('Failed to create audience.'));
         }
     } catch (error) {
         const errors = error?.response?.data?.errors;
@@ -688,7 +880,7 @@ const createGroup = async () => {
             || error?.message
             || (statusCode ? `Request failed (${statusCode}).` : null)
             || (typeof rawResponse === 'string' && rawResponse.trim() ? 'Unexpected server response.' : null)
-            || t('Failed to create audince.');
+            || t('Failed to create audience.');
     } finally {
         isCreatingGroup.value = false;
     }
@@ -724,7 +916,7 @@ const deleteGroup = async (group) => {
             runFilterRequest({ page: undefined });
         }
     } catch (error) {
-        createGroupError.value = error?.response?.data?.message || t('Failed to delete audince.');
+        createGroupError.value = error?.response?.data?.message || t('Failed to delete audience.');
     } finally {
         deletingGroupUuid.value = '';
     }
@@ -770,7 +962,7 @@ const deleteSelectedGroups = async () => {
             runFilterRequest({ page: undefined });
         }
     } catch (error) {
-        createGroupError.value = error?.response?.data?.message || t('Failed to delete selected audince.');
+        createGroupError.value = error?.response?.data?.message || t('Failed to delete selected audience.');
     } finally {
         isDeletingGroups.value = false;
     }
@@ -966,10 +1158,20 @@ const handleOutsideClick = (event) => {
 onMounted(() => {
     loadSelectedIds();
     document.addEventListener('click', handleOutsideClick);
+
+    if (!hasSeenContactManagementTour()) {
+        window.setTimeout(() => {
+            startContactManagementTour({ markSeen: true });
+        }, 650);
+    }
 });
 
 onBeforeUnmount(() => {
     document.removeEventListener('click', handleOutsideClick);
+    if (activeTour.value) {
+        activeTour.value.exit(true);
+        activeTour.value = null;
+    }
 });
 
 const onImportCompleted = () => {
@@ -987,37 +1189,63 @@ const onImportCompleted = () => {
                             <span class="h-2 w-2 rounded-full bg-emerald-500"></span>
                             {{ $t('WhatsApp CRM') }}
                         </div>
-                        <h1 class="text-3xl font-extrabold tracking-tight text-slate-950 md:text-4xl">{{ $t('Contact Management') }}</h1>
+                        <div class="flex flex-wrap items-center gap-2">
+                            <h1 class="text-3xl font-extrabold tracking-tight text-slate-950 md:text-4xl">{{ $t('Contact Management') }}</h1>
+                            <span class="help-tooltip" tabindex="0" :title="helpText.page">
+                                <HelpCircle class="h-4 w-4" />
+                                <span class="help-tooltip-content">{{ helpText.page }}</span>
+                            </span>
+                        </div>
                         <p class="mt-2 text-sm leading-6 text-slate-500">{{ $t('Manage contacts, filters, groups, and bulk actions from one place.') }}</p>
                     </div>
 
                     <div class="flex flex-wrap items-center gap-2">
-                        <button type="button" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md" @click="isImportWizardOpen = true">
+                        
+                        <button type="button" class="btn-import inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md" :title="helpText.import" data-help-icon @click="isImportWizardOpen = true">
                             <Import class="h-4 w-4" />
-                            {{ $t('Import') }}
+                            <span>{{ $t('Import') }}</span>
+                            <span class="text-[10px] font-extrabold uppercase tracking-normal text-slate-400">XLSX/CSV</span>
                         </button>
-                        <button type="button" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md" @click="runExportAll">
-                            <Download class="h-4 w-4" />
+                        <button type="button" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md" :title="helpText.exportAll" data-help-icon @click="runExportAll">
+                            <Upload class="h-4 w-4" />
                             {{ $t('Export All') }}
                         </button>
-                        <Link href="/contacts/add" class="inline-flex items-center gap-2 rounded-full bg-slate-950 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-slate-300 transition-all duration-300 hover:-translate-y-0.5 hover:bg-slate-800">
+                        <Link href="/contacts/add" class="inline-flex items-center gap-2 rounded-full bg-slate-950 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-slate-300 transition-all duration-300 hover:-translate-y-0.5 hover:bg-slate-800" :title="helpText.addContact" data-help-icon>
                             <UserPlus class="h-4 w-4" />
                             {{ $t('Add Contact') }}
                         </Link>
                     </div>
                 </div>
 
-                <div class="mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
-                    <div class="rounded-[1.5rem] border border-slate-100 bg-[#F8FAFC] p-4">
-                        <p class="text-xs font-bold text-slate-500">{{ $t('Total Contacts') }}</p>
+                <div class="stats-container mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
+                    <div class="rounded-[1.5rem] border border-slate-100 bg-[#F8FAFC] p-4" :title="helpText.totalContacts">
+                        <p class="flex items-center gap-1.5 text-xs font-bold text-slate-500">
+                            {{ $t('Total Contacts') }}
+                            <span class="help-tooltip" tabindex="0" :title="helpText.totalContacts">
+                                <HelpCircle class="h-3.5 w-3.5" />
+                                <span class="help-tooltip-content">{{ helpText.totalContacts }}</span>
+                            </span>
+                        </p>
                         <p class="mt-2 text-2xl font-extrabold tracking-tight text-slate-950">{{ rowCount }}</p>
                     </div>
-                    <div class="rounded-[1.5rem] border border-slate-100 bg-[#F8FAFC] p-4">
-                        <p class="text-xs font-bold text-slate-500">{{ $t('Filtered Contacts') }}</p>
+                    <div class="rounded-[1.5rem] border border-slate-100 bg-[#F8FAFC] p-4" :title="helpText.filteredContacts">
+                        <p class="flex items-center gap-1.5 text-xs font-bold text-slate-500">
+                            {{ $t('Filtered Contacts') }}
+                            <span class="help-tooltip" tabindex="0" :title="helpText.filteredContacts">
+                                <HelpCircle class="h-3.5 w-3.5" />
+                                <span class="help-tooltip-content">{{ helpText.filteredContacts }}</span>
+                            </span>
+                        </p>
                         <p class="mt-2 text-2xl font-extrabold tracking-tight text-slate-950">{{ filteredCount }}</p>
                     </div>
-                    <div class="rounded-[1.5rem] border border-slate-100 bg-[#F8FAFC] p-4">
-                        <p class="text-xs font-bold text-slate-500">{{ $t('Active Filters') }}</p>
+                    <div class="rounded-[1.5rem] border border-slate-100 bg-[#F8FAFC] p-4" :title="helpText.activeFilters">
+                        <p class="flex items-center gap-1.5 text-xs font-bold text-slate-500">
+                            {{ $t('Active Filters') }}
+                            <span class="help-tooltip" tabindex="0" :title="helpText.activeFilters">
+                                <HelpCircle class="h-3.5 w-3.5" />
+                                <span class="help-tooltip-content">{{ helpText.activeFilters }}</span>
+                            </span>
+                        </p>
                         <p class="mt-2 text-2xl font-extrabold tracking-tight text-slate-950">{{ activeFilterCount }}</p>
                     </div>
                 </div>
@@ -1025,12 +1253,12 @@ const onImportCompleted = () => {
 
             <section class="rounded-[2rem] border border-white bg-white/95 p-4 shadow-sm shadow-slate-200/70">
                 <div class="flex flex-col gap-3 2xl:flex-row 2xl:items-center 2xl:justify-between">
-                    <div class="flex min-w-0 flex-1 flex-col gap-3 sm:flex-row">
+                    <div class="search-bar-container flex min-w-0 flex-1 flex-col gap-3 sm:flex-row">
                         <label class="relative block min-w-[18rem] flex-1">
                             <Search class="pointer-events-none absolute top-1/2 z-10 h-4 w-4 -translate-y-1/2 text-slate-400" :class="isRtl ? 'right-4' : 'left-4'" />
-                            <input v-model="query.search" type="text" class="h-12 w-full rounded-full border border-slate-200 bg-[#F8FAFC] text-sm font-medium outline-none ring-primary/20 transition-all duration-300 placeholder:text-slate-400 focus:border-primary focus:bg-white focus:ring" :class="isRtl ? 'pr-11 pl-4' : 'pl-11 pr-4'" :placeholder="$t('Search name, phone, country, or email')" @input="debouncedSearch">
+                            <input v-model="query.search" type="text" class="h-12 w-full rounded-full border border-slate-200 bg-[#F8FAFC] text-sm font-medium outline-none ring-primary/20 transition-all duration-300 placeholder:text-slate-400 focus:border-primary focus:bg-white focus:ring" :class="isRtl ? 'pr-11 pl-4' : 'pl-11 pr-4'" :placeholder="$t('Search name, phone, country, or email')" :title="helpText.search" @input="debouncedSearch">
                         </label>
-                        <select v-model="query.country_dial_code" class="h-12 w-full min-w-[14rem] rounded-full border border-slate-200 bg-[#F8FAFC] px-4 text-sm font-medium text-slate-700 outline-none ring-primary/20 transition-all duration-300 focus:border-primary focus:bg-white focus:ring sm:w-72" @change="applyQuickCountryDialCodeFilter">
+                        <select v-model="query.country_dial_code" class="h-12 w-full min-w-[14rem] rounded-full border border-slate-200 bg-[#F8FAFC] px-4 text-sm font-medium text-slate-700 outline-none ring-primary/20 transition-all duration-300 focus:border-primary focus:bg-white focus:ring sm:w-72" :title="helpText.countryFilter" @change="applyQuickCountryDialCodeFilter">
                             <option value="">{{ $t('All Countries') }}</option>
                             <option v-for="option in countryDialCodeOptions" :key="`quick-${option.region}-${option.value}`" :value="option.value">
                                 {{ option.label }}
@@ -1040,21 +1268,21 @@ const onImportCompleted = () => {
 
                     <div class="flex flex-wrap items-center gap-2">
                         <div class="inline-flex rounded-full bg-slate-100 p-1">
-                            <button type="button" class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-bold transition-all duration-300" :class="viewMode === 'grid' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-800'" @click="viewMode = 'grid'">
+                            <button type="button" class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-bold transition-all duration-300" :class="viewMode === 'grid' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-800'" :title="helpText.gridView" data-help-icon @click="viewMode = 'grid'">
                                 <Grid2X2 class="h-4 w-4" />
                                 {{ $t('Grid') }}
                             </button>
-                            <button type="button" class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-bold transition-all duration-300" :class="viewMode === 'list' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-800'" @click="viewMode = 'list'">
+                            <button type="button" class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-bold transition-all duration-300" :class="viewMode === 'list' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-800'" :title="helpText.listView" data-help-icon @click="viewMode = 'list'">
                                 <List class="h-4 w-4" />
                                 {{ $t('List') }}
                             </button>
-                            <button type="button" class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-bold transition-all duration-300" :class="viewMode === 'table' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-800'" @click="viewMode = 'table'">
+                            <button type="button" class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-bold transition-all duration-300" :class="viewMode === 'table' ? 'bg-white text-slate-950 shadow-sm' : 'text-slate-500 hover:text-slate-800'" :title="helpText.tableView" data-help-icon @click="viewMode = 'table'">
                                 <Table2 class="h-4 w-4" />
                                 {{ $t('Table') }}
                             </button>
                         </div>
                         <div v-if="viewMode === 'table'" ref="columnsMenuRef" class="relative">
-                            <button type="button" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-all duration-300 hover:border-indigo-200 hover:text-indigo-700" @click.stop="toggleColumnsMenu">
+                            <button type="button" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-all duration-300 hover:border-indigo-200 hover:text-indigo-700" :title="helpText.columns" data-help-icon @click.stop="toggleColumnsMenu">
                                 <Columns3 class="h-4 w-4" />
                                 {{ $t('Columns') }}
                             </button>
@@ -1068,7 +1296,13 @@ const onImportCompleted = () => {
                             >
                                 <div v-if="isColumnsMenuOpen" class="absolute z-30 mt-2 w-72 rounded-[1.5rem] border border-slate-100 bg-white p-3 shadow-2xl shadow-slate-200" :class="isRtl ? 'left-0' : 'right-0'">
                                     <div class="mb-2 flex items-center justify-between gap-3 border-b border-slate-100 pb-2">
-                                        <p class="text-sm font-extrabold tracking-tight text-slate-950">{{ $t('Table Columns') }}</p>
+                                        <p class="flex items-center gap-1.5 text-sm font-extrabold tracking-tight text-slate-950">
+                                            {{ $t('Table Columns') }}
+                                            <span class="help-tooltip" tabindex="0" :title="helpText.columns">
+                                                <HelpCircle class="h-3.5 w-3.5" />
+                                                <span class="help-tooltip-content">{{ helpText.columns }}</span>
+                                            </span>
+                                        </p>
                                         <button type="button" class="rounded-full px-2 py-1 text-xs font-bold text-slate-500 transition-all duration-300 hover:bg-slate-100 hover:text-slate-900" @click="resetTableColumns">
                                             {{ $t('Reset') }}
                                         </button>
@@ -1082,16 +1316,16 @@ const onImportCompleted = () => {
                                 </div>
                             </Transition>
                         </div>
-                        <button type="button" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-all duration-300 hover:border-emerald-200 hover:text-emerald-700" @click="isGroupsModalOpen = true">
+                        <button type="button" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-all duration-300 hover:border-emerald-200 hover:text-emerald-700" :title="helpText.groups" data-help-icon @click="isGroupsModalOpen = true">
                             <Users class="h-4 w-4" />
                             {{ $t('Groups') }}
                         </button>
-                        <button type="button" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-all duration-300 hover:border-sky-200 hover:text-sky-700" @click="isFilterModalOpen = true">
+                        <button type="button" class="btn-advanced-filters inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-all duration-300 hover:border-sky-200 hover:text-sky-700" :title="helpText.advancedFilters" data-help-icon @click="isFilterModalOpen = true">
                             <Filter class="h-4 w-4" />
                             {{ $t('Advanced Filters') }}
                             <span v-if="activeFilterCount > 0" class="rounded-full bg-sky-100 px-2 py-0.5 text-xs text-sky-700">{{ activeFilterCount }}</span>
                         </button>
-                        <button type="button" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-all duration-300 hover:border-blue-200 hover:text-blue-700" @click="selectAllFilteredRows">
+                        <button type="button" class="checkbox-select-all inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 transition-all duration-300 hover:border-blue-200 hover:text-blue-700" :title="helpText.selectAllResults" data-help-icon @click="selectAllFilteredRows">
                             <Check class="h-4 w-4" />
                             {{ $t('Select All Results') }}
                         </button>
@@ -1099,18 +1333,24 @@ const onImportCompleted = () => {
                 </div>
 
                 <div v-if="activeFilterCount > 0" class="mt-3 flex flex-wrap items-center gap-2 rounded-full border border-amber-100 bg-amber-50 px-4 py-2">
-                    <span class="text-xs font-bold text-amber-700">{{ activeFilterCount }} {{ $t('filters active') }}</span>
-                    <button type="button" class="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-700 ring-1 ring-amber-100 transition-all duration-300 hover:text-amber-700" @click="clearFilters">{{ $t('Reset Filters') }}</button>
+                    <span class="text-xs font-bold text-amber-700" :title="helpText.activeFilterBanner">{{ activeFilterCount }} {{ $t('filters active') }}</span>
+                    <button type="button" class="rounded-full bg-white px-3 py-1 text-xs font-bold text-slate-700 ring-1 ring-amber-100 transition-all duration-300 hover:text-amber-700" :title="helpText.resetFilters" @click="clearFilters">{{ $t('Reset Filters') }}</button>
                 </div>
             </section>
 
-            <section class="space-y-4">
+            <section class="contacts-table space-y-4">
                 <div class="flex flex-col gap-2 sm:flex-row sm:items-end sm:justify-between">
                     <div>
-                        <h2 class="text-2xl font-extrabold tracking-tight text-slate-950">{{ $t('Contacts') }}</h2>
+                        <div class="flex items-center gap-2">
+                            <h2 class="text-2xl font-extrabold tracking-tight text-slate-950">{{ $t('Contacts') }}</h2>
+                            <span class="help-tooltip" tabindex="0" :title="helpText.contacts">
+                                <HelpCircle class="h-4 w-4" />
+                                <span class="help-tooltip-content">{{ helpText.contacts }}</span>
+                            </span>
+                        </div>
                         <p class="mt-1 text-sm text-slate-500">{{ rows.meta?.from || 0 }}-{{ rows.meta?.to || 0 }} / {{ rows.meta?.total || 0 }}</p>
                     </div>
-                    <button type="button" class="inline-flex items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition-all duration-300 hover:border-blue-200 hover:text-blue-700" @click="toggleSelectAll">
+                    <button type="button" class="inline-flex items-center justify-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-bold text-slate-700 transition-all duration-300 hover:border-blue-200 hover:text-blue-700" :title="helpText.selectPage" data-help-icon @click="toggleSelectAll">
                         <Check class="h-4 w-4" />
                         {{ allOnPageSelected ? $t('Unselect Page') : $t('Select Page') }}
                     </button>
@@ -1131,14 +1371,15 @@ const onImportCompleted = () => {
                             :key="`card-${contact.id}`"
                             class="group relative cursor-pointer rounded-[2rem] border-2 bg-white p-5 shadow-sm shadow-slate-200/70 transition-all duration-300 hover:-translate-y-1 hover:shadow-xl hover:shadow-slate-200"
                             :class="isRowSelected(contact.id) ? 'border-blue-500 ring-4 ring-blue-100' : 'border-transparent hover:border-slate-100'"
+                            :title="helpText.contactCard"
                             @click="toggleRow(contact.id)"
                         >
                             <div
                                 class="absolute left-5 top-5 flex h-9 w-9 items-center justify-center rounded-full border-2 bg-white shadow-sm transition-all duration-300"
-                                :class="isRowSelected(contact.id) ? 'border-blue-600 bg-blue-600 text-white shadow-lg shadow-blue-200' : 'border-slate-200 text-transparent group-hover:border-blue-300 group-hover:bg-blue-50'"
+                                :class="isRowSelected(contact.id) ? 'border-blue-600 bg-white text-blue-600 shadow-lg shadow-blue-100' : 'border-slate-200 text-slate-300 group-hover:border-blue-300 group-hover:bg-blue-50'"
                                 :aria-label="isRowSelected(contact.id) ? $t('Selected') : $t('Select contact')"
                             >
-                                <Check class="h-4 w-4" />
+                                <Check v-if="isRowSelected(contact.id)" class="h-4 w-4 stroke-[3]" />
                             </div>
 
                             <div class="flex items-start gap-4">
@@ -1152,7 +1393,7 @@ const onImportCompleted = () => {
                                     </span>
                                 </div>
                                 <div class="min-w-0 flex-1 pt-1">
-                                    <Link :href="`/contacts?id=${contact.uuid}`" class="line-clamp-2 text-xl font-extrabold tracking-tight text-slate-950 transition-colors duration-300 hover:text-primary" @click.stop>
+                                    <Link :href="`/contacts?id=${contact.uuid}`" class="line-clamp-2 text-xl font-extrabold tracking-tight text-slate-950 transition-colors duration-300 hover:text-primary" :title="helpText.contactName" @click.stop>
                                         {{ contactName(contact) }}
                                     </Link>
                                     <p class="mt-2 truncate text-left font-mono text-[15px] font-semibold text-slate-600" dir="ltr">{{ contactPhone(contact) }}</p>
@@ -1161,7 +1402,7 @@ const onImportCompleted = () => {
 
                             <div class="mt-5 space-y-4">
                                 <div>
-                                    <p class="mb-2 text-xs font-extrabold uppercase text-slate-400">{{ $t('Groups') }}</p>
+                                    <p class="mb-2 text-xs font-extrabold uppercase text-slate-400" :title="helpText.groupsColumn" data-help-icon>{{ $t('Groups') }}</p>
                                     <div class="flex flex-wrap gap-2">
                                         <span v-for="groupName in visibleGroupNames(contact)" :key="`group-${contact.id}-${groupName}`" class="rounded-full bg-emerald-50 px-3 py-1 text-xs font-bold text-emerald-700 ring-1 ring-emerald-100">
                                             {{ groupName }}
@@ -1174,7 +1415,7 @@ const onImportCompleted = () => {
                                 </div>
 
                                 <div>
-                                    <p class="mb-2 text-xs font-extrabold uppercase text-slate-400">{{ $t('Labels') }}</p>
+                                    <p class="mb-2 text-xs font-extrabold uppercase text-slate-400" :title="helpText.labelsColumn" data-help-icon>{{ $t('Labels') }}</p>
                                     <div class="flex flex-wrap gap-2">
                                         <span v-for="label in visibleLabels(contact)" :key="`label-${contact.id}-${label}`" class="rounded-full bg-sky-50 px-3 py-1 text-xs font-bold text-sky-700 ring-1 ring-sky-100">
                                             {{ label }}
@@ -1212,6 +1453,7 @@ const onImportCompleted = () => {
                             <Link
                                 :href="contactChatUrl(contact)"
                                 class="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 py-3 text-sm font-extrabold text-white shadow-sm shadow-emerald-200 transition-all duration-300 hover:-translate-y-0.5 hover:bg-[#1fb85a] hover:shadow-lg hover:shadow-emerald-200"
+                                :title="helpText.whatsappMessage"
                                 @click.stop
                             >
                                 <MessageCircle class="h-4 w-4" />
@@ -1226,6 +1468,7 @@ const onImportCompleted = () => {
                             :key="`list-${contact.id}`"
                             class="group grid cursor-pointer grid-cols-1 gap-4 rounded-[2rem] border-2 bg-white p-4 shadow-sm shadow-slate-200/70 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-lg md:grid-cols-[auto_minmax(0,1fr)_auto] md:items-center"
                             :class="isRowSelected(contact.id) ? 'border-blue-500 ring-4 ring-blue-100' : 'border-transparent hover:border-slate-100'"
+                            :title="helpText.contactCard"
                             @click="toggleRow(contact.id)"
                         >
                             <div class="flex items-center gap-4">
@@ -1237,21 +1480,21 @@ const onImportCompleted = () => {
                                 </div>
                                 <div
                                     class="flex h-8 w-8 items-center justify-center rounded-full border-2 bg-white shadow-sm transition-all duration-300"
-                                    :class="isRowSelected(contact.id) ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-200 text-transparent group-hover:border-blue-300 group-hover:bg-blue-50'"
+                                    :class="isRowSelected(contact.id) ? 'border-blue-600 bg-white text-blue-600 shadow-blue-100' : 'border-slate-200 text-slate-300 group-hover:border-blue-300 group-hover:bg-blue-50'"
                                     :aria-label="isRowSelected(contact.id) ? $t('Selected') : $t('Select contact')"
                                 >
-                                    <Check class="h-4 w-4" />
+                                    <Check v-if="isRowSelected(contact.id)" class="h-4 w-4 stroke-[3]" />
                                 </div>
                             </div>
 
                             <div class="min-w-0">
-                                <Link :href="`/contacts?id=${contact.uuid}`" class="block truncate text-lg font-extrabold tracking-tight text-slate-950 hover:text-primary" @click.stop>{{ contactName(contact) }}</Link>
+                                <Link :href="`/contacts?id=${contact.uuid}`" class="block truncate text-lg font-extrabold tracking-tight text-slate-950 hover:text-primary" :title="helpText.contactName" @click.stop>{{ contactName(contact) }}</Link>
                                 <div class="mt-1 flex flex-wrap items-center gap-2">
                                     <span class="font-mono text-sm font-semibold text-slate-600" dir="ltr">{{ contactPhone(contact) }}</span>
                                 </div>
                                 <div class="mt-3 grid gap-2 lg:grid-cols-3">
                                     <div>
-                                        <p class="mb-1 text-[11px] font-extrabold uppercase text-slate-400">{{ $t('Groups') }}</p>
+                                        <p class="mb-1 text-[11px] font-extrabold uppercase text-slate-400" :title="helpText.groupsColumn" data-help-icon>{{ $t('Groups') }}</p>
                                         <div class="flex flex-wrap gap-1.5">
                                             <span v-for="groupName in visibleGroupNames(contact)" :key="`list-group-${contact.id}-${groupName}`" class="rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">
                                                 {{ groupName }}
@@ -1261,7 +1504,7 @@ const onImportCompleted = () => {
                                         </div>
                                     </div>
                                     <div>
-                                        <p class="mb-1 text-[11px] font-extrabold uppercase text-slate-400">{{ $t('Labels') }}</p>
+                                        <p class="mb-1 text-[11px] font-extrabold uppercase text-slate-400" :title="helpText.labelsColumn" data-help-icon>{{ $t('Labels') }}</p>
                                         <div class="flex flex-wrap gap-1.5">
                                             <span v-for="label in visibleLabels(contact)" :key="`list-label-${contact.id}-${label}`" class="rounded-full bg-sky-50 px-2.5 py-1 text-xs font-bold text-sky-700">
                                                 {{ label }}
@@ -1282,7 +1525,7 @@ const onImportCompleted = () => {
                                 </div>
                             </div>
 
-                            <Link :href="contactChatUrl(contact)" class="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 text-sm font-extrabold text-white transition-all duration-300 hover:bg-[#1fb85a]" @click.stop>
+                            <Link :href="contactChatUrl(contact)" class="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 text-sm font-extrabold text-white transition-all duration-300 hover:bg-[#1fb85a]" :title="helpText.whatsappMessage" @click.stop>
                                 <MessageCircle class="h-4 w-4" />
                                 {{ $t('Send WhatsApp Message') }}
                             </Link>
@@ -1294,7 +1537,7 @@ const onImportCompleted = () => {
                             <table class="min-w-full divide-y divide-slate-100" :class="uiTextAlignmentClass">
                                 <thead class="bg-[#F8FAFC]">
                                     <tr>
-                                        <th class="sticky right-0 z-10 w-14 bg-[#F8FAFC] px-4 py-4">
+                                         <th class="sticky right-0 z-10 w-14 bg-[#F8FAFC] px-4 py-4" :title="helpText.selectPage">
                                             <input
                                                 ref="selectAllCheckboxRef"
                                                 type="checkbox"
@@ -1303,7 +1546,7 @@ const onImportCompleted = () => {
                                                 @change="toggleSelectAll"
                                             >
                                         </th>
-                                        <th v-for="column in visibleTableColumns" :key="`head-${column.key}`" class="whitespace-nowrap px-4 py-4 text-xs font-extrabold uppercase tracking-normal text-slate-500">
+                                        <th v-for="column in visibleTableColumns" :key="`head-${column.key}`" class="whitespace-nowrap px-4 py-4 text-xs font-extrabold uppercase tracking-normal text-slate-500" :title="column.key === 'groups' ? helpText.groupsColumn : column.key === 'labels' ? helpText.labelsColumn : column.key === 'subscription' ? helpText.subscriptionColumn : column.key === 'contact_source' ? helpText.sourceColumn : column.key === 'country' ? helpText.countryColumn : column.key === 'created_at' ? helpText.createdAtColumn : column.key === 'name' ? helpText.contactName : ''">
                                             {{ $t(column.label) }}
                                         </th>
                                     </tr>
@@ -1314,11 +1557,12 @@ const onImportCompleted = () => {
                                         :key="`table-${contact.id}`"
                                         class="group cursor-pointer transition-all duration-300 hover:bg-slate-50/80"
                                         :class="isRowSelected(contact.id) ? 'bg-blue-50/70' : ''"
+                                        :title="helpText.contactCard"
                                         @click="toggleRow(contact.id)"
                                     >
                                         <td class="sticky right-0 z-10 bg-inherit px-4 py-4">
-                                            <div class="flex h-8 w-8 items-center justify-center rounded-full border-2 bg-white shadow-sm transition-all duration-300" :class="isRowSelected(contact.id) ? 'border-blue-600 bg-blue-600 text-white' : 'border-slate-200 text-transparent group-hover:border-blue-300 group-hover:bg-blue-50'">
-                                                <Check class="h-4 w-4" />
+                                            <div class="flex h-8 w-8 items-center justify-center rounded-full border-2 bg-white shadow-sm transition-all duration-300" :class="isRowSelected(contact.id) ? 'border-blue-600 bg-white text-blue-600 shadow-blue-100' : 'border-slate-200 text-slate-300 group-hover:border-blue-300 group-hover:bg-blue-50'">
+                                                <Check v-if="isRowSelected(contact.id)" class="h-4 w-4 stroke-[3]" />
                                             </div>
                                         </td>
                                         <td v-for="column in visibleTableColumns" :key="`cell-${contact.id}-${column.key}`" class="whitespace-nowrap px-4 py-4 align-top text-sm">
@@ -1330,7 +1574,7 @@ const onImportCompleted = () => {
                                                         </div>
                                                         <span class="absolute -bottom-0.5 -left-0.5 h-3 w-3 rounded-full bg-emerald-500 ring-2 ring-white"></span>
                                                     </div>
-                                                    <Link :href="`/contacts?id=${contact.uuid}`" class="max-w-[14rem] truncate text-sm font-extrabold tracking-tight text-slate-950 hover:text-primary" @click.stop>
+                                                    <Link :href="`/contacts?id=${contact.uuid}`" class="max-w-[14rem] truncate text-sm font-extrabold tracking-tight text-slate-950 hover:text-primary" :title="helpText.contactName" @click.stop>
                                                         {{ contactName(contact) }}
                                                     </Link>
                                                 </div>
@@ -1360,12 +1604,12 @@ const onImportCompleted = () => {
                                                 </div>
                                             </template>
                                             <template v-else-if="column.key === 'subscription'">
-                                                <span class="rounded-full px-3 py-1 text-xs font-bold" :class="contact.is_subscribed ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'">
+                                                <span class="rounded-full px-3 py-1 text-xs font-bold" :class="contact.is_subscribed ? 'bg-emerald-100 text-emerald-700' : 'bg-rose-100 text-rose-700'" :title="helpText.subscriptionColumn">
                                                     {{ contact.is_subscribed ? $t('Subscribed') : $t('Unsubscribed') }}
                                                 </span>
                                             </template>
                                             <template v-else-if="column.key === 'contact_source'">
-                                                <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600">
+                                                <span class="rounded-full bg-slate-100 px-3 py-1 text-xs font-bold text-slate-600" :title="helpText.sourceColumn">
                                                     {{ $t(String(contact.contact_source || 'platform').toLowerCase()) }}
                                                 </span>
                                             </template>
@@ -1389,17 +1633,17 @@ const onImportCompleted = () => {
                     </div>
                 </Transition>
 
-                <div class="flex flex-col gap-3 rounded-[2rem] border border-white bg-white px-4 py-3 text-sm shadow-sm shadow-slate-200/70 sm:flex-row sm:items-center sm:justify-between">
+                <div class="flex flex-col gap-3 rounded-[2rem] border border-white bg-white px-4 py-3 text-sm shadow-sm shadow-slate-200/70 sm:flex-row sm:items-center sm:justify-between" :title="helpText.pagination">
                     <p class="font-medium text-slate-500">{{ rows.meta?.from || 0 }}-{{ rows.meta?.to || 0 }} / {{ rows.meta?.total || 0 }}</p>
                     <div class="flex items-center justify-between gap-2 sm:justify-end">
-                        <button type="button" class="inline-flex h-10 items-center gap-2 rounded-full border border-slate-200 px-4 font-bold text-slate-700 transition-all duration-300 disabled:opacity-40" :disabled="currentPage <= 1" @click="goToPage(currentPage - 1)">
-                            <ChevronRight class="h-4 w-4" />
+                        <button type="button" class="inline-flex h-10 min-w-[7.5rem] items-center justify-center gap-2 rounded-full border border-slate-200 px-4 font-bold text-slate-700 transition-all duration-300 hover:border-blue-200 hover:text-blue-700 disabled:cursor-not-allowed disabled:text-slate-400 disabled:opacity-50" :title="helpText.pagination" :disabled="currentPage <= 1" @click="goToPage(currentPage - 1)">
+                            <component :is="previousPageIcon" class="h-4 w-4 stroke-[2.5]" />
                             {{ $t('Previous') }}
                         </button>
-                        <span class="rounded-full bg-[#F8FAFC] px-4 py-2 font-extrabold text-slate-700">{{ currentPage }} / {{ totalPages }}</span>
-                        <button type="button" class="inline-flex h-10 items-center gap-2 rounded-full border border-slate-200 px-4 font-bold text-slate-700 transition-all duration-300 disabled:opacity-40" :disabled="currentPage >= totalPages" @click="goToPage(currentPage + 1)">
+                        <span class="inline-flex h-10 min-w-[5.5rem] items-center justify-center rounded-full bg-[#F8FAFC] px-4 font-extrabold text-slate-700" dir="ltr">{{ currentPage }} / {{ totalPages }}</span>
+                        <button type="button" class="inline-flex h-10 min-w-[7.5rem] items-center justify-center gap-2 rounded-full border border-slate-200 px-4 font-bold text-slate-700 transition-all duration-300 hover:border-blue-200 hover:text-blue-700 disabled:cursor-not-allowed disabled:text-slate-400 disabled:opacity-50" :title="helpText.pagination" :disabled="currentPage >= totalPages" @click="goToPage(currentPage + 1)">
                             {{ $t('Next') }}
-                            <ChevronLeft class="h-4 w-4" />
+                            <component :is="nextPageIcon" class="h-4 w-4 stroke-[2.5]" />
                         </button>
                     </div>
                 </div>
@@ -1415,42 +1659,42 @@ const onImportCompleted = () => {
             leave-to-class="translate-y-8 scale-95 opacity-0"
         >
             <div v-if="selectedCount > 0" class="fixed inset-x-0 bottom-5 z-50 flex justify-center px-4">
-                <div class="flex max-w-[min(96vw,1100px)] flex-wrap items-center justify-center gap-2 rounded-[2rem] border border-white/10 bg-slate-950/95 p-2 text-white shadow-2xl shadow-slate-400/50 backdrop-blur sm:rounded-full">
-                    <div class="flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm font-extrabold">
+                <div class="flex max-w-[min(96vw,1100px)] flex-wrap items-center justify-center gap-2 rounded-[2rem] border border-white/10 bg-slate-950/95 p-2 text-white shadow-2xl shadow-slate-400/50 backdrop-blur sm:rounded-full" :title="helpText.bulkBar">
+                    <div class="flex items-center gap-2 rounded-full bg-white/10 px-4 py-2 text-sm font-extrabold" :title="helpText.bulkBar">
                         <Check class="h-4 w-4 text-blue-300" />
                         {{ selectedCount }} {{ $t('selected') }}
                     </div>
-                    <span v-if="allFilteredSelected" class="hidden rounded-full bg-blue-500/15 px-3 py-2 text-xs font-bold text-blue-100 sm:inline-flex">{{ $t('All filtered results selected') }}</span>
-                    <button type="button" class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold text-white transition-all duration-300 hover:bg-white/10" @click="bulkActionModal = 'add_label'">
+                    <span v-if="allFilteredSelected" class="hidden rounded-full bg-blue-500/15 px-3 py-2 text-xs font-bold text-blue-100 sm:inline-flex" :title="helpText.selectAllResults">{{ $t('All filtered results selected') }}</span>
+                    <button type="button" class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold text-white transition-all duration-300 hover:bg-white/10" :title="helpText.labelsColumn" data-help-icon @click="bulkActionModal = 'add_label'">
                         <Tags class="h-4 w-4" />
                         {{ $t('Add Labels') }}
                     </button>
-                    <button type="button" class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold text-white transition-all duration-300 hover:bg-white/10" @click="bulkActionModal = 'remove_label'">
+                    <button type="button" class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold text-white transition-all duration-300 hover:bg-white/10" :title="helpText.labelsColumn" data-help-icon @click="bulkActionModal = 'remove_label'">
                         <Minus class="h-4 w-4 text-sky-300" />
                         {{ $t('Remove Labels') }}
                     </button>
-                    <button type="button" class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold text-white transition-all duration-300 hover:bg-white/10" @click="bulkActionModal = 'add_group'">
+                    <button type="button" class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold text-white transition-all duration-300 hover:bg-white/10" :title="helpText.groupsColumn" data-help-icon @click="bulkActionModal = 'add_group'">
                         <Users class="h-4 w-4 text-emerald-300" />
                         {{ $t('Add Group') }}
                     </button>
-                    <button type="button" class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold text-white transition-all duration-300 hover:bg-white/10" @click="bulkActionModal = 'remove_group'">
+                    <button type="button" class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold text-white transition-all duration-300 hover:bg-white/10" :title="helpText.groupsColumn" data-help-icon @click="bulkActionModal = 'remove_group'">
                         <Minus class="h-4 w-4 text-emerald-300" />
                         {{ $t('Remove Group') }}
                     </button>
-                    <button type="button" class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold text-white transition-all duration-300 hover:bg-white/10" @click="bulkActionModal = 'change_subscription_status'">
+                    <button type="button" class="inline-flex items-center gap-2 rounded-full px-4 py-2 text-sm font-bold text-white transition-all duration-300 hover:bg-white/10" :title="helpText.subscriptionColumn" data-help-icon @click="bulkActionModal = 'change_subscription_status'">
                         <Check class="h-4 w-4 text-amber-300" />
                         {{ $t('Change Subscription') }}
                     </button>
 
-                    <button v-if="role !== 'agent'" type="button" class="inline-flex items-center gap-2 rounded-full bg-rose-500 px-4 py-2 text-sm font-bold text-white transition-all duration-300 hover:bg-rose-600" @click="runBulkDelete">
+                    <button v-if="role !== 'agent'" type="button" class="inline-flex items-center gap-2 rounded-full bg-rose-500 px-4 py-2 text-sm font-bold text-white transition-all duration-300 hover:bg-rose-600" :title="$t('Delete the selected customers only after making sure you no longer need their data.')" data-help-icon @click="runBulkDelete">
                         <Trash2 class="h-4 w-4" />
                         {{ $t('Delete') }}
                     </button>
-                    <button type="button" class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-bold text-slate-200 transition-all duration-300 hover:bg-white/10" @click="runExport">
-                        <Download class="h-4 w-4" />
+                    <button type="button" class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-bold text-slate-200 transition-all duration-300 hover:bg-white/10" :title="$t('Export only the selected customers to an external file.')" data-help-icon @click="runExport">
+                        <Upload class="h-4 w-4" />
                         {{ $t('Export Selected') }}
                     </button>
-                    <button type="button" class="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-slate-200 transition-all duration-300 hover:bg-white/20" :aria-label="$t('Clear Selection')" @click="clearSelectionAndFilters">
+                    <button type="button" class="inline-flex h-9 w-9 items-center justify-center rounded-full bg-white/10 text-slate-200 transition-all duration-300 hover:bg-white/20" :aria-label="$t('Clear Selection')" :title="$t('Clear the current selection and filters to return to the starting view.')" @click="clearSelectionAndFilters">
                         <X class="h-4 w-4" />
                     </button>
                 </div>
@@ -1463,18 +1707,48 @@ const onImportCompleted = () => {
             <div class="rounded-lg border border-slate-200 p-3">
                <div class="space-y-3">
                     <div>
-                        <label class="mb-1 block text-xs font-medium text-slate-500">{{ $t('Group') }}</label>
-                        <select v-model="query.group_ids" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" multiple>
-                            <option :value="NO_GROUP_OPTION">{{ $t('No Group') }}</option>
-                            <option v-for="group in groups" :key="group.id" :value="String(group.id)">{{ group.name }}</option>
-                        </select>
+                        <div class="mb-1 flex items-center justify-between gap-2">
+                            <label class="text-xs font-medium text-slate-500" :title="helpText.groupsColumn" data-help-icon>{{ $t('Group') }}</label>
+                            <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-500">
+                                {{ $t('Selected') }}: {{ query.group_ids.length }}
+                            </span>
+                        </div>
+                        <div class="max-h-52 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2" :title="helpText.groupsColumn">
+                            <label class="mb-1 flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm text-slate-700 transition hover:bg-slate-50">
+                                <input v-model="query.group_ids" type="checkbox" :value="NO_GROUP_OPTION" class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                                <span>{{ $t('No Group') }}</span>
+                            </label>
+                            <label
+                                v-for="group in groups"
+                                :key="`filter-group-${group.id}`"
+                                class="mb-1 flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm text-slate-700 transition last:mb-0 hover:bg-slate-50"
+                            >
+                                <input v-model="query.group_ids" type="checkbox" :value="String(group.id)" class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                                <span class="truncate">{{ group.name }}</span>
+                            </label>
+                        </div>
                     </div>
                     <div>
-                        <label class="mb-1 block text-xs font-medium text-slate-500">{{ $t('Label') }}</label>
-                        <select v-model="query.label_ids" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" multiple>
-                            <option :value="NO_LABEL_OPTION">{{ $t('No Label') }}</option>
-                            <option v-for="label in labels" :key="label.id" :value="String(label.id)">{{ label.title }}</option>
-                        </select>
+                        <div class="mb-1 flex items-center justify-between gap-2">
+                            <label class="text-xs font-medium text-slate-500" :title="helpText.labelsColumn" data-help-icon>{{ $t('Label') }}</label>
+                            <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-500">
+                                {{ $t('Selected') }}: {{ query.label_ids.length }}
+                            </span>
+                        </div>
+                        <div class="max-h-52 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2" :title="helpText.labelsColumn">
+                            <label class="mb-1 flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm text-slate-700 transition hover:bg-slate-50">
+                                <input v-model="query.label_ids" type="checkbox" :value="NO_LABEL_OPTION" class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                                <span>{{ $t('No Label') }}</span>
+                            </label>
+                            <label
+                                v-for="label in labels"
+                                :key="`filter-label-${label.id}`"
+                                class="mb-1 flex cursor-pointer items-center gap-3 rounded-md px-2 py-2 text-sm text-slate-700 transition last:mb-0 hover:bg-slate-50"
+                            >
+                                <input v-model="query.label_ids" type="checkbox" :value="String(label.id)" class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                                <span class="truncate">{{ label.title }}</span>
+                            </label>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -1483,23 +1757,23 @@ const onImportCompleted = () => {
                 <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{{ $t('Status') }}</p>
                 <div class="grid gap-3 sm:grid-cols-2">
                     <div>
-                        <label class="mb-1 block text-xs font-medium text-slate-500">{{ $t('Subscription Status') }}</label>
-                        <select v-model="query.subscription_status" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+                        <label class="mb-1 text-xs font-medium text-slate-500" :title="helpText.subscriptionColumn" data-help-icon>{{ $t('Subscription Status') }}</label>
+                        <select v-model="query.subscription_status" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" :title="helpText.subscriptionColumn">
                             <option value="">{{ $t('All Statuses') }}</option>
                             <option value="1">{{ $t('Subscribed') }}</option>
                             <option value="0">{{ $t('Unsubscribed') }}</option>
                         </select>
                     </div>
                     <div>
-                        <label class="mb-1 block text-xs font-medium text-slate-500">{{ $t('Contact Source') }}</label>
-                        <select v-model="query.contact_source" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+                        <label class="mb-1 text-xs font-medium text-slate-500" :title="helpText.sourceColumn" data-help-icon>{{ $t('Contact Source') }}</label>
+                        <select v-model="query.contact_source" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" :title="selectedContactSourceHelp">
                             <option value="">{{ $t('All Sources') }}</option>
-                            <option v-for="source in contactSourceOptions" :key="source.value" :value="source.value">{{ $t(source.label) }}</option>
+                            <option v-for="source in contactSourceOptions" :key="source.value" :value="source.value" :title="source.description">{{ $t(source.label) }}</option>
                         </select>
                     </div>
                     <div class="sm:col-span-2">
-                        <label class="mb-1 block text-xs font-medium text-slate-500">{{ $t('Block Status') }}</label>
-                        <select v-model="query.blocked_status" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+                        <label class="mb-1 text-xs font-medium text-slate-500" :title="helpText.blockedStatus" data-help-icon>{{ $t('Block Status') }}</label>
+                        <select v-model="query.blocked_status" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" :title="helpText.blockedStatus">
                             <option value="">{{ $t('All') }}</option>
                             <option value="1">{{ $t('Blocked') }}</option>
                             <option value="0">{{ $t('Not blocked') }}</option>
@@ -1509,27 +1783,30 @@ const onImportCompleted = () => {
             </div>
 
             <div class="rounded-lg border border-slate-200 p-3">
-                <p class="mb-2 text-xs font-semibold uppercase tracking-wide text-slate-500">{{ $t('Date & Attributes') }}</p>
+                <p class="mb-1 text-xs font-semibold uppercase tracking-wide text-slate-500" :title="helpText.dateAttributes" data-help-icon>{{ $t('Date & Attributes') }}</p>
+                <p class="mb-3 text-[11px] leading-5 text-slate-500" :title="helpText.dateAttributes" data-help-icon>
+                    {{ helpText.dateAttributes }}
+                </p>
                 <div class="grid gap-3">
                     <div class="grid grid-cols-1 gap-2 sm:grid-cols-2">
                         <div>
-                            <label class="mb-1 block text-xs font-medium text-slate-500">{{ $t('Created From') }}</label>
-                            <input v-model="query.created_from" type="date" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+                            <label class="mb-1 text-xs font-medium text-slate-500" :title="$t('Choose the start of the date range to show customers added after it.')" data-help-icon>{{ $t('Created From') }}</label>
+                            <input v-model="query.created_from" type="date" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" :title="$t('Choose the start of the date range to show customers added after it.')">
                         </div>
                         <div>
-                            <label class="mb-1 block text-xs font-medium text-slate-500">{{ $t('Created To') }}</label>
-                            <input v-model="query.created_to" type="date" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+                            <label class="mb-1 text-xs font-medium text-slate-500" :title="$t('Choose the end of the date range to show customers added before it.')" data-help-icon>{{ $t('Created To') }}</label>
+                            <input v-model="query.created_to" type="date" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" :title="$t('Choose the end of the date range to show customers added before it.')">
                         </div>
                     </div>
 
                     <div>
-                        <label class="mb-1 block text-xs font-medium text-slate-500">{{ $t('Custom Attribute') }}</label>
-                        <select v-model="query.custom_attribute_key" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm">
+                        <label class="mb-1 text-xs font-medium text-slate-500" :title="$t('Choose a custom piece of customer data such as stage, language, or any field you added.')" data-help-icon>{{ $t('Custom Attribute') }}</label>
+                        <select v-model="query.custom_attribute_key" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" :title="$t('Choose a custom piece of customer data such as stage, language, or any field you added.')">
                             <option value="">{{ $t('Select Attribute') }}</option>
                             <option v-for="attribute in availableCustomAttributes" :key="attribute.value" :value="attribute.value">{{ attribute.label }}</option>
                         </select>
                     </div>
-                    <input v-model="query.custom_attribute_value" type="text" class="rounded-md border border-slate-300 px-3 py-2 text-sm" :placeholder="$t('Contains value')">
+                    <input v-model="query.custom_attribute_value" type="text" class="rounded-md border border-slate-300 px-3 py-2 text-sm" :placeholder="$t('Contains value')" :title="$t('Type part of the value you want to search for inside the custom field.')">
                 </div>
             </div>
 
@@ -1648,17 +1925,49 @@ const onImportCompleted = () => {
     <Modal :label="$t('Bulk Action')" :isOpen="!!bulkActionModal" :closeBtn="true" @close="bulkActionModal = ''">
         <div class="grid gap-3 pt-4">
             <template v-if="bulkActionModal === 'add_group' || bulkActionModal === 'remove_group'">
-                <label class="text-xs font-medium text-slate-500">{{ $t('Select Groups') }}</label>
-                <select v-model="bulkForm.group_ids" class="rounded-md border border-slate-300 px-3 py-2 text-sm" multiple>
-                    <option v-for="group in groups" :key="group.id" :value="group.id">{{ group.name }}</option>
-                </select>
+                <div class="flex items-center justify-between gap-2">
+                    <label class="text-xs font-medium text-slate-500">{{ $t('Select Groups') }}</label>
+                    <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-500">
+                        {{ $t('Selected') }}: {{ bulkForm.group_ids.length }}
+                    </span>
+                </div>
+                <div class="max-h-64 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2">
+                    <label
+                        v-for="group in groups"
+                        :key="`bulk-group-${group.id}`"
+                        class="mb-1 flex cursor-pointer items-center gap-3 rounded-md border px-3 py-2 text-sm transition last:mb-0"
+                        :class="bulkForm.group_ids.includes(String(group.id)) ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-transparent text-slate-700 hover:bg-slate-50'"
+                    >
+                        <input v-model="bulkForm.group_ids" type="checkbox" :value="String(group.id)" class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                        <span class="truncate">{{ group.name }}</span>
+                    </label>
+                    <p v-if="!groups.length" class="px-3 py-4 text-center text-sm font-medium text-slate-400">
+                        {{ $t('No groups available') }}
+                    </p>
+                </div>
             </template>
 
             <template v-if="bulkActionModal === 'add_label' || bulkActionModal === 'remove_label'">
-                <label class="text-xs font-medium text-slate-500">{{ $t('Select Labels') }}</label>
-                <select v-model="bulkForm.label_ids" class="rounded-md border border-slate-300 px-3 py-2 text-sm" multiple>
-                    <option v-for="label in labels" :key="label.id" :value="label.id">{{ label.title }}</option>
-                </select>
+                <div class="flex items-center justify-between gap-2">
+                    <label class="text-xs font-medium text-slate-500">{{ $t('Select Labels') }}</label>
+                    <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[11px] font-bold text-slate-500">
+                        {{ $t('Selected') }}: {{ bulkForm.label_ids.length }}
+                    </span>
+                </div>
+                <div class="max-h-64 overflow-y-auto rounded-lg border border-slate-200 bg-white p-2">
+                    <label
+                        v-for="label in labels"
+                        :key="`bulk-label-${label.id}`"
+                        class="mb-1 flex cursor-pointer items-center gap-3 rounded-md border px-3 py-2 text-sm transition last:mb-0"
+                        :class="bulkForm.label_ids.includes(String(label.id)) ? 'border-blue-200 bg-blue-50 text-blue-700' : 'border-transparent text-slate-700 hover:bg-slate-50'"
+                    >
+                        <input v-model="bulkForm.label_ids" type="checkbox" :value="String(label.id)" class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500">
+                        <span class="truncate">{{ label.title }}</span>
+                    </label>
+                    <p v-if="!labels.length" class="px-3 py-4 text-center text-sm font-medium text-slate-400">
+                        {{ $t('No labels available') }}
+                    </p>
+                </div>
             </template>
 
             <template v-if="bulkActionModal === 'change_subscription_status'">
@@ -1681,3 +1990,134 @@ const onImportCompleted = () => {
         @completed="onImportCompleted"
     />
 </template>
+
+<style>
+.help-tooltip {
+    position: relative;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    color: #94a3b8;
+    cursor: help;
+    vertical-align: middle;
+}
+
+.help-tooltip:hover,
+.help-tooltip:focus {
+    color: #0f172a;
+    outline: none;
+}
+
+.help-tooltip-content {
+    position: absolute;
+    inset-inline-start: 50%;
+    bottom: calc(100% + 10px);
+    z-index: 60;
+    width: min(280px, calc(100vw - 32px));
+    transform: translateX(-50%);
+    border-radius: 14px;
+    background: #0f172a;
+    padding: 10px 12px;
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.55;
+    opacity: 0;
+    pointer-events: none;
+    text-align: start;
+    transition: opacity 160ms ease, transform 160ms ease;
+    white-space: normal;
+}
+
+.help-tooltip:hover .help-tooltip-content,
+.help-tooltip:focus .help-tooltip-content {
+    opacity: 1;
+    transform: translateX(-50%) translateY(-2px);
+}
+
+[data-help-icon] {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+[data-help-icon]::after {
+    content: '?';
+    display: inline-flex;
+    width: 0.95rem;
+    height: 0.95rem;
+    flex: 0 0 auto;
+    align-items: center;
+    justify-content: center;
+    border: 1.5px solid #94a3b8;
+    border-radius: 9999px;
+    color: #64748b;
+    font-size: 0.62rem;
+    font-weight: 800;
+    line-height: 1;
+}
+
+[data-help-icon]:hover::after,
+[data-help-icon]:focus-visible::after {
+    border-color: #0f172a;
+    color: #0f172a;
+}
+
+.introjs-tooltip.contact-management-tour-tooltip {
+    max-width: min(360px, calc(100vw - 32px));
+    border-radius: 16px;
+    box-shadow: 0 24px 60px rgba(15, 23, 42, 0.18);
+}
+
+.contact-management-tour-tooltip .introjs-tooltip-title {
+    color: #0f172a;
+    font-size: 16px;
+    font-weight: 800;
+    letter-spacing: 0;
+}
+
+.contact-management-tour-tooltip .introjs-tooltiptext {
+    color: #475569;
+    font-size: 14px;
+    line-height: 1.55;
+}
+
+.contact-management-tour-tooltip .introjs-button {
+    border-radius: 9999px;
+    border-color: #e2e8f0;
+    background: #ffffff;
+    color: #334155;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 700;
+    text-shadow: none;
+}
+
+.contact-management-tour-tooltip .introjs-nextbutton,
+.contact-management-tour-tooltip .introjs-donebutton {
+    border-color: #0f172a;
+    background: #0f172a;
+    color: #ffffff;
+}
+
+.contact-management-tour-tooltip .introjs-skipbutton {
+    color: #64748b;
+}
+
+.introjs-helperLayer.contact-management-tour-highlight {
+    border-radius: 18px;
+}
+
+@media (max-width: 640px) {
+    .introjs-tooltip.contact-management-tour-tooltip {
+        min-width: 0;
+        width: calc(100vw - 32px);
+    }
+
+    .contact-management-tour-tooltip .introjs-tooltipbuttons {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+    }
+}
+</style>
