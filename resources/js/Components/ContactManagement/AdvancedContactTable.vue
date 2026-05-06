@@ -6,6 +6,7 @@ import debounce from 'lodash/debounce';
 import { useI18n } from 'vue-i18n';
 import {
     Check,
+    ChevronDown,
     ChevronLeft,
     ChevronRight,
     Filter,
@@ -99,9 +100,11 @@ const hasNoLabelFilter = computed(() => query.label_ids.includes(NO_LABEL_OPTION
 const isFilterModalOpen = ref(false);
 const isGroupsModalOpen = ref(false);
 const isColumnsMenuOpen = ref(false);
+const isSourceMenuOpen = ref(false);
 const isImportWizardOpen = ref(false);
 const viewMode = ref('table');
 const columnsMenuRef = ref(null);
+const sourceMenuRef = ref(null);
 const selectAllCheckboxRef = ref(null);
 const selectedIds = ref([]);
 const deselectedIds = ref([]);
@@ -456,6 +459,19 @@ const selectedContactSourceHelp = computed(() => {
     return selectedSource?.description || helpText.value.sourceColumn;
 });
 
+const allContactSourceOptions = computed(() => [
+    {
+        value: '',
+        label: 'All Sources',
+        description: helpText.value.sourceColumn,
+    },
+    ...contactSourceOptions.value,
+]);
+
+const selectedContactSourceOption = computed(() => (
+    allContactSourceOptions.value.find((source) => source.value === query.contact_source) || allContactSourceOptions.value[0]
+));
+
 const helpText = computed(() => ({
     page: t('This page brings together all your WhatsApp customers: you can search, classify, filter, import, and manage multiple contacts at once.'),
    // tour: t('Start a quick interactive guide that introduces the key parts of this page step by step.'),
@@ -492,6 +508,66 @@ const helpText = computed(() => ({
     pagination: t('Move between pages of the current results without changing the search or filters.'),
     bulkBar: t('After selecting customers, use this bar to add labels or groups, change subscription status, or export.'),
 }));
+const helpTooltip = reactive({
+    visible: false,
+    text: '',
+    left: 16,
+    top: 16,
+    placement: 'bottom',
+});
+
+const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+
+const positionHelpTooltip = (trigger) => {
+    if (!trigger || typeof window === 'undefined') {
+        return;
+    }
+
+    const rect = trigger.getBoundingClientRect();
+    const tooltipWidth = Math.min(340, window.innerWidth - 32);
+    const left = clamp(
+        rect.left + (rect.width / 2) - (tooltipWidth / 2),
+        16,
+        Math.max(16, window.innerWidth - tooltipWidth - 16)
+    );
+    const canShowAbove = rect.top > 130;
+
+    helpTooltip.left = Math.round(left);
+    helpTooltip.top = Math.round(canShowAbove ? rect.top - 12 : rect.bottom + 12);
+    helpTooltip.placement = canShowAbove ? 'top' : 'bottom';
+};
+
+const showHelpTooltip = (event) => {
+    const trigger = event.target?.closest?.('[data-help-icon]');
+    if (!trigger) {
+        hideHelpTooltip();
+        return;
+    }
+
+    const text = trigger.dataset.helpText || trigger.getAttribute('aria-label');
+    if (!text) {
+        return;
+    }
+
+    helpTooltip.text = text;
+    positionHelpTooltip(trigger);
+    helpTooltip.visible = true;
+};
+
+const hideHelpTooltip = () => {
+    helpTooltip.visible = false;
+};
+
+const handleHelpPointerOut = (event) => {
+    const trigger = event.target?.closest?.('[data-help-icon]');
+    const nextTarget = event.relatedTarget;
+
+    if (trigger && nextTarget instanceof Node && trigger.contains(nextTarget)) {
+        return;
+    }
+
+    hideHelpTooltip();
+};
 
 const runFilterRequest = (extra = {}) => {
     const payload = {
@@ -1023,23 +1099,42 @@ const closeColumnsMenu = () => {
     isColumnsMenuOpen.value = false;
 };
 
-const handleOutsideClick = (event) => {
-    if (!isColumnsMenuOpen.value) {
-        return;
+const toggleSourceMenu = () => {
+    isSourceMenuOpen.value = !isSourceMenuOpen.value;
+};
+
+const closeSourceMenu = () => {
+    isSourceMenuOpen.value = false;
+};
+
+const selectContactSource = (value) => {
+    query.contact_source = value;
+    closeSourceMenu();
+};
+
+const isInsideElement = (element, target) => (
+    Boolean(element)
+    && target instanceof Node
+    && element.contains(target)
+);
+
+const handleOutsidePointerDown = (event) => {
+    if (isColumnsMenuOpen.value && !isInsideElement(columnsMenuRef.value, event.target)) {
+        closeColumnsMenu();
     }
 
-    if (columnsMenuRef.value && !columnsMenuRef.value.contains(event.target)) {
-        closeColumnsMenu();
+    if (isSourceMenuOpen.value && !isInsideElement(sourceMenuRef.value, event.target)) {
+        closeSourceMenu();
     }
 };
 
 onMounted(() => {
     loadSelectedIds();
-    document.addEventListener('click', handleOutsideClick);
+    document.addEventListener('pointerdown', handleOutsidePointerDown, true);
 });
 
 onBeforeUnmount(() => {
-    document.removeEventListener('click', handleOutsideClick);
+    document.removeEventListener('pointerdown', handleOutsidePointerDown, true);
 });
 
 const onImportCompleted = () => {
@@ -1048,7 +1143,16 @@ const onImportCompleted = () => {
 </script>
 
 <template>
-    <div :dir="uiDirection" class="-m-4 min-h-screen bg-[#F8FAFC] px-4 py-5 text-slate-950 md:-m-6 md:px-6 md:py-6" :class="uiTextAlignmentClass">
+    <div
+        :dir="uiDirection"
+        class="-m-4 min-h-screen bg-[#F8FAFC] px-4 py-5 text-slate-950 md:-m-6 md:px-6 md:py-6"
+        :class="uiTextAlignmentClass"
+        @pointerover="showHelpTooltip"
+        @pointerout="handleHelpPointerOut"
+        @focusin="showHelpTooltip"
+        @focusout="hideHelpTooltip"
+        @click="showHelpTooltip"
+    >
         <div class="mx-auto max-w-[1800px] space-y-5 pb-24">
             <section class="rounded-[2rem] border border-white bg-white/90 p-5 shadow-sm shadow-slate-200/70">
                 <div class="flex flex-col gap-5">
@@ -1571,7 +1675,14 @@ const onImportCompleted = () => {
     </div>
 
     <Modal :label="$t('Advanced Filters')" :isOpen="isFilterModalOpen" :closeBtn="true" @close="isFilterModalOpen = false">
-        <div class="space-y-3 pt-4">
+        <div
+            class="space-y-3 pt-4"
+            @pointerover="showHelpTooltip"
+            @pointerout="handleHelpPointerOut"
+            @focusin="showHelpTooltip"
+            @focusout="hideHelpTooltip"
+            @click="showHelpTooltip"
+        >
             <div class="rounded-lg border border-slate-200 p-3">
                <div class="space-y-3">
                     <div>
@@ -1634,10 +1745,48 @@ const onImportCompleted = () => {
                     </div>
                     <div>
                         <label class="mb-1 text-xs font-medium text-slate-500" :data-help-text="helpText.sourceColumn" data-help-icon>{{ $t('Contact Source') }}</label>
-                        <select v-model="query.contact_source" class="w-full rounded-md border border-slate-300 px-3 py-2 text-sm" :aria-label="selectedContactSourceHelp">
-                            <option value="">{{ $t('All Sources') }}</option>
-                            <option v-for="source in contactSourceOptions" :key="source.value" :value="source.value" :aria-label="source.description">{{ $t(source.label) }}</option>
-                        </select>
+                        <div ref="sourceMenuRef" class="relative">
+                            <button
+                                type="button"
+                                class="flex w-full items-center justify-between gap-3 rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 transition hover:border-slate-400 focus:border-primary focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                :aria-label="selectedContactSourceHelp"
+                                aria-haspopup="listbox"
+                                :aria-expanded="isSourceMenuOpen"
+                                @click.stop="toggleSourceMenu"
+                            >
+                                <span class="truncate">{{ $t(selectedContactSourceOption.label) }}</span>
+                                <ChevronDown class="h-4 w-4 shrink-0 text-slate-500 transition" :class="{ 'rotate-180': isSourceMenuOpen }" />
+                            </button>
+                            <div
+                                v-if="isSourceMenuOpen"
+                                class="absolute inset-x-0 top-full z-50 mt-1 max-h-80 overflow-y-auto rounded-lg border border-slate-200 bg-white p-1 shadow-xl shadow-slate-200"
+                                role="listbox"
+                            >
+                                <div
+                                    v-for="source in allContactSourceOptions"
+                                    :key="`contact-source-${source.value || 'all'}`"
+                                    class="flex w-full items-center justify-between gap-2 rounded-md px-3 py-2 transition hover:bg-slate-50"
+                                    :class="query.contact_source === source.value ? 'bg-primary/10 text-primary' : 'text-slate-700'"
+                                    role="option"
+                                    :aria-selected="query.contact_source === source.value"
+                                >
+                                    <button
+                                        type="button"
+                                        class="min-w-0 flex-1 text-start text-sm font-semibold"
+                                        @click.stop="selectContactSource(source.value)"
+                                    >
+                                        <span class="block truncate">{{ $t(source.label) }}</span>
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="contact-source-help-button shrink-0 rounded-full p-1 text-slate-500 transition hover:bg-white hover:text-slate-900 focus:outline-none focus:ring-2 focus:ring-primary/20"
+                                        :aria-label="source.description"
+                                        :data-help-text="source.description"
+                                        data-help-icon
+                                    ></button>
+                                </div>
+                            </div>
+                        </div>
                     </div>
                     <div class="sm:col-span-2">
                         <label class="mb-1 text-xs font-medium text-slate-500" :data-help-text="helpText.blockedStatus" data-help-icon>{{ $t('Block Status') }}</label>
@@ -1857,6 +2006,18 @@ const onImportCompleted = () => {
         :countries="contactConstants.countryDialCodes"
         @completed="onImportCompleted"
     />
+
+    <Teleport to="body">
+        <div
+            v-if="helpTooltip.visible"
+            class="contact-management-help-tooltip"
+            :class="`is-${helpTooltip.placement}`"
+            :style="{ left: `${helpTooltip.left}px`, top: `${helpTooltip.top}px` }"
+            role="tooltip"
+        >
+            {{ helpTooltip.text }}
+        </div>
+    </Teleport>
 </template>
 
 <style>
@@ -1911,26 +2072,8 @@ const onImportCompleted = () => {
 }
 
 [data-help-icon]::before {
-    content: attr(data-help-text);
-    position: absolute;
-    inset-inline-start: 50%;
-    bottom: calc(100% + 10px);
-    z-index: 60;
-    width: max-content;
-    max-width: min(280px, calc(100vw - 32px));
-    transform: translateX(-50%);
-    border-radius: 14px;
-    background: #0f172a;
-    padding: 10px 12px;
-    color: #ffffff;
-    font-size: 12px;
-    font-weight: 600;
-    line-height: 1.55;
-    opacity: 0;
-    pointer-events: none;
-    text-align: start;
-    transition: opacity 160ms ease, transform 160ms ease;
-    white-space: normal;
+    content: none !important;
+    display: none !important;
 }
 
 [data-help-icon]::after {
@@ -1957,7 +2100,35 @@ const onImportCompleted = () => {
 
 [data-help-icon]:hover::before,
 [data-help-icon]:focus-visible::before {
-    opacity: 1;
-    transform: translateX(-50%) translateY(-2px);
+    display: none !important;
+}
+
+.contact-management-help-tooltip {
+    position: fixed;
+    z-index: 9999;
+    width: min(340px, calc(100vw - 32px));
+    max-height: min(260px, calc(100vh - 32px));
+    overflow-y: auto;
+    border-radius: 12px;
+    background: #0f172a;
+    padding: 10px 12px;
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.55;
+    text-align: start;
+    white-space: normal;
+    word-break: normal;
+    overflow-wrap: anywhere;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.22);
+    pointer-events: none;
+}
+
+.contact-management-help-tooltip.is-top {
+    transform: translateY(-100%);
+}
+
+.contact-management-help-tooltip.is-bottom {
+    transform: none;
 }
 </style>

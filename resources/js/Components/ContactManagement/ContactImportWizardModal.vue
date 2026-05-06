@@ -577,6 +577,65 @@ const groupAssignmentIsInvalid = computed(() => (
     (groupForm.assignment_mode === 'split' && (!groupForm.split_group_size || groupForm.split_group_size < 1 || !String(groupForm.split_group_prefix || '').trim()))
     || (groupForm.assignment_mode === 'file_group_name' && !hasGroupNameMapping.value)
 ));
+const helpTooltip = reactive({
+    visible: false,
+    text: '',
+    left: 16,
+    top: 16,
+    placement: 'bottom',
+});
+
+const clamp = (value, min, max) => Math.min(Math.max(value, min), max);
+
+const positionHelpTooltip = (trigger) => {
+    if (!trigger || typeof window === 'undefined') {
+        return;
+    }
+
+    const rect = trigger.getBoundingClientRect();
+    const tooltipWidth = Math.min(340, window.innerWidth - 32);
+    const left = clamp(
+        rect.left + (rect.width / 2) - (tooltipWidth / 2),
+        16,
+        Math.max(16, window.innerWidth - tooltipWidth - 16)
+    );
+    const canShowAbove = rect.top > 130;
+
+    helpTooltip.left = Math.round(left);
+    helpTooltip.top = Math.round(canShowAbove ? rect.top - 12 : rect.bottom + 12);
+    helpTooltip.placement = canShowAbove ? 'top' : 'bottom';
+};
+
+const showHelpTooltip = (event) => {
+    const trigger = event.target?.closest?.('[data-help-icon]');
+    if (!trigger) {
+        return;
+    }
+
+    const text = trigger.dataset.helpText || trigger.getAttribute('aria-label');
+    if (!text) {
+        return;
+    }
+
+    helpTooltip.text = text;
+    positionHelpTooltip(trigger);
+    helpTooltip.visible = true;
+};
+
+const hideHelpTooltip = () => {
+    helpTooltip.visible = false;
+};
+
+const handleHelpPointerOut = (event) => {
+    const trigger = event.target?.closest?.('[data-help-icon]');
+    const nextTarget = event.relatedTarget;
+
+    if (trigger && nextTarget instanceof Node && trigger.contains(nextTarget)) {
+        return;
+    }
+
+    hideHelpTooltip();
+};
 
 const goToPreviousStep = () => {
     if (busy.value || uploadBusy.value) {
@@ -589,7 +648,14 @@ const goToPreviousStep = () => {
 
 <template>
     <Modal :label="$t('Import Contacts Wizard')" :isOpen="modelValue" :closeBtn="true" @close="closeModal">
-        <div class="space-y-4 pt-4">
+        <div
+            class="contact-import-wizard space-y-4 pt-4"
+            @pointerover="showHelpTooltip"
+            @pointerout="handleHelpPointerOut"
+            @focusin="showHelpTooltip"
+            @focusout="hideHelpTooltip"
+            @click="showHelpTooltip"
+        >
             <div class="flex flex-wrap items-center gap-2 text-xs">
                 <span class="rounded-full px-2 py-1" :class="wizardStep >= 1 ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600'">{{ $t('1. Upload') }}</span>
                 <span class="rounded-full px-2 py-1" :class="wizardStep >= 2 ? 'bg-primary text-white' : 'bg-slate-100 text-slate-600'">{{ $t('2. Mapping') }}</span>
@@ -867,13 +933,13 @@ const goToPreviousStep = () => {
             </div>
 
             <div v-if="wizardStep === 4" class="space-y-3">
-                <p class="text-sm text-slate-600" :title="audienceHelp.step" data-help-icon>{{ $t('Choose how to assign imported contacts to audience.') }}</p>
+                <p class="text-sm text-slate-600" :data-help-text="audienceHelp.step" data-help-icon>{{ $t('Choose how to assign imported contacts to audience.') }}</p>
 
                 <div class="rounded-xl border border-slate-200 bg-slate-50/60 p-3 space-y-3">
                     <label
                         class="flex cursor-pointer items-start gap-2 rounded-lg border p-3 transition"
                         :class="groupForm.assignment_mode === 'all_selected' ? 'border-primary bg-primary/5 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300'"
-                        :title="audienceHelp.allSelected"
+                        :data-help-text="audienceHelp.allSelected"
                         data-help-icon
                     >
                         <input v-model="groupForm.assignment_mode" type="radio" value="all_selected" class="mt-0.5">
@@ -885,7 +951,7 @@ const goToPreviousStep = () => {
                     <label
                         class="flex cursor-pointer items-start gap-2 rounded-lg border p-3 transition"
                         :class="groupForm.assignment_mode === 'split' ? 'border-primary bg-primary/5 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300'"
-                        :title="audienceHelp.split"
+                        :data-help-text="audienceHelp.split"
                         data-help-icon
                     >
                         <input v-model="groupForm.assignment_mode" type="radio" value="split" class="mt-0.5">
@@ -900,7 +966,7 @@ const goToPreviousStep = () => {
                             groupForm.assignment_mode === 'file_group_name' ? 'border-primary bg-primary/5 shadow-sm' : 'border-slate-200 bg-white hover:border-slate-300',
                             hasGroupNameMapping ? 'cursor-pointer' : 'cursor-not-allowed opacity-60'
                         ]"
-                        :title="audienceHelp.fromFile"
+                        :data-help-text="audienceHelp.fromFile"
                         data-help-icon
                     >
                         <input v-model="groupForm.assignment_mode" type="radio" value="file_group_name" class="mt-0.5" :disabled="!hasGroupNameMapping">
@@ -925,13 +991,13 @@ const goToPreviousStep = () => {
                                 type="text"
                                 class="w-full rounded-lg border border-slate-300 py-2 pl-9 pr-3 text-sm outline-none ring-primary/20 transition focus:border-primary focus:ring"
                                 :placeholder="$t('Search audience...')"
-                                :title="audienceHelp.search"
+                                :aria-label="audienceHelp.search"
                             >
                         </div>
 
                         <div class="mt-2 flex items-center gap-2 text-xs">
-                            <span class="rounded-full bg-slate-100 px-2 py-1 text-slate-600" :title="audienceHelp.visible" data-help-icon>{{ $t('Visible') }}: {{ filteredContactGroups.length }}</span>
-                            <span class="rounded-full bg-emerald-50 px-2 py-1 text-emerald-700" :title="audienceHelp.selected" data-help-icon>{{ $t('Selected') }}: {{ selectedGroupsCount }}</span>
+                            <span class="rounded-full bg-slate-100 px-2 py-1 text-slate-600" :data-help-text="audienceHelp.visible" data-help-icon>{{ $t('Visible') }}: {{ filteredContactGroups.length }}</span>
+                            <span class="rounded-full bg-emerald-50 px-2 py-1 text-emerald-700" :data-help-text="audienceHelp.selected" data-help-icon>{{ $t('Selected') }}: {{ selectedGroupsCount }}</span>
                         </div>
 
                         <div class="mt-2 max-h-56 overflow-auto rounded-lg border border-slate-200 bg-slate-50/40 p-2">
@@ -940,7 +1006,7 @@ const goToPreviousStep = () => {
                                 :key="`assign-${group.id}`"
                                 class="mb-1 flex cursor-pointer items-center gap-2 rounded-md border px-2 py-2 text-sm transition last:mb-0"
                                 :class="groupForm.group_ids.includes(group.id) ? 'border-primary bg-primary/5 text-primary' : 'border-transparent bg-white text-slate-700 hover:border-slate-200'"
-                                :title="audienceHelp.chooseAudience"
+                                :data-help-text="audienceHelp.chooseAudience"
                                 data-help-icon
                             >
                                 <input v-model="groupForm.group_ids" type="checkbox" :value="group.id">
@@ -952,24 +1018,24 @@ const goToPreviousStep = () => {
                         </div>
                     </div>
 
-                    <label class="text-xs text-slate-600" :title="audienceHelp.newAudience">
-                        <span data-help-icon>{{ $t('Create New audience') }}</span>
-                        <input v-model="groupForm.new_group_name" type="text" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-primary/20 focus:border-primary focus:ring" :placeholder="$t('New audience name')" :title="audienceHelp.newAudience">
+                    <label class="text-xs text-slate-600">
+                        <span :data-help-text="audienceHelp.newAudience" data-help-icon>{{ $t('Create New audience') }}</span>
+                        <input v-model="groupForm.new_group_name" type="text" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-primary/20 focus:border-primary focus:ring" :placeholder="$t('New audience name')" :aria-label="audienceHelp.newAudience">
                     </label>
                 </div>
 
                 <div v-else-if="groupForm.assignment_mode === 'split'" class="grid gap-3 md:grid-cols-2">
-                    <label class="text-xs text-slate-600" :title="audienceHelp.contactsPerAudience">
-                        <span data-help-icon>{{ $t('Contacts per audience') }}</span>
-                        <input v-model.number="groupForm.split_group_size" min="1" type="number" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-primary/20 focus:border-primary focus:ring" :placeholder="$t('100')" :title="audienceHelp.contactsPerAudience">
+                    <label class="text-xs text-slate-600">
+                        <span :data-help-text="audienceHelp.contactsPerAudience" data-help-icon>{{ $t('Contacts per audience') }}</span>
+                        <input v-model.number="groupForm.split_group_size" min="1" type="number" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-primary/20 focus:border-primary focus:ring" :placeholder="$t('100')" :aria-label="audienceHelp.contactsPerAudience">
                     </label>
-                    <label class="text-xs text-slate-600" :title="audienceHelp.prefix">
-                        <span data-help-icon>{{ $t('audience name prefix') }}</span>
-                        <input v-model="groupForm.split_group_prefix" type="text" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-primary/20 focus:border-primary focus:ring" :placeholder="$t('audience')" :title="audienceHelp.prefix">
+                    <label class="text-xs text-slate-600">
+                        <span :data-help-text="audienceHelp.prefix" data-help-icon>{{ $t('audience name prefix') }}</span>
+                        <input v-model="groupForm.split_group_prefix" type="text" class="mt-1 w-full rounded-lg border border-slate-300 px-3 py-2 text-sm outline-none ring-primary/20 focus:border-primary focus:ring" :placeholder="$t('audience')" :aria-label="audienceHelp.prefix">
                     </label>
                 </div>
 
-                <div v-else-if="groupForm.assignment_mode === 'file_group_name'" class="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-900" :title="audienceHelp.fromFile" data-help-icon>
+                <div v-else-if="groupForm.assignment_mode === 'file_group_name'" class="rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-3 text-sm text-emerald-900" :data-help-text="audienceHelp.fromFile" data-help-icon>
                     <p class="font-semibold">{{ $t('Audience names will come from your file') }}</p>
                     <p class="mt-1 text-xs leading-5 text-emerald-800">
                         {{ $t('Each imported contact will be added to the audience written in its group_name column. If an audience does not exist yet, it will be created automatically.') }}
@@ -981,7 +1047,7 @@ const goToPreviousStep = () => {
                         <button type="button" class="rounded-md border border-slate-300 px-4 py-2 text-sm text-slate-700 disabled:opacity-60" :disabled="busy || uploadBusy" @click="goToPreviousStep">
                             {{ $t('Previous') }}
                         </button>
-                        <button type="button" class="rounded-md bg-primary px-4 py-2 text-sm text-white disabled:opacity-60" :title="audienceHelp.save" data-help-icon :disabled="busy || groupAssignmentIsInvalid" @click="saveGroupAssignment">
+                        <button type="button" class="rounded-md bg-primary px-4 py-2 text-sm text-white disabled:opacity-60" :data-help-text="audienceHelp.save" data-help-icon :disabled="busy || groupAssignmentIsInvalid" @click="saveGroupAssignment">
                             {{ busy ? $t('Saving...') : $t('Save Audience Assignment') }}
                         </button>
                     </div>
@@ -1097,6 +1163,18 @@ const goToPreviousStep = () => {
         </div>
     </Modal>
 
+    <Teleport to="body">
+        <div
+            v-if="helpTooltip.visible"
+            class="contact-import-help-tooltip"
+            :class="`is-${helpTooltip.placement}`"
+            :style="{ left: `${helpTooltip.left}px`, top: `${helpTooltip.top}px` }"
+            role="tooltip"
+        >
+            {{ helpTooltip.text }}
+        </div>
+    </Teleport>
+
     <Modal :label="$t('Edit Import Row')" :isOpen="isEditOpen" :closeBtn="true" @close="isEditOpen = false">
         <div class="space-y-2 pt-4">
             <div v-if="editErrorMessage" class="rounded-md bg-rose-50 px-3 py-2 text-sm text-rose-700">{{ editErrorMessage }}</div>
@@ -1132,13 +1210,19 @@ const goToPreviousStep = () => {
     </Modal>
 </template>
 <style>
-[data-help-icon] {
+.contact-import-wizard [data-help-icon] {
+    position: relative;
     display: inline-flex;
     align-items: center;
     gap: 0.35rem;
 }
 
-[data-help-icon]::after {
+.contact-import-wizard [data-help-icon]::before {
+    content: none !important;
+    display: none !important;
+}
+
+.contact-import-wizard [data-help-icon]::after {
     content: '?';
     display: inline-flex;
     width: 0.95rem;
@@ -1152,5 +1236,40 @@ const goToPreviousStep = () => {
     font-size: 0.62rem;
     font-weight: 800;
     line-height: 1;
+}
+
+.contact-import-wizard [data-help-icon]:hover::after,
+.contact-import-wizard [data-help-icon]:focus-visible::after {
+    border-color: #0f172a;
+    color: #0f172a;
+}
+
+.contact-import-help-tooltip {
+    position: fixed;
+    z-index: 9999;
+    width: min(340px, calc(100vw - 32px));
+    max-height: min(260px, calc(100vh - 32px));
+    overflow-y: auto;
+    border-radius: 12px;
+    background: #0f172a;
+    padding: 10px 12px;
+    color: #ffffff;
+    font-size: 12px;
+    font-weight: 600;
+    line-height: 1.55;
+    text-align: start;
+    white-space: normal;
+    word-break: normal;
+    overflow-wrap: anywhere;
+    box-shadow: 0 18px 40px rgba(15, 23, 42, 0.22);
+    pointer-events: none;
+}
+
+.contact-import-help-tooltip.is-top {
+    transform: translateY(-100%);
+}
+
+.contact-import-help-tooltip.is-bottom {
+    transform: none;
 }
 </style>
