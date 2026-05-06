@@ -502,12 +502,6 @@ const helpText = computed(() => ({
 
 const contactManagementTourSteps = computed(() => [
     {
-        element: '.btn-import',
-        title: t('Import Contacts'),
-        intro: t("Start here to upload your customer list. Ensure you have collected 'Opt-in' consent from your customers first to comply with WhatsApp's official policies."),
-        position: isRtl.value ? 'left' : 'right',
-    },
-    {
         element: '.stats-container',
         title: t('Database Overview'),
         intro: t("Track your database growth at a glance. 'Filtered Contacts' shows you the exact size of the segment you are about to target."),
