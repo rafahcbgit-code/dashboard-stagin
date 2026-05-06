@@ -360,6 +360,7 @@ class ChatService
     private function createNewTicket($contactId, $organizationId, $autoassignment)
     {
         $ticket = new ChatTicket();
+        $ticket->organization_id = $organizationId;
         $ticket->contact_id = $contactId;
         $ticket->status = 'open';
         $ticket->updated_at = now();
@@ -428,7 +429,9 @@ class ChatService
             $isSpecificAgentEnabled = !empty($settings->tickets->assigned_to_specific_agents ?? false);
 
             // Skip if ticket already exists, is open AND is already assigned
-            $existingTicket = ChatTicket::where('contact_id', $contactId)->first();
+            $existingTicket = ChatTicket::where('contact_id', $contactId)
+                ->where('organization_id', $organizationId)
+                ->first();
             if ($existingTicket && $existingTicket->status === 'open' && $existingTicket->assigned_to !== null) {
                 Log::channel('webhook')->debug('Ticket already open and assigned, skipping assignment', [
                     'contact_id' => $contactId,
@@ -472,13 +475,16 @@ class ChatService
 
     private function assignTicketToSpecificAgent($contactId, $organizationId)
     {
-        $ticket = ChatTicket::where('contact_id', $contactId)->first();
+        $ticket = ChatTicket::where('contact_id', $contactId)
+            ->where('organization_id', $organizationId)
+            ->first();
         $isNewTicket = false;
         $wasClosed = false;
 
         if (!$ticket) {
             // Create a new ticket
             $ticket = new ChatTicket();
+            $ticket->organization_id = $organizationId;
             $ticket->contact_id = $contactId;
             $ticket->created_at = now();
             $ticket->updated_at = now();
@@ -501,6 +507,7 @@ class ChatService
         if (!empty($agents)) {
             // 2. Find the last ticket assigned among these agents
             $lastTicket = ChatTicket::whereIn('assigned_to', $agents)
+                ->where('organization_id', $organizationId)
                 ->latest()
                 ->first();
 

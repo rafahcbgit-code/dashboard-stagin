@@ -258,6 +258,19 @@ class AutoReplyService
                     $instruction->target_agent_id
                 );
 
+                // Notify the user they're being connected to an agent
+                $transferMessage = $this->botSettingsService->getSetting(
+                    $organizationId,
+                    'escalation_transfer_message',
+                    "You're being connected to a team member who can help. Please hold on a moment."
+                );
+                $this->initializeWhatsappService($organizationId)->sendMessage(
+                    $contact->uuid,
+                    $transferMessage,
+                    null,
+                    'text'
+                );
+
                 return true;
             }
 
@@ -342,9 +355,14 @@ class AutoReplyService
                 $routingService = new AgentRoutingService();
                 $routingService->assignToAgent($organizationId, $contact->id, 'auto_assignment');
 
+                $transferMessage = $this->botSettingsService->getSetting(
+                    $organizationId,
+                    'escalation_transfer_message',
+                    "You're being connected to a team member who can help. Please hold on a moment."
+                );
                 $this->initializeWhatsappService($organizationId)->sendMessage(
                     $contact->uuid,
-                    "You're being connected to a team member who can help. Please hold on a moment.",
+                    $transferMessage,
                     null,
                     'text'
                 );
@@ -464,6 +482,18 @@ class AutoReplyService
 
                         $routingService = new AgentRoutingService();
                         $routingService->assignToAgent($organizationId, $contact->id, 'auto_assignment');
+
+                        $transferMessage = $this->botSettingsService->getSetting(
+                            $organizationId,
+                            'escalation_transfer_message',
+                            "You're being connected to a team member who can help. Please hold on a moment."
+                        );
+                        $this->initializeWhatsappService($organizationId)->sendMessage(
+                            $contact->uuid,
+                            $transferMessage,
+                            null,
+                            'text'
+                        );
 
                         return true;
                     }

@@ -195,9 +195,9 @@ onMounted(() => {
           <label class="text-sm mb-2"><span class="text-red-500">*</span>  Media Type</label>
           <FormSelect v-model="input1" :name="''" :type="'text'" :optionClassName="'h-32'"  :options="options" :class="'col-span-4'"/>
         </div>
-        <div>
+        <div v-if="input1 !== 'audio'">
           <label class="text-sm mb-2">Caption (Optional)</label>
-          <textarea 
+          <textarea
               ref="textAreaRef"
               class="block w-full rounded-md border-0 py-1.5 px-4 text-gray-900 shadow-sm outline-none ring-1 ring-inset placeholder:text-gray-400 sm:text-sm sm:leading-6 ring-gray-300"
               v-model="textInput"
@@ -206,6 +206,9 @@ onMounted(() => {
               placeholder="Enter text"
               >
           </textarea>
+        </div>
+        <div v-else class="rounded-md bg-amber-50 border border-amber-200 px-3 py-2">
+          <p class="text-xs text-amber-700">WhatsApp does not support captions on audio messages.</p>
         </div>
         <div class="flex items-center justify-between mt-2 mb-2 space-x-4">
             <span class="text-xs">{{ $t('Characters') }}: {{ characterCount + '/' + characterLimit }}</span>

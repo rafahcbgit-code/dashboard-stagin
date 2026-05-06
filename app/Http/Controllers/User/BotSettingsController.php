@@ -63,6 +63,7 @@ class BotSettingsController extends BaseController
     public function update(Request $request)
     {
         $validated = $request->validate([
+            'automation_enabled' => 'nullable|boolean',
             'fallback_threshold' => 'sometimes|integer|min:1|max:20',
             'flow_timeout_minutes' => 'sometimes|integer|min:5|max:1440',
             'ai_fallback_enabled' => 'nullable|boolean',
@@ -78,9 +79,11 @@ class BotSettingsController extends BaseController
             'fallback_menu_button_1_enabled' => 'nullable|boolean',
             'fallback_menu_button_2_enabled' => 'nullable|boolean',
             'fallback_menu_button_3_enabled' => 'nullable|boolean',
+            'escalation_transfer_message' => 'nullable|string|max:500',
         ]);
 
         // Convert checkboxes to booleans
+        $validated['automation_enabled'] = isset($validated['automation_enabled']) ? (bool) $validated['automation_enabled'] : false;
         $validated['ai_fallback_enabled'] = isset($validated['ai_fallback_enabled']) ? (bool) $validated['ai_fallback_enabled'] : false;
         $validated['fallback_menu_enabled'] = isset($validated['fallback_menu_enabled']) ? (bool) $validated['fallback_menu_enabled'] : false;
         $validated['fallback_menu_route_to_agent'] = isset($validated['fallback_menu_route_to_agent']) ? (bool) $validated['fallback_menu_route_to_agent'] : false;

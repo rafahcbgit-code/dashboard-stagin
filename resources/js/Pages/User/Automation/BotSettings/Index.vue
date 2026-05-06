@@ -337,6 +337,19 @@
                                         <p class="text-[10px] text-slate-400">{{ $t('WhatsApp allows up to 3 buttons, each max 20 characters. Disable all buttons for text-only mode.') }}</p>
                                     </div>
 
+                                    <!-- Transfer message -->
+                                    <div>
+                                        <label class="block text-sm font-medium text-slate-700 mb-1.5">{{ $t('Transfer Message') }}</label>
+                                        <textarea
+                                            v-model="form.escalation_transfer_message"
+                                            rows="2"
+                                            maxlength="500"
+                                            class="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-primary focus:ring-1 focus:ring-primary/30 focus:outline-none transition-colors resize-none"
+                                            :placeholder="$t('e.g., You\'re being connected to a team member who can help. Please hold on a moment.')"
+                                        />
+                                        <p class="text-[10px] text-slate-400 mt-1">{{ $t('Sent to the user when a conversation is escalated to a human agent.') }}</p>
+                                    </div>
+
                                     <!-- Preview -->
                                     <div class="rounded-lg border border-slate-200 bg-slate-50 p-4">
                                         <p class="text-xs font-medium text-slate-500 mb-2">{{ $t('WhatsApp Preview') }}</p>
@@ -395,6 +408,7 @@ const form = ref({
     fallback_menu_button_1_enabled: props.settings?.fallback_menu_button_1_enabled ?? true,
     fallback_menu_button_2_enabled: props.settings?.fallback_menu_button_2_enabled ?? true,
     fallback_menu_button_3_enabled: props.settings?.fallback_menu_button_3_enabled ?? (props.settings?.fallback_menu_route_to_agent ?? true),
+    escalation_transfer_message: props.settings?.escalation_transfer_message || "You're being connected to a team member who can help. Please hold on a moment.",
 });
 
 const activeButtons = computed(() => {
