@@ -204,9 +204,7 @@ class FlowService
             $mediaUrl = $mediaFilePath;
         }
 
-        $flowMedia = FlowMedia::create([
-            'flow_id' => $flow->id,
-            'step_id' => $stepId,
+        $mediaData = [
             'path' => $mediaUrl,
             'location' => $storage,
             'metadata' => json_encode([
@@ -214,7 +212,21 @@ class FlowService
                 'extension' => $fileMimeType,
                 'size' => $fileContent->getSize()
             ])
-        ]);
+        ];
+
+        // Find or create: update existing media for this node, or create a new record
+        $flowMedia = FlowMedia::where('flow_id', $flow->id)
+            ->where('step_id', $stepId)
+            ->first();
+
+        if ($flowMedia) {
+            $flowMedia->update($mediaData);
+        } else {
+            $flowMedia = FlowMedia::create(array_merge($mediaData, [
+                'flow_id' => $flow->id,
+                'step_id' => $stepId,
+            ]));
+        }
 
         return $flowMedia;
     }
