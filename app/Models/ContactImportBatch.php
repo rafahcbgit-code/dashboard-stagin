@@ -20,6 +20,8 @@ class ContactImportBatch extends Model
         'selected_group_ids' => 'array',
         'group_assignment' => 'array',
         'report' => 'array',
+        'started_at' => 'datetime',
+        'finished_at' => 'datetime',
     ];
 
     public function rows(): HasMany

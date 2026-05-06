@@ -822,7 +822,7 @@ const createGroup = async () => {
     const name = (createGroupForm.name || '').trim();
 
     if (!name) {
-        createGroupError.value = t('Audince name is required.');
+        createGroupError.value = t('Audience name is required.');
         return;
     }
 
@@ -865,7 +865,7 @@ const createGroup = async () => {
             runFilterRequest({ page: undefined });
             isGroupsModalOpen.value = false;
         } else {
-            throw new Error(t('Failed to create audince.'));
+            throw new Error(t('Failed to create audience.'));
         }
     } catch (error) {
         const errors = error?.response?.data?.errors;
@@ -880,7 +880,7 @@ const createGroup = async () => {
             || error?.message
             || (statusCode ? `Request failed (${statusCode}).` : null)
             || (typeof rawResponse === 'string' && rawResponse.trim() ? 'Unexpected server response.' : null)
-            || t('Failed to create audince.');
+            || t('Failed to create audience.');
     } finally {
         isCreatingGroup.value = false;
     }
@@ -916,7 +916,7 @@ const deleteGroup = async (group) => {
             runFilterRequest({ page: undefined });
         }
     } catch (error) {
-        createGroupError.value = error?.response?.data?.message || t('Failed to delete audince.');
+        createGroupError.value = error?.response?.data?.message || t('Failed to delete audience.');
     } finally {
         deletingGroupUuid.value = '';
     }
@@ -962,7 +962,7 @@ const deleteSelectedGroups = async () => {
             runFilterRequest({ page: undefined });
         }
     } catch (error) {
-        createGroupError.value = error?.response?.data?.message || t('Failed to delete selected audince.');
+        createGroupError.value = error?.response?.data?.message || t('Failed to delete selected audience.');
     } finally {
         isDeletingGroups.value = false;
     }
@@ -1200,10 +1200,7 @@ const onImportCompleted = () => {
                     </div>
 
                     <div class="flex flex-wrap items-center gap-2">
-                        <button type="button" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md" :title="helpText.tour" data-help-icon @click="startContactManagementTour">
-                            <HelpCircle class="h-4 w-4" />
-                            {{ $t('Tour') }}
-                        </button>
+                        
                         <button type="button" class="btn-import inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md" :title="helpText.import" data-help-icon @click="isImportWizardOpen = true">
                             <Import class="h-4 w-4" />
                             <span>{{ $t('Import') }}</span>
@@ -1773,9 +1770,6 @@ const onImportCompleted = () => {
                             <option value="">{{ $t('All Sources') }}</option>
                             <option v-for="source in contactSourceOptions" :key="source.value" :value="source.value" :title="source.description">{{ $t(source.label) }}</option>
                         </select>
-                        <p class="mt-1 text-[11px] leading-5 text-slate-500" :title="selectedContactSourceHelp" data-help-icon>
-                            {{ selectedContactSourceHelp }}
-                        </p>
                     </div>
                     <div class="sm:col-span-2">
                         <label class="mb-1 text-xs font-medium text-slate-500" :title="helpText.blockedStatus" data-help-icon>{{ $t('Block Status') }}</label>
