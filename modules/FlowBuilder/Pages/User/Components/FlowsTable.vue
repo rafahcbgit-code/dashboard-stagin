@@ -126,7 +126,7 @@
                             <template #items>
                                 <DropdownItemGroup>
                                     <DropdownItem :href="'/automation/flows/' + item.uuid">{{ $t('Edit') }}</DropdownItem>
-                                    <DropdownItem as="button" @click="handleDuplicateFlow(item.uuid)">{{ $t('Copy') }}</DropdownItem>
+                                    <DropdownItem as="button" :disabled="item.status !== 'active'" @click="item.status === 'active' && handleDuplicateFlow(item.uuid)" :title="item.status !== 'active' ? $t('Flow must be published to copy') : ''">{{ $t('Copy') }}</DropdownItem>
                                     <DropdownItem as="button" @click="handleDeleteFlow(item.uuid)">{{ $t('Delete') }}</DropdownItem>
                                 </DropdownItemGroup>
                             </template>

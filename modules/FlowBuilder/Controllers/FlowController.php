@@ -149,11 +149,22 @@ class FlowController extends BaseController
 
     public function duplicate(Request $request, $uuid)
     {
-        $flow = $this->flowService->duplicateFlow($uuid);
+        $flow = Flow::where('uuid', $uuid)->firstOrFail();
+
+        if ($flow->status !== 'active') {
+            return Redirect::back()->with(
+                'status', [
+                    'type' => 'error',
+                    'message' => __('Only published flows can be copied.')
+                ]
+            );
+        }
+
+        $this->flowService->duplicateFlow($uuid);
 
         return Redirect::back()->with(
             'status', [
-                'type' => 'success', 
+                'type' => 'success',
                 'message' => __('Flow copied successfully!')
             ]
         );
