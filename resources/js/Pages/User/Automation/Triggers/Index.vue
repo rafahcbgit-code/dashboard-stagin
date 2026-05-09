@@ -169,7 +169,7 @@
                                 </div>
                             </template>
                         </draggable>
-                        <Pagination v-if="triggerGroups.meta && triggerGroups.meta.last_page > 1" class="mt-3" :pagination="triggerGroups.meta" />
+                        <Pagination v-if="triggerGroups.last_page > 1" class="mt-3" :pagination="triggerGroups" />
                     </div>
                 </div>
             </div>

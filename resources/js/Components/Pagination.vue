@@ -102,7 +102,9 @@
     },
     methods: {
       loadPage(page) {
-        this.$inertia.get(this.$page.url, {page: page}, {
+        const url = new URL(window.location.href);
+        url.searchParams.set('page', page);
+        this.$inertia.get(url.pathname, Object.fromEntries(url.searchParams), {
           preserveState: true
         });
       },
