@@ -12,6 +12,7 @@
         className: String,
         placeholder: String,
         textAreaRows: Number,
+        maxLength: [Number, String],
         error: String,
     })
 
@@ -31,6 +32,7 @@
                 @input="updateValue"
                 :placeholder="placeholder"
                 :rows="textAreaRows"
+                :maxlength="maxLength"
                 >
                 {{ props.modelValue }}
             </textarea>

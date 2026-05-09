@@ -27,7 +27,8 @@ class TriggerGroupController extends BaseController
         // Ensure system triggers exist
         $this->triggerGroupService->initializeSystemTriggers($organizationId);
 
-        $triggerGroups = $this->triggerGroupService->listAll($organizationId);
+        $searchTerm = $request->query('search');
+        $triggerGroups = $this->triggerGroupService->listAll($organizationId, $searchTerm);
 
         // Get available flows for linking
         $flows = \Modules\FlowBuilder\Models\Flow::where('organization_id', $organizationId)
@@ -40,6 +41,7 @@ class TriggerGroupController extends BaseController
             'title' => __('Triggers'),
             'triggerGroups' => $triggerGroups,
             'flows' => $flows,
+            'filters' => request()->all(),
             'aimodule' => $aimodule,
             'fbmodule' => $fbmodule,
         ]);

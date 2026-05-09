@@ -16,6 +16,11 @@ const props = defineProps<NodeProps>()
 
 const title = ref(props.data.title)
 const uuid = ref(props.data.uuid)
+const maxHeaderLength = 60;
+const maxBodyLength = 1024;
+const maxFooterLength = 60;
+const maxSectionTitleLength = 24;
+const maxButtonLabelLength = 20;
 const isEditTitle = ref(false)
 
 const fields = ref({
@@ -184,24 +189,27 @@ function getCharsCount(input: string): number {
 
       <div v-if="fields.headerType == 'text'" class="mb-4">
         <label class="text-sm mb-2"><span class="text-red-500">*</span> Header Text</label>
-        <FormInput v-model="fields.headerText" :name="''" :placeholder="'Enter header text'" :type="'text'" :class="'col-span-4'"/>
+        <FormInput v-model="fields.headerText" :name="''" :placeholder="'Enter header text'" :type="'text'" :maxLength="maxHeaderLength" :class="'col-span-4'"/>
+        <span class="text-xs text-gray-500">{{ getCharsCount(fields.headerText) }}/{{ maxHeaderLength }}</span>
       </div>
       
       <FlowMedia v-if="fields.headerType != 'text' && fields.headerType != 'none'" v-model="fields.headerMedia" :type="fields.headerType" :uuid="uuid" :nodeId="node.id"/>
 
       <div class="mb-4">
         <label class="text-sm mb-2"><span class="text-red-500">*</span> Body</label>
-        <FormTextArea v-model="fields.body" :placeholder="'Enter the main message for this message type'" :name="''" :type="'text'" :class="'col-span-4'"/>
+        <FormTextArea v-model="fields.body" :placeholder="'Enter the main message for this message type'" :name="''" :type="'text'" :maxLength="maxBodyLength" :class="'col-span-4'"/>
+        <span class="text-xs text-gray-500">{{ getCharsCount(fields.body) }}/{{ maxBodyLength }}</span>
       </div>
 
       <div class="mb-4">
         <label class="text-sm mb-2">Footer Text (Optional)</label>
-        <FormInput v-model="fields.footer" :name="''" :placeholder="'Enter footer text'" :type="'text'" :class="'col-span-4'"/>
+        <FormInput v-model="fields.footer" :name="''" :placeholder="'Enter footer text'" :type="'text'" :maxLength="maxFooterLength" :class="'col-span-4'"/>
+        <span class="text-xs text-gray-500">{{ getCharsCount(fields.footer) }}/{{ maxFooterLength }}</span>
       </div>
 
       <div class="mb-4">
         <label class="text-sm mb-2"><span class="text-red-500">*</span> Button Label</label>
-        <FormInput v-model="fields.buttonLabel" :name="''" :placeholder="'Enter button label'" :type="'text'" :maxLength="20" :class="'col-span-4'"/>
+        <FormInput v-model="fields.buttonLabel" :name="''" :placeholder="'Enter button label'" :type="'text'" :maxLength="maxButtonLabelLength" :class="'col-span-4'"/>
       </div>
 
       <div class="flex justify-between items-center mb-4">
@@ -219,7 +227,8 @@ function getCharsCount(input: string): number {
         
         <div class="mb-4">
           <label class="text-sm mb-2"><span class="text-red-500">*</span> Title</label>
-          <FormInput v-model="section.title" :name="''" :placeholder="'Enter section title'" :type="'text'" :class="'col-span-4'"/>
+          <FormInput v-model="section.title" :name="''" :placeholder="'Enter section title'" :type="'text'" :maxLength="maxSectionTitleLength" :class="'col-span-4'"/>
+              <span class="text-xs text-gray-500">{{ getCharsCount(section.title || '') }}/{{ maxSectionTitleLength }}</span>
         </div>
 
         <div class="flex justify-between items-center mb-4">

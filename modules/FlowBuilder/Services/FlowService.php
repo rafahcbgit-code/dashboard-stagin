@@ -188,6 +188,32 @@ class FlowService
         // Get file extension or MIME type
         $fileExtension = strtolower($fileContent->getClientOriginalExtension());
         $fileMimeType = strtolower($fileContent->getMimeType());
+        $fileSize = $fileContent->getSize();
+
+        // Validate file size by media type
+        $maxSizes = [
+            'image' => 5 * 1024 * 1024,    // 5 MB
+            'video' => 16 * 1024 * 1024,    // 16 MB
+            'audio' => 16 * 1024 * 1024,    // 16 MB
+            'document' => 25 * 1024 * 1024,  // 25 MB
+        ];
+
+        // Determine media type from MIME type
+        $mediaType = null;
+        if (str_starts_with($fileMimeType, 'image/')) {
+            $mediaType = 'image';
+        } elseif (str_starts_with($fileMimeType, 'video/')) {
+            $mediaType = 'video';
+        } elseif (str_starts_with($fileMimeType, 'audio/')) {
+            $mediaType = 'audio';
+        } else {
+            $mediaType = 'document';
+        }
+
+        if ($mediaType && isset($maxSizes[$mediaType]) && $fileSize > $maxSizes[$mediaType]) {
+            $mbLimit = $maxSizes[$mediaType] / (1024 * 1024);
+            abort(422, ucfirst($mediaType) . " file must not exceed {$mbLimit}MB.");
+        }
 
         if($storage === 'local'){
             $location = 'local';

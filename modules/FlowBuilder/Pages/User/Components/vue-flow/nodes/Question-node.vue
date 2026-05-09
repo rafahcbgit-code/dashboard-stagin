@@ -16,6 +16,12 @@ const { removeNodes, nodes, addNodes, removeEdges, edges } = useVueFlow()
 const isEditTitle = ref(false)
 const title = ref(props.data.title || 'Question')
 
+const maxQuestionTextLength = 1024
+const maxVariableNameLength = 50
+const maxRetryMessageLength = 1024
+const minRetries = 1
+const maxRetries = 10
+
 const fields = ref({
   type: 'question',
   question_text: props.data.metadata?.fields?.question_text || '',
@@ -25,6 +31,10 @@ const fields = ref({
   retry_message: props.data.metadata?.fields?.retry_message || '',
   validation_pattern: props.data.metadata?.fields?.validation_pattern || '',
 })
+
+function getCharsCount(input: string): number {
+  return input.length
+}
 
 const inputTypeOptions = ref([
   { label: 'Text', value: 'text' },
@@ -142,14 +152,16 @@ watch(() => fields.value.input_type, (newType) => {
           <label class="text-sm font-medium text-gray-700 mb-1 block">
             <span class="text-red-500">*</span> Question text
           </label>
-          <FormTextArea v-model="fields.question_text" :placeholder="'e.g. What is your email address?'" :name="'question_text'" :type="'text'" :class="'col-span-4'"/>
+          <FormTextArea v-model="fields.question_text" :placeholder="'e.g. What is your email address?'" :name="'question_text'" :type="'text'" :maxLength="maxQuestionTextLength" :class="'col-span-4'"/>
+          <span class="text-xs text-gray-500">{{ getCharsCount(fields.question_text) }}/{{ maxQuestionTextLength }}</span>
         </div>
 
         <div>
           <label class="text-sm font-medium text-gray-700 mb-1 block">
             <span class="text-red-500">*</span> Save answer to variable
           </label>
-          <FormInput v-model="fields.variable_name" :name="'variable_name'" :placeholder="'e.g. email'" :type="'text'" :class="'col-span-4'"/>
+          <FormInput v-model="fields.variable_name" :name="'variable_name'" :placeholder="'e.g. email'" :type="'text'" :maxLength="maxVariableNameLength" :class="'col-span-4'"/>
+          <span class="text-xs text-gray-500">{{ getCharsCount(fields.variable_name) }}/{{ maxVariableNameLength }}</span>
           <span class="text-xs text-gray-400">{{ variableHint }}</span>
         </div>
 
@@ -165,13 +177,14 @@ watch(() => fields.value.input_type, (newType) => {
 
         <div>
           <label class="text-sm font-medium text-gray-700 mb-1 block">Max retries</label>
-          <FormInput v-model="fields.max_retries" :name="'max_retries'" :type="'number'" :class="'col-span-4'"/>
+          <FormInput v-model="fields.max_retries" :name="'max_retries'" :type="'number'" :min="minRetries" :max="maxRetries" :class="'col-span-4'"/>
           <span class="text-xs text-gray-400">How many times the user can retry before routing to the fail path</span>
         </div>
 
         <div>
           <label class="text-sm font-medium text-gray-700 mb-1 block">Retry message</label>
-          <FormTextArea v-model="fields.retry_message" placeholder="e.g. That doesn&#39;t look like a valid email. Please try again." :name="'retry_message'" :type="'text'" :class="'col-span-4'"/>
+          <FormTextArea v-model="fields.retry_message" placeholder="e.g. That doesn&#39;t look like a valid email. Please try again." :name="'retry_message'" :type="'text'" :maxLength="maxRetryMessageLength" :class="'col-span-4'"/>
+          <span class="text-xs text-gray-500">{{ getCharsCount(fields.retry_message) }}/{{ maxRetryMessageLength }}</span>
           <span class="text-xs text-gray-400">Shown when validation fails</span>
         </div>
       </div>

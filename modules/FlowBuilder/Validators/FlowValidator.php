@@ -87,13 +87,15 @@ class FlowValidator
     {
         $errors = [];
 
-        // Check if 'body' is present and not empty
         if (empty($data['body'])) {
             $errors[] = 'Text body is required.';
         }
 
-       // Additional checks can be added for other media fields like 'caption'
-       return !empty($errors) ? $errors : true;
+        if (!empty($data['body']) && mb_strlen($data['body'], 'UTF-8') > 4096) {
+            $errors[] = 'Text body must not exceed 4096 characters.';
+        }
+
+        return !empty($errors) ? $errors : true;
     }
 
     /**
@@ -106,7 +108,6 @@ class FlowValidator
     {
         $errors = [];
 
-        // Check if 'media' data is provided and contains the required fields
         if (empty($data['media']) || empty($data['media']['path'])) {
             $errors[] = 'Media path is required.';
         }
@@ -117,20 +118,45 @@ class FlowValidator
 
         // Validate mediaType format based on mimeType
         if (!empty($data['mediaType'])) {
-            // Assuming the metadata contains 'extension' as MIME type
             if(isset($data['media']['metadata'])){
-                $mimeType = json_decode($data['media']['metadata'], true)['extension'] ?? ''; // You should update this based on your actual structure
+                $mimeType = json_decode($data['media']['metadata'], true)['extension'] ?? '';
             } else {
                 $mimeType = '';
             }
-            // Validate based on media type and mimeType
             $validTypes = $this->validateMediaTypeFormat($mimeType, $data['mediaType']);
             if ($validTypes !== true) {
-                $errors[] = $validTypes;  // Store specific error for invalid format
+                $errors[] = $validTypes;
             }
         }
 
-        // Additional checks can be added for other media fields like 'caption'
+        // Caption limit: 1024 for image/video/document, 0 for audio
+        if (!empty($data['caption'])) {
+            if ($data['mediaType'] === 'audio') {
+                $errors[] = 'Audio messages cannot have a caption.';
+            } elseif (mb_strlen($data['caption'], 'UTF-8') > 1024) {
+                $errors[] = 'Caption must not exceed 1024 characters.';
+            }
+        }
+
+        // Media file size limits
+        if (!empty($data['media']) && !empty($data['media']['metadata'])) {
+            $mediaMeta = is_string($data['media']['metadata'])
+                ? json_decode($data['media']['metadata'], true)
+                : $data['media']['metadata'];
+            $fileSize = $mediaMeta['size'] ?? 0;
+            $maxSizes = [
+                'image' => 5 * 1024 * 1024,    // 5 MB
+                'video' => 16 * 1024 * 1024,    // 16 MB
+                'audio' => 16 * 1024 * 1024,    // 16 MB
+                'document' => 25 * 1024 * 1024,  // 25 MB
+            ];
+            $mediaType = $data['mediaType'] ?? '';
+            if (isset($maxSizes[$mediaType]) && $fileSize > $maxSizes[$mediaType]) {
+                $mbLimit = $maxSizes[$mediaType] / (1024 * 1024);
+                $errors[] = ucfirst($mediaType) . " file must not exceed {$mbLimit}MB.";
+            }
+        }
+
         return !empty($errors) ? $errors : true;
     }
 
@@ -151,21 +177,37 @@ class FlowValidator
                     if (empty($data['headerText'])) {
                         $errors[] = 'Header text is required when headerType is "text".';
                     }
+                    if (!empty($data['headerText']) && mb_strlen($data['headerText'], 'UTF-8') > 60) {
+                        $errors[] = 'Header text must not exceed 60 characters.';
+                    }
                     break;
-                
+
                 case 'image':
                 case 'video':
                 case 'document':
                     if (empty($data['headerMedia'])) {
                         $errors[] = 'Media is required when headerType is "' . $data['headerType'] . '".';
                     } else if (!empty($data['headerMedia'])) {
-                        // Assuming the metadata contains 'extension' as MIME type
-                        $mimeType = json_decode($data['headerMedia']['metadata'], true)['extension'] ?? ''; // You should update this based on your actual structure
-            
-                        // Validate based on media type and mimeType
+                        $mimeType = json_decode($data['headerMedia']['metadata'], true)['extension'] ?? '';
                         $validTypes = $this->validateMediaTypeFormat($mimeType, $data['headerType']);
                         if ($validTypes !== true) {
-                            $errors[] = $validTypes;  // Store specific error for invalid format
+                            $errors[] = $validTypes;
+                        }
+                        // Header media file size limits
+                        if (!empty($data['headerMedia']['metadata'])) {
+                            $mediaMeta = is_string($data['headerMedia']['metadata'])
+                                ? json_decode($data['headerMedia']['metadata'], true)
+                                : $data['headerMedia']['metadata'];
+                            $fileSize = $mediaMeta['size'] ?? 0;
+                            $maxSizes = [
+                                'image' => 5 * 1024 * 1024,
+                                'video' => 16 * 1024 * 1024,
+                                'document' => 25 * 1024 * 1024,
+                            ];
+                            if (isset($maxSizes[$data['headerType']]) && $fileSize > $maxSizes[$data['headerType']]) {
+                                $mbLimit = $maxSizes[$data['headerType']] / (1024 * 1024);
+                                $errors[] = ucfirst($data['headerType']) . " file must not exceed {$mbLimit}MB.";
+                            }
                         }
                     }
                     break;
@@ -176,9 +218,16 @@ class FlowValidator
         if (empty($data['body'])) {
             $errors[] = 'Body text is required.';
         }
+        if (!empty($data['body']) && mb_strlen($data['body'], 'UTF-8') > 1024) {
+            $errors[] = 'Body text must not exceed 1024 characters.';
+        }
+
+        // Footer limit
+        if (!empty($data['footer']) && mb_strlen($data['footer'], 'UTF-8') > 60) {
+            $errors[] = 'Footer text must not exceed 60 characters.';
+        }
 
         // Check if 'buttonType' exists and is 'buttons'
-        // Validate buttons if 'buttonType' is 'buttons'
         if (($data['buttonType'] ?? '') === 'buttons' && isset($data['buttons'])) {
             $validButtons = array_filter([
                 'button1' => $data['buttons']['button1'] ?? '',
@@ -190,7 +239,6 @@ class FlowValidator
                 $errors[] = 'At least one button (button1, button2, button3) must have a value.';
             }
 
-            // Ensure button values are between 1 to 20 characters long
             foreach ($validButtons as $key => $value) {
                 if (!$this->validateButtonValueLength($value)) {
                     $errors[] = ucfirst($key) . ' must be between 1 to 20 characters.';
@@ -200,26 +248,25 @@ class FlowValidator
 
         // Check if 'buttonType' exists and is 'cta_url'
         if (isset($data['buttonType']) && $data['buttonType'] === 'cta_url') {
-            // Validate that 'ctaUrlButton' array exists and contains 'displayText' and 'url'
             if (empty($data['ctaUrlButton']) || !isset($data['ctaUrlButton']['displayText']) || !isset($data['ctaUrlButton']['url'])) {
                 $errors[] = 'Both displayText and url are required for ctaUrlButton.';
             }
 
-            // Further validation if required for displayText and url (e.g., non-empty values)
             if (empty($data['ctaUrlButton']['displayText']) || empty($data['ctaUrlButton']['url'])) {
                 $errors[] = 'Both displayText and url must not be empty.';
             }
 
-            // URL pattern to validate the 'url'
+            if (!empty($data['ctaUrlButton']['displayText']) && mb_strlen($data['ctaUrlButton']['displayText'], 'UTF-8') > 25) {
+                $errors[] = 'CTA display text must not exceed 25 characters.';
+            }
+
             $urlPattern = '/^(https?:\/\/)([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(:\d+)?(\/\S*)?$/';
 
-            // Validate if the URL matches the pattern
             if (!preg_match($urlPattern, $data['ctaUrlButton']['url'])) {
                 $errors[] = 'The URL format is invalid. Please provide a valid URL.';
             }
         }
-        
-        // Additional checks can be added for other media fields like 'caption'
+
         return !empty($errors) ? $errors : true;
     }
 
@@ -233,9 +280,23 @@ class FlowValidator
         if (empty($data['question_text'])) {
             $errors[] = 'Question text is required.';
         }
+        if (!empty($data['question_text']) && mb_strlen($data['question_text'], 'UTF-8') > 1024) {
+            $errors[] = 'Question text must not exceed 1024 characters.';
+        }
 
         if (empty($data['variable_name'])) {
             $errors[] = 'Variable name is required.';
+        }
+        if (!empty($data['variable_name']) && mb_strlen($data['variable_name'], 'UTF-8') > 50) {
+            $errors[] = 'Variable name must not exceed 50 characters.';
+        }
+
+        if (!empty($data['retry_message']) && mb_strlen($data['retry_message'], 'UTF-8') > 1024) {
+            $errors[] = 'Retry message must not exceed 1024 characters.';
+        }
+
+        if (isset($data['max_retries']) && ($data['max_retries'] < 1 || $data['max_retries'] > 10)) {
+            $errors[] = 'Max retries must be between 1 and 10.';
         }
 
         return !empty($errors) ? $errors : true;
@@ -361,21 +422,37 @@ class FlowValidator
                     if (empty($data['headerText'])) {
                         $errors[] = 'Header text is required when headerType is "text".';
                     }
+                    if (!empty($data['headerText']) && mb_strlen($data['headerText'], 'UTF-8') > 60) {
+                        $errors[] = 'Header text must not exceed 60 characters.';
+                    }
                     break;
-                
+
                 case 'image':
                 case 'video':
                 case 'document':
                     if (empty($data['headerMedia'])) {
                         $errors[] = 'Media is required when headerType is "' . $data['headerType'] . '".';
                     } else if (!empty($data['headerMedia'])) {
-                        // Assuming the metadata contains 'extension' as MIME type
-                        $mimeType = json_decode($data['headerMedia']['metadata'], true)['extension'] ?? ''; // You should update this based on your actual structure
-            
-                        // Validate based on media type and mimeType
+                        $mimeType = json_decode($data['headerMedia']['metadata'], true)['extension'] ?? '';
                         $validTypes = $this->validateMediaTypeFormat($mimeType, $data['headerType']);
                         if ($validTypes !== true) {
-                            $errors[] = $validTypes;  // Store specific error for invalid format
+                            $errors[] = $validTypes;
+                        }
+                        // Header media file size limits
+                        if (!empty($data['headerMedia']['metadata'])) {
+                            $mediaMeta = is_string($data['headerMedia']['metadata'])
+                                ? json_decode($data['headerMedia']['metadata'], true)
+                                : $data['headerMedia']['metadata'];
+                            $fileSize = $mediaMeta['size'] ?? 0;
+                            $maxSizes = [
+                                'image' => 5 * 1024 * 1024,
+                                'video' => 16 * 1024 * 1024,
+                                'document' => 25 * 1024 * 1024,
+                            ];
+                            if (isset($maxSizes[$data['headerType']]) && $fileSize > $maxSizes[$data['headerType']]) {
+                                $mbLimit = $maxSizes[$data['headerType']] / (1024 * 1024);
+                                $errors[] = ucfirst($data['headerType']) . " file must not exceed {$mbLimit}MB.";
+                            }
                         }
                     }
                     break;
@@ -386,10 +463,21 @@ class FlowValidator
         if (empty($data['body'])) {
             $errors[] = 'Body text is required.';
         }
+        if (!empty($data['body']) && mb_strlen($data['body'], 'UTF-8') > 1024) {
+            $errors[] = 'Body text must not exceed 1024 characters.';
+        }
+
+        // Footer limit
+        if (!empty($data['footer']) && mb_strlen($data['footer'], 'UTF-8') > 60) {
+            $errors[] = 'Footer text must not exceed 60 characters.';
+        }
 
         // Check if button label has a value
         if (empty($data['buttonLabel'])) {
             $errors[] = 'Button label is required.';
+        }
+        if (!empty($data['buttonLabel']) && mb_strlen($data['buttonLabel'], 'UTF-8') > 20) {
+            $errors[] = 'Button label must not exceed 20 characters.';
         }
 
         // Check if list sections are provided
@@ -400,22 +488,31 @@ class FlowValidator
         $hasEmptySections = false;
 
         if(isset($data['sections'])){
-            // Ensure each section has a title and valid rows
             foreach ($data['sections'] as $section) {
                 if (empty($section['title'])) {
                     $errors[] = 'Each list section must have a title.';
+                }
+                if (!empty($section['title']) && mb_strlen($section['title'], 'UTF-8') > 24) {
+                    $errors[] = 'Section title must not exceed 24 characters.';
                 }
 
                 if (empty($section['rows']) || !is_array($section['rows'])) {
                     $errors[] = 'Each list section must have rows.';
                 }
 
-                // Check if all rows in a section are empty (no title or id)
                 $allRowsEmpty = true;
                 foreach ($section['rows'] as $row) {
                     if (!empty($row['title']) && !empty($row['id'])) {
                         $allRowsEmpty = false;
-                        break;
+                    }
+                    if (!empty($row['title']) && mb_strlen($row['title'], 'UTF-8') > 24) {
+                        $errors[] = 'Row title must not exceed 24 characters.';
+                    }
+                    if (!empty($row['id']) && mb_strlen($row['id'], 'UTF-8') > 200) {
+                        $errors[] = 'Row ID must not exceed 200 characters.';
+                    }
+                    if (!empty($row['description']) && mb_strlen($row['description'], 'UTF-8') > 72) {
+                        $errors[] = 'Row description must not exceed 72 characters.';
                     }
                 }
 
@@ -425,12 +522,10 @@ class FlowValidator
             }
         }
 
-        // Return error if any section has all rows empty
         if ($hasEmptySections) {
             $errors[] = 'Each section must contain at least one row with both a title and an id.';
         }
 
-        // Additional checks can be added for other media fields like 'caption'
         return !empty($errors) ? $errors : true;
     }
 
