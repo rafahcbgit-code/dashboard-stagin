@@ -10,12 +10,16 @@ class TriggerGroupService
     /**
      * Get all trigger groups for an organization, ordered by priority.
      */
-    public function listAll(int $organizationId)
+    public function listAll(int $organizationId, ?string $searchTerm = null)
     {
         return TriggerGroup::forOrganization($organizationId)
             ->with('flow')
             ->orderedByPriority()
-            ->get();
+            ->when($searchTerm, function ($query) use ($searchTerm) {
+                $query->where('name', 'like', '%' . $searchTerm . '%');
+            })
+            ->paginate(10)
+            ->withQueryString();
     }
 
     /**
