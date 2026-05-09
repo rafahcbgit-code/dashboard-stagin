@@ -48,8 +48,12 @@ const options2 = ref([
   { value: 'document', label: 'Document' },
 ]);
 
-// Max character limit for buttons
+// Max character limit for buttons (WhatsApp limit: 20 for reply, 25 for CTA display)
 const maxButtonLength = 20;
+const maxCtaDisplayLength = 25;
+const maxHeaderLength = 60;
+const maxBodyLength = 1024;
+const maxFooterLength = 60;
 
 watch(
   fields,
@@ -189,19 +193,22 @@ function getCharsCount(input: string): number {
 
       <div v-if="fields.headerType == 'text'" class="mb-4">
         <label class="text-sm mb-2"><span class="text-red-500">*</span> Header Text</label>
-        <FormInput v-model="fields.headerText" :name="''" :placeholder="'Enter header text'" :type="'text'" :class="'col-span-4'"/>
+        <FormInput v-model="fields.headerText" :name="''" :placeholder="'Enter header text'" :type="'text'" :maxLength="maxHeaderLength" :class="'col-span-4'"/>
+        <span class="text-xs text-gray-500">{{ getCharsCount(fields.headerText) }}/{{ maxHeaderLength }}</span>
       </div>
       
       <FlowMedia v-if="fields.headerType != 'text' && fields.headerType != 'none'" v-model="fields.headerMedia" :type="fields.headerType" :uuid="uuid" :nodeId="node.id"/>
 
       <div class="mb-4">
         <label class="text-sm mb-2"><span class="text-red-500">*</span> Body</label>
-        <FormTextArea v-model="fields.body" :placeholder="'Enter the main message for this message type'" :name="''" :type="'text'" :class="'col-span-4'"/>
+        <FormTextArea v-model="fields.body" :placeholder="'Enter the main message for this message type'" :name="''" :type="'text'" :class="'col-span-4'" :maxLength="maxBodyLength"/>
+        <span class="text-xs text-gray-500">{{ getCharsCount(fields.body) }}/{{ maxBodyLength }}</span>
       </div>
 
       <div class="mb-4">
         <label class="text-sm mb-2">Footer Text (Optional)</label>
-        <FormInput v-model="fields.footer" :name="''" :placeholder="'Enter footer text'" :type="'text'" :class="'col-span-4'"/>
+        <FormInput v-model="fields.footer" :name="''" :placeholder="'Enter footer text'" :type="'text'" :maxLength="maxFooterLength" :class="'col-span-4'"/>
+        <span class="text-xs text-gray-500">{{ getCharsCount(fields.footer) }}/{{ maxFooterLength }}</span>
       </div>
 
       <div class="mb-4">
@@ -249,7 +256,8 @@ function getCharsCount(input: string): number {
         <label class="text-sm mb-2">CTA Button</label>
         <div class="mb-4">
           <label class="text-sm mb-2">Display text</label>
-          <FormInput v-model="fields.ctaUrlButton.displayText" :type="'text'" :maxLength="maxButtonLength" :class="'col-span-4'"/>
+          <FormInput v-model="fields.ctaUrlButton.displayText" :type="'text'" :maxLength="maxCtaDisplayLength" :class="'col-span-4'"/>
+          <span class="text-xs text-gray-500">{{ getCharsCount(fields.ctaUrlButton.displayText) }}/{{ maxCtaDisplayLength }}</span>
         </div>
 
         <div class="mb-4">

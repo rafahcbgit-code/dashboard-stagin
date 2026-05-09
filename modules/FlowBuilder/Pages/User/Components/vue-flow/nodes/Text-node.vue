@@ -13,7 +13,7 @@ const props = defineProps<NodeProps>()
 const textAreaRef = ref(null);
 const title = ref(props.data.title)
 const textInput = ref(props.data.metadata?.fields["body"] || '')
-const characterLimit = ref('1098');
+const characterLimit = ref('4096');
 const characterCount = ref('0');
 
 const isEditTitle = ref(false)

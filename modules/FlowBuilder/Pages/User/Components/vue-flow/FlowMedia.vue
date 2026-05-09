@@ -10,8 +10,25 @@ const nodeId = ref(props.nodeId)
 const handleFileChange = (event) => {
   const input = event.target;
   if (input && input.files && input.files[0]) {
-    file.value = input.files[0];
-    uploadMedia();  // Call uploadMedia immediately when a file is selected
+    const selectedFile = input.files[0];
+
+    // Validate file size by type
+    const maxSizes = {
+      image: 5 * 1024 * 1024,     // 5 MB
+      video: 16 * 1024 * 1024,    // 16 MB
+      audio: 16 * 1024 * 1024,    // 16 MB
+      document: 25 * 1024 * 1024, // 25 MB
+    };
+    const type = props.type;
+    if (maxSizes[type] && selectedFile.size > maxSizes[type]) {
+      const mbLimit = maxSizes[type] / (1024 * 1024);
+      alert(`${type.charAt(0).toUpperCase() + type.slice(1)} file must not exceed ${mbLimit}MB. Your file is ${(selectedFile.size / (1024 * 1024)).toFixed(1)}MB.`);
+      input.value = '';
+      return;
+    }
+
+    file.value = selectedFile;
+    uploadMedia();
   }
 };
 
@@ -66,10 +83,10 @@ const removeMedia = () => {
                 <span v-if="props.type == 'document'">Upload document file</span>
             </label>
             </div>
-            <p v-if="props.type == 'image'" class="text-xs text-gray-500">PNG or JPG files only</p>
-            <p v-if="props.type == 'video'" class="text-xs text-gray-500">MP4 or 3GPP files only</p>
-            <p v-if="props.type == 'audio'" class="text-xs text-gray-500">MP3/AAC/AMR or <br> MP4 files only</p>
-            <p v-if="props.type == 'document'" class="text-xs text-gray-500">PDF/TXT/XLS/XLSX/DOC/DOCX/PPT or PPTX files only</p>
+            <p v-if="props.type == 'image'" class="text-xs text-gray-500">PNG or JPG (max 5MB)</p>
+            <p v-if="props.type == 'video'" class="text-xs text-gray-500">MP4 or 3GPP (max 16MB)</p>
+            <p v-if="props.type == 'audio'" class="text-xs text-gray-500">MP3/AAC/AMR or MP4 (max 16MB)</p>
+            <p v-if="props.type == 'document'" class="text-xs text-gray-500">PDF/TXT/XLS/XLSX/DOC/DOCX/PPT/PPTX (max 25MB)</p>
         </div>
         <div v-else class="flex text-sm text-gray-600">
             <div class="">
