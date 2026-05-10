@@ -110,7 +110,7 @@
                                             <!-- Linked Flow -->
                                             <template v-if="trigger.flow">
                                                 <span class="text-xs text-slate-500">
-                                                    {{ $t('Flow') }}: <span class="font-medium text-slate-700">{{ trigger.flow.name }}</span>
+                                                    {{ $t('Flow') }}: <a :href="'/automation/flows/' + trigger.flow.uuid" target="_blank" class="font-medium text-primary hover:underline">{{ trigger.flow.name }}</a>
                                                 </span>
                                             </template>
                                             <template v-else>
@@ -315,43 +315,14 @@
                     </div>
                 </div>
 
-                <!-- Rate Limit -->
+                <!-- Rate Limit (read-only info) -->
                 <div>
                     <label class="block text-sm font-semibold text-slate-700 mb-1.5">{{ $t('Rate Limit') }}</label>
-                    <div class="grid grid-cols-3 gap-2">
-                        <button
-                            type="button"
-                            @click="form.rate_limit_type = 'none'"
-                            class="rounded-lg border px-3 py-2.5 text-center text-sm transition-all duration-150"
-                            :class="form.rate_limit_type === 'none'
-                                ? 'border-primary bg-primary/5 text-primary font-semibold ring-1 ring-primary/20'
-                                : 'border-slate-200 text-slate-600 hover:border-slate-300'"
-                        >
-                            <div class="font-medium text-xs">{{ $t('No Limit') }}</div>
-                            <div class="text-[10px] mt-0.5 opacity-70">{{ $t('Every time') }}</div>
-                        </button>
-                        <button
-                            type="button"
-                            @click="form.rate_limit_type = 'lifetime'"
-                            class="rounded-lg border px-3 py-2.5 text-center text-sm transition-all duration-150"
-                            :class="form.rate_limit_type === 'lifetime'
-                                ? 'border-primary bg-primary/5 text-primary font-semibold ring-1 ring-primary/20'
-                                : 'border-slate-200 text-slate-600 hover:border-slate-300'"
-                        >
-                            <div class="font-medium text-xs">{{ $t('Once Ever') }}</div>
-                            <div class="text-[10px] mt-0.5 opacity-70">{{ $t('Per contact') }}</div>
-                        </button>
-                        <button
-                            type="button"
-                            @click="form.rate_limit_type = '24h'"
-                            class="rounded-lg border px-3 py-2.5 text-center text-sm transition-all duration-150"
-                            :class="form.rate_limit_type === '24h'
-                                ? 'border-primary bg-primary/5 text-primary font-semibold ring-1 ring-primary/20'
-                                : 'border-slate-200 text-slate-600 hover:border-slate-300'"
-                        >
-                            <div class="font-medium text-xs">{{ $t('Once / 24h') }}</div>
-                            <div class="text-[10px] mt-0.5 opacity-70">{{ $t('Per day') }}</div>
-                        </button>
+                    <div class="rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-600">
+                        <span v-if="form.rate_limit_type === 'none'" class="text-slate-600">{{ $t('No limit — fires every time') }}</span>
+                        <span v-else-if="form.rate_limit_type === 'lifetime'" class="text-slate-600">{{ $t('Once ever per contact') }}</span>
+                        <span v-else-if="form.rate_limit_type === '24h'" class="text-slate-600">{{ $t('Once per 24 hours per contact') }}</span>
+                        <span v-else class="text-slate-600">{{ formatRateLimit(form.rate_limit_type) }}</span>
                     </div>
                 </div>
 
