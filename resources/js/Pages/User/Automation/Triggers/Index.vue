@@ -106,14 +106,6 @@
                                                 {{ $t('Bypassed') }}
                                             </span>
                                         </div>
-                                    <div class="flex-1 min-w-0">
-                                        <div class="flex items-center gap-2">
-                                            <span class="font-medium text-sm text-slate-800 truncate">{{ trigger.name }}</span>
-                                            <span v-if="trigger.is_system" class="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-sky-50 text-sky-600 border border-sky-100">
-                                                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12c5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg>
-                                                {{ $t('System') }}
-                                            </span>
-                                        </div>
                                         <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
                                             <!-- Linked Flow -->
                                             <template v-if="trigger.flow">
