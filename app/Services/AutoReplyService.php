@@ -198,17 +198,19 @@ class AutoReplyService
                     $routingService = new AgentRoutingService();
                     $routingService->assignToAgent($organizationId, $contact->id, 'auto_assignment');
 
-                    $transferMessage = $this->botSettingsService->getSetting(
-                        $organizationId,
-                        'escalation_transfer_message',
-                        "You're being connected to a team member who can help. Please hold on a moment."
-                    );
-                    $this->initializeWhatsappService($organizationId)->sendMessage(
-                        $contact->uuid,
-                        $transferMessage,
-                        null,
-                        'text'
-                    );
+                    if ($this->botSettingsService->getSetting($organizationId, 'escalation_transfer_message_enabled', false)) {
+                        $transferMessage = $this->botSettingsService->getSetting(
+                            $organizationId,
+                            'escalation_transfer_message',
+                            "You're being connected to a team member who can help. Please hold on a moment."
+                        );
+                        $this->initializeWhatsappService($organizationId)->sendMessage(
+                            $contact->uuid,
+                            $transferMessage,
+                            null,
+                            'text'
+                        );
+                    }
 
                     return true;
                 }
@@ -283,17 +285,19 @@ class AutoReplyService
                 $routingService = new AgentRoutingService();
                 $routingService->assignToAgent($organizationId, $contact->id, 'auto_assignment');
 
-                $transferMessage = $this->botSettingsService->getSetting(
-                    $organizationId,
-                    'escalation_transfer_message',
-                    "You're being connected to a team member who can help. Please hold on a moment."
-                );
-                $this->initializeWhatsappService($organizationId)->sendMessage(
-                    $contact->uuid,
-                    $transferMessage,
-                    null,
-                    'text'
-                );
+                if ($this->botSettingsService->getSetting($organizationId, 'escalation_transfer_message_enabled', false)) {
+                    $transferMessage = $this->botSettingsService->getSetting(
+                        $organizationId,
+                        'escalation_transfer_message',
+                        "You're being connected to a team member who can help. Please hold on a moment."
+                    );
+                    $this->initializeWhatsappService($organizationId)->sendMessage(
+                        $contact->uuid,
+                        $transferMessage,
+                        null,
+                        'text'
+                    );
+                }
 
                 return true;
             }
@@ -366,17 +370,19 @@ class AutoReplyService
                 );
 
                 // Notify the user they're being connected to an agent
-                $transferMessage = $this->botSettingsService->getSetting(
-                    $organizationId,
-                    'escalation_transfer_message',
-                    "You're being connected to a team member who can help. Please hold on a moment."
-                );
-                $this->initializeWhatsappService($organizationId)->sendMessage(
-                    $contact->uuid,
-                    $transferMessage,
-                    null,
-                    'text'
-                );
+                if ($this->botSettingsService->getSetting($organizationId, 'escalation_transfer_message_enabled', false)) {
+                    $transferMessage = $this->botSettingsService->getSetting(
+                        $organizationId,
+                        'escalation_transfer_message',
+                        "You're being connected to a team member who can help. Please hold on a moment."
+                    );
+                    $this->initializeWhatsappService($organizationId)->sendMessage(
+                        $contact->uuid,
+                        $transferMessage,
+                        null,
+                        'text'
+                    );
+                }
 
                 return true;
             }
@@ -515,17 +521,19 @@ class AutoReplyService
                     $routingService = new AgentRoutingService();
                     $routingService->assignToAgent($organizationId, $contact->id, 'auto_assignment');
 
-                    $transferMessage = $this->botSettingsService->getSetting(
-                        $organizationId,
-                        'escalation_transfer_message',
-                        "You're being connected to a team member who can help. Please hold on a moment."
-                    );
-                    $this->initializeWhatsappService($organizationId)->sendMessage(
-                        $contact->uuid,
-                        $transferMessage,
-                        null,
-                        'text'
-                    );
+                    if ($this->botSettingsService->getSetting($organizationId, 'escalation_transfer_message_enabled', false)) {
+                        $transferMessage = $this->botSettingsService->getSetting(
+                            $organizationId,
+                            'escalation_transfer_message',
+                            "You're being connected to a team member who can help. Please hold on a moment."
+                        );
+                        $this->initializeWhatsappService($organizationId)->sendMessage(
+                            $contact->uuid,
+                            $transferMessage,
+                            null,
+                            'text'
+                        );
+                    }
 
                     return true;
 
@@ -632,17 +640,19 @@ class AutoReplyService
                 $routingService = new AgentRoutingService();
                 $routingService->assignToAgent($organizationId, $contact->id, 'auto_assignment');
 
-                $transferMessage = $this->botSettingsService->getSetting(
-                    $organizationId,
-                    'escalation_transfer_message',
-                    "You're being connected to a team member who can help. Please hold on a moment."
-                );
-                $this->initializeWhatsappService($organizationId)->sendMessage(
-                    $contact->uuid,
-                    $transferMessage,
-                    null,
-                    'text'
-                );
+                if ($this->botSettingsService->getSetting($organizationId, 'escalation_transfer_message_enabled', false)) {
+                    $transferMessage = $this->botSettingsService->getSetting(
+                        $organizationId,
+                        'escalation_transfer_message',
+                        "You're being connected to a team member who can help. Please hold on a moment."
+                    );
+                    $this->initializeWhatsappService($organizationId)->sendMessage(
+                        $contact->uuid,
+                        $transferMessage,
+                        null,
+                        'text'
+                    );
+                }
 
                 return true;
             }

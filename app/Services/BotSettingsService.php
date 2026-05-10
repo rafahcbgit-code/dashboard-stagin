@@ -12,6 +12,7 @@ class BotSettingsService
         'flow_timeout_minutes' => 30,
         'ai_fallback_enabled' => false,
         'ai_fallback_confidence' => 75,
+        'escalation_transfer_message_enabled' => false,
         'escalation_transfer_message' => "You're being connected to a team member who can help. Please hold on a moment.",
     ];
 

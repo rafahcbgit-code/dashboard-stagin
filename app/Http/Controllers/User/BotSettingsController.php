@@ -59,12 +59,14 @@ class BotSettingsController extends BaseController
             'flow_timeout_minutes' => 'sometimes|integer|min:5|max:1440',
             'ai_fallback_enabled' => 'nullable|boolean',
             'ai_fallback_confidence' => 'nullable|integer|min:0|max:100',
+            'escalation_transfer_message_enabled' => 'nullable|boolean',
             'escalation_transfer_message' => 'nullable|string|max:500',
         ]);
 
         // Convert checkboxes to booleans
         $validated['automation_enabled'] = isset($validated['automation_enabled']) ? (bool) $validated['automation_enabled'] : false;
         $validated['ai_fallback_enabled'] = isset($validated['ai_fallback_enabled']) ? (bool) $validated['ai_fallback_enabled'] : false;
+        $validated['escalation_transfer_message_enabled'] = isset($validated['escalation_transfer_message_enabled']) ? (bool) $validated['escalation_transfer_message_enabled'] : false;
 
         $organizationId = session()->get('current_organization');
         $this->botSettingsService->update($organizationId, $validated);
