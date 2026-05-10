@@ -130,13 +130,13 @@ class TriggerGroupService
 
     /**
      * Initialize system triggers for an organization.
-     * Creates: Welcome, Greeting, Away, Fallback.
+     * Creates: New Contact, Greeting, Away, Fallback.
      */
     public function initializeSystemTriggers(int $organizationId): void
     {
         $systemTriggers = [
             [
-                'name' => 'Welcome',
+                'name' => 'New Contact',
                 'type' => 'new_contact',
                 'rate_limit_type' => 'lifetime',
                 'priority' => 0,

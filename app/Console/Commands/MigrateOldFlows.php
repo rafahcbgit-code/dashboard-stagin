@@ -207,7 +207,7 @@ class MigrateOldFlows extends Command
 
         switch ($trigger) {
             case 'new_contact':
-                // Link the system Welcome trigger to this flow, or create one
+                // Link the system New Contact trigger to this flow, or create one
                 $welcomeTrigger = TriggerGroup::forOrganization($orgId)
                     ->where('type', 'new_contact')
                     ->first();
