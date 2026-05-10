@@ -11,6 +11,7 @@
                                 <p class="text-sm text-slate-500 mt-0.5">{{ $t('Define how your bot responds to messages. Drag to reorder priority.') }}</p>
                             </div>
                             <button
+                                v-if="!aiOnlyMode"
                                 @click="showCreateModal = true"
                                 class="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-[#045a47] transition-colors"
                             >
@@ -23,6 +24,15 @@
                         <div class="mt-4 flex items-start gap-2 rounded-lg bg-emerald-50 border border-emerald-100 px-3.5 py-2.5 text-xs text-emerald-800">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 mt-0.5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
                             <span>{{ $t('Triggers evaluate top-to-bottom. The first match wins. Drag to reorder priority.') }}</span>
+                        </div>
+
+                        <!-- AI-Only Mode Banner -->
+                        <div v-if="aiOnlyMode" class="mt-3 flex items-start gap-2 rounded-lg bg-indigo-50 border border-indigo-200 px-3.5 py-2.5 text-xs text-indigo-800">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 mt-0.5"><path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446A9 9 0 1 1 12 3z"/><path d="M17 4a2 2 0 0 0 2 2a2 2 0 0 0-2 2a2 2 0 0 0-2-2a2 2 0 0 0 2-2"/></svg>
+                            <div>
+                                <span class="font-semibold">{{ $t('AI-Only Mode is active.') }}</span>
+                                {{ $t('Only AI responds to messages. All triggers are bypassed except the Fallback trigger, which serves as a safety net when AI cannot answer.') }}
+                            </div>
                         </div>
 
                         <!-- Search -->
@@ -59,14 +69,19 @@
                             <template #item="{ element: trigger }">
                                 <div
                                     class="group relative flex items-center gap-3 rounded-lg border px-4 py-3 transition-all duration-150"
-                                    :class="trigger.is_enabled
-                                        ? 'bg-white border-slate-200 hover:border-slate-300 hover:shadow-sm'
-                                        : 'bg-slate-50/60 border-slate-100 opacity-70'"
+                                    :class="[
+                                        (aiOnlyMode && trigger.type !== 'fallback')
+                                            ? 'bg-slate-50/60 border-slate-100 opacity-50 pointer-events-none'
+                                            : trigger.is_enabled
+                                                ? 'bg-white border-slate-200 hover:border-slate-300 hover:shadow-sm'
+                                                : 'bg-slate-50/60 border-slate-100 opacity-70'
+                                    ]"
                                 >
                                     <!-- Drag Handle -->
-                                    <div class="drag-handle cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500 transition-colors py-1">
+                                    <div v-if="!(aiOnlyMode && trigger.type !== 'fallback')" class="drag-handle cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500 transition-colors py-1">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg>
                                     </div>
+                                    <div v-else class="w-[18px] py-1"></div>
 
                                     <!-- Type Icon -->
                                     <div
@@ -77,6 +92,20 @@
                                     </div>
 
                                     <!-- Trigger Info -->
+                                    <div class="flex-1 min-w-0">
+                                        <div class="flex items-center gap-2">
+                                            <span class="font-medium text-sm text-slate-800 truncate">{{ trigger.name }}</span>
+                                            <span v-if="trigger.is_system" class="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-sky-50 text-sky-600 border border-sky-100">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12c5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg>
+                                                {{ $t('System') }}
+                                            </span>
+                                            <span v-if="aiOnlyMode && trigger.type === 'fallback'" class="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-indigo-50 text-indigo-600 border border-indigo-200">
+                                                {{ $t('AI-Only') }}
+                                            </span>
+                                            <span v-if="aiOnlyMode && trigger.type !== 'fallback'" class="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-slate-100 text-slate-400 border border-slate-200">
+                                                {{ $t('Bypassed') }}
+                                            </span>
+                                        </div>
                                     <div class="flex-1 min-w-0">
                                         <div class="flex items-center gap-2">
                                             <span class="font-medium text-sm text-slate-800 truncate">{{ trigger.name }}</span>
@@ -374,7 +403,7 @@ import Pagination from '@/Components/Pagination.vue';
 import { trans } from 'laravel-vue-i18n';
 import debounce from 'lodash/debounce';
 
-const props = defineProps(['triggerGroups', 'flows', 'filters', 'aimodule', 'fbmodule']);
+const props = defineProps(['triggerGroups', 'flows', 'filters', 'aimodule', 'fbmodule', 'aiOnlyMode']);
 
 const localTriggers = ref([...(props.triggerGroups?.data || [])]);
 

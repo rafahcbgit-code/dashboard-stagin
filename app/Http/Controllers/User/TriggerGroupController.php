@@ -5,6 +5,7 @@ namespace App\Http\Controllers\User;
 use App\Http\Controllers\Controller as BaseController;
 use App\Helpers\CustomHelper;
 use App\Models\TriggerGroup;
+use App\Services\AiSettingsService;
 use App\Services\TriggerGroupService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -37,6 +38,10 @@ class TriggerGroupController extends BaseController
             ->orderBy('name')
             ->get();
 
+        // Check if AI-Only Mode is active for UI feedback
+        $aiSettingsService = new AiSettingsService();
+        $aiOnlyMode = $aiSettingsService->isAiOnlyMode($organizationId);
+
         return Inertia::render('User/Automation/Triggers/Index', [
             'title' => __('Triggers'),
             'triggerGroups' => $triggerGroups,
@@ -44,6 +49,7 @@ class TriggerGroupController extends BaseController
             'filters' => request()->all(),
             'aimodule' => $aimodule,
             'fbmodule' => $fbmodule,
+            'aiOnlyMode' => $aiOnlyMode,
         ]);
     }
 
