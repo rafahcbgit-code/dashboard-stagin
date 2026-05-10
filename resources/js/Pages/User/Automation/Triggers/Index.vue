@@ -211,17 +211,19 @@
                     />
                 </div>
 
-                <!-- Type -->
+                <!-- Type badge (read-only) -->
                 <div>
-                    <label class="block text-sm font-semibold text-slate-700 mb-1.5">{{ $t('When should this trigger fire?') }}</label>
-                    <select
-                        v-model="form.type"
-                        class="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 focus:border-primary focus:ring-1 focus:ring-primary/30 focus:outline-none transition-colors"
-                        :disabled="editingTrigger?.is_system"
-                    >
-                        <option value="new_contact">{{ $t('New Contact') }} — {{ $t('First message from unknown contact') }}</option>
-                        <option value="new_message">{{ $t('New Message') }} — {{ $t('Keyword or AI matching') }}</option>
-                    </select>
+                    <label class="block text-sm font-semibold text-slate-700 mb-1.5">{{ $t('Type') }}</label>
+                    <div class="flex items-center gap-2">
+                        <span
+                            class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold"
+                            :class="typeIconColor(form.type) + ' text-white'"
+                        >
+                            {{ typeIcon(form.type) }}
+                            {{ formatType(form.type) }}
+                        </span>
+                        <span class="text-xs text-slate-400">{{ formatTypeDescription(form.type, form.rate_limit_type) }}</span>
+                    </div>
                 </div>
 
                 <!-- Keywords (only for new_message type) -->
@@ -312,17 +314,6 @@
                             <span>{{ $t('More accurate') }}</span>
                         </div>
                         <p class="text-xs text-slate-500 mt-2">{{ $t('Lower = more matches but less accurate. Higher = stricter matching.') }}</p>
-                    </div>
-                </div>
-
-                <!-- Rate Limit (read-only info) -->
-                <div>
-                    <label class="block text-sm font-semibold text-slate-700 mb-1.5">{{ $t('Rate Limit') }}</label>
-                    <div class="rounded-lg border border-slate-200 bg-slate-50 px-3.5 py-2.5 text-sm text-slate-600">
-                        <span v-if="form.rate_limit_type === 'none'" class="text-slate-600">{{ $t('No limit — fires every time') }}</span>
-                        <span v-else-if="form.rate_limit_type === 'lifetime'" class="text-slate-600">{{ $t('Once ever per contact') }}</span>
-                        <span v-else-if="form.rate_limit_type === '24h'" class="text-slate-600">{{ $t('Once per 24 hours per contact') }}</span>
-                        <span v-else class="text-slate-600">{{ formatRateLimit(form.rate_limit_type) }}</span>
                     </div>
                 </div>
 
@@ -456,6 +447,17 @@ function formatRateLimit(type) {
         '24h': 'Once/24h',
     };
     return limits[type] || type;
+}
+
+function formatTypeDescription(type, rateLimitType) {
+    const descriptions = {
+        new_contact: 'First message from a new contact',
+        greeting: 'During working hours',
+        away: 'Outside working hours',
+        fallback: 'When no other trigger matches',
+        new_message: rateLimitType === 'none' ? 'Fires every time' : rateLimitType === 'lifetime' ? 'Once per contact, ever' : 'Once per 24h per contact',
+    };
+    return descriptions[type] || '';
 }
 
 function addKeyword() {
