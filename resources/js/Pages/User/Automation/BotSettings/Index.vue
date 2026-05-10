@@ -219,8 +219,20 @@
                                         <label class="block text-sm font-semibold text-slate-800">{{ $t('Transfer Message') }}</label>
                                         <p class="text-xs text-slate-500 mt-0.5">{{ $t('Sent to the user when a conversation is escalated to a human agent.') }}</p>
                                     </div>
+                                    <!-- Toggle -->
+                                    <button
+                                        type="button"
+                                        @click="form.escalation_transfer_message_enabled = !form.escalation_transfer_message_enabled"
+                                        class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-1 shrink-0"
+                                        :class="form.escalation_transfer_message_enabled ? 'bg-primary' : 'bg-slate-300'"
+                                    >
+                                        <span
+                                            class="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform duration-200"
+                                            :class="form.escalation_transfer_message_enabled ? 'translate-x-[18px]' : 'translate-x-[3px]'"
+                                        />
+                                    </button>
                                 </div>
-                                <div class="mt-4">
+                                <div v-if="form.escalation_transfer_message_enabled" class="mt-4">
                                     <textarea
                                         v-model="form.escalation_transfer_message"
                                         rows="2"
@@ -228,6 +240,9 @@
                                         class="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-primary focus:ring-1 focus:ring-primary/30 focus:outline-none transition-colors resize-none"
                                         :placeholder="$t('e.g., You\'re being connected to a team member who can help. Please hold on a moment.')"
                                     />
+                                </div>
+                                <div v-else class="mt-2 text-xs text-slate-400">
+                                    {{ $t('No message will be sent when escalating to a human agent.') }}
                                 </div>
                             </div>
 
@@ -261,6 +276,7 @@ const form = ref({
     flow_timeout_minutes: props.settings?.flow_timeout_minutes || 30,
     ai_fallback_enabled: props.settings?.ai_fallback_enabled || false,
     ai_fallback_confidence: props.settings?.ai_fallback_confidence || 75,
+    escalation_transfer_message_enabled: props.settings?.escalation_transfer_message_enabled ?? false,
     escalation_transfer_message: props.settings?.escalation_transfer_message || "You're being connected to a team member who can help. Please hold on a moment.",
 });
 
