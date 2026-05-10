@@ -9,7 +9,6 @@ use App\Models\Organization;
 use App\Services\BotSettingsService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
-use Modules\FlowBuilder\Models\Flow;
 
 class BotSettingsController extends BaseController
 {
@@ -42,19 +41,11 @@ class BotSettingsController extends BaseController
             ->enabled()
             ->count();
 
-        // Get flows for fallback menu dropdowns
-        $flows = Flow::where('organization_id', $organizationId)
-            ->whereNull('deleted_at')
-            ->orderBy('name')
-            ->select('id', 'name')
-            ->get();
-
         return Inertia::render('User/Automation/BotSettings/Index', [
             'title' => __('Bot Settings'),
             'settings' => $settings,
             'workingHours' => $workingHours,
             'kbEntryCount' => $kbEntryCount,
-            'flows' => $flows,
             'aimodule' => $aimodule,
             'fbmodule' => $fbmodule,
         ]);
@@ -68,28 +59,12 @@ class BotSettingsController extends BaseController
             'flow_timeout_minutes' => 'sometimes|integer|min:5|max:1440',
             'ai_fallback_enabled' => 'nullable|boolean',
             'ai_fallback_confidence' => 'nullable|integer|min:0|max:100',
-            'fallback_menu_enabled' => 'nullable|boolean',
-            'fallback_menu_message' => 'nullable|string|max:500',
-            'fallback_menu_start_over_flow_id' => 'nullable|integer|exists:flows,id',
-            'fallback_menu_help_flow_id' => 'nullable|integer|exists:flows,id',
-            'fallback_menu_route_to_agent' => 'nullable|boolean',
-            'fallback_menu_button_1_label' => 'nullable|string|max:20',
-            'fallback_menu_button_2_label' => 'nullable|string|max:20',
-            'fallback_menu_button_3_label' => 'nullable|string|max:20',
-            'fallback_menu_button_1_enabled' => 'nullable|boolean',
-            'fallback_menu_button_2_enabled' => 'nullable|boolean',
-            'fallback_menu_button_3_enabled' => 'nullable|boolean',
             'escalation_transfer_message' => 'nullable|string|max:500',
         ]);
 
         // Convert checkboxes to booleans
         $validated['automation_enabled'] = isset($validated['automation_enabled']) ? (bool) $validated['automation_enabled'] : false;
         $validated['ai_fallback_enabled'] = isset($validated['ai_fallback_enabled']) ? (bool) $validated['ai_fallback_enabled'] : false;
-        $validated['fallback_menu_enabled'] = isset($validated['fallback_menu_enabled']) ? (bool) $validated['fallback_menu_enabled'] : false;
-        $validated['fallback_menu_route_to_agent'] = isset($validated['fallback_menu_route_to_agent']) ? (bool) $validated['fallback_menu_route_to_agent'] : false;
-        $validated['fallback_menu_button_1_enabled'] = isset($validated['fallback_menu_button_1_enabled']) ? (bool) $validated['fallback_menu_button_1_enabled'] : false;
-        $validated['fallback_menu_button_2_enabled'] = isset($validated['fallback_menu_button_2_enabled']) ? (bool) $validated['fallback_menu_button_2_enabled'] : false;
-        $validated['fallback_menu_button_3_enabled'] = isset($validated['fallback_menu_button_3_enabled']) ? (bool) $validated['fallback_menu_button_3_enabled'] : false;
 
         $organizationId = session()->get('current_organization');
         $this->botSettingsService->update($organizationId, $validated);

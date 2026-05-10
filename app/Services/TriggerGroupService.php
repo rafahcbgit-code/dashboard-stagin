@@ -171,7 +171,7 @@ class TriggerGroupService
                 'rate_limit_type' => 'none',
                 'priority' => 999,
                 'is_system' => true,
-                'is_enabled' => false,
+                'is_enabled' => true,
                 'keywords' => null,
                 'match_mode' => 'exact',
             ],

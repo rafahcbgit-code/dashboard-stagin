@@ -74,7 +74,7 @@ class AutoReplyService
             return $buttonResult;
         }
 
-        // AI-Only Mode: AI answers from KB directly, fallback menu for unanswered
+        // AI-Only Mode: AI answers from KB directly, then fall through to triggers
         $aiSettingsService = new AiSettingsService();
         if ($aiSettingsService->isAiOnlyMode($organizationId)) {
             // Guard: AI-only mode requires AI to be enabled
@@ -82,7 +82,7 @@ class AutoReplyService
                 Log::warning('replySequence: AI-Only Mode active but AI is disabled, falling through to normal processing', [
                     'organization_id' => $organizationId,
                 ]);
-                // Fall through to normal trigger/AI/fallback processing
+                // Fall through to normal trigger/AI processing
             } else {
                 Log::info('replySequence: AI-Only Mode active, attempting AI answer', [
                     'organization_id' => $organizationId,
@@ -94,13 +94,7 @@ class AutoReplyService
                     return $aiFallbackResult;
                 }
 
-                // AI couldn't answer — show fallback menu
-                $fallbackMenuResult = $this->handleFallbackMenu($organizationId, $chat);
-                if ($fallbackMenuResult) {
-                    return $fallbackMenuResult;
-                }
-
-                return null;
+                // AI couldn't answer — fall through to trigger evaluation
             }
         }
 
@@ -141,12 +135,7 @@ class AutoReplyService
             return $aiFallbackResult;
         }
 
-        // Nothing matched — show fallback menu if enabled
-        $fallbackMenuResult = $this->handleFallbackMenu($organizationId, $chat);
-        if ($fallbackMenuResult) {
-            return $fallbackMenuResult;
-        }
-
+        // Nothing matched — no further handling
         return null;
     }
 
@@ -190,6 +179,46 @@ class AutoReplyService
                 $result->triggerGroup->id
             );
 
+            // If it's a fallback trigger, check escalation threshold before executing
+            if ($result->triggerGroup->type === 'fallback') {
+                // Check if fallback counter exceeds threshold — auto-escalate to agent
+                if ($this->rateLimitService->shouldEscalate($organizationId, $contact->id)) {
+                    Log::info('Fallback trigger: Threshold exceeded, auto-escalating to agent', [
+                        'organization_id' => $organizationId,
+                        'contact_id' => $contact->id,
+                    ]);
+
+                    $routingService = new AgentRoutingService();
+                    $routingService->assignToAgent($organizationId, $contact->id, 'auto_assignment');
+
+                    $transferMessage = $this->botSettingsService->getSetting(
+                        $organizationId,
+                        'escalation_transfer_message',
+                        "You're being connected to a team member who can help. Please hold on a moment."
+                    );
+                    $this->initializeWhatsappService($organizationId)->sendMessage(
+                        $contact->uuid,
+                        $transferMessage,
+                        null,
+                        'text'
+                    );
+
+                    return true;
+                }
+
+                // If has a linked flow, start it
+                if ($result->flow) {
+                    $flowExecutionService = new \Modules\FlowBuilder\Services\FlowExecutionService(
+                        $organizationId,
+                        $this->metaPayload
+                    );
+                    return $flowExecutionService->startFlow($result->flow->id, $chat);
+                }
+
+                // Fallback trigger matched but no flow and no escalation — fall through
+                return false;
+            }
+
             // If the matched trigger has a linked flow, execute it
             if ($result->flow) {
                 $flowExecutionService = new \Modules\FlowBuilder\Services\FlowExecutionService(
@@ -197,11 +226,6 @@ class AutoReplyService
                     $this->metaPayload
                 );
                 return $flowExecutionService->startFlow($result->flow->id, $chat);
-            }
-
-            // If it's a fallback trigger with no flow, let it fall through
-            if ($result->triggerGroup->type === 'fallback') {
-                return false;
             }
 
             return false;
@@ -325,130 +349,46 @@ class AutoReplyService
     }
 
     /**
-     * Handle Fallback Menu — send 3-button interactive WhatsApp message when nothing else matches.
+     * Handle a legacy fallback menu button response from WhatsApp.
+     * These button IDs (fallback_start_over, fallback_help, fallback_talk_to_agent)
+     * come from the old fallback menu that has been removed. This handler provides
+     * backward compatibility for users who received the old menu.
      *
-     * @return bool True if fallback menu was sent
+     * @deprecated The fallback menu has been replaced by the fallback trigger.
      */
-    private function handleFallbackMenu(int $organizationId, Chat $chat): bool
+    private function handleLegacyFallbackButtonResponse(int $organizationId, Chat $chat, string $buttonId): bool
     {
         try {
-            if (!$this->botSettingsService->isFallbackMenuEnabled($organizationId)) {
+            Log::info('Legacy fallback button response received (fallback menu is deprecated)', [
+                'organization_id' => $organizationId,
+                'button_id' => $buttonId,
+            ]);
+
+            $contact = Contact::where('id', $chat->contact_id)->first();
+            if (!$contact) {
                 return false;
             }
 
-            // Ensure system triggers (including fallback) are initialized
             $this->triggerGroupService->initializeSystemTriggers($organizationId);
-
-            $config = $this->botSettingsService->getFallbackMenuConfig($organizationId);
-            $contact = Contact::where('id', $chat->contact_id)->first();
-            if (!$contact) {
-                return false;
-            }
-
-            // Check if fallback counter exceeds threshold — auto-escalate to agent
-            if ($this->rateLimitService->shouldEscalate($organizationId, $contact->id)) {
-                Log::info('Fallback Menu: Counter exceeded threshold, auto-escalating to agent', [
-                    'organization_id' => $organizationId,
-                    'contact_id' => $contact->id,
-                ]);
-
-                $routingService = new AgentRoutingService();
-                $routingService->assignToAgent($organizationId, $contact->id, 'auto_assignment');
-
-                $transferMessage = $this->botSettingsService->getSetting(
-                    $organizationId,
-                    'escalation_transfer_message',
-                    "You're being connected to a team member who can help. Please hold on a moment."
-                );
-                $this->initializeWhatsappService($organizationId)->sendMessage(
-                    $contact->uuid,
-                    $transferMessage,
-                    null,
-                    'text'
-                );
-                return true;
-            }
-
-            $buttons = [];
-            if ($config['button_1_enabled']) {
-                $buttons[] = ['id' => 'fallback_start_over', 'title' => $config['button_1_label']];
-            }
-            if ($config['button_2_enabled']) {
-                $buttons[] = ['id' => 'fallback_help', 'title' => $config['button_2_label']];
-            }
-            if ($config['button_3_enabled']) {
-                $buttons[] = ['id' => 'fallback_talk_to_agent', 'title' => $config['button_3_label']];
-            }
-
-            $message = $config['message'] ?: "I didn't quite understand that. What would you like to do?";
-
-            if (empty($buttons)) {
-                // Text-only mode: no buttons enabled, send plain text
-                $this->initializeWhatsappService($organizationId)->sendMessage(
-                    $contact->uuid,
-                    $message,
-                    null,
-                    'text'
-                );
-            } else {
-                $this->initializeWhatsappService($organizationId)->sendMessage(
-                    $contact->uuid,
-                    $message,
-                    null,
-                    'interactive buttons',
-                    $buttons
-                );
-            }
-
-            // Record fallback trigger for rate limiting / escalation counting
-            $this->rateLimitService->recordFallback($organizationId, $contact->id);
-
-            Log::info('Fallback Menu sent', [
-                'organization_id' => $organizationId,
-                'contact_id' => $contact->id,
-            ]);
-
-            return true;
-        } catch (\Throwable $e) {
-            Log::error('Fallback Menu handler failed', [
-                'organization_id' => $organizationId,
-                'chat_id' => $chat->id ?? null,
-                'error' => $e->getMessage(),
-            ]);
-            return false;
-        }
-    }
-
-    /**
-     * Handle a fallback menu button response from WhatsApp.
-     * Called from the webhook when a button_reply with id starting with "fallback_" is received.
-     */
-    public function handleFallbackButtonResponse(int $organizationId, Chat $chat, string $buttonId): bool
-    {
-        try {
-            $config = $this->botSettingsService->getFallbackMenuConfig($organizationId);
-            $contact = Contact::where('id', $chat->contact_id)->first();
-            if (!$contact) {
-                return false;
-            }
-
-            $flowExecutionService = new \Modules\FlowBuilder\Services\FlowExecutionService(
-                $organizationId,
-                $this->metaPayload
-            );
+            $fallbackTrigger = \App\Models\TriggerGroup::forOrganization($organizationId)
+                ->byType('fallback')
+                ->first();
 
             switch ($buttonId) {
                 case 'fallback_start_over':
                     // Reset fallback counter so escalation counting restarts
                     $this->rateLimitService->resetFallbackCounter($organizationId, $contact->id);
 
-                    if ($config['start_over_flow_id']) {
-                        return $flowExecutionService->startFlow($config['start_over_flow_id'], $chat);
+                    // If the fallback trigger has a flow, start it
+                    if ($fallbackTrigger && $fallbackTrigger->flow_id) {
+                        $flowExecutionService = new \Modules\FlowBuilder\Services\FlowExecutionService(
+                            $organizationId,
+                            $this->metaPayload
+                        );
+                        return $flowExecutionService->startFlow($fallbackTrigger->flow_id, $chat);
                     }
-                    // If no flow configured, try to trigger the first/new_contact trigger
-                    $this->triggerGroupService->initializeSystemTriggers($organizationId);
 
-                    // Reset the new_contact trigger rate limit so it can re-fire
+                    // Otherwise, try to trigger the new_contact trigger
                     $newContactTrigger = \App\Models\TriggerGroup::forOrganization($organizationId)
                         ->byType('new_contact')
                         ->first();
@@ -456,11 +396,15 @@ class AutoReplyService
                         $this->rateLimitService->resetTrigger($organizationId, $contact->id, $newContactTrigger->id);
                     }
 
+                    $flowExecutionService = new \Modules\FlowBuilder\Services\FlowExecutionService(
+                        $organizationId,
+                        $this->metaPayload
+                    );
                     $result = $this->triggerEvaluationService->evaluate(
                         $organizationId,
                         $contact,
                         '',
-                        true // treat as new contact to get the welcome flow
+                        true
                     );
                     if ($result && $result->flow) {
                         return $flowExecutionService->startFlow($result->flow->id, $chat);
@@ -468,42 +412,45 @@ class AutoReplyService
                     return false;
 
                 case 'fallback_help':
-                    if ($config['help_flow_id']) {
-                        return $flowExecutionService->startFlow($config['help_flow_id'], $chat);
+                    // If the fallback trigger has a flow, start it
+                    if ($fallbackTrigger && $fallbackTrigger->flow_id) {
+                        $flowExecutionService = new \Modules\FlowBuilder\Services\FlowExecutionService(
+                            $organizationId,
+                            $this->metaPayload
+                        );
+                        return $flowExecutionService->startFlow($fallbackTrigger->flow_id, $chat);
                     }
                     return false;
 
                 case 'fallback_talk_to_agent':
-                    if ($config['route_to_agent']) {
-                        Log::info('Fallback Menu: Talk to Agent requested', [
-                            'organization_id' => $organizationId,
-                            'contact_id' => $contact->id,
-                        ]);
+                    // Escalate to agent
+                    Log::info('Legacy fallback: Talk to Agent requested', [
+                        'organization_id' => $organizationId,
+                        'contact_id' => $contact->id,
+                    ]);
 
-                        $routingService = new AgentRoutingService();
-                        $routingService->assignToAgent($organizationId, $contact->id, 'auto_assignment');
+                    $routingService = new AgentRoutingService();
+                    $routingService->assignToAgent($organizationId, $contact->id, 'auto_assignment');
 
-                        $transferMessage = $this->botSettingsService->getSetting(
-                            $organizationId,
-                            'escalation_transfer_message',
-                            "You're being connected to a team member who can help. Please hold on a moment."
-                        );
-                        $this->initializeWhatsappService($organizationId)->sendMessage(
-                            $contact->uuid,
-                            $transferMessage,
-                            null,
-                            'text'
-                        );
+                    $transferMessage = $this->botSettingsService->getSetting(
+                        $organizationId,
+                        'escalation_transfer_message',
+                        "You're being connected to a team member who can help. Please hold on a moment."
+                    );
+                    $this->initializeWhatsappService($organizationId)->sendMessage(
+                        $contact->uuid,
+                        $transferMessage,
+                        null,
+                        'text'
+                    );
 
-                        return true;
-                    }
-                    return false;
+                    return true;
 
                 default:
                     return false;
             }
         } catch (\Throwable $e) {
-            Log::error('Fallback button response handler failed', [
+            Log::error('Legacy fallback button response handler failed', [
                 'organization_id' => $organizationId,
                 'chat_id' => $chat->id ?? null,
                 'button_id' => $buttonId,
@@ -531,9 +478,9 @@ class AutoReplyService
 
         $buttonId = $interactive['button_reply']['id'] ?? '';
 
-        // Fallback menu button clicks
+        // Fallback menu button clicks (legacy — fallback menu is deprecated)
         if (strpos($buttonId, 'fallback_') === 0) {
-            return $this->handleFallbackButtonResponse($organizationId, $chat, $buttonId);
+            return $this->handleLegacyFallbackButtonResponse($organizationId, $chat, $buttonId);
         }
 
         // AI "Was this helpful?" button clicks
@@ -546,7 +493,7 @@ class AutoReplyService
 
     /**
      * Handle AI "Was this helpful?" button response.
-     * Yes → acknowledge, No → show fallback menu.
+     * Yes → acknowledge, No → check escalation or send simple response.
      */
     private function handleAiHelpfulButton(int $organizationId, Chat $chat, string $buttonId): bool
     {
@@ -585,13 +532,59 @@ class AutoReplyService
                 return true;
             }
 
-            // ai_helpful_no — show the fallback menu instead
-            Log::info('AI Helpful: User said answer was not helpful, showing fallback menu', [
+            // ai_helpful_no — user said answer was not helpful
+            Log::info('AI Helpful: User said answer was not helpful', [
                 'organization_id' => $organizationId,
                 'contact_id' => $contact->id,
             ]);
 
-            return $this->handleFallbackMenu($organizationId, $chat);
+            // Record fallback counter and check escalation threshold
+            $this->rateLimitService->recordFallback($organizationId, $contact->id);
+            if ($this->rateLimitService->shouldEscalate($organizationId, $contact->id)) {
+                Log::info('AI Helpful: Escalation threshold exceeded, auto-assigning to agent', [
+                    'organization_id' => $organizationId,
+                    'contact_id' => $contact->id,
+                ]);
+
+                $routingService = new AgentRoutingService();
+                $routingService->assignToAgent($organizationId, $contact->id, 'auto_assignment');
+
+                $transferMessage = $this->botSettingsService->getSetting(
+                    $organizationId,
+                    'escalation_transfer_message',
+                    "You're being connected to a team member who can help. Please hold on a moment."
+                );
+                $this->initializeWhatsappService($organizationId)->sendMessage(
+                    $contact->uuid,
+                    $transferMessage,
+                    null,
+                    'text'
+                );
+
+                return true;
+            }
+
+            // Not escalating yet — send a simple text response
+            $organizationConfig = Organization::where('id', $organizationId)->first();
+            $metadata = $organizationConfig->metadata ? json_decode($organizationConfig->metadata, true) : [];
+
+            $whatsappService = new WhatsappService(
+                $metadata['whatsapp']['access_token'] ?? null,
+                config('graph.api_version'),
+                $metadata['whatsapp']['app_id'] ?? null,
+                $metadata['whatsapp']['phone_number_id'] ?? null,
+                $metadata['whatsapp']['waba_id'] ?? null,
+                $organizationId
+            );
+
+            $whatsappService->sendMessage(
+                $contact->uuid,
+                "I understand. Please try rephrasing your question, or type 'help' for assistance.",
+                null,
+                'text'
+            );
+
+            return true;
         } catch (\Throwable $e) {
             Log::error('AI Helpful button handler failed', [
                 'organization_id' => $organizationId,
