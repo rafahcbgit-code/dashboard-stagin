@@ -74,7 +74,7 @@ class AutoReplyService
             return $buttonResult;
         }
 
-        // AI-Only Mode: AI answers from KB directly, then fall through to triggers
+        // AI-Only Mode: AI answers from KB directly, only fallback trigger as safety net
         $aiSettingsService = new AiSettingsService();
         if ($aiSettingsService->isAiOnlyMode($organizationId)) {
             // Guard: AI-only mode requires AI to be enabled
@@ -82,7 +82,7 @@ class AutoReplyService
                 Log::warning('replySequence: AI-Only Mode active but AI is disabled, falling through to normal processing', [
                     'organization_id' => $organizationId,
                 ]);
-                // Fall through to normal trigger/AI processing
+                // Fall through to normal trigger/AI processing below
             } else {
                 Log::info('replySequence: AI-Only Mode active, attempting AI answer', [
                     'organization_id' => $organizationId,
@@ -94,7 +94,14 @@ class AutoReplyService
                     return $aiFallbackResult;
                 }
 
-                // AI couldn't answer — fall through to trigger evaluation
+                // AI couldn't answer — only try the fallback trigger as a safety net
+                // Skip normal triggers, active flows, and second AI attempt
+                $fallbackResult = $this->handleFallbackOnlyEvaluation($organizationId, $chat);
+                if ($fallbackResult) {
+                    return $fallbackResult;
+                }
+
+                return null;
             }
         }
 
@@ -231,6 +238,82 @@ class AutoReplyService
             return false;
         } catch (\Throwable $e) {
             Log::error('Trigger evaluation failed', [
+                'organization_id' => $organizationId,
+                'chat_id' => $chat->id,
+                'error' => $e->getMessage(),
+            ]);
+            return false;
+        }
+    }
+
+    /**
+     * Evaluate only the fallback trigger (used in AI-Only Mode).
+     * Skips all normal triggers and active flows — only checks the fallback trigger
+     * for escalation threshold and linked flow execution.
+     *
+     * @return bool True if the fallback trigger handled the message
+     */
+    private function handleFallbackOnlyEvaluation(int $organizationId, Chat $chat): bool
+    {
+        try {
+            // Ensure system triggers are initialized
+            $this->triggerGroupService->initializeSystemTriggers($organizationId);
+
+            // Find the fallback trigger
+            $fallbackTrigger = \App\Models\TriggerGroup::forOrganization($organizationId)
+                ->byType('fallback')
+                ->first();
+
+            if (!$fallbackTrigger || !$fallbackTrigger->is_enabled) {
+                return false;
+            }
+
+            $contact = Contact::where('id', $chat->contact_id)->first();
+            if (!$contact) {
+                return false;
+            }
+
+            // Check escalation threshold — if exceeded, auto-escalate to agent
+            if ($this->rateLimitService->shouldEscalate($organizationId, $contact->id)) {
+                Log::info('Fallback-only evaluation: Threshold exceeded, auto-escalating to agent', [
+                    'organization_id' => $organizationId,
+                    'contact_id' => $contact->id,
+                ]);
+
+                $routingService = new AgentRoutingService();
+                $routingService->assignToAgent($organizationId, $contact->id, 'auto_assignment');
+
+                $transferMessage = $this->botSettingsService->getSetting(
+                    $organizationId,
+                    'escalation_transfer_message',
+                    "You're being connected to a team member who can help. Please hold on a moment."
+                );
+                $this->initializeWhatsappService($organizationId)->sendMessage(
+                    $contact->uuid,
+                    $transferMessage,
+                    null,
+                    'text'
+                );
+
+                return true;
+            }
+
+            // Record the fallback trigger hit for rate limiting
+            $this->rateLimitService->recordTrigger($organizationId, $contact->id, $fallbackTrigger->id);
+
+            // If fallback trigger has a linked flow, start it
+            if ($fallbackTrigger->flow_id) {
+                $flowExecutionService = new \Modules\FlowBuilder\Services\FlowExecutionService(
+                    $organizationId,
+                    $this->metaPayload
+                );
+                return $flowExecutionService->startFlow($fallbackTrigger->flow_id, $chat);
+            }
+
+            // Fallback trigger matched but no flow linked — no action
+            return false;
+        } catch (\Throwable $e) {
+            Log::error('Fallback-only evaluation failed', [
                 'organization_id' => $organizationId,
                 'chat_id' => $chat->id,
                 'error' => $e->getMessage(),

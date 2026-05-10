@@ -48,7 +48,7 @@
                                     </div>
                                     <div class="flex-1">
                                         <label class="block text-sm font-semibold text-slate-800">{{ $t('AI-Only Mode') }}</label>
-                                        <p class="text-xs text-slate-500 mt-0.5">{{ $t('When enabled, the bot only uses AI to respond. Basic replies are skipped entirely.') }}</p>
+                                        <p class="text-xs text-slate-500 mt-0.5">{{ $t('When enabled, only AI responds to messages. Triggers are bypassed — only the Fallback trigger is used as a safety net when AI cannot answer.') }}</p>
                                     </div>
                                     <button
                                         type="button"
