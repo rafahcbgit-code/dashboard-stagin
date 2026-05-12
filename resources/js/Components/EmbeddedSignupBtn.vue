@@ -43,7 +43,91 @@
 
     let sessionPhoneNumberId = null;
     let sessionWabaId = null;
+    let authCode = null;
     let codeGeneratedAt = null;
+    let submitTimer = null;
+    let hasSubmitted = false;
+    const sessionInfoWaitMs = 8000;
+
+    const getSignupValue = (payload, keys) => {
+        if (!payload || typeof payload !== 'object') {
+            return null;
+        }
+
+        for (const key of keys) {
+            if (payload[key]) {
+                return payload[key];
+            }
+        }
+
+        return null;
+    };
+
+    const captureSessionInfo = (payload) => {
+        const phoneNumberId = getSignupValue(payload, ['phone_number_id', 'phoneNumberId']);
+        const wabaId = getSignupValue(payload, ['waba_id', 'wabaId', 'whatsapp_business_account_id']);
+
+        if (phoneNumberId) {
+            sessionPhoneNumberId = phoneNumberId;
+        }
+
+        if (wabaId) {
+            sessionWabaId = wabaId;
+        }
+    };
+
+    const submitSignup = () => {
+        if (hasSubmitted || !authCode) {
+            return;
+        }
+
+        if (!sessionWabaId) {
+            console.warn('[ESU] Submitting without waba_id after waiting for session info; backend fallback will be used.');
+        }
+
+        hasSubmitted = true;
+        clearTimeout(submitTimer);
+        console.log('[ESU] Sending POST to /whatsapp/exchange-code at', new Date().toISOString());
+
+        router.post(`/whatsapp/exchange-code`, {
+            token: authCode,
+            phone_number_id: sessionPhoneNumberId,
+            waba_id: sessionWabaId,
+        }, {
+            preserveState: true,
+            onSuccess: () => {
+                console.log('[ESU] Backend exchange-code: SUCCESS');
+                router.visit('/settings/whatsapp', {
+                    preserveState: false,
+                });
+            },
+            onError: (errors) => {
+                console.error('[ESU] Backend exchange-code: ERROR', JSON.stringify(errors));
+                isSetupLoading.value = false;
+                hasSubmitted = false;
+            },
+            onFinish: () => {
+                const elapsed = Date.now() - codeGeneratedAt;
+                console.log('[ESU] Backend request finished. Time from code received to finish:', elapsed, 'ms');
+            }
+        })
+    };
+
+    const queueSignupSubmit = () => {
+        if (hasSubmitted || !authCode) {
+            return;
+        }
+
+        if (sessionWabaId) {
+            submitSignup();
+            return;
+        }
+
+        if (!submitTimer) {
+            console.log('[ESU] Auth code received before waba_id; waiting for Meta session info.');
+            submitTimer = setTimeout(submitSignup, sessionInfoWaitMs);
+        }
+    };
 
     const logEmbeddedSignupEvent = (eventName, payload) => {
         if (!payload) {
@@ -70,10 +154,21 @@
 
             if (data.type === 'WA_EMBEDDED_SIGNUP') {
                 logEmbeddedSignupEvent(data.event, data.data);
+                captureSessionInfo(data.data);
+
+                if (sessionWabaId) {
+                    console.log('[ESU] Session info captured - phone_number_id:', sessionPhoneNumberId, '| waba_id:', sessionWabaId);
+                    queueSignupSubmit();
+                }
+
+                if (data.event === 'FINISH_ONLY_WABA' || data.event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING') {
+                    queueSignupSubmit();
+                }
+
                 if (data.event === 'FINISH') {
                     const {phone_number_id, waba_id} = data.data;
-                    sessionPhoneNumberId = phone_number_id;
-                    sessionWabaId = waba_id;
+                    sessionPhoneNumberId = phone_number_id || sessionPhoneNumberId;
+                    sessionWabaId = waba_id || sessionWabaId;
                     console.log('[ESU] FINISH event — phone_number_id:', phone_number_id, '| waba_id:', waba_id);
                 } else if (data.event === 'CANCEL') {
                     console.warn('[ESU] CANCEL event — user cancelled at step:', data.data?.current_step);
@@ -91,6 +186,14 @@
     function launchWhatsAppSignup() {
         console.log('[ESU] launchWhatsAppSignup() called at', new Date().toISOString());
         console.log('[ESU] FB object available?', typeof FB !== 'undefined');
+        clearTimeout(submitTimer);
+        submitTimer = null;
+        hasSubmitted = false;
+        authCode = null;
+        sessionPhoneNumberId = null;
+        sessionWabaId = null;
+        codeGeneratedAt = null;
+        window.removeEventListener("message", sessionInfoListener);
         window.addEventListener("message", sessionInfoListener);
 
         // Conversion tracking code
@@ -110,33 +213,14 @@
             if (response.authResponse) {
                 codeGeneratedAt = Date.now();
                 const code = response.authResponse.code;
+                authCode = code;
                 console.log('[ESU] Auth code received — length:', code?.length, '| first 10 chars:', code?.substring(0, 10));
                 console.log('[ESU] session phone_number_id:', sessionPhoneNumberId, '| waba_id:', sessionWabaId);
-                console.log('[ESU] Sending POST to /whatsapp/exchange-code at', new Date().toISOString());
 
                 isSetupLoading.value = true;
+                queueSignupSubmit();
+                return;
 
-                router.post(`/whatsapp/exchange-code`, {
-                    token: code,
-                    phone_number_id: sessionPhoneNumberId,
-                    waba_id: sessionWabaId,
-                }, {
-                    preserveState: true,
-                    onSuccess: () => {
-                        console.log('[ESU] Backend exchange-code: SUCCESS');
-                        router.visit('/settings/whatsapp', {
-                            preserveState: false,
-                        });
-                    },
-                    onError: (errors) => {
-                        console.error('[ESU] Backend exchange-code: ERROR', JSON.stringify(errors));
-                        isSetupLoading.value = false;
-                    },
-                    onFinish: () => {
-                        const elapsed = Date.now() - codeGeneratedAt;
-                        console.log('[ESU] Backend request finished. Time from code received to finish:', elapsed, 'ms');
-                    }
-                })
             } else {
                 console.warn('[ESU] No authResponse — user cancelled or did not authorize. Status:', response.status);
             }
