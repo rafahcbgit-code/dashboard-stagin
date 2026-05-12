@@ -11,6 +11,82 @@ const props = defineProps({
 const isSetupLoading = ref(false);
 let sessionPhoneNumberId = null;
 let sessionWabaId = null;
+let authCode = null;
+let submitTimer = null;
+let hasSubmitted = false;
+const sessionInfoWaitMs = 8000;
+
+function getSignupValue(payload, keys) {
+  if (!payload || typeof payload !== 'object') {
+    return null;
+  }
+
+  for (const key of keys) {
+    if (payload[key]) {
+      return payload[key];
+    }
+  }
+
+  return null;
+}
+
+function captureSessionInfo(payload) {
+  const phoneNumberId = getSignupValue(payload, ['phone_number_id', 'phoneNumberId']);
+  const wabaId = getSignupValue(payload, ['waba_id', 'wabaId', 'whatsapp_business_account_id']);
+
+  if (phoneNumberId) {
+    sessionPhoneNumberId = phoneNumberId;
+  }
+
+  if (wabaId) {
+    sessionWabaId = wabaId;
+  }
+}
+
+function submitSignup() {
+  if (hasSubmitted || !authCode) {
+    return;
+  }
+
+  if (!sessionWabaId) {
+    console.warn('[ESU-CO] Submitting without waba_id after waiting for session info; backend fallback will be used.');
+  }
+
+  hasSubmitted = true;
+  clearTimeout(submitTimer);
+
+  router.post(`/whatsapp/exchange-code`, {
+    token: authCode,
+    coexistence: true,
+    phone_number_id: sessionPhoneNumberId,
+    waba_id: sessionWabaId,
+  }, {
+    preserveState: true,
+    onSuccess: () => {
+      router.visit('/settings/whatsapp', { preserveState: false });
+    },
+    onError: () => {
+      isSetupLoading.value = false;
+      hasSubmitted = false;
+    }
+  });
+}
+
+function queueSignupSubmit() {
+  if (hasSubmitted || !authCode) {
+    return;
+  }
+
+  if (sessionWabaId) {
+    submitSignup();
+    return;
+  }
+
+  if (!submitTimer) {
+    console.log('[ESU-CO] Auth code received before waba_id; waiting for Meta session info.');
+    submitTimer = setTimeout(submitSignup, sessionInfoWaitMs);
+  }
+}
 
 function initFacebookSDK() {
   window.fbAsyncInit = function () {
@@ -40,13 +116,31 @@ function sessionInfoListener(event) {
   try {
     const data = JSON.parse(event.data);
     if (data.type === 'WA_EMBEDDED_SIGNUP') {
+      captureSessionInfo(data.data);
+
+      if (sessionWabaId) {
+        console.log('[ESU-CO] Session info captured:', {
+          phone_number_id: sessionPhoneNumberId,
+          waba_id: sessionWabaId
+        });
+        queueSignupSubmit();
+      }
+
+      if (data.event === 'FINISH_ONLY_WABA' || data.event === 'FINISH_WHATSAPP_BUSINESS_APP_ONBOARDING') {
+        queueSignupSubmit();
+      }
+
       if (data.event === 'FINISH') {
         const { phone_number_id, waba_id } = data.data;
-        sessionPhoneNumberId = phone_number_id || null;
-        sessionWabaId = waba_id || null;
+        sessionPhoneNumberId = phone_number_id || sessionPhoneNumberId;
+        sessionWabaId = waba_id || sessionWabaId;
         console.log("✅ Coexistence finished:", { phone_number_id, waba_id });
+      } else if (data.event === 'CANCEL') {
+        console.log('[ESU-CO] User cancelled at step:', data.data?.current_step);
+      } else if (data.event === 'ERROR') {
+        console.error('[ESU-CO] Error event from Meta:', JSON.stringify(data.data));
       } else {
-        console.log("⚠️ User cancelled at step:", data.data.current_step);
+        console.log('[ESU-CO] Embedded Signup event:', data.event, data.data);
       }
     }
   } catch {
@@ -55,6 +149,13 @@ function sessionInfoListener(event) {
 }
 
 function launchWhatsAppCoexistenceSignup() {
+  clearTimeout(submitTimer);
+  submitTimer = null;
+  hasSubmitted = false;
+  authCode = null;
+  sessionPhoneNumberId = null;
+  sessionWabaId = null;
+  window.removeEventListener("message", sessionInfoListener);
   window.addEventListener("message", sessionInfoListener);
 
   if (typeof fbq !== 'undefined') {
@@ -66,23 +167,11 @@ function launchWhatsAppCoexistenceSignup() {
 
   FB.login(function (response) {
     if (response.authResponse) {
+      authCode = response.authResponse.code;
       isSetupLoading.value = true;
+      queueSignupSubmit();
+      return;
 
-      // send to backend for exchange
-      router.post(`/whatsapp/exchange-code`, {
-        token: response.authResponse.code,
-        coexistence: true, // 🚩 Important flag
-        phone_number_id: sessionPhoneNumberId,
-        waba_id: sessionWabaId,
-      }, {
-        preserveState: true,
-        onSuccess: () => {
-          router.visit('/settings/whatsapp', { preserveState: false });
-        },
-        onError: () => {
-          isSetupLoading.value = false;
-        }
-      });
     } else {
       isSetupLoading.value = false;
       console.log('❌ User cancelled login or did not authorize.');
