@@ -57,4 +57,27 @@ return [
         'log_permanent_failures' => env('CAMPAIGN_LOG_PERMANENT_FAILURES', true),
     ],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Chunk Processing Configuration
+    |--------------------------------------------------------------------------
+    |
+    | chunk_size: Number of messages processed per ProcessCampaignChunkJob.
+    |             Each chunk sends messages concurrently via Guzzle Pool.
+    |
+    | concurrency: Max concurrent HTTP requests per chunk job.
+    |              Controls parallelism of WhatsApp API calls.
+    |              Start with 5-10 and increase if rate limits allow.
+    |
+    | load_test_mode: When true, skip Meta API calls and return fake success
+    |                 responses. Used for benchmarking without hitting the API.
+    |
+    */
+
+    'chunk_size' => env('CAMPAIGN_CHUNK_SIZE', 50),
+
+    'concurrency' => env('CAMPAIGN_CONCURRENCY', 10),
+
+    'load_test_mode' => env('CAMPAIGN_LOAD_TEST_MODE', false),
+
 ];

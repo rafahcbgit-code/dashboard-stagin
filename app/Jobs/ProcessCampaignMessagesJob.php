@@ -12,7 +12,6 @@ use Illuminate\Foundation\Bus\PendingDispatch;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\Bus;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
@@ -92,7 +91,7 @@ class ProcessCampaignMessagesJob implements ShouldQueue, ShouldBeUnique
             CampaignLog::select(['id', 'campaign_id', 'contact_id', 'status'])
                 ->withCount('retries')
                 ->with([
-                    'campaign' => fn($q) => $q->select(['id', 'organization_id', 'status', 'uuid', 'created_by']),
+                    'campaign' => fn($q) => $q->select(['id', 'organization_id', 'status', 'uuid', 'created_by', 'template_id']),
                     'contact',
                 ])
                 ->whereIn('status', ['pending', 'failed'])
@@ -109,10 +108,10 @@ class ProcessCampaignMessagesJob implements ShouldQueue, ShouldBeUnique
                         'batch_size' => count($logs),
                         'configured_batch_size' => $batchSize,
                     ]);
-                    $jobs = [];
 
                     // Task 2.6: Track campaigns that were cancelled mid-batch
                     $cancelledCampaigns = [];
+                    $byCampaign = [];
 
                     foreach ($logs as $log) {
                         // Task 2.6: AC-2.6.4 - Skip if campaign was cancelled mid-batch
@@ -131,12 +130,16 @@ class ProcessCampaignMessagesJob implements ShouldQueue, ShouldBeUnique
                         // Task 2.8: AC-2.8.1 - Use pre-loaded retries_count instead of N+1 query
                         $retryCount = $log->retries_count;
 
-                        // Add job if pending or failed with retries remaining
+                        // Add eligible logs grouped by campaign
                         if (
                             $log->status === 'pending' ||
                             ($log->status === 'failed' && $retryEnabled && $retryCount < $maxRetries)
                         ) {
-                            $jobs[] = new ProcessSingleCampaignLogJob($log);
+                            $campaignId = $log->campaign_id;
+                            if (!isset($byCampaign[$campaignId])) {
+                                $byCampaign[$campaignId] = [];
+                            }
+                            $byCampaign[$campaignId][] = $log;
                         }
 
                         // Track campaign IDs
@@ -145,12 +148,24 @@ class ProcessCampaignMessagesJob implements ShouldQueue, ShouldBeUnique
                         }
                     }
 
-                    // Dispatch jobs to org-specific queue (Task 2.1: AC-2.1.1)
-                    if (! empty($jobs)) {
-                        Bus::batch($jobs)
-                            ->allowFailures()
-                            ->onQueue($this->queue)
-                            ->dispatch();
+                    // Dispatch ProcessCampaignChunkJob per chunk per campaign
+                    $chunkSize = config('campaigns.chunk_size', 50);
+                    $concurrency = config('campaigns.concurrency', 10);
+
+                    foreach ($byCampaign as $campaignId => $campaignLogs) {
+                        $campaign = $campaignLogs[0]->campaign;
+                        if (! $campaign) continue;
+
+                        foreach (collect($campaignLogs)->chunk($chunkSize) as $chunk) {
+                            ProcessCampaignChunkJob::dispatch(
+                                logIds: $chunk->pluck('id')->toArray(),
+                                organizationId: $this->organizationId,
+                                campaignId: $campaignId,
+                                templateId: $campaign->template_id,
+                                createdBy: $campaign->created_by,
+                                concurrency: $concurrency,
+                            )->onQueue($this->queue);
+                        }
                     }
 
                     // Task 2.3: AC-2.3.4 - Track total processed

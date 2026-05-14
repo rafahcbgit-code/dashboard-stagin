@@ -11,10 +11,10 @@ use Illuminate\Support\Facades\DB;
 
 trait TemplateTrait
 {
-    function buildTemplateRequest($campaignId, $contact)
+    function buildTemplateRequest($campaignId, $contact, ?Campaign $campaign = null, ?Template $campaignTemplate = null)
     {
-        $campaign = Campaign::where('id', $campaignId)->first();
-        $campaignTemplate = Template::where('id', $campaign->template_id)->first();
+        $campaign = $campaign ?? Campaign::where('id', $campaignId)->first();
+        $campaignTemplate = $campaignTemplate ?? Template::where('id', $campaign->template_id)->first();
 
         $metadata = json_decode($campaign->metadata);
 
@@ -380,11 +380,11 @@ trait TemplateTrait
 
 
 
-    function buildCarouselTemplateRequest(int $templateId, object $contact): array
+    function buildCarouselTemplateRequest(int $templateId, object $contact, ?Template $template = null): array
     {
         \Log::info('buildCarouselTemplateRequest');
 
-        $template = Template::where('id', $templateId)->first();
+        $template = $template ?? Template::where('id', $templateId)->first();
         $metadata = json_decode($template->metadata, true);
         $carouselCards = $metadata['carousel_cards'] ?? [];
 
