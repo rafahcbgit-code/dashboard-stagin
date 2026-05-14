@@ -42,7 +42,7 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
 
     public function handle()
     {
-        $log = CampaignLog::with('campaign', 'campaign.organization', 'contact')->find($this->campaignLogId);
+        $log = CampaignLog::with('campaign', 'campaign.organization', 'campaign.template', 'contact')->find($this->campaignLogId);
 
         if (! $log || $log->status !== 'failed') {
             return;
@@ -79,14 +79,18 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
             $retryLog->status = 'ongoing';
             $retryLog->save();
 
-            $template = $this->buildTemplateRequest($log->campaign_id, $log->contact);
+            $template = $this->buildTemplateRequest($log->campaign_id, $log->contact, $log->campaign, $log->campaign->template ?? null);
             $campaign_user_id = $log->campaign->created_by;
 
             $response = $this->whatsappService->sendTemplateMessage(
                 $log->contact->uuid,
                 $template,
                 $campaign_user_id,
-                $log->campaign_id
+                $log->campaign_id,
+                null,
+                $log->contact,
+                $log->campaign,
+                $log->campaign->template ?? null
             );
 
             $status = ($response->success === true) ? 'success' : 'failed';

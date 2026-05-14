@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Campaign;
+use App\Models\Contact;
 use App\Models\Template;
 use App\Models\CampaignLog;
 use App\Traits\TemplateTrait;
@@ -30,9 +31,16 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
      */
     protected static array $progressState = [];
 
-    private $campaignLog;
+    protected static array $campaignCache = [];
+    protected static array $templateCache = [];
 
-    private $organizationId;
+    public int $campaignLogId;
+    public int $organizationId;
+    public int $campaignId;
+    public int $createdBy;
+    public int $templateId;
+    public int $contactId;
+    public string $contactUuid;
 
     private $whatsappService;
 
@@ -40,9 +48,23 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
 
     public $tries = 3;
 
-    public function __construct(CampaignLog $campaignLog)
-    {
-        $this->campaignLog = $campaignLog;
+    public function __construct(
+        int $campaignLogId,
+        int $organizationId,
+        int $campaignId,
+        int $createdBy,
+        int $templateId,
+        int $contactId,
+        string $contactUuid
+    ) {
+        $this->queue = 'campaign-messages';
+        $this->campaignLogId = $campaignLogId;
+        $this->organizationId = $organizationId;
+        $this->campaignId = $campaignId;
+        $this->createdBy = $createdBy;
+        $this->templateId = $templateId;
+        $this->contactId = $contactId;
+        $this->contactUuid = $contactUuid;
     }
 
     public function handle()
@@ -50,7 +72,7 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
         try {
             $lockedLog = DB::transaction(function () {
                 // Lock the log for update to prevent duplicate processing
-                return CampaignLog::where('id', $this->campaignLog->id)
+                return CampaignLog::where('id', $this->campaignLogId)
                     ->whereIn('status', ['pending', 'failed'])
                     ->lockForUpdate()
                     ->first();
@@ -58,7 +80,7 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
 
             if ($lockedLog) {
                 // Task 2.6: AC-2.6.4 - Check if campaign was cancelled before processing
-                $campaign = Campaign::find($this->campaignLog->campaign_id);
+                $campaign = $this->getCampaignCached();
 
                 if (! $campaign || $campaign->status === 'cancelled') {
                     // Campaign cancelled - skip sending and update log status
@@ -67,24 +89,28 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
                     }
                     Log::info('Campaign cancelled - skipping message', [
                         'campaign_id' => $campaign?->id,
-                        'campaign_log_id' => $this->campaignLog->id,
+                        'campaign_log_id' => $this->campaignLogId,
                     ]);
 
                     return;
                 }
 
-                $campaign_user_id = $campaign->created_by;
                 $lockedLog->status = 'ongoing';
                 $lockedLog->save();
 
-                $this->organizationId = $this->campaignLog->campaign->organization_id;
                 $this->initializeWhatsappService();
 
                 try {
                     $jobStartTime = microtime(true);
 
-                    // Detect if this is a carousel template (reuse already-loaded $campaign)
-                    $template = Template::find($campaign->template_id);
+                    $contact = Contact::find($this->contactId);
+                    if (!$contact) {
+                        $lockedLog->update(['status' => 'failed']);
+                        return;
+                    }
+
+                    // Detect if this is a carousel template (reuse cached template)
+                    $template = $this->getTemplateCached();
                     $metadata = json_decode($template->metadata, true);
                     $isCarousel = ($metadata['template_type'] ?? '') === 'carousel';
 
@@ -92,22 +118,23 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
                         // Build carousel template payload
                         $buildStart = microtime(true);
                         $templatePayload = $this->buildCarouselTemplateRequest(
-                            $campaign->template_id,
-                            $this->campaignLog->contact
+                            $template->id,
+                            $contact,
+                            $template
                         );
                         $buildDuration = round((microtime(true) - $buildStart) * 1000, 2);
-                        
+
                         // Enrich with fresh media IDs (cached per campaign)
                         $enrichStart = microtime(true);
                         $templatePayload = $this->whatsappService->enrichCarouselWithMediaIds(
                             $templatePayload,
-                            $this->campaignLog->campaign_id
+                            $this->campaignId
                         );
                         $enrichDuration = round((microtime(true) - $enrichStart) * 1000, 2);
 
                         Log::channel('campaign')->info('Carousel payload prepared', [
-                            'campaign_log_id' => $this->campaignLog->id,
-                            'campaign_id' => $this->campaignLog->campaign_id,
+                            'campaign_log_id' => $this->campaignLogId,
+                            'campaign_id' => $this->campaignId,
                             'build_ms' => $buildDuration,
                             'media_enrich_ms' => $enrichDuration,
                             'card_count' => count($metadata['carousel_cards'] ?? []),
@@ -115,8 +142,10 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
                     } else {
                         // Build regular template payload
                         $templatePayload = $this->buildTemplateRequest(
-                            $this->campaignLog->campaign_id,
-                            $this->campaignLog->contact
+                            $this->campaignId,
+                            $contact,
+                            $campaign,
+                            $template
                         );
 
                         $validationError = $this->validateResolvedTemplate($templatePayload);
@@ -131,14 +160,18 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
                             return;
                         }
                     }
-                    
+
                     // Send to Meta API
                     $sendStart = microtime(true);
                     $responseObject = $this->whatsappService->sendTemplateMessage(
-                        $this->campaignLog->contact->uuid,
+                        $this->contactUuid,
                         $templatePayload,
-                        $campaign_user_id,
-                        $this->campaignLog->campaign_id
+                        $this->createdBy,
+                        $this->campaignId,
+                        null,
+                        $contact,
+                        $campaign,
+                        $template
                     );
                     $sendDuration = round((microtime(true) - $sendStart) * 1000, 2);
 
@@ -150,8 +183,8 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
                     $totalDuration = round((microtime(true) - $jobStartTime) * 1000, 2);
 
                     Log::channel('campaign')->info('Campaign message processed', [
-                        'campaign_log_id' => $this->campaignLog->id,
-                        'campaign_id' => $this->campaignLog->campaign_id,
+                        'campaign_log_id' => $this->campaignLogId,
+                        'campaign_id' => $this->campaignId,
                         'is_carousel' => $isCarousel,
                         'meta_api_ms' => $sendDuration,
                         'db_update_ms' => $dbDuration,
@@ -165,7 +198,7 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
                 }
             }
         } catch (\Exception $e) {
-            Log::error('Error processing campaign log ' . $this->campaignLog->id . ': ' . $e->getMessage());
+            Log::error('Error processing campaign log ' . $this->campaignLogId . ': ' . $e->getMessage());
             throw $e;
         }
     }
@@ -194,7 +227,7 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
 
     protected function checkAndUpdateCampaignStatus($campaignId)
     {
-        $campaign = Campaign::find($campaignId);
+        $campaign = $this->getCampaignCached();
 
         if (! $campaign || $campaign->status !== 'ongoing') {
             return;
@@ -274,6 +307,22 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
         );
     }
 
+    private function getCampaignCached(): ?Campaign
+    {
+        if (!isset(self::$campaignCache[$this->campaignId])) {
+            self::$campaignCache[$this->campaignId] = Campaign::find($this->campaignId);
+        }
+        return self::$campaignCache[$this->campaignId];
+    }
+
+    private function getTemplateCached(): ?Template
+    {
+        if (!isset(self::$templateCache[$this->templateId])) {
+            self::$templateCache[$this->templateId] = Template::find($this->templateId);
+        }
+        return self::$templateCache[$this->templateId];
+    }
+
     /**
      * Task 2.5: AC-2.5.3 - Check if progress should be broadcast based on throttle rules.
      * Broadcasts if 10 messages processed OR 5 seconds elapsed since last broadcast.
@@ -346,7 +395,7 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
      */
     protected function broadcastProgress(int $campaignId, object $stats): void
     {
-        $campaign = Campaign::find($campaignId);
+        $campaign = $this->getCampaignCached();
         if (! $campaign) {
             return;
         }
@@ -423,8 +472,11 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
     {
         if ($campaignId === null) {
             self::$progressState = [];
+            self::$campaignCache = [];
+            self::$templateCache = [];
         } else {
             unset(self::$progressState[$campaignId]);
+            unset(self::$campaignCache[$campaignId]);
         }
     }
 }

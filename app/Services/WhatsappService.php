@@ -32,6 +32,9 @@ class WhatsappService
     private $organizationId;
     private $wabaId;
 
+    /** @var Client|null Shared Guzzle client for concurrent requests within a single PHP process */
+    private static ?Client $sharedClient = null;
+
     public function __construct($accessToken, $apiVersion, $appId, $phoneNumberId, $wabaId, $organizationId)
     {
         $this->accessToken = $accessToken;
@@ -54,6 +57,60 @@ class WhatsappService
             ];
         });
         Config::set('broadcasting.connections.pusher', $pusherConfig);
+    }
+
+    public static function getSharedClient(): Client
+    {
+        if (self::$sharedClient === null) {
+            self::$sharedClient = new Client([
+                'timeout' => 30,
+                'connect_timeout' => 10,
+            ]);
+        }
+        return self::$sharedClient;
+    }
+
+    public static function resetSharedClient(): void
+    {
+        self::$sharedClient = null;
+    }
+
+    public function getApiVersion(): string
+    {
+        return $this->apiVersion;
+    }
+
+    public function getPhoneNumberIdProperty(): string
+    {
+        return $this->phoneNumberId;
+    }
+
+    public function getAccessToken(): string
+    {
+        return $this->accessToken;
+    }
+
+    public function getOrganizationId(): int
+    {
+        return $this->organizationId;
+    }
+
+    public function getSendUrl(): string
+    {
+        return "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}/messages";
+    }
+
+    public function buildTemplateRequestPayload(string $phone, array $templateContent, ?int $campaignId = null): array
+    {
+        $requestData = [
+            'messaging_product' => 'whatsapp',
+            'recipient_type' => 'individual',
+            'to' => $phone,
+            'type' => 'template',
+            'template' => $templateContent,
+        ];
+
+        return $requestData;
     }
 
     /**
@@ -186,9 +243,9 @@ class WhatsappService
      * @param string $messageContent The content of the message to be sent.
      * @return mixed Returns the response from the HTTP request.
      */
-    public function sendTemplateMessage($contactUuId, $templateContent, $userId = NULL, $campaignId = NULL, $mediaId = NULL)
+    public function sendTemplateMessage($contactUuId, $templateContent, $userId = NULL, $campaignId = NULL, $mediaId = NULL, ?Contact $contact = null, ?Campaign $campaign = null, ?Template $campaignTemplate = null)
     {
-        $contact = Contact::where('uuid', $contactUuId)->first();
+        $contact = $contact ?? Contact::where('uuid', $contactUuId)->first();
 
         if (! $contact) {
             return $this->buildErrorResponse('Contact not found');
@@ -229,20 +286,20 @@ class WhatsappService
 
             if ($campaignId != NULL) {
                 // Campaign flow
-                $campaign = Campaign::find($campaignId);
+                $campaign = $campaign ?? Campaign::find($campaignId);
                 $campaignMetadata = json_decode($campaign->metadata);
-                
-                $template = Template::find($campaign->template_id);
+
+                $template = $campaignTemplate ?? Template::find($campaign->template_id);
                 $templateMeta = json_decode($template->metadata, true);
                 
                 logger($templateMeta);
 
                 if (($templateMeta['template_type'] ?? '') === 'carousel') {
                     // Carousel campaign
-                    $metadata = $this->buildCarouselTemplateChatMessage($contactUuId, $template->id);
+                    $metadata = $this->buildCarouselTemplateChatMessage($contactUuId, $template->id, $template);
                 } else {
                     // Standard campaign
-                    $metadata = $this->buildCampaignTemplateChatMessage($campaignMetadata, $contactUuId);
+                    $metadata = $this->buildCampaignTemplateChatMessage($campaignMetadata, $contactUuId, $contact);
                 }
             } else {
                 // Direct send flow
@@ -748,8 +805,8 @@ class WhatsappService
         return $mediaId;
     }
 
-    private function buildCampaignTemplateChatMessage($templateMetadata, $contactUuId){
-        $contact = Contact::where('uuid', $contactUuId)->first();
+    public function buildCampaignTemplateChatMessage($templateMetadata, $contactUuId, ?Contact $contact = null){
+        $contact = $contact ?? Contact::where('uuid', $contactUuId)->first();
         $array = [];
         
         // Convert to object if it's an array (from carousel implementation)
@@ -2440,9 +2497,9 @@ class WhatsappService
      * @param  int     $templateId    The Template model ID
      * @return string                 JSON-encoded metadata for the Chat record
      */
-    private function buildCarouselTemplateChatMessage(string $contactUuid, int $templateId): string
+    public function buildCarouselTemplateChatMessage(string $contactUuid, int $templateId, ?Template $template = null): string
     {
-        $template     = Template::where('id', $templateId)->first();
+        $template = $template ?? Template::where('id', $templateId)->first();
         $metadata     = json_decode($template->metadata, true);
         $carouselCards = $metadata['carousel_cards'] ?? [];
 
@@ -2852,6 +2909,88 @@ class WhatsappService
         return $responseObject;
     }
 
+    /**
+     * Create Chat and ChatLog records from a successful WhatsApp API response.
+     * Extracted from sendTemplateMessage for reuse in batch processing.
+     *
+     * @return array{chat: Chat, responseObject: object}
+     */
+    public function createChatLogFromResponse(
+        object $responseObject,
+        Contact $contact,
+        ?int $userId,
+        ?int $organizationId,
+        ?string $metadata,
+        $mediaId,
+        ?int $campaignId,
+        array $flowStubs = []
+    ): array {
+        $chat = Chat::create([
+            'organization_id' => $organizationId ?? $contact->organization_id,
+            'wam_id' => $responseObject->data->messages[0]->id,
+            'contact_id' => $contact->id,
+            'type' => 'outbound',
+            'user_id' => $userId,
+            'metadata' => $metadata,
+            'media_id' => $mediaId,
+            'status' => isset($responseObject->data->messages[0]->message_status)
+                ? $responseObject->data->messages[0]->message_status
+                : 'sent',
+            'created_at' => now(),
+        ]);
+
+        $responseObject->data->chat = $chat;
+
+        $chatlogId = ChatLog::insertGetId([
+            'contact_id' => $contact->id,
+            'entity_type' => 'chat',
+            'entity_id' => $chat->id,
+            'created_at' => now(),
+        ]);
+
+        $chatLogArray = ChatLog::where('id', $chatlogId)->where('deleted_at', null)->first();
+        $chatArray = array([
+            'type' => 'chat',
+            'value' => $chatLogArray->relatedEntities,
+        ]);
+
+        event(new NewChatEvent($chatArray, $organizationId ?? $contact->organization_id));
+
+        // Process MetaFlow stubs
+        foreach ($flowStubs as $stub) {
+            if (empty($stub['flow_token']) || empty($stub['meta_flow_id'])) {
+                Log::warning('MetaFlows: skipping stub — missing flow_token or meta_flow_id', [
+                    'stub' => $stub,
+                ]);
+                continue;
+            }
+            $metaFlow = \Modules\MetaFlows\Models\MetaFlow::where('meta_flow_id', $stub['meta_flow_id'])
+                ->where('organization_id', $organizationId ?? $contact->organization_id)
+                ->first();
+            if ($metaFlow) {
+                \Modules\MetaFlows\Models\MetaFlowResponse::create([
+                    'organization_id' => $organizationId ?? $contact->organization_id,
+                    'meta_flow_id' => $metaFlow->id,
+                    'contact_id' => $contact->id,
+                    'flow_token' => $stub['flow_token'],
+                    'response_json' => null,
+                ]);
+            } else {
+                Log::warning('MetaFlows: no MetaFlow found for stub — stub NOT created', [
+                    'meta_flow_id_searched' => $stub['meta_flow_id'],
+                    'organization_id' => $organizationId ?? $contact->organization_id,
+                ]);
+            }
+        }
+
+        // Trigger webhook
+        WebhookHelper::triggerWebhookEvent('message.sent', [
+            'data' => $responseObject,
+        ], $organizationId ?? $contact->organization_id);
+
+        return ['chat' => $chat, 'responseObject' => $responseObject];
+    }
+
     function createResumableUploadSession($file)
     {
         $fileLength = $file->getSize();
@@ -2909,7 +3048,7 @@ class WhatsappService
     // Private method to send an HTTP request
     private function sendHttpRequest($method, $url, $data = [], $headers = [])
     {
-        $client = new Client();
+        $client = self::getSharedClient();
         $responseObject = new \stdClass();
 
         try {
