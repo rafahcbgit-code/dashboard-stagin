@@ -45,7 +45,33 @@ class TriggerEvaluationService
             return null;
         }
 
-        foreach ($triggerGroups as $triggerGroup) {
+        // Fallback triggers always evaluate last, regardless of their priority number
+        $nonFallback = $triggerGroups->filter(fn($tg) => $tg->type !== 'fallback');
+        $fallbacks = $triggerGroups->filter(fn($tg) => $tg->type === 'fallback');
+
+        foreach ($nonFallback as $triggerGroup) {
+            $match = $this->matchesTrigger($triggerGroup, $message, $isNewContact, $organizationId, $contact);
+
+            if ($match !== null) {
+                Log::info('TriggerEvaluationService: Trigger matched', [
+                    'trigger_group_id' => $triggerGroup->id,
+                    'trigger_name' => $triggerGroup->name,
+                    'trigger_type' => $triggerGroup->type,
+                    'match_mode' => $match->matchMode,
+                    'contact_id' => $contact->id ?? null,
+                ]);
+
+                return new TriggerMatchResult(
+                    triggerGroup: $triggerGroup,
+                    flow: $triggerGroup->flow,
+                    matchMode: $match->matchMode,
+                    matchedKeyword: $match->matchedKeyword,
+                    confidence: $match->confidence
+                );
+            }
+        }
+
+        foreach ($fallbacks as $triggerGroup) {
             $match = $this->matchesTrigger($triggerGroup, $message, $isNewContact, $organizationId, $contact);
 
             if ($match !== null) {
