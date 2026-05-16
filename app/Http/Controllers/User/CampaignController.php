@@ -467,4 +467,47 @@ class CampaignController extends BaseController
             ],
         ]);
     }
+
+    public function resendFailed(string $uuid): JsonResponse
+    {
+        $organizationId = session()->get('current_organization');
+
+        $campaign = Campaign::where('uuid', $uuid)
+            ->where('organization_id', $organizationId)
+            ->first();
+
+        if (! $campaign) {
+            return response()->json(['error' => 'Campaign not found'], 404);
+        }
+
+        if (! in_array($campaign->status, ['completed', 'cancelled'])) {
+            return response()->json([
+                'error' => 'Can only resend failed messages for completed or cancelled campaigns',
+                'current_status' => $campaign->status,
+            ], 400);
+        }
+
+        $failedCount = CampaignLog::where('campaign_id', $campaign->id)
+            ->whereIn('status', ['failed', 'permanently_failed'])
+            ->count();
+
+        if ($failedCount === 0) {
+            return response()->json(['error' => 'No failed messages to resend'], 400);
+        }
+
+        CampaignLog::where('campaign_id', $campaign->id)
+            ->whereIn('status', ['failed', 'permanently_failed'])
+            ->update([
+                'status' => 'pending',
+                'retry_count' => 0,
+            ]);
+
+        $campaign->update(['status' => 'ongoing']);
+
+        return response()->json([
+            'status' => 'ongoing',
+            'message' => 'Resending failed messages',
+            'failed_count' => $failedCount,
+        ]);
+    }
 }
