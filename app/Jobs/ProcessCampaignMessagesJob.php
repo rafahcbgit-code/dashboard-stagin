@@ -99,7 +99,7 @@ class ProcessCampaignMessagesJob implements ShouldQueue, ShouldBeUnique
                     $query->where('status', 'ongoing')
                         ->where('organization_id', $this->organizationId);
                 })
-                ->chunk($batchSize, function ($logs) use (&$campaignsProcessed, &$batchNumber, &$totalProcessed, $batchSize, $retryEnabled, $maxRetries) {
+                ->chunk($batchSize, function ($logs) use (&$campaignsProcessed, &$batchNumber, &$totalProcessed, $batchSize, $retryEnabled, $maxRetries, $orgMetadata) {
                     $batchNumber++;
                     // Task 2.3: AC-2.3.4 - Log batch progress at start of each chunk
                     Log::info('ProcessCampaignMessagesJob batch started', [
