@@ -144,6 +144,20 @@ class ProcessCampaignChunkJob implements ShouldQueue
                     $templatePayload
                 );
 
+                // Debug: log payload details for diagnosing template errors
+                Log::channel('campaign')->info('CampaignChunkJob sending payload', [
+                    'log_id' => $log->id,
+                    'campaign_id' => $this->campaignId,
+                    'organization_id' => $this->organizationId,
+                    'template_name' => $templatePayload['name'] ?? null,
+                    'template_language' => $templatePayload['language'] ?? null,
+                    'contact_phone' => $contact->phone,
+                    'send_url' => $whatsappService->getSendUrl(),
+                    'phone_number_id' => $whatsappService->getPhoneNumberIdProperty(),
+                    'payload_components_count' => count($templatePayload['components'] ?? []),
+                    'has_flow_stubs' => !empty($flowStubs),
+                ]);
+
                 $payloads[] = [
                     'log' => $log,
                     'contact' => $contact,
@@ -299,6 +313,19 @@ class ProcessCampaignChunkJob implements ShouldQueue
         $url = $whatsappService->getSendUrl();
         $headers = $whatsappService->setHeaders();
 
+        // Debug: log first payload to verify request structure
+        if (!empty($payloads)) {
+            $firstPayload = $payloads[0]['requestData'] ?? null;
+            Log::channel('campaign')->info('CampaignChunkJob first request payload', [
+                'campaign_id' => $this->campaignId,
+                'organization_id' => $this->organizationId,
+                'url' => $url,
+                'phone_number_id' => $whatsappService->getPhoneNumberIdProperty(),
+                'payload_template' => $firstPayload['template'] ?? null,
+                'total_payloads' => count($payloads),
+            ]);
+        }
+
         $requests = function () use ($payloads, $url, $headers) {
             foreach ($payloads as $idx => $payload) {
                 yield $idx => new Request(
@@ -318,9 +345,22 @@ class ProcessCampaignChunkJob implements ShouldQueue
                 $responseObject->data = json_decode($response->getBody()->getContents());
                 $results[$index] = $responseObject;
             },
-            'rejected' => function ($reason, $index) use (&$results) {
+            'rejected' => function ($reason, $index) use (&$results, $payloads) {
                 $responseObject = new \stdClass();
                 $responseObject->success = false;
+
+                // Debug: log failed request details
+                $failedPayload = $payloads[$index]['requestData'] ?? null;
+                Log::channel('campaign')->error('CampaignChunkJob request rejected', [
+                    'campaign_id' => $this->campaignId ?? null,
+                    'organization_id' => $this->organizationId ?? null,
+                    'index' => $index,
+                    'template_name' => $failedPayload['template']['name'] ?? null,
+                    'template_language' => $failedPayload['template']['language'] ?? null,
+                    'phone' => $failedPayload['to'] ?? null,
+                    'error_class' => get_class($reason),
+                    'error_message' => $reason->getMessage(),
+                ]);
 
                 if ($reason instanceof ConnectException) {
                     $responseObject->data = new \stdClass();
