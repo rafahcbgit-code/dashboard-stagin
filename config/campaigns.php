@@ -78,6 +78,22 @@ return [
 
     'concurrency' => env('CAMPAIGN_CONCURRENCY', 10),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Request Delay (milliseconds)
+    |--------------------------------------------------------------------------
+    |
+    | Milliseconds to pause between each API request within a chunk job.
+    | This spaces out sends to avoid hitting Meta's rate limits (130429).
+    |
+    | At concurrency=5 with delay=100ms: effective rate ~50 req/sec
+    | At concurrency=5 with delay=200ms: effective rate ~25 req/sec
+    | At concurrency=5 with delay=0: no throttling, burst as fast as possible
+    |
+    */
+
+    'request_delay_ms' => env('CAMPAIGN_REQUEST_DELAY_MS', 100),
+
     'load_test_mode' => env('CAMPAIGN_LOAD_TEST_MODE', false),
 
 ];

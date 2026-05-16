@@ -43,6 +43,7 @@ class ProcessCampaignChunkJob implements ShouldQueue
         public int $templateId,
         public int $createdBy,
         public int $concurrency = 10,
+        public int $requestDelayMs = 100,
     ) {
         $this->queue = 'campaign-messages';
     }
@@ -355,8 +356,13 @@ class ProcessCampaignChunkJob implements ShouldQueue
             ]);
         }
 
-        $requests = function () use ($payloads, $url, $headers) {
+        $delayMs = $this->requestDelayMs;
+
+        $requests = function () use ($payloads, $url, $headers, $delayMs) {
             foreach ($payloads as $idx => $payload) {
+                if ($idx > 0 && $delayMs > 0) {
+                    usleep($delayMs * 1000);
+                }
                 yield $idx => new Request(
                     'POST',
                     $url,

@@ -149,8 +149,9 @@ class ProcessCampaignMessagesJob implements ShouldQueue, ShouldBeUnique
                     }
 
                     // Dispatch ProcessCampaignChunkJob per chunk per campaign
-                    $chunkSize = config('campaigns.chunk_size', 50);
-                    $concurrency = config('campaigns.concurrency', 10);
+                    $chunkSize = $this->getChunkSize($orgMetadata);
+                    $concurrency = $this->getConcurrency($orgMetadata);
+                    $requestDelayMs = $this->getRequestDelayMs($orgMetadata);
 
                     foreach ($byCampaign as $campaignId => $campaignLogs) {
                         $campaign = $campaignLogs[0]->campaign;
@@ -164,6 +165,7 @@ class ProcessCampaignMessagesJob implements ShouldQueue, ShouldBeUnique
                                 templateId: $campaign->template_id,
                                 createdBy: $campaign->created_by,
                                 concurrency: $concurrency,
+                                requestDelayMs: $requestDelayMs,
                             )->onQueue($this->queue);
                         }
                     }
@@ -234,6 +236,30 @@ class ProcessCampaignMessagesJob implements ShouldQueue, ShouldBeUnique
         }
 
         return min($defaultSize, $maxSize);
+    }
+
+    private function getChunkSize(array $orgMetadata): int
+    {
+        $default = config('campaigns.chunk_size', 50);
+        $orgOverride = $orgMetadata['campaigns']['chunk_size'] ?? null;
+
+        return $orgOverride !== null ? max(1, (int) $orgOverride) : $default;
+    }
+
+    private function getConcurrency(array $orgMetadata): int
+    {
+        $default = config('campaigns.concurrency', 10);
+        $orgOverride = $orgMetadata['campaigns']['concurrency'] ?? null;
+
+        return $orgOverride !== null ? max(1, (int) $orgOverride) : $default;
+    }
+
+    private function getRequestDelayMs(array $orgMetadata): int
+    {
+        $default = config('campaigns.request_delay_ms', 100);
+        $orgOverride = $orgMetadata['campaigns']['request_delay_ms'] ?? null;
+
+        return $orgOverride !== null ? max(0, (int) $orgOverride) : $default;
     }
 
     private function markCampaignAsCompleted($campaignId)
