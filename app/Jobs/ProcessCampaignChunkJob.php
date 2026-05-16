@@ -33,7 +33,7 @@ class ProcessCampaignChunkJob implements ShouldQueue
 
     protected static array $campaignCache = [];
     protected static array $templateCache = [];
-    protected static ?WhatsappService $sharedWhatsappService = null;
+    protected static array $whatsappServiceCache = [];
     protected static array $progressState = [];
 
     public function __construct(
@@ -135,6 +135,9 @@ class ProcessCampaignChunkJob implements ShouldQueue
                     }
                 }
 
+                $flowStubs = $templatePayload['_flow_stubs'] ?? [];
+                unset($templatePayload['_flow_stubs']);
+
                 // Build raw request payload
                 $requestData = $whatsappService->buildTemplateRequestPayload(
                     $contact->phone,
@@ -146,7 +149,7 @@ class ProcessCampaignChunkJob implements ShouldQueue
                     'contact' => $contact,
                     'requestData' => $requestData,
                     'templateContent' => $templatePayload,
-                    'flowStubs' => $templatePayload['_flow_stubs'] ?? [],
+                    'flowStubs' => $flowStubs,
                 ];
             } catch (\Exception $e) {
                 Log::error('Error building template payload for campaign log', [
@@ -364,7 +367,7 @@ class ProcessCampaignChunkJob implements ShouldQueue
 
     protected function getWhatsappService(): WhatsappService
     {
-        if (self::$sharedWhatsappService === null) {
+        if (!isset(self::$whatsappServiceCache[$this->organizationId])) {
             $config = OrganizationService::getCachedMetadata($this->organizationId);
             $accessToken = $config['whatsapp']['access_token'] ?? null;
             $apiVersion = 'v18.0';
@@ -372,7 +375,7 @@ class ProcessCampaignChunkJob implements ShouldQueue
             $phoneNumberId = $config['whatsapp']['phone_number_id'] ?? null;
             $wabaId = $config['whatsapp']['waba_id'] ?? null;
 
-            self::$sharedWhatsappService = new WhatsappService(
+            self::$whatsappServiceCache[$this->organizationId] = new WhatsappService(
                 $accessToken,
                 $apiVersion,
                 $appId,
@@ -381,7 +384,8 @@ class ProcessCampaignChunkJob implements ShouldQueue
                 $this->organizationId
             );
         }
-        return self::$sharedWhatsappService;
+
+        return self::$whatsappServiceCache[$this->organizationId];
     }
 
     protected function broadcastProgressIfNeeded(): void
@@ -498,6 +502,7 @@ class ProcessCampaignChunkJob implements ShouldQueue
             self::$progressState = [];
             self::$campaignCache = [];
             self::$templateCache = [];
+            self::$whatsappServiceCache = [];
         } else {
             unset(self::$progressState[$campaignId]);
             unset(self::$campaignCache[$campaignId]);
