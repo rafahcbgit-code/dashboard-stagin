@@ -216,6 +216,13 @@ class CampaignController extends BaseController
             $campaign['total_delivered_count'] = $counts->total_delivered_count ?? 0;
             $campaign['total_failed_count'] = $counts->total_failed_count ?? 0;
             $campaign['total_read_count'] = $counts->total_read_count ?? 0;
+            $campaign['rate_limited_failed_count'] = CampaignLog::where('campaign_id', $campaign->id)
+                ->whereIn('status', ['failed', 'permanently_failed'])
+                ->where(function ($query) {
+                    $query->whereRaw("JSON_EXTRACT(metadata, '$.data.error.code') = 130429")
+                          ->orWhereRaw("JSON_EXTRACT(metadata, '$.error.code') = 130429");
+                })
+                ->count();
             $data['campaign'] = $campaign;
 
             $data['filters'] = request()->all(['search']);
@@ -487,26 +494,29 @@ class CampaignController extends BaseController
             ], 400);
         }
 
-        $failedCount = CampaignLog::where('campaign_id', $campaign->id)
+        $rateLimitedQuery = CampaignLog::where('campaign_id', $campaign->id)
             ->whereIn('status', ['failed', 'permanently_failed'])
-            ->count();
+            ->where(function ($query) {
+                $query->whereRaw("JSON_EXTRACT(metadata, '$.data.error.code') = 130429")
+                      ->orWhereRaw("JSON_EXTRACT(metadata, '$.error.code') = 130429");
+            });
+
+        $failedCount = $rateLimitedQuery->count();
 
         if ($failedCount === 0) {
-            return response()->json(['error' => 'No failed messages to resend'], 400);
+            return response()->json(['error' => 'No rate-limited messages to resend'], 400);
         }
 
-        CampaignLog::where('campaign_id', $campaign->id)
-            ->whereIn('status', ['failed', 'permanently_failed'])
-            ->update([
-                'status' => 'pending',
-                'retry_count' => 0,
-            ]);
+        $rateLimitedQuery->update([
+            'status' => 'pending',
+            'retry_count' => 0,
+        ]);
 
         $campaign->update(['status' => 'ongoing']);
 
         return response()->json([
             'status' => 'ongoing',
-            'message' => 'Resending failed messages',
+            'message' => 'Resending rate-limited messages',
             'failed_count' => $failedCount,
         ]);
     }

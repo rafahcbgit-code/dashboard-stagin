@@ -19,13 +19,13 @@
                     </button>
                     <span v-if="isCancelling" class="text-sm text-gray-600">{{ $t('Cancelling...') }}</span>
 
-                    <!-- Resend Failed button (only for completed/cancelled campaigns with failed messages) -->
+                    <!-- Resend rate-limited messages button (only for completed/cancelled campaigns with rate-limited failures) -->
                     <button
                         v-if="canResendFailed && !isResending"
                         @click="showResendConfirmation = true"
                         class="rounded-md bg-amber-500 hover:bg-amber-600 px-3 py-2 text-sm text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500"
                     >
-                        {{ $t('Resend Failed') }}
+                        {{ $t('Resend Rate-Limited') }}
                     </button>
                     <span v-if="isResending" class="text-sm text-gray-600">{{ $t('Resending...') }}</span>
 
@@ -139,9 +139,9 @@
                                         </svg>
                                     </div>
                                     <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
-                                        <h3 class="text-lg leading-6 font-medium text-gray-900" id="resend-modal-title">{{ $t('Resend Failed Messages') }}</h3>
+                                        <h3 class="text-lg leading-6 font-medium text-gray-900" id="resend-modal-title">{{ $t('Resend Rate-Limited Messages') }}</h3>
                                         <div class="mt-2">
-                                            <p class="text-sm text-gray-500">{{ $t('This will resend all failed messages in this campaign. The campaign status will change back to ongoing and failed messages will be retried.') }}</p>
+                                            <p class="text-sm text-gray-500">{{ $t('This will resend messages that failed due to WhatsApp rate limits. The campaign will restart and only rate-limited messages will be retried. Other failed messages are not affected.') }}</p>
                                         </div>
                                     </div>
                                 </div>
@@ -151,7 +151,7 @@
                                         @click="resendFailed"
                                         class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-amber-500 text-base font-medium text-white hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500 sm:ml-3 sm:w-auto sm:text-sm"
                                     >
-                                        {{ $t('Yes, Resend Failed') }}
+                                        {{ $t('Yes, Resend Rate-Limited') }}
                                     </button>
                                     <button
                                         type="button"
@@ -304,11 +304,11 @@
     // Check if campaign is ongoing
     const isOngoing = computed(() => props.campaign.status === 'ongoing' && !campaignCancelled.value);
 
-    // Check if resend failed button should show (completed/cancelled with failed messages)
+    // Check if resend failed button should show (completed/cancelled with rate-limited failures)
     const canResendFailed = computed(() => {
         const status = props.campaign.status;
         if (status !== 'completed' && status !== 'cancelled') return false;
-        return displayStats.value.failed > 0;
+        return (props.campaign.rate_limited_failed_count ?? 0) > 0;
     });
 
     // Display stats that update in real-time for ongoing campaigns
