@@ -333,6 +333,7 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::get('/campaigns/reports/export-statuses', [App\Http\Controllers\User\CampaignController::class, 'exportCampaignStatuses'])->name('campaigns.export-statuses');
                 Route::delete('/campaigns/{uuid?}', [App\Http\Controllers\User\CampaignController::class, 'delete']);
                 Route::post('/campaigns/{uuid}/cancel', [App\Http\Controllers\User\CampaignController::class, 'cancel'])->name('campaigns.cancel');
+                Route::post('/campaigns/{uuid}/resend-failed', [App\Http\Controllers\User\CampaignController::class, 'resendFailed'])->name('campaigns.resend-failed');
 
                 Route::match(['get', 'post'], '/templates/create', [App\Http\Controllers\User\TemplateController::class, 'create']);
                 Route::get('/templates/{uuid?}', [App\Http\Controllers\User\TemplateController::class, 'index']);

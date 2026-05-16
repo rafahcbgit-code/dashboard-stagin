@@ -19,6 +19,16 @@
                     </button>
                     <span v-if="isCancelling" class="text-sm text-gray-600">{{ $t('Cancelling...') }}</span>
 
+                    <!-- Resend Failed button (only for completed/cancelled campaigns with failed messages) -->
+                    <button
+                        v-if="canResendFailed && !isResending"
+                        @click="showResendConfirmation = true"
+                        class="rounded-md bg-amber-500 hover:bg-amber-600 px-3 py-2 text-sm text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500"
+                    >
+                        {{ $t('Resend Failed') }}
+                    </button>
+                    <span v-if="isResending" class="text-sm text-gray-600">{{ $t('Resending...') }}</span>
+
                     <a :href="'/campaigns/export/' + props.campaign.uuid" class="rounded-md bg-secondary px-3 py-2 text-sm text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
                         {{ $t('Export as CSV') }}
                     </a>
@@ -110,6 +120,45 @@
                                         class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:w-auto sm:text-sm"
                                     >
                                         {{ $t('No, Keep Running') }}
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Resend Failed confirmation dialog -->
+                    <div v-if="showResendConfirmation" class="fixed inset-0 z-50 overflow-y-auto" aria-labelledby="resend-modal-title" role="dialog" aria-modal="true">
+                        <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
+                            <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="showResendConfirmation = false"></div>
+                            <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
+                            <div class="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
+                                <div class="sm:flex sm:items-start">
+                                    <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-amber-100 sm:mx-0 sm:h-10 sm:w-10">
+                                        <svg class="h-6 w-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
+                                        </svg>
+                                    </div>
+                                    <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+                                        <h3 class="text-lg leading-6 font-medium text-gray-900" id="resend-modal-title">{{ $t('Resend Failed Messages') }}</h3>
+                                        <div class="mt-2">
+                                            <p class="text-sm text-gray-500">{{ $t('This will resend all failed messages in this campaign. The campaign status will change back to ongoing and failed messages will be retried.') }}</p>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="mt-5 sm:mt-4 sm:flex sm:flex-row-reverse">
+                                    <button
+                                        type="button"
+                                        @click="resendFailed"
+                                        class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-amber-500 text-base font-medium text-white hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500 sm:ml-3 sm:w-auto sm:text-sm"
+                                    >
+                                        {{ $t('Yes, Resend Failed') }}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        @click="showResendConfirmation = false"
+                                        class="mt-3 w-full inline-flex justify-center rounded-md border border-gray-300 shadow-sm px-4 py-2 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:mt-0 sm:w-auto sm:text-sm"
+                                    >
+                                        {{ $t('Cancel') }}
                                     </button>
                                 </div>
                             </div>
@@ -248,8 +297,19 @@
     const cancelStats = ref(null);
     const cancelError = ref(null);
 
+    // Resend failed state
+    const showResendConfirmation = ref(false);
+    const isResending = ref(false);
+
     // Check if campaign is ongoing
     const isOngoing = computed(() => props.campaign.status === 'ongoing' && !campaignCancelled.value);
+
+    // Check if resend failed button should show (completed/cancelled with failed messages)
+    const canResendFailed = computed(() => {
+        const status = props.campaign.status;
+        if (status !== 'completed' && status !== 'cancelled') return false;
+        return displayStats.value.failed > 0;
+    });
 
     // Display stats that update in real-time for ongoing campaigns
     const displayStats = computed(() => {
@@ -356,6 +416,36 @@
             alert(cancelError.value);
         } finally {
             isCancelling.value = false;
+        }
+    };
+
+    const resendFailed = async () => {
+        isResending.value = true;
+        showResendConfirmation.value = false;
+
+        try {
+            const response = await fetch(`/campaigns/${props.campaign.uuid}/resend-failed`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                    'Accept': 'application/json',
+                },
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                campaignCompleted.value = false;
+                campaignCancelled.value = false;
+                router.reload({ only: ['campaign', 'rows'] });
+            } else {
+                alert(data.error || 'Failed to resend messages');
+            }
+        } catch (error) {
+            alert('Network error occurred while resending messages');
+        } finally {
+            isResending.value = false;
         }
     };
 
