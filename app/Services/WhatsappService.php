@@ -2300,8 +2300,10 @@ class WhatsappService
                         }
 
                         $template->metadata = json_encode($newMeta);
+                        $template->name = $templateData->name ?? $template->name;
+                        $template->language = $templateData->language ?? $template->language;
                         $template->status = $templateData->status;
-                        $template->category = $templateData->category;
+                        $template->category = $templateData->category ?? $template->category;
                         $template->updated_at = now();
                         $template->deleted_at = NULL;
                         $template->save();
@@ -2319,7 +2321,7 @@ class WhatsappService
                         $template->organization_id = session()->get('current_organization');
                         $template->meta_id = $templateData->id;
                         $template->name = $templateData->name;
-                        $template->category = $templateData->language;
+                        $template->category = $templateData->category;
                         $template->language = $templateData->language;
                         $template->metadata = json_encode($newMeta);
                         $template->status = $templateData->status;
