@@ -415,6 +415,15 @@ class ProcessCampaignChunkJob implements ShouldQueue
             $phoneNumberId = $config['whatsapp']['phone_number_id'] ?? null;
             $wabaId = $config['whatsapp']['waba_id'] ?? null;
 
+            Log::channel('campaign')->info('CampaignChunkJob creating WhatsappService', [
+                'organization_id' => $this->organizationId,
+                'campaign_id' => $this->campaignId,
+                'phone_number_id' => $phoneNumberId,
+                'waba_id' => $wabaId,
+                'access_token_prefix' => substr($accessToken ?? '', 0, 10) . '...',
+                'cached_services_count' => count(self::$whatsappServiceCache),
+            ]);
+
             self::$whatsappServiceCache[$this->organizationId] = new WhatsappService(
                 $accessToken,
                 $apiVersion,
@@ -423,6 +432,13 @@ class ProcessCampaignChunkJob implements ShouldQueue
                 $wabaId,
                 $this->organizationId
             );
+        } else {
+            Log::channel('campaign')->info('CampaignChunkJob reusing cached WhatsappService', [
+                'organization_id' => $this->organizationId,
+                'campaign_id' => $this->campaignId,
+                'cached_phone_number_id' => self::$whatsappServiceCache[$this->organizationId]->getPhoneNumberIdProperty(),
+                'cached_services_count' => count(self::$whatsappServiceCache),
+            ]);
         }
 
         return self::$whatsappServiceCache[$this->organizationId];
