@@ -793,7 +793,7 @@ class WhatsappService
         }
     }
 
-    private function getMediaIdFromCampaign($campaignId){
+    public function getMediaIdFromCampaign($campaignId){
         $campaign = Campaign::where('id', $campaignId)->first();
         $templateMetadata = json_decode($campaign->metadata);
         $mediaId = null;
