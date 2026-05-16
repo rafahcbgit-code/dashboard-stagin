@@ -181,6 +181,35 @@ class ProcessCampaignChunkJob implements ShouldQueue
         }
 
         // 8. Send concurrently via Guzzle Pool (or skip in load test mode)
+        // Debug: For FLOW templates, also send via sendTemplateMessage to compare
+        $hasFlowStubs = !empty(array_filter($payloads, fn($p) => !empty($p['flowStubs'])));
+        if ($hasFlowStubs && !empty($payloads)) {
+            $testPayload = $payloads[0];
+            try {
+                $testResult = $whatsappService->sendTemplateMessage(
+                    $testPayload['contact']->uuid,
+                    $testPayload['templateContent'],
+                    $this->createdBy,
+                    $this->campaignId,
+                    null,
+                    $testPayload['contact'],
+                    $campaign,
+                    $template
+                );
+                Log::channel('campaign')->info('CampaignChunkJob FLOW template sendTemplateMessage test', [
+                    'campaign_id' => $this->campaignId,
+                    'template_name' => $testPayload['templateContent']['name'] ?? null,
+                    'success' => $testResult->success ?? false,
+                    'phone_number_id' => $whatsappService->getPhoneNumberIdProperty(),
+                ]);
+            } catch (\Exception $e) {
+                Log::channel('campaign')->error('CampaignChunkJob FLOW template sendTemplateMessage test FAILED', [
+                    'campaign_id' => $this->campaignId,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
         if ($isLoadTest) {
             $results = [];
             foreach ($payloads as $idx => $payload) {
