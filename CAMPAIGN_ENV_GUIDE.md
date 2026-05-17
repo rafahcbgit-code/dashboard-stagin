@@ -57,6 +57,47 @@ Check your phone number's current throughput:
 GET https://graph.facebook.com/v18.0/{phone_number_id}?fields=throughput
 ```
 
+## Quick Speed Reference
+
+The delay controls the send rate. The generator yields one request every `delay` ms:
+
+```
+Effective rate = 1000ms / delay
+```
+
+| Target speed | Concurrency | Delay | Artisan command |
+|-------------|-------------|-------|-----------------|
+| 10 msg/sec | 3 | 100 | `--concurrency=3 --delay=100` |
+| 20 msg/sec | 3 | 50 | `--concurrency=3 --delay=50` |
+| 50 msg/sec | 5 | 100 | `--concurrency=5 --delay=100` |
+| 80 msg/sec | 5 | 12 | `--concurrency=5 --delay=12` |
+| Fast (no limit) | 10 | 0 | `--concurrency=10 --delay=0` |
+
+**How concurrency and delay work together:**
+
+- **Delay** = milliseconds between yielding the next request to the Guzzle Pool. This is the main rate controller.
+- **Concurrency** = how many requests are in-flight at the same time. Does NOT increase the rate — only determines how many are flying at once.
+- The rate is `1000 / delay` regardless of concurrency (as long as concurrency >= 1).
+
+**Example:** delay=50ms → 1 request every 50ms → 20 requests per second. Whether concurrency is 1 or 5, the generator still only yields every 50ms.
+
+**Per-org override (recommended):**
+
+Instead of changing the global `.env` (which affects all orgs), use the artisan command for orgs with different limits:
+
+```bash
+# Org with 20 msg/sec limit (coexistence mode)
+php artisan campaign:config 5 --concurrency=3 --delay=50
+
+# Org with fast sending (upgraded tier)
+php artisan campaign:config 12 --concurrency=10 --delay=0
+
+# Verify
+php artisan campaign:config 5 --show
+```
+
+**Priority:** org metadata override > env variable > config default
+
 ---
 
 ## Artisan Command: `campaign:config`
