@@ -3063,8 +3063,20 @@ class WhatsappService
             }
 
             $response = $client->request($method, $url, $requestOptions);
-            $responseObject->success = true;
-            $responseObject->data = json_decode($response->getBody()->getContents());
+            $body = json_decode($response->getBody()->getContents());
+
+            // Meta can return HTTP 200 with an error object in the body
+            // (e.g. rate limit 130429). Treat these as failures.
+            if (isset($body->error)) {
+                $responseObject->success = false;
+                $responseObject->data = $body;
+                $responseObject->message = $body->error->error_user_msg
+                    ?? $body->error->message
+                    ?? 'Unknown error';
+            } else {
+                $responseObject->success = true;
+                $responseObject->data = $body;
+            }
         } catch (ConnectException $e) {
             $responseObject->success = false;
             $responseObject->data = new \stdClass();
