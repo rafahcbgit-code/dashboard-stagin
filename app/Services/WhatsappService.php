@@ -263,6 +263,37 @@ class WhatsappService
         $flowStubs = $templateContent['_flow_stubs'] ?? [];
         unset($templateContent['_flow_stubs']);
 
+        $templateModel = $campaignTemplate;
+        if (!$templateModel && $campaignId !== null) {
+            $campaign = $campaign ?? Campaign::find($campaignId);
+            $templateModel = $campaign ? Template::find($campaign->template_id) : null;
+        }
+        if (!$templateModel) {
+            $templateModel = $this->resolveTemplateFromPayload($templateContent);
+        }
+
+        try {
+            $templateContent = $this->enrichTemplateHeaderWithMediaId(
+                $templateContent,
+                $templateModel,
+                [
+                    'campaign_id' => $campaignId,
+                    'template_id' => $templateModel?->id,
+                    'contact_id' => $contact->id,
+                ]
+            );
+        } catch (\RuntimeException $e) {
+            Log::error('Template media enrichment failed before Meta send', [
+                'error' => $e->getMessage(),
+                'campaign_id' => $campaignId,
+                'template_id' => $templateModel?->id,
+                'contact_id' => $contact->id,
+                'template' => $templateContent['name'] ?? null,
+            ]);
+
+            return $this->buildErrorResponse($e->getMessage(), 422, 'TEMPLATE_MEDIA_UPLOAD_FAILED');
+        }
+
         $requestData['messaging_product'] = 'whatsapp';
         $requestData['recipient_type'] = 'individual';
         $requestData['to'] = $contact->phone;
@@ -280,6 +311,17 @@ class WhatsappService
 
         $responseObject = $this->sendHttpRequest('POST', $url, $requestData, $headers);
         Log::info("meta resp", [$responseObject]);
+
+        if (($responseObject->success ?? false) !== true && $this->templatePayloadHasHeaderMedia($templateContent)) {
+            Log::error('Template media send failed after Meta request', [
+                'campaign_id' => $campaignId,
+                'template_id' => $templateModel?->id,
+                'contact_id' => $contact->id,
+                'wamid' => $responseObject->data->messages[0]->id ?? null,
+                'error' => $responseObject->data->error ?? null,
+            ]);
+        }
+
         if($responseObject->success === true){
             // Determine metadata based on template type
             $metadata = null;
@@ -451,6 +493,218 @@ class WhatsappService
         return $variables;
     }
 
+    private function enrichTemplateHeaderWithMediaId(array $templateContent, ?Template $templateModel = null, array $context = []): array
+    {
+        $templateMedia = $this->resolveTemplateHeaderMedia($templateModel);
+
+        foreach ($templateContent['components'] ?? [] as $componentIndex => $component) {
+            if (strtolower($component['type'] ?? '') !== 'header') {
+                continue;
+            }
+
+            foreach (($component['parameters'] ?? []) as $parameterIndex => $parameter) {
+                $mediaType = strtolower((string) ($parameter['type'] ?? ''));
+
+                if (!in_array($mediaType, ['image', 'video', 'document'], true)) {
+                    continue;
+                }
+
+                if (!empty($parameter[$mediaType]['id'] ?? null)) {
+                    Log::info('Template header media already uses Meta media ID', array_merge($context, [
+                        'media_type' => $mediaType,
+                        'media_id' => $parameter[$mediaType]['id'],
+                    ]));
+
+                    return $templateContent;
+                }
+
+                $mediaUrl = $templateMedia['url']
+                    ?? $parameter[$mediaType]['link']
+                    ?? null;
+
+                if (!$mediaUrl || !filter_var($mediaUrl, FILTER_VALIDATE_URL)) {
+                    throw new \RuntimeException(__('Missing media for header.'));
+                }
+
+                $mediaId = $this->getOrUploadTemplateHeaderMediaId(
+                    $mediaUrl,
+                    $mediaType,
+                    $templateModel,
+                    $context
+                );
+
+                if (!$mediaId) {
+                    throw new \RuntimeException(__('Unable to upload template header media before sending.'));
+                }
+
+                unset($templateContent['components'][$componentIndex]['parameters'][$parameterIndex][$mediaType]['link']);
+                $templateContent['components'][$componentIndex]['parameters'][$parameterIndex][$mediaType]['id'] = $mediaId;
+
+                Log::info('Template header media link replaced with Meta media ID', array_merge($context, [
+                    'media_type' => $mediaType,
+                    'media_id' => $mediaId,
+                    'media_url' => $this->sanitizeMediaUrlForLog($mediaUrl),
+                ]));
+
+                return $templateContent;
+            }
+        }
+
+        return $templateContent;
+    }
+
+    private function getOrUploadTemplateHeaderMediaId(string $mediaUrl, string $mediaType, ?Template $templateModel = null, array $context = []): ?string
+    {
+        $templateKey = $templateModel?->id
+            ? 'template_' . $templateModel->id
+            : 'payload_' . sha1(($templateModel?->name ?? '') . '|' . ($templateModel?->language ?? ''));
+
+        $cacheKey = 'template_header_media_id:' . sha1(implode('|', [
+            (string) $this->phoneNumberId,
+            $templateKey,
+            $mediaType,
+            $mediaUrl,
+        ]));
+
+        $cachedMediaId = \Illuminate\Support\Facades\Cache::get($cacheKey);
+
+        if ($cachedMediaId) {
+            Log::info('Template header media ID loaded from cache', array_merge($context, [
+                'media_type' => $mediaType,
+                'media_id' => $cachedMediaId,
+                'media_cache_key' => $cacheKey,
+                'media_url' => $this->sanitizeMediaUrlForLog($mediaUrl),
+            ]));
+
+            return (string) $cachedMediaId;
+        }
+
+        $access = $this->inspectMediaUrlAccessibility($mediaUrl);
+        Log::info('Template header media URL checked before upload', array_merge($context, [
+            'media_type' => $mediaType,
+            'media_url' => $this->sanitizeMediaUrlForLog($mediaUrl),
+            'http_status' => $access['http_status'] ?? null,
+            'source' => $access['source'] ?? null,
+        ]));
+
+        $mediaId = $this->uploadMediaForSending($mediaUrl, array_merge($context, [
+            'media_type' => $mediaType,
+            'media_url' => $this->sanitizeMediaUrlForLog($mediaUrl),
+        ]), 'template_header');
+
+        if ($mediaId) {
+            \Illuminate\Support\Facades\Cache::put($cacheKey, $mediaId, 86400);
+            Log::info('Template header media ID cached', array_merge($context, [
+                'media_type' => $mediaType,
+                'media_id' => $mediaId,
+                'media_cache_key' => $cacheKey,
+                'media_url' => $this->sanitizeMediaUrlForLog($mediaUrl),
+            ]));
+        }
+
+        return $mediaId;
+    }
+
+    private function resolveTemplateHeaderMedia(?Template $templateModel): ?array
+    {
+        if (!$templateModel) {
+            return null;
+        }
+
+        $metadata = json_decode($templateModel->metadata ?? '{}', true);
+
+        if (!is_array($metadata)) {
+            return null;
+        }
+
+        $storedMedia = $metadata['_default_header_media'] ?? $metadata['default_header_media'] ?? null;
+        $mediaId = is_array($storedMedia) ? ($storedMedia['media_id'] ?? $storedMedia['chat_media_id'] ?? null) : null;
+        $url = is_array($storedMedia) ? ($storedMedia['url'] ?? $storedMedia['path'] ?? null) : null;
+
+        if (!$url && $mediaId) {
+            $chatMedia = ChatMedia::find($mediaId);
+            $url = $chatMedia?->path;
+        }
+
+        if (!$url) {
+            foreach (($metadata['components'] ?? []) as $component) {
+                if (strtoupper((string) ($component['type'] ?? '')) === 'HEADER') {
+                    $headerHandle = $component['example']['header_handle'][0] ?? null;
+                    if (is_string($headerHandle) && filter_var($headerHandle, FILTER_VALIDATE_URL)) {
+                        $url = $headerHandle;
+                    }
+                    break;
+                }
+            }
+        }
+
+        return $url ? ['url' => $url, 'media_id' => $mediaId] : null;
+    }
+
+    private function inspectMediaUrlAccessibility(string $mediaUrl): array
+    {
+        try {
+            $appUrl = rtrim(config('app.url'), '/');
+
+            if (str_starts_with($mediaUrl, $appUrl . '/media/')) {
+                $relativePath = urldecode(str_replace($appUrl . '/media/', '', $mediaUrl));
+
+                return [
+                    'source' => 'local',
+                    'http_status' => \Storage::disk('local')->exists($relativePath) ? 200 : 404,
+                ];
+            }
+
+            $response = \Http::timeout(10)->head($mediaUrl);
+
+            return [
+                'source' => 'remote',
+                'http_status' => $response->status(),
+            ];
+        } catch (\Exception $e) {
+            return [
+                'source' => 'remote',
+                'http_status' => null,
+                'error' => $e->getMessage(),
+            ];
+        }
+    }
+
+    private function sanitizeMediaUrlForLog(?string $mediaUrl): ?string
+    {
+        if (!$mediaUrl) {
+            return null;
+        }
+
+        $parts = parse_url($mediaUrl);
+
+        if (!$parts || empty($parts['host'])) {
+            return $mediaUrl;
+        }
+
+        $path = $parts['path'] ?? '';
+        $scheme = $parts['scheme'] ?? 'https';
+
+        return $scheme . '://' . $parts['host'] . $path;
+    }
+
+    private function templatePayloadHasHeaderMedia(array $templateContent): bool
+    {
+        foreach ($templateContent['components'] ?? [] as $component) {
+            if (strtolower((string) ($component['type'] ?? '')) !== 'header') {
+                continue;
+            }
+
+            foreach (($component['parameters'] ?? []) as $parameter) {
+                if (in_array(strtolower((string) ($parameter['type'] ?? '')), ['image', 'video', 'document'], true)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     /**
      * Enrich carousel template payload with fresh media IDs.
      * Uses campaign-level caching so media is uploaded only ONCE per campaign,
@@ -577,17 +831,34 @@ class WhatsappService
         return $template->id;
     }
 
+    private function resolveTemplateFromPayload(array $templateContent): ?Template
+    {
+        $name = $templateContent['name'] ?? null;
+        $language = $templateContent['language']['code'] ?? null;
+
+        if (!$name || !$language) {
+            return null;
+        }
+
+        return Template::where('organization_id', $this->organizationId)
+            ->where('name', $name)
+            ->where('language', $language)
+            ->first();
+    }
+
     /**
      * Upload media file and return its media ID for sending carousel templates
      */
-    private function uploadMediaForSending(string $fileUrl): ?string
+    private function uploadMediaForSending(string $fileUrl, array $context = [], string $filenamePrefix = 'carousel'): ?string
     {
         try {
             // Get file info
             $fileData = $this->getFileDataForUpload($fileUrl);
             
             if (!$fileData) {
-                Log::error('Could not get file data', ['url' => $fileUrl]);
+                Log::error('Could not get file data', array_merge($context, [
+                    'url' => $this->sanitizeMediaUrlForLog($fileUrl),
+                ]));
                 return null;
             }
 
@@ -600,7 +871,7 @@ class WhatsappService
             
             // Determine proper filename with extension
             $extension = $this->getExtensionFromMimeType($fileData['mime_type']);
-            $filename = 'carousel_' . uniqid() . '.' . $extension;
+            $filename = $filenamePrefix . '_' . uniqid() . '.' . $extension;
             
             $response = \Http::withHeaders([
                 'Authorization' => 'Bearer ' . $this->accessToken,
@@ -618,26 +889,26 @@ class WhatsappService
 
             if ($response->successful()) {
                 $mediaId = $response->json('id');
-                Log::info('Media uploaded for carousel card', [
+                Log::info('Media uploaded for WhatsApp send', array_merge($context, [
                     'media_id' => $mediaId,
                     'mime_type' => $fileData['mime_type'],
                     'filename' => $filename
-                ]);
+                ]));
                 return $mediaId;
             }
 
-            Log::error('Media upload failed', [
+            Log::error('Media upload failed', array_merge($context, [
                 'response' => $response->json(),
                 'mime_type' => $fileData['mime_type'],
-                'url' => $fileUrl
-            ]);
+                'url' => $this->sanitizeMediaUrlForLog($fileUrl)
+            ]));
             return null;
             
         } catch (\Exception $e) {
-            Log::error('uploadMediaForSending error', [
+            Log::error('uploadMediaForSending error', array_merge($context, [
                 'error' => $e->getMessage(),
-                'url' => $fileUrl
-            ]);
+                'url' => $this->sanitizeMediaUrlForLog($fileUrl)
+            ]));
             return null;
         }
     }
