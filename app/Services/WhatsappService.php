@@ -493,7 +493,7 @@ class WhatsappService
         return $variables;
     }
 
-    private function enrichTemplateHeaderWithMediaId(array $templateContent, ?Template $templateModel = null, array $context = []): array
+    public function enrichTemplateHeaderWithMediaId(array $templateContent, ?Template $templateModel = null, array $context = []): array
     {
         $templateMedia = $this->resolveTemplateHeaderMedia($templateModel);
 
