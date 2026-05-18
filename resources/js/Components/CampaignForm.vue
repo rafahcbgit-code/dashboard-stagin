@@ -206,7 +206,7 @@ const loadTemplate = async () => {
           form.header.parameters = headerExamples.header_handle.map((item) => ({
             type: form.header.format,
             selection: "default",
-            value: null,
+            value: item,
             url: item,
           }));
         }
@@ -798,7 +798,15 @@ onMounted(() => {
                 "
                 class="w-full mt-3"
               >
-                <div>
+                <div v-if="form.header.parameters[index].selection === 'default'">
+                  <div class="flex items-center space-x-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                    <span class="font-medium">{{ $t("Template media") }}</span>
+                    <span class="max-w-[24rem] truncate">
+                      {{ form.header.parameters[index].url || form.header.parameters[index].value }}
+                    </span>
+                  </div>
+                </div>
+                <div v-else>
                   <div class="flex items-center space-x-4">
                     <label
                       class="cursor-pointer flex justify-center px-2 py-2 w-[30%] bg-slate-200 shadow-sm rounded-lg border"

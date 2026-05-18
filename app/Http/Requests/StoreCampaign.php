@@ -49,18 +49,17 @@ class StoreCampaign extends FormRequest
                 $rules['header.parameters.0.value'] = 'required|max:60'; // Max 60 characters
             }
 
-            // Rules for image format
-            if ($format === 'IMAGE') {
+            $headerSelection = $this->input('header.parameters.0.selection');
+
+            if ($format === 'IMAGE' && $headerSelection === 'upload') {
                 $rules['header.parameters.0.value'] = 'required|image|mimes:png,jpg|max:5120'; // Max 5MB
             }
 
-            // Rules for video format
-            if ($format === 'VIDEO') {
+            if ($format === 'VIDEO' && $headerSelection === 'upload') {
                 $rules['header.parameters.0.value'] = 'required|file|mimes:mp4|max:16384'; // Max 5MB
             }
 
-            // Rules for document format
-            if ($format === 'DOCUMENT') {
+            if ($format === 'DOCUMENT' && $headerSelection === 'upload') {
                 $rules['header.parameters.0.value'] = 'required|file|mimes:pdf,txt,ppt,doc,xls,docx,pptx,xlsx|max:102400'; // Max 100MB
             }
         }

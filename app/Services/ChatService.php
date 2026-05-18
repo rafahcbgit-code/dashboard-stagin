@@ -710,6 +710,7 @@ class ChatService
 
         // Extract media_id from request if already uploaded
         $mediaId = $request->media_id ?? null;
+        $defaultHeaderMedia = $this->resolveTemplateDefaultHeaderMedia($template);
 
         if (isset($request->header['format']) && in_array($request->header['format'], ['IMAGE', 'DOCUMENT', 'VIDEO'])) {
             $header = $request->header;
@@ -719,7 +720,7 @@ class ChatService
                 $metadata['header']['parameters'] = [];
 
                 foreach ($request->header['parameters'] as $key => $parameter) {
-                    if ($parameter['selection'] === 'upload') {
+                    if ($parameter['selection'] === 'upload' && empty($defaultHeaderMedia['url'])) {
                         // This is now only for web version (when file object is passed)
                         $storage = Setting::where('key', 'storage_system')->first()->value;
                         $fileName = $parameter['value']->getClientOriginalName();
@@ -753,14 +754,18 @@ class ChatService
 
                         $mediaId = $chatMedia->id;
                     } else {
-                        // For API (when URL is passed) - use the URL directly
-                        $mediaUrl = $parameter['value'];
+                        $mediaUrl = $defaultHeaderMedia['url']
+                            ?? $parameter['value']
+                            ?? $parameter['url']
+                            ?? null;
+                        $mediaId = $defaultHeaderMedia['media_id'] ?? $mediaId;
                     }
 
                     $metadata['header']['parameters'][] = [
                         'type' => $parameter['type'],
-                        'selection' => $parameter['selection'],
+                        'selection' => $defaultHeaderMedia ? 'default' : $parameter['selection'],
                         'value' => $mediaUrl,
+                        'url' => $mediaUrl,
                     ];
                 }
             }
@@ -768,10 +773,16 @@ class ChatService
             $metadata['header'] = $request->header ?? null;
         }
 
+        if (!isset($metadata['header'])) {
+            $metadata['header'] = $request->header ?? null;
+        }
+
         $metadata['body'] = $request->body ?? ['text' => '', 'parameters' => []];
         $metadata['footer'] = $request->footer ?? ['text' => null];
         $metadata['buttons'] = $request->buttons ?? [];
         $metadata['media'] = $mediaId;
+        $this->applyTemplateDefaultHeaderMedia($metadata, $template);
+        $mediaId = $metadata['media'] ?? $mediaId;
 
         //Build Template to send
         $template = $this->buildTemplate($template->name, $template->language, json_decode(json_encode($metadata)), $contact);

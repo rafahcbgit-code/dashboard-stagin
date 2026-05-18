@@ -3,6 +3,7 @@
 namespace App\Traits;
 
 use App\Models\Campaign;
+use App\Models\ChatMedia;
 use App\Models\Template;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -16,9 +17,15 @@ trait TemplateTrait
         $campaign = $campaign ?? Campaign::where('id', $campaignId)->first();
         $campaignTemplate = $campaignTemplate ?? Template::where('id', $campaign->template_id)->first();
 
-        $metadata = json_decode($campaign->metadata);
+        $metadata = json_decode($campaign->metadata, true);
+        $this->applyTemplateDefaultHeaderMedia($metadata, $campaignTemplate);
 
-        return $this->buildTemplate($campaignTemplate->name, $campaignTemplate->language, $metadata, $contact);
+        return $this->buildTemplate(
+            $campaignTemplate->name,
+            $campaignTemplate->language,
+            json_decode(json_encode($metadata)),
+            $contact
+        );
     }
 
     function buildTemplate($templateName, $templateLanguage, $metadata, $contact)
@@ -106,11 +113,38 @@ trait TemplateTrait
                 $param['type'] = $paramType;
                 
                 if ($paramType === 'image') {
-                    $param['image']['link'] = $parameter->value;
+                    $mediaId = $parameter->media_id ?? $parameter->id ?? null;
+                    $mediaUrl = $parameter->value ?? $parameter->url ?? null;
+
+                    if ($mediaId) {
+                        $param['image']['id'] = (string) $mediaId;
+                    } else {
+                        $param['image']['link'] = is_string($mediaUrl) && filter_var($mediaUrl, FILTER_VALIDATE_URL)
+                            ? $mediaUrl
+                            : null;
+                    }
                 } else if ($paramType === 'video') {
-                    $param['video']['link'] = $parameter->value;
+                    $mediaId = $parameter->media_id ?? $parameter->id ?? null;
+                    $mediaUrl = $parameter->value ?? $parameter->url ?? null;
+
+                    if ($mediaId) {
+                        $param['video']['id'] = (string) $mediaId;
+                    } else {
+                        $param['video']['link'] = is_string($mediaUrl) && filter_var($mediaUrl, FILTER_VALIDATE_URL)
+                            ? $mediaUrl
+                            : null;
+                    }
                 } else if ($paramType === 'document') {
-                    $param['document']['link'] = $parameter->value;
+                    $mediaId = $parameter->media_id ?? $parameter->id ?? null;
+                    $mediaUrl = $parameter->value ?? $parameter->url ?? null;
+
+                    if ($mediaId) {
+                        $param['document']['id'] = (string) $mediaId;
+                    } else {
+                        $param['document']['link'] = is_string($mediaUrl) && filter_var($mediaUrl, FILTER_VALIDATE_URL)
+                            ? $mediaUrl
+                            : null;
+                    }
                 } else if ($paramType === 'text') {
                     $value = $parameter->selection === 'static'
                         ? $parameter->value : $this->getParameters($contact, $parameter->value);
@@ -126,6 +160,112 @@ trait TemplateTrait
         }
 
         return $headerComponent;
+    }
+
+    protected function applyTemplateDefaultHeaderMedia(array &$metadata, ?Template $template): void
+    {
+        $headerFormat = strtoupper((string) ($metadata['header']['format'] ?? ''));
+
+        if (!in_array($headerFormat, ['IMAGE', 'VIDEO', 'DOCUMENT'], true)) {
+            return;
+        }
+
+        $defaultMedia = $this->resolveTemplateDefaultHeaderMedia($template);
+
+        if (!$defaultMedia || empty($defaultMedia['url'])) {
+            return;
+        }
+
+        $parameters = $metadata['header']['parameters'] ?? [];
+        $mediaParameterIndex = null;
+
+        foreach ($parameters as $index => $parameter) {
+            $type = strtoupper((string) ($parameter['type'] ?? ''));
+            if (in_array($type, ['IMAGE', 'VIDEO', 'DOCUMENT'], true)) {
+                $mediaParameterIndex = $index;
+                break;
+            }
+        }
+
+        $defaultParameter = [
+            'type' => $headerFormat,
+            'selection' => 'default',
+            'value' => $defaultMedia['url'],
+            'url' => $defaultMedia['url'],
+        ];
+
+        if ($mediaParameterIndex === null) {
+            $metadata['header']['parameters'] = [$defaultParameter];
+        } else {
+            $current = $parameters[$mediaParameterIndex];
+            $hasValue = !empty($current['value'] ?? null) || !empty($current['url'] ?? null);
+
+            if (!$hasValue || ($current['selection'] ?? null) === 'default') {
+                $parameters[$mediaParameterIndex] = array_merge($current, $defaultParameter);
+                $metadata['header']['parameters'] = $parameters;
+            }
+        }
+
+        if (!empty($defaultMedia['media_id'])) {
+            $metadata['media'] = $defaultMedia['media_id'];
+        }
+    }
+
+    protected function resolveTemplateDefaultHeaderMedia(?Template $template): ?array
+    {
+        if (!$template) {
+            return null;
+        }
+
+        $metadata = json_decode($template->metadata ?? '{}', true);
+
+        if (!is_array($metadata)) {
+            return null;
+        }
+
+        $header = $this->findTemplateHeaderComponent($metadata);
+        $format = strtoupper((string) ($header['format'] ?? ''));
+
+        if (!in_array($format, ['IMAGE', 'VIDEO', 'DOCUMENT'], true)) {
+            return null;
+        }
+
+        $storedMedia = $metadata['_default_header_media'] ?? $metadata['default_header_media'] ?? [];
+        $mediaId = $storedMedia['media_id'] ?? $storedMedia['chat_media_id'] ?? null;
+        $url = $storedMedia['url'] ?? $storedMedia['path'] ?? null;
+
+        if (!$url && $mediaId) {
+            $chatMedia = ChatMedia::find($mediaId);
+            $url = $chatMedia?->path;
+        }
+
+        if (!$url) {
+            $headerHandle = $header['example']['header_handle'][0] ?? null;
+            if (is_string($headerHandle) && filter_var($headerHandle, FILTER_VALIDATE_URL)) {
+                $url = $headerHandle;
+            }
+        }
+
+        if (!$url) {
+            return null;
+        }
+
+        return [
+            'format' => $format,
+            'url' => $url,
+            'media_id' => $mediaId,
+        ];
+    }
+
+    private function findTemplateHeaderComponent(array $metadata): ?array
+    {
+        foreach (($metadata['components'] ?? []) as $component) {
+            if (strtoupper((string) ($component['type'] ?? '')) === 'HEADER') {
+                return $component;
+            }
+        }
+
+        return null;
     }
 
     function buildBodyComponent($metadata, $contact)
@@ -326,6 +466,13 @@ trait TemplateTrait
                             return __('Missing value for header variable :index.', [
                                 'index' => $index + 1,
                             ]);
+                        }
+                    } elseif (in_array(($param['type'] ?? ''), ['image', 'video', 'document'], true)) {
+                        $paramType = $param['type'];
+                        $value = $param[$paramType]['link'] ?? $param[$paramType]['id'] ?? null;
+
+                        if ($value === null || trim((string) $value) === '') {
+                            return __('Missing media for header.');
                         }
                     }
                 }
