@@ -139,6 +139,17 @@ class ProcessCampaignChunkJob implements ShouldQueue
                 $flowStubs = $templatePayload['_flow_stubs'] ?? [];
                 unset($templatePayload['_flow_stubs']);
 
+                $templatePayload = $whatsappService->enrichTemplateHeaderWithMediaId(
+                    $templatePayload,
+                    $template,
+                    [
+                        'campaign_id' => $this->campaignId,
+                        'campaign_log_id' => $log->id,
+                        'template_id' => $template->id,
+                        'contact_id' => $contact->id,
+                    ]
+                );
+
                 // Build raw request payload
                 $requestData = $whatsappService->buildTemplateRequestPayload(
                     $contact->phone,
