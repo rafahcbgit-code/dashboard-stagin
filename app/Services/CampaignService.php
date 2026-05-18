@@ -97,6 +97,8 @@ class CampaignService
             DB::transaction(function () use ($request, $organizationId, $template, $contactGroup, $timezone) {
                 //Request metadata
                 $mediaId = null;
+                $defaultHeaderMedia = $this->resolveTemplateDefaultHeaderMedia($template);
+
                 if(in_array($request->header['format'], ['IMAGE', 'DOCUMENT', 'VIDEO'])){
                     $header = $request->header;
                     
@@ -105,7 +107,7 @@ class CampaignService
                         $metadata['header']['parameters'] = [];
                 
                         foreach ($request->header['parameters'] as $key => $parameter) {
-                            if ($parameter['selection'] === 'upload') {
+                            if ($parameter['selection'] === 'upload' && empty($defaultHeaderMedia['url'])) {
                                 //$path = $parameter['value']->store('public');
                                 //$imageUrl = config('app.url') . '/media/' . $path;
 
@@ -140,13 +142,18 @@ class CampaignService
 
                                 $mediaId = $chatMedia->id;
                             } else {
-                                $mediaUrl = $parameter['value'];
+                                $mediaUrl = $defaultHeaderMedia['url']
+                                    ?? $parameter['value']
+                                    ?? $parameter['url']
+                                    ?? null;
+                                $mediaId = $defaultHeaderMedia['media_id'] ?? $mediaId;
                             }
                 
                             $metadata['header']['parameters'][] = [
                                 'type' => $parameter['type'],
-                                'selection' => $parameter['selection'],
+                                'selection' => $defaultHeaderMedia ? 'default' : $parameter['selection'],
                                 'value' => $mediaUrl,
+                                'url' => $mediaUrl,
                             ];
                         }
                     }
@@ -154,10 +161,15 @@ class CampaignService
                     $metadata['header'] = $request->header;
                 }
 
+                if (!isset($metadata['header'])) {
+                    $metadata['header'] = $request->header;
+                }
+
                 $metadata['body'] = $request->body;
                 $metadata['footer'] = $request->footer;
                 $metadata['buttons'] = $request->buttons;
                 $metadata['media'] = $mediaId;
+                $this->applyTemplateDefaultHeaderMedia($metadata, $template);
 
                 // Convert $request->time from organization's timezone to UTC
                 $scheduledAt = $request->skip_schedule ? Carbon::now('UTC') : Carbon::parse($request->time, $timezone)->setTimezone('UTC');

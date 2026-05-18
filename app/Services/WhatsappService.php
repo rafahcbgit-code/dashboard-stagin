@@ -1336,6 +1336,7 @@ class WhatsappService
     public function createTemplate(Request $request)
     {
         $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->wabaId}/message_templates";
+        $defaultHeaderMedia = null;
         
         $requestData = [
             "name" => $request->name,
@@ -1372,6 +1373,11 @@ class WhatsappService
                     if(!$fileUploadResponse->success){
                         return $fileUploadResponse;
                     }
+
+                    $defaultHeaderMedia = $this->storeTemplateHeaderMedia(
+                        $request->header['example'],
+                        $request->header['format']
+                    );
 
                     $requestData['components'][] = [
                         "type" => "HEADER",
@@ -1542,7 +1548,11 @@ class WhatsappService
             $template->name = $request->name;
             $template->category = $request->category;
             $template->language = $request->language;
-            $template->metadata = json_encode($requestData);
+            $metadataToSave = $requestData;
+            if ($defaultHeaderMedia) {
+                $metadataToSave['_default_header_media'] = $defaultHeaderMedia;
+            }
+            $template->metadata = json_encode($metadataToSave);
             $template->status = $responseObject->data->status;
             $template->created_by = auth()->user()->id;
             $template->created_at = now();
@@ -1754,6 +1764,8 @@ class WhatsappService
     {
         $template = Template::where('uuid', $uuid)->first();
         $url = "https://graph.facebook.com/{$this->apiVersion}/{$template->meta_id}";
+        $existingMetadata = json_decode($template->metadata ?? '{}', true);
+        $defaultHeaderMedia = $existingMetadata['_default_header_media'] ?? null;
         
         $requestData = [
             //"name" => $request->name,
@@ -1790,6 +1802,11 @@ class WhatsappService
                         return $fileUploadResponse;
                     }
 
+                    $defaultHeaderMedia = $this->storeTemplateHeaderMedia(
+                        $request->header['example'],
+                        $request->header['format']
+                    );
+
                     $requestData['components'][] = [
                         "type" => "HEADER",
                         "format" => $request->header['format'],
@@ -1801,7 +1818,7 @@ class WhatsappService
                     ];
                 } else {
                     // Decode existing metadata
-                    $metadata = json_decode($template->metadata, true);
+                    $metadata = $existingMetadata;
 
                     // Extract existing header if available
                     $existingHeader = [];
@@ -1970,7 +1987,11 @@ class WhatsappService
             if ($template) {
                 $template->organization_id = session()->get('current_organization');
                 $template->category = $template->status == 'APPROVED' ? $template->category : $request->category;
-                $template->metadata = json_encode($requestData);
+                $metadataToSave = $requestData;
+                if ($defaultHeaderMedia) {
+                    $metadataToSave['_default_header_media'] = $defaultHeaderMedia;
+                }
+                $template->metadata = json_encode($metadataToSave);
                 $template->status = 'PENDING';
                 $template->created_by = auth()->user()->id;
                 $template->updated_at = now(); // No need to set `created_at` when updating
@@ -2297,6 +2318,10 @@ class WhatsappService
 
                         if ($this->isCarouselTemplate($newMeta)) {
                             $newMeta = $this->rebuildCarouselMeta($newMeta, $existingMeta);
+                        }
+
+                        if (isset($existingMeta['_default_header_media'])) {
+                            $newMeta['_default_header_media'] = $existingMeta['_default_header_media'];
                         }
 
                         $template->metadata = json_encode($newMeta);
@@ -2909,6 +2934,53 @@ class WhatsappService
         }
 
         return $responseObject;
+    }
+
+    private function storeTemplateHeaderMedia($file, string $format): ?array
+    {
+        try {
+            if (!$file) {
+                return null;
+            }
+
+            $storage = Setting::where('key', 'storage_system')->first()->value ?? 'local';
+            $originalName = $file->getClientOriginalName();
+            $extension = $file->getClientOriginalExtension();
+            $safeName = uniqid('template_', true) . ($extension ? ".{$extension}" : '');
+
+            if ($storage === 'local') {
+                $storedPath = Storage::disk('local')->putFileAs('public', $file, $safeName);
+                $mediaUrl = rtrim(config('app.url'), '/') . '/media/' . ltrim($storedPath, '/');
+            } elseif ($storage === 'aws') {
+                $storedPath = $file->storeAs('uploads/media/templates/' . $this->organizationId, $safeName, 's3');
+                $mediaUrl = Storage::disk('s3')->url($storedPath);
+            } else {
+                return null;
+            }
+
+            $chatMedia = new ChatMedia();
+            $chatMedia->name = $originalName;
+            $chatMedia->location = $storage === 'aws' ? 'amazon' : 'local';
+            $chatMedia->path = $mediaUrl;
+            $chatMedia->type = $file->getMimeType();
+            $chatMedia->size = $file->getSize();
+            $chatMedia->created_at = now();
+            $chatMedia->save();
+
+            return [
+                'media_id' => $chatMedia->id,
+                'url' => $mediaUrl,
+                'type' => strtoupper($format),
+                'name' => $originalName,
+            ];
+        } catch (\Exception $e) {
+            Log::warning('Failed to store template header media locally', [
+                'error' => $e->getMessage(),
+                'format' => $format,
+            ]);
+
+            return null;
+        }
     }
 
     /**

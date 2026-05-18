@@ -10,6 +10,7 @@ use App\Models\Template;
 use App\Services\ChatService;
 use App\Services\PhoneService;
 use App\Services\SubscriptionService;
+use App\Traits\TemplateTrait;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Storage;
@@ -17,6 +18,8 @@ use Illuminate\Support\Facades\Log;
 
 class MessageController extends Controller
 {
+    use TemplateTrait;
+
     private $chatService;
 
     public function __construct()
@@ -577,7 +580,23 @@ class MessageController extends Controller
 
             // Check if this is a media header (IMAGE, VIDEO, DOCUMENT)
             if (in_array($format, ['IMAGE', 'VIDEO', 'DOCUMENT'])) {
-                $headerData = $this->buildMediaHeader($request, $format, $organizationId);
+                $defaultHeaderMedia = $this->resolveTemplateDefaultHeaderMedia($template);
+
+                if ($defaultHeaderMedia && !empty($defaultHeaderMedia['url'])) {
+                    $headerData = [
+                        'format' => $format,
+                        'parameters' => [[
+                            'type' => $format,
+                            'selection' => 'default',
+                            'value' => $defaultHeaderMedia['url'],
+                            'url' => $defaultHeaderMedia['url'],
+                        ]],
+                        'media_id' => $defaultHeaderMedia['media_id'] ?? null,
+                    ];
+                } else {
+                    $headerData = $this->buildMediaHeader($request, $format, $organizationId);
+                }
+
                 $templateRequest->header = $headerData;
                 $mediaId = $headerData['media_id'] ?? null; // Extract media ID
             } else {
