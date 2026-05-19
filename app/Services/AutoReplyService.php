@@ -407,24 +407,43 @@ class AutoReplyService
                 'text'
             );
 
-            // Send "Was this helpful?" follow-up buttons
-            $helpfulButtons = [
-                ['id' => 'ai_helpful_yes', 'title' => 'Yes, this helped'],
-                ['id' => 'ai_helpful_no', 'title' => 'No, I need more help'],
-            ];
+            // Send "Was this helpful?" follow-up buttons (only if enabled and not already sent in this conversation)
+            $shouldSendFollowup = $this->botSettingsService->isAiFollowupEnabled($organizationId);
 
-            $whatsappService->sendMessage(
-                $contact->uuid,
-                'Was this helpful?',
-                null,
-                'interactive buttons',
-                $helpfulButtons
-            );
+            if ($shouldSendFollowup) {
+                $shouldSendFollowup = $this->hasNotReceivedFeedbackInConversation($organizationId, $contact);
+            }
 
-            Log::info('AI Fallback: Answer sent with feedback buttons', [
-                'organization_id' => $organizationId,
-                'contact_id' => $contact->id,
-            ]);
+            if ($shouldSendFollowup) {
+                $questionText = $this->botSettingsService->getAiFollowupQuestion($organizationId);
+                $yesText = $this->botSettingsService->getAiFollowupYesText($organizationId);
+                $noText = $this->botSettingsService->getAiFollowupNoText($organizationId);
+
+                $helpfulButtons = [
+                    ['id' => 'ai_helpful_yes', 'title' => $yesText],
+                    ['id' => 'ai_helpful_no', 'title' => $noText],
+                ];
+
+                $whatsappService->sendMessage(
+                    $contact->uuid,
+                    $questionText,
+                    null,
+                    'interactive buttons',
+                    $helpfulButtons
+                );
+
+                $this->markFeedbackSent($contact);
+
+                Log::info('AI Fallback: Answer sent with feedback buttons', [
+                    'organization_id' => $organizationId,
+                    'contact_id' => $contact->id,
+                ]);
+            } else {
+                Log::info('AI Fallback: Answer sent without feedback buttons', [
+                    'organization_id' => $organizationId,
+                    'contact_id' => $contact->id,
+                ]);
+            }
 
             return true;
         } catch (\Throwable $e) {
@@ -595,26 +614,7 @@ class AutoReplyService
             }
 
             if ($buttonId === 'ai_helpful_yes') {
-                // User confirmed the answer was helpful — send a quick acknowledgment
-                $organizationConfig = Organization::where('id', $organizationId)->first();
-                $metadata = $organizationConfig->metadata ? json_decode($organizationConfig->metadata, true) : [];
-
-                $whatsappService = new WhatsappService(
-                    $metadata['whatsapp']['access_token'] ?? null,
-                    config('graph.api_version'),
-                    $metadata['whatsapp']['app_id'] ?? null,
-                    $metadata['whatsapp']['phone_number_id'] ?? null,
-                    $metadata['whatsapp']['waba_id'] ?? null,
-                    $organizationId
-                );
-
-                $whatsappService->sendMessage(
-                    $contact->uuid,
-                    'Great! Let me know if you need anything else.',
-                    null,
-                    'text'
-                );
-
+                // User confirmed the answer was helpful — silent acknowledgment (no message sent back)
                 Log::info('AI Helpful: User confirmed answer was helpful', [
                     'organization_id' => $organizationId,
                     'contact_id' => $contact->id,
@@ -653,6 +653,9 @@ class AutoReplyService
                         'text'
                     );
                 }
+
+                // Reset feedback tracking so the user can receive feedback buttons in future conversations
+                $this->resetFeedbackSent($contact);
 
                 return true;
             }
@@ -728,5 +731,47 @@ class AutoReplyService
         $wabaId = $config['whatsapp']['waba_id'] ?? null;
 
         return new WhatsappService($accessToken, $apiVersion, $appId, $phoneNumberId, $wabaId, $organizationId);
+    }
+
+    /**
+     * Check if the contact has NOT already received feedback buttons in the current conversation.
+     * Uses Contact.metadata.ai_feedback_sent_at and the flow_timeout_minutes setting
+     * to determine if enough time has passed to consider this a new conversation.
+     */
+    private function hasNotReceivedFeedbackInConversation(int $organizationId, Contact $contact): bool
+    {
+        $metadata = $contact->metadata ? json_decode($contact->metadata, true) : [];
+        $feedbackSentAt = $metadata['ai_feedback_sent_at'] ?? null;
+
+        if (!$feedbackSentAt) {
+            return true;
+        }
+
+        $timeoutMinutes = $this->botSettingsService->getFlowTimeoutMinutes($organizationId);
+        $feedbackTime = \Carbon\Carbon::parse($feedbackSentAt);
+
+        return $feedbackTime->diffInMinutes(now()) >= $timeoutMinutes;
+    }
+
+    /**
+     * Mark that feedback buttons were sent to this contact.
+     */
+    private function markFeedbackSent(Contact $contact): void
+    {
+        $metadata = $contact->metadata ? json_decode($contact->metadata, true) : [];
+        $metadata['ai_feedback_sent_at'] = now()->toIso8601String();
+        $contact->metadata = json_encode($metadata, JSON_UNESCAPED_UNICODE);
+        $contact->save();
+    }
+
+    /**
+     * Reset feedback tracking for a contact so feedback buttons can be sent in future conversations.
+     */
+    private function resetFeedbackSent(Contact $contact): void
+    {
+        $metadata = $contact->metadata ? json_decode($contact->metadata, true) : [];
+        unset($metadata['ai_feedback_sent_at']);
+        $contact->metadata = json_encode($metadata, JSON_UNESCAPED_UNICODE);
+        $contact->save();
     }
 }

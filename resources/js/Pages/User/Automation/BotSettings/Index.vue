@@ -186,6 +186,78 @@
                                             </div>
                                             <p class="text-xs text-slate-500 mt-2">{{ $t('Controls how confident AI must be before sending an answer. At 50%, AI answers most questions but may be wrong. At 90%, AI only responds when very sure.') }}</p>
                                         </div>
+
+                                        <!-- Follow-up Message Toggle -->
+                                        <div class="rounded-lg border border-slate-200 p-4">
+                                            <div class="flex items-start gap-3">
+                                                <div class="flex-shrink-0 w-8 h-8 rounded-lg bg-blue-50 flex items-center justify-center">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-blue-600"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                                                </div>
+                                                <div class="flex-1">
+                                                    <label class="block text-sm font-semibold text-slate-800">{{ $t('Ask for Feedback After AI Answers') }}</label>
+                                                    <p class="text-xs text-slate-500 mt-0.5">{{ $t('Send a "Was this helpful?" prompt after the first AI answer in each conversation. Feedback is only asked once per conversation.') }}</p>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    @click="form.ai_followup_enabled = !form.ai_followup_enabled"
+                                                    class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-1 shrink-0"
+                                                    :class="form.ai_followup_enabled ? 'bg-primary' : 'bg-slate-300'"
+                                                >
+                                                    <span
+                                                        class="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform duration-200"
+                                                        :class="form.ai_followup_enabled ? 'translate-x-[18px]' : 'translate-x-[3px]'"
+                                                    />
+                                                </button>
+                                            </div>
+
+                                            <!-- Customization fields when enabled -->
+                                            <div v-if="form.ai_followup_enabled" class="mt-4 space-y-3">
+                                                <div>
+                                                    <label class="block text-xs font-medium text-slate-700 mb-1">{{ $t('Question text') }}</label>
+                                                    <input
+                                                        v-model="form.ai_followup_question"
+                                                        type="text"
+                                                        maxlength="60"
+                                                        class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-primary focus:ring-1 focus:ring-primary/30 focus:outline-none transition-colors"
+                                                        :placeholder="$t('Was this helpful?')"
+                                                    />
+                                                    <p class="text-[10px] text-slate-400 mt-1">{{ form.ai_followup_question.length }}/60</p>
+                                                </div>
+                                                <div class="grid grid-cols-2 gap-3">
+                                                    <div>
+                                                        <label class="block text-xs font-medium text-slate-700 mb-1">{{ $t('Yes button') }}</label>
+                                                        <input
+                                                            v-model="form.ai_followup_yes_text"
+                                                            type="text"
+                                                            maxlength="20"
+                                                            class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-primary focus:ring-1 focus:ring-primary/30 focus:outline-none transition-colors"
+                                                            :placeholder="$t('Yes, this helped')"
+                                                        />
+                                                        <p class="text-[10px] text-slate-400 mt-1">{{ form.ai_followup_yes_text.length }}/20</p>
+                                                    </div>
+                                                    <div>
+                                                        <label class="block text-xs font-medium text-slate-700 mb-1">{{ $t('No button') }}</label>
+                                                        <input
+                                                            v-model="form.ai_followup_no_text"
+                                                            type="text"
+                                                            maxlength="20"
+                                                            class="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-800 placeholder:text-slate-400 focus:border-primary focus:ring-1 focus:ring-primary/30 focus:outline-none transition-colors"
+                                                            :placeholder="$t('No, I need more help')"
+                                                        />
+                                                        <p class="text-[10px] text-slate-400 mt-1">{{ form.ai_followup_no_text.length }}/20</p>
+                                                    </div>
+                                                </div>
+                                                <div class="rounded-md bg-slate-50 border border-slate-200 px-3 py-2 text-xs text-slate-500">
+                                                    <div class="flex items-start gap-2">
+                                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 mt-0.5 text-slate-400"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                                                        <div>
+                                                            <p>{{ $t('Feedback buttons are shown once per conversation. After the first AI answer, subsequent answers won\'t include them until the conversation times out.') }}</p>
+                                                            <p class="mt-1">{{ $t('When the customer taps "No", the existing escalation behavior applies — the fallback counter increments and the conversation may be auto-assigned to an agent.') }}</p>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
                                     </div>
                                     <div v-else class="mt-2 text-xs text-slate-400">
                                         {{ $t('AI will not attempt to answer when no trigger matches. Messages will fall through to the Fallback trigger.') }}
@@ -448,6 +520,10 @@ const form = ref({
     ai_fallback_confidence: props.settings?.ai_fallback_confidence || 75,
     escalation_transfer_message_enabled: props.settings?.escalation_transfer_message_enabled ?? false,
     escalation_transfer_message: props.settings?.escalation_transfer_message || "You're being connected to a team member who can help. Please hold on a moment.",
+    ai_followup_enabled: props.settings?.ai_followup_enabled ?? false,
+    ai_followup_question: props.settings?.ai_followup_question || 'Was this helpful?',
+    ai_followup_yes_text: props.settings?.ai_followup_yes_text || 'Yes, this helped',
+    ai_followup_no_text: props.settings?.ai_followup_no_text || 'No, I need more help',
     // AI Settings fields
     ai_enabled: props.aiSettings?.ai_enabled || false,
     ai_only_mode: props.aiSettings?.ai_only_mode || false,
@@ -484,6 +560,10 @@ async function submitForm() {
         ai_fallback_confidence: form.value.ai_fallback_confidence,
         escalation_transfer_message_enabled: form.value.escalation_transfer_message_enabled,
         escalation_transfer_message: form.value.escalation_transfer_message,
+        ai_followup_enabled: form.value.ai_followup_enabled,
+        ai_followup_question: form.value.ai_followup_question,
+        ai_followup_yes_text: form.value.ai_followup_yes_text,
+        ai_followup_no_text: form.value.ai_followup_no_text,
     };
 
     const aiSettings = {

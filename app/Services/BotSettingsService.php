@@ -14,6 +14,10 @@ class BotSettingsService
         'ai_fallback_confidence' => 75,
         'escalation_transfer_message_enabled' => false,
         'escalation_transfer_message' => "You're being connected to a team member who can help. Please hold on a moment.",
+        'ai_followup_enabled' => false,
+        'ai_followup_question' => 'Was this helpful?',
+        'ai_followup_yes_text' => 'Yes, this helped',
+        'ai_followup_no_text' => 'No, I need more help',
     ];
 
     /**
@@ -88,6 +92,38 @@ class BotSettingsService
     public function getFlowTimeoutMinutes(int $organizationId): int
     {
         return (int) $this->getSetting($organizationId, 'flow_timeout_minutes', self::DEFAULTS['flow_timeout_minutes']);
+    }
+
+    /**
+     * Check if AI follow-up feedback is enabled.
+     */
+    public function isAiFollowupEnabled(int $organizationId): bool
+    {
+        return (bool) $this->getSetting($organizationId, 'ai_followup_enabled', self::DEFAULTS['ai_followup_enabled']);
+    }
+
+    /**
+     * Get the follow-up question text.
+     */
+    public function getAiFollowupQuestion(int $organizationId): string
+    {
+        return $this->getSetting($organizationId, 'ai_followup_question', self::DEFAULTS['ai_followup_question']);
+    }
+
+    /**
+     * Get the follow-up "Yes" button text.
+     */
+    public function getAiFollowupYesText(int $organizationId): string
+    {
+        return $this->getSetting($organizationId, 'ai_followup_yes_text', self::DEFAULTS['ai_followup_yes_text']);
+    }
+
+    /**
+     * Get the follow-up "No" button text.
+     */
+    public function getAiFollowupNoText(int $organizationId): string
+    {
+        return $this->getSetting($organizationId, 'ai_followup_no_text', self::DEFAULTS['ai_followup_no_text']);
     }
 
 }
