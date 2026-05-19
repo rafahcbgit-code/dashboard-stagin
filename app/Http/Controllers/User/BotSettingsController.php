@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller as BaseController;
 use App\Helpers\CustomHelper;
 use App\Models\AiKnowledgeBase;
 use App\Models\Organization;
+use App\Services\AiSettingsService;
 use App\Services\BotSettingsService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -13,10 +14,12 @@ use Inertia\Inertia;
 class BotSettingsController extends BaseController
 {
     private BotSettingsService $botSettingsService;
+    private AiSettingsService $aiSettingsService;
 
-    public function __construct(BotSettingsService $botSettingsService)
+    public function __construct(BotSettingsService $botSettingsService, AiSettingsService $aiSettingsService)
     {
         $this->botSettingsService = $botSettingsService;
+        $this->aiSettingsService = $aiSettingsService;
     }
 
     public function index(Request $request)
@@ -26,6 +29,7 @@ class BotSettingsController extends BaseController
         $fbmodule = CustomHelper::isModuleEnabled('Flow builder');
 
         $settings = $this->botSettingsService->get($organizationId);
+        $aiSettings = $this->aiSettingsService->get($organizationId);
 
         // Read working hours from org metadata (read-only for display)
         $org = Organization::find($organizationId);
@@ -42,8 +46,9 @@ class BotSettingsController extends BaseController
             ->count();
 
         return Inertia::render('User/Automation/BotSettings/Index', [
-            'title' => __('Bot Settings'),
+            'title' => __('Behavior & AI'),
             'settings' => $settings,
+            'aiSettings' => $aiSettings,
             'workingHours' => $workingHours,
             'kbEntryCount' => $kbEntryCount,
             'aimodule' => $aimodule,
