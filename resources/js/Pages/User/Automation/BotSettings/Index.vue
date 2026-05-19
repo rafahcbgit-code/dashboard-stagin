@@ -432,6 +432,7 @@
                                             <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
                                         </a>
                                     </div>
+                                </div>
 
                                     <!-- Rejoin Reminder -->
                                     <div class="rounded-lg border border-slate-200 p-5 mt-6">
@@ -493,7 +494,7 @@
                                             {{ $t('Users who stop responding mid-flow will not receive a reminder.') }}
                                         </div>
                                     </div>
-                                </div>
+                            </div>
 
                             <!-- ============================================ -->
                             <!-- SECTION 5: AI Matching Defaults -->
