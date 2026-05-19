@@ -319,6 +319,12 @@ class ChatService
         } catch (\Exception $e) {
             Log::error('Failed to send assignment notification: ' . $e->getMessage());
         }
+
+        try {
+            \App\Jobs\SendAssignmentEmailJob::dispatch($organizationId, $assignedTo, $contactId);
+        } catch (\Exception $e) {
+            Log::error('Failed to dispatch assignment email: ' . $e->getMessage());
+        }
     }
 
     /**
@@ -543,6 +549,12 @@ class ChatService
             );
         } catch (\Exception $e) {
             Log::error('Failed to send assignment notification: ' . $e->getMessage());
+        }
+
+        try {
+            \App\Jobs\SendAssignmentEmailJob::dispatch($organizationId, $ticket->assigned_to, $contactId);
+        } catch (\Exception $e) {
+            Log::error('Failed to dispatch assignment email: ' . $e->getMessage());
         }
 
         return $ticket;
