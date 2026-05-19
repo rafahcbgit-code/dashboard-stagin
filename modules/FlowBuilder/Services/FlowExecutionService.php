@@ -447,6 +447,45 @@ class FlowExecutionService
                 return true;
             }
 
+            // Portal node: end current flow, start target flow
+            if ($nodeType === 'portal') {
+                $fields = \Arr::get($node, 'data.metadata.fields', []);
+                $targetFlowUuid = $fields['target_flow_uuid'] ?? null;
+
+                if (!$targetFlowUuid) {
+                    Log::warning('FlowExecution: portal node missing target_flow_uuid', [
+                        'node_id' => $currentNodeId,
+                    ]);
+                    $this->endFlow($chat->contact_id);
+                    return false;
+                }
+
+                $targetFlow = Flow::where('uuid', $targetFlowUuid)
+                    ->where('organization_id', $this->organizationId)
+                    ->where('status', 'active')
+                    ->first();
+
+                if (!$targetFlow) {
+                    Log::warning('FlowExecution: portal target flow not found or inactive', [
+                        'target_flow_uuid' => $targetFlowUuid,
+                        'node_id' => $currentNodeId,
+                    ]);
+                    $this->endFlow($chat->contact_id);
+                    return false;
+                }
+
+                Log::info('FlowExecution: portal redirect', [
+                    'from_flow' => $flow->id,
+                    'to_flow' => $targetFlow->id,
+                    'contact_id' => $chat->contact_id,
+                    'node_id' => $currentNodeId,
+                ]);
+
+                $this->endFlow($chat->contact_id, 'portal_redirect');
+
+                return $this->startFlow($targetFlow->id, $chat);
+            }
+
             // Message node: if this is an interactive node (buttons/list/CTA) and we're
             // resuming with user input, route to the correct branch instead of resending.
             $fields = \Arr::get($node, 'data.metadata.fields', []);

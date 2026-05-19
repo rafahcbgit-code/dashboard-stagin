@@ -130,6 +130,20 @@ class FlowController extends BaseController
         $data['labels'] = $labels;
         $data['templates'] = $templates;
         $data['metaFlows'] = $metaFlows;
+
+        // Get active flows for Portal node (exclude current flow)
+        $activeFlows = Flow::where('organization_id', $organizationId)
+            ->where('status', 'active')
+            ->where('id', '!=', $data['flow']->id)
+            ->orderBy('name')
+            ->get()
+            ->map(fn($f) => [
+                'id' => $f->id,
+                'uuid' => $f->uuid,
+                'name' => $f->name,
+            ]);
+        $data['activeFlows'] = $activeFlows;
+
         $data['availableActions'] = $availableActions;
 
         return Inertia::render('FlowBuilder::User/View', $data);

@@ -74,6 +74,13 @@ class FlowValidator
                     }
                     break;
 
+                case 'portal':
+                    $portalValidation = $this->validatePortal($data);
+                    if ($portalValidation !== true) {
+                        $errors['portal'] = $portalValidation;
+                    }
+                    break;
+
                 case 'action':
                     $actionValidation = $this->validateAction($node['data']);
                     if ($actionValidation !== true) {
@@ -384,6 +391,30 @@ class FlowValidator
 
         if (!empty($data['cta']) && mb_strlen($data['cta'], 'UTF-8') > 20) {
             $errors[] = 'CTA button text must not exceed 20 characters.';
+        }
+
+        return !empty($errors) ? $errors : true;
+    }
+
+    /**
+     * Validate a portal node.
+     */
+    private function validatePortal(array $data)
+    {
+        $errors = [];
+
+        if (empty($data['target_flow_uuid'])) {
+            $errors[] = 'A target flow must be selected for portal nodes.';
+        }
+
+        if (!empty($data['target_flow_uuid'])) {
+            $targetFlow = \Modules\FlowBuilder\Models\Flow::where('uuid', $data['target_flow_uuid'])
+                ->where('status', 'active')
+                ->first();
+
+            if (!$targetFlow) {
+                $errors[] = 'The selected target flow is not active or does not exist.';
+            }
         }
 
         return !empty($errors) ? $errors : true;

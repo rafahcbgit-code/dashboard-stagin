@@ -14,11 +14,12 @@ import QuestionNode from '@modules/FlowBuilder/Pages/User/Components/vue-flow/no
 import ActionNode from '@modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/Action-node.vue'
 import TemplateNode from '@modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/Template-node.vue'
 import MetaFlowNode from '@modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/MetaFlow-node.vue'
+import PortalNode from '@modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/Portal-node.vue'
 import { Test_data } from '@/lib/constant'
 
 import type { Dimensions, Elements } from '@vue-flow/core'
 
-const props = defineProps(['uuid', 'flow', 'contactGroups', 'contactFields', 'labels', 'templates', 'metaFlows']);
+const props = defineProps(['uuid', 'flow', 'contactGroups', 'contactFields', 'labels', 'templates', 'metaFlows', 'activeFlows']);
 
 // Provide contact groups to child components
 provide('contactGroups', props.contactGroups || []);
@@ -30,6 +31,8 @@ provide('labels', props.labels || []);
 provide('templates', props.templates || []);
 // Provide meta flows to child components
 provide('metaFlows', props.metaFlows || []);
+// Provide active flows to child components
+provide('activeFlows', props.activeFlows || []);
 
 const elements = ref<Elements>()
 
@@ -42,6 +45,7 @@ const nodeTypes = {
   question: markRaw(QuestionNode),
   template: markRaw(TemplateNode),
   metaflow: markRaw(MetaFlowNode),
+  portal: markRaw(PortalNode),
   action: markRaw(ActionNode),
 }
 
@@ -196,6 +200,8 @@ const getDefaultConfig = (actionType: string) => {
       return { template_uuid: '', template_name: '', template_language: '', parameters: {} }
     case 'metaflow':
       return { metaflow_uuid: '', metaflow_name: '', body: 'Please complete the form.', cta: 'Open' }
+    case 'portal':
+      return { target_flow_uuid: '', target_flow_name: '', trigger_name: '', trigger_keyword: '', trigger_created: false }
     default:
       return {}
   }
@@ -277,6 +283,15 @@ function handleOnDrop(event: DragEvent) {
         metaflow_name: '',
         body: 'Please complete the form.',
         cta: 'Open',
+      }
+    } else if (type === 'portal') {
+      defaultFields = {
+        type: 'portal',
+        target_flow_uuid: '',
+        target_flow_name: '',
+        trigger_name: '',
+        trigger_keyword: '',
+        trigger_created: false,
       }
     }
 
