@@ -18,6 +18,7 @@ import WebhookNode from './actions/Webhook-node.vue'
 import AIResponseNode from './actions/AIResponse-node.vue'
 import ConditionalNode from './actions/Conditional-node.vue'
 import AssignToAgentNode from './actions/AssignToAgent-node.vue'
+import LabelNode from './actions/Label-node.vue'
 
 const props = defineProps({
   id: String,
@@ -51,6 +52,8 @@ const actionComponent = computed(() => {
       return ConditionalNode
     case 'assign_to_agent':
       return AssignToAgentNode
+    case 'label':
+      return LabelNode
     default:
       return AddToGroupNode // Default fallback
   }

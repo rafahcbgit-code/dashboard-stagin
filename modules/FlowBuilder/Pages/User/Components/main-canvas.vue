@@ -16,12 +16,14 @@ import { Test_data } from '@/lib/constant'
 
 import type { Dimensions, Elements } from '@vue-flow/core'
 
-const props = defineProps(['uuid', 'flow', 'contactGroups', 'contactFields']);
+const props = defineProps(['uuid', 'flow', 'contactGroups', 'contactFields', 'labels']);
 
 // Provide contact groups to child components
 provide('contactGroups', props.contactGroups || []);
 // Provide contact fields to child components
 provide('contactFields', props.contactFields || []);
+// Provide labels to child components
+provide('labels', props.labels || []);
 
 const elements = ref<Elements>()
 
@@ -180,6 +182,8 @@ const getDefaultConfig = (actionType: string) => {
       }
     case 'assign_to_agent':
       return { assignment_type: 'specific_agent', agent_id: '' }
+    case 'label':
+      return { action: 'add', label_ids: [] }
     default:
       return {}
   }

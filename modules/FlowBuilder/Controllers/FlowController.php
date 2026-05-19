@@ -60,6 +60,19 @@ class FlowController extends BaseController
                 ];
             });
 
+        // Get labels for the current organization
+        $labels = \App\Models\Label::where('organization_id', $organizationId)
+            ->whereNull('deleted_at')
+            ->orderBy('title')
+            ->get()
+            ->map(function($label) {
+                return [
+                    'value' => $label->id,
+                    'label' => $label->title,
+                    'color' => $label->color,
+                ];
+            });
+
         // Get contact fields for the current organization
         $contactFields = \App\Models\ContactField::where('organization_id', $organizationId)
             ->whereNull('deleted_at')
@@ -86,6 +99,7 @@ class FlowController extends BaseController
 
         $data['contactGroups'] = $contactGroups;
         $data['contactFields'] = $contactFields;
+        $data['labels'] = $labels;
         $data['availableActions'] = $availableActions;
 
         return Inertia::render('FlowBuilder::User/View', $data);

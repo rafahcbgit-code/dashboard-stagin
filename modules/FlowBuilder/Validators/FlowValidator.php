@@ -393,6 +393,15 @@ class FlowValidator
                 }
                 break;
 
+            case 'label':
+                if (!in_array($config['action'] ?? '', ['add', 'remove'])) {
+                    $errors[] = 'Action must be "add" or "remove" for label action.';
+                }
+                if (empty($config['label_ids']) || !is_array($config['label_ids'])) {
+                    $errors[] = 'At least one label is required for label action.';
+                }
+                break;
+
             default:
                 if (empty($actionType)) {
                     $errors[] = 'Action type is required.';
