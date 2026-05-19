@@ -296,6 +296,25 @@ class WhatsappService
             return $this->buildErrorResponse($e->getMessage(), 422, 'TEMPLATE_MEDIA_UPLOAD_FAILED');
         }
 
+        if ($this->isCarouselPayload($templateContent)) {
+            $templateContent = $this->enrichCarouselWithMediaIds($templateContent, $campaignId);
+
+            if ($this->carouselPayloadHasMediaLinks($templateContent)) {
+                Log::error('Carousel media enrichment left unresolved media links', [
+                    'campaign_id' => $campaignId,
+                    'template_id' => $templateModel?->id,
+                    'contact_id' => $contact->id,
+                    'template' => $templateContent['name'] ?? null,
+                ]);
+
+                return $this->buildErrorResponse(
+                    __('Unable to upload carousel media before sending.'),
+                    422,
+                    'CAROUSEL_MEDIA_UPLOAD_FAILED'
+                );
+            }
+        }
+
         $requestData['messaging_product'] = 'whatsapp';
         $requestData['recipient_type'] = 'individual';
         $requestData['to'] = $contact->phone;
@@ -718,10 +737,12 @@ class WhatsappService
      */
     public function enrichCarouselWithMediaIds(array $templatePayload, ?int $campaignId = null): array
     {
-        $cacheKey = $campaignId ? "carousel_media_ids_campaign_{$campaignId}" : null;
+        $cacheKey = $campaignId
+            ? "carousel_media_ids_campaign_{$campaignId}"
+            : $this->carouselMediaIdsCacheKey($templatePayload);
         $cachedMediaIds = [];
 
-        // Try to load cached media IDs for this campaign
+        // Try to load cached media IDs for this campaign or direct-send payload.
         if ($cacheKey) {
             $cachedMediaIds = \Illuminate\Support\Facades\Cache::get($cacheKey, []);
             if (!empty($cachedMediaIds)) {
@@ -806,6 +827,48 @@ class WhatsappService
         return $templatePayload;
     }
 
+    private function carouselMediaIdsCacheKey(array $templatePayload): ?string
+    {
+        $mediaUrls = [];
+
+        foreach ($templatePayload['components'] ?? [] as $component) {
+            if (strtolower((string) ($component['type'] ?? '')) !== 'carousel') {
+                continue;
+            }
+
+            foreach (($component['cards'] ?? []) as $cardIndex => $card) {
+                foreach (($card['components'] ?? []) as $cardComponent) {
+                    if (strtolower((string) ($cardComponent['type'] ?? '')) !== 'header') {
+                        continue;
+                    }
+
+                    foreach (($cardComponent['parameters'] ?? []) as $parameter) {
+                        $mediaType = strtolower((string) ($parameter['type'] ?? ''));
+
+                        if (in_array($mediaType, ['image', 'video', 'document'], true)) {
+                            $mediaUrl = $parameter[$mediaType]['link'] ?? null;
+
+                            if ($mediaUrl) {
+                                $mediaUrls[$cardIndex] = $mediaUrl;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if (empty($mediaUrls)) {
+            return null;
+        }
+
+        return 'carousel_media_ids_payload:' . sha1(json_encode([
+            'phone_number_id' => $this->phoneNumberId,
+            'template' => $templatePayload['name'] ?? null,
+            'language' => $templatePayload['language']['code'] ?? null,
+            'media_urls' => $mediaUrls,
+        ]));
+    }
+
     /**
      * Check if a template payload is a carousel by scanning its components.
      */
@@ -816,6 +879,37 @@ class WhatsappService
                 return true;
             }
         }
+        return false;
+    }
+
+    private function carouselPayloadHasMediaLinks(array $templateContent): bool
+    {
+        foreach ($templateContent['components'] ?? [] as $component) {
+            if (strtolower((string) ($component['type'] ?? '')) !== 'carousel') {
+                continue;
+            }
+
+            foreach (($component['cards'] ?? []) as $card) {
+                foreach (($card['components'] ?? []) as $cardComponent) {
+                    if (strtolower((string) ($cardComponent['type'] ?? '')) !== 'header') {
+                        continue;
+                    }
+
+                    foreach (($cardComponent['parameters'] ?? []) as $parameter) {
+                        $mediaType = strtolower((string) ($parameter['type'] ?? ''));
+
+                        if (
+                            in_array($mediaType, ['image', 'video', 'document'], true)
+                            && !empty($parameter[$mediaType]['link'] ?? null)
+                            && empty($parameter[$mediaType]['id'] ?? null)
+                        ) {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+
         return false;
     }
 
@@ -875,16 +969,19 @@ class WhatsappService
             $extension = $this->getExtensionFromMimeType($fileData['mime_type']);
             $filename = $filenamePrefix . '_' . uniqid() . '.' . $extension;
             
-            $response = \Http::withHeaders([
-                'Authorization' => 'Bearer ' . $this->accessToken,
-            ])->attach(
-                'file',
-                $fileData['content'],
-                $filename
-            )->post($url, [
-                'messaging_product' => 'whatsapp',
-                'type' => $fileData['mime_type'],  // Explicitly set type
-            ]);
+            $response = \Http::timeout(120)
+                ->connectTimeout(20)
+                ->retry(2, 1000)
+                ->withHeaders([
+                    'Authorization' => 'Bearer ' . $this->accessToken,
+                ])->attach(
+                    'file',
+                    $fileData['content'],
+                    $filename
+                )->post($url, [
+                    'messaging_product' => 'whatsapp',
+                    'type' => $fileData['mime_type'],  // Explicitly set type
+                ]);
 
             // Clean up temp file
             fclose($tempFile);
@@ -921,38 +1018,45 @@ class WhatsappService
     private function getFileDataForUpload(string $url): ?array
     {
         try {
-            $appUrl = rtrim(config('app.url'), '/');
-            
-            // If it's a local URL, read from storage
-            if (str_starts_with($url, $appUrl . '/media/')) {
-                $relativePath = str_replace($appUrl . '/media/', '', $url);
-                $decodedPath = urldecode($relativePath);
-                
+            $decodedPath = $this->localMediaPathFromUrl($url);
+
+            if ($decodedPath) {
                 if (\Storage::disk('local')->exists($decodedPath)) {
                     $content = \Storage::disk('local')->get($decodedPath);
                     $mimeType = \Storage::disk('local')->mimeType($decodedPath);
-                    
+
                     return [
                         'content' => $content,
                         'mime_type' => $mimeType,
                     ];
                 }
-                
+
                 Log::warning('Local file not found', ['path' => $decodedPath]);
                 return null;
             }
             
-            // For external URLs (like Meta CDN), fetch and detect MIME type
-            $content = @file_get_contents($url);
-            
-            if ($content === false) {
-                Log::error('Could not fetch external URL', ['url' => $url]);
+            $response = Http::timeout(30)
+                ->withHeaders([
+                    'User-Agent' => 'Mozilla/5.0',
+                    'Accept' => 'image/avif,image/webp,image/apng,image/svg+xml,image/*,video/*,application/pdf,*/*;q=0.8',
+                ])
+                ->get($url);
+
+            if (!$response->successful()) {
+                Log::error('Could not fetch external URL', [
+                    'url' => $this->sanitizeMediaUrlForLog($url),
+                    'status' => $response->status(),
+                    'content_type' => $response->header('Content-Type'),
+                ]);
                 return null;
             }
-            
+
+            $content = $response->body();
+
             // Detect MIME type from content or URL
-            $mimeType = $this->detectMimeType($content, $url);
-            
+            $mimeType = $response->header('Content-Type') ?: $this->detectMimeType($content, $url);
+            $mimeType = trim(explode(';', $mimeType)[0]);
+
             return [
                 'content' => $content,
                 'mime_type' => $mimeType,
@@ -965,6 +1069,30 @@ class WhatsappService
             ]);
             return null;
         }
+    }
+
+    private function localMediaPathFromUrl(string $url): ?string
+    {
+        $appUrl = rtrim(config('app.url'), '/');
+        $mediaPrefix = $appUrl . '/media/';
+
+        if (str_starts_with($url, $mediaPrefix)) {
+            return urldecode(substr($url, strlen($mediaPrefix)));
+        }
+
+        $path = parse_url($url, PHP_URL_PATH);
+
+        if (!$path) {
+            return null;
+        }
+
+        $mediaPathPosition = strpos($path, '/media/');
+
+        if ($mediaPathPosition === false) {
+            return null;
+        }
+
+        return urldecode(substr($path, $mediaPathPosition + strlen('/media/')));
     }
 
     /**
