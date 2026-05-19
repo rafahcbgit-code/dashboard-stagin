@@ -65,7 +65,7 @@
                                         <input
                                             type="file"
                                             class="sr-only"
-                                            accept=".jpg, .png"
+                                            accept=".jpg, .jpeg, .png"
                                             ref="fileInput"
                                             id="file-upload"
                                             @change="handleFileUpload($event)"
@@ -93,7 +93,7 @@
                                                         <span>{{ $t('Provide examples of the variables or media in the header') }}</span>
                                                     </label>
                                                 </div>
-                                                <p class="text-xs text-gray-500">{{ $t('PNG or JPG files only') }}</p>
+                                                <p class="text-xs text-gray-500">{{ $t('PNG, JPG or JPEG files only') }}</p>
                                             </div>
                                         </div>
                                     </div>
@@ -403,13 +403,13 @@
                     <!-- Standard template preview -->
                     <div v-if="templateType !== 'carousel'">
                     <div class="mr-auto rounded-lg rounded-tl-none my-1 p-1 text-sm bg-white flex flex-col relative speech-bubble-left w-[25em]">
-                        <div v-if="form.header.format != 'TEXT'" class="mb-4 rounded overflow-hidden">
+                        <div v-if="form.header.format != 'TEXT'" class="-m-1 mb-3 rounded overflow-hidden">
                             <template v-if="form.header.format === 'IMAGE'">
                                 <img
                                     v-if="currentHeaderPreviewUrl && !imagePreviewFailed"
                                     :src="currentHeaderPreviewUrl"
                                     alt="Header image preview"
-                                    class="w-full max-h-[260px] object-cover"
+                                    class="block w-full h-auto"
                                     @error="imagePreviewFailed = true"
                                 >
                                 <div v-else class="bg-[#ccd0d5] flex justify-center py-8 rounded">

@@ -5,7 +5,7 @@
         <ChatTable :rows="rows" :filters="props.filters" :rowCount="props.rowCount"
           :ticketingIsEnabled="ticketingIsEnabled" :status="props?.status"
           :chatSortDirection="props.chat_sort_direction" :teamRole="props.teamRole"
-          :selectedContactUuid="contact?.uuid" />
+                    :selectedContactUuid="contact?.uuid" :templates="templates" />
       </div>
       <div class="min-w-0 bg-cover flex flex-col chat-bg"
         :class="contact ? 'h-screen md:w-[70%]' : 'md:h-screen md:w-[70%]'">
