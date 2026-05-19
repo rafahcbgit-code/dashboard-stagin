@@ -60,7 +60,7 @@
                                 </div>
                                 <div v-if="form.header.format === 'IMAGE' || form.header.format === 'VIDEO' || form.header.format === 'DOCUMENT'">
                                     <div class="flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
-                                        <input type="file" class="sr-only" :accept="form.header.format === 'IMAGE' ? '.jpg,.png' : form.header.format === 'VIDEO' ? '.mp4' : '.pdf'" ref="fileInput" id="file-upload" @change="handleFileUpload($event)" />
+                                        <input type="file" class="sr-only" :accept="form.header.format === 'IMAGE' ? '.jpg,.jpeg,.png' : form.header.format === 'VIDEO' ? '.mp4' : '.pdf'" ref="fileInput" id="file-upload" @change="handleFileUpload($event)" />
                                         <div class="text-center">
                                             <div v-if="form.header.example" class="flex justify-center items-center">
                                                 <div class="flex justify-center items-center space-s-3 py-1 border bg-slate-100 rounded-lg mb-2 w-fit px-2">
@@ -78,7 +78,7 @@
                                                     <span>{{ $t('Provide examples of the variables or media in the header') }}</span>
                                                 </label>
                                             </div>
-                                            <p class="text-xs text-gray-500">{{ form.header.format === 'IMAGE' ? $t('PNG or JPG files only') : form.header.format === 'VIDEO' ? $t('MP4 files only') : $t('PDF files only') }}</p>
+                                            <p class="text-xs text-gray-500">{{ form.header.format === 'IMAGE' ? $t('PNG, JPG or JPEG files only') : form.header.format === 'VIDEO' ? $t('MP4 files only') : $t('PDF files only') }}</p>
                                         </div>
                                     </div>
                                 </div>
@@ -170,10 +170,35 @@
                     <!-- Standard preview -->
                     <div v-if="!isCarousel">
                         <div class="mr-auto rounded-lg rounded-tl-none my-1 p-1 text-sm bg-white flex flex-col relative speech-bubble-left w-[25em]">
-                            <div v-if="form.header.format != null && form.header.format != 'TEXT' && form.category != 'AUTHENTICATION'" class="mb-4 bg-[#ccd0d5] flex justify-center py-8 rounded">
-                                <img v-if="form.header.format === 'IMAGE'" :src="'/images/image-placeholder.png'">
-                                <img v-if="form.header.format === 'VIDEO'" :src="'/images/video-placeholder.png'">
-                                <img v-if="form.header.format === 'DOCUMENT'" :src="'/images/document-placeholder.png'">
+                            <div v-if="form.header.format != null && form.header.format != 'TEXT' && form.category != 'AUTHENTICATION'" class="-m-1 mb-3 rounded overflow-hidden">
+                                <template v-if="form.header.format === 'IMAGE'">
+                                    <img
+                                        v-if="currentHeaderPreviewUrl && !imagePreviewFailed"
+                                        :src="currentHeaderPreviewUrl"
+                                        alt="Header image preview"
+                                        class="block w-full h-auto"
+                                        @error="imagePreviewFailed = true"
+                                    >
+                                    <div v-else class="bg-[#ccd0d5] flex justify-center py-8 rounded">
+                                        <img :src="'/images/image-placeholder.png'">
+                                    </div>
+                                </template>
+                                <template v-else-if="form.header.format === 'VIDEO'">
+                                    <video
+                                        v-if="currentHeaderPreviewUrl && !videoPreviewFailed"
+                                        controls
+                                        class="block w-full h-auto"
+                                        @error="videoPreviewFailed = true"
+                                    >
+                                        <source :src="currentHeaderPreviewUrl" type="video/mp4">
+                                    </video>
+                                    <div v-else class="bg-[#ccd0d5] flex justify-center py-8 rounded">
+                                        <img :src="'/images/video-placeholder.png'">
+                                    </div>
+                                </template>
+                                <div v-else class="bg-[#ccd0d5] flex justify-center py-8 rounded">
+                                    <img :src="'/images/document-placeholder.png'">
+                                </div>
                             </div>
                             <h2 v-else-if="form.header.format == 'TEXT' && form.category != 'AUTHENTICATION'" class="text-gray-700 text-[16px] mb-1 px-2">{{ form.header.text }}</h2>
                             <p v-if="form.category != 'AUTHENTICATION'" class="px-2 normal-case whitespace-pre-wrap" v-html="form.body.text"></p>
@@ -351,21 +376,53 @@
     ]);
 
     const previousExamples = ref({});
+    const storedHeaderMedia = metadata.value?._default_header_media ?? metadata.value?.default_header_media ?? null;
+    const headerPreviewUrls = ref({
+        IMAGE: form.value.header.format === 'IMAGE' ? (storedHeaderMedia?.url ?? null) : null,
+        VIDEO: form.value.header.format === 'VIDEO' ? (storedHeaderMedia?.url ?? null) : null,
+        DOCUMENT: null,
+    });
+    const imagePreviewFailed = ref(false);
+    const videoPreviewFailed = ref(false);
+    const currentHeaderPreviewUrl = computed(() => {
+        const currentFormat = form.value.header?.format;
+        if (!currentFormat) return null;
+        return headerPreviewUrls.value[currentFormat] || null;
+    });
+
     const changeHeaderType = (value) => {
         const currentType = form.value.header.format;
         previousExamples.value[currentType] = form.value.header.example;
         form.value.header.format = value;
         form.value.header.example = previousExamples.value[value] ?? null;
+        imagePreviewFailed.value = false;
+        videoPreviewFailed.value = false;
     };
 
     const handleFileUpload = (event) => {
         const file = event.target.files[0];
         if (!file) return;
+        const currentFormat = form.value.header?.format;
         const reader = new FileReader();
-        reader.onload = () => { form.value.header.example = file; };
+        reader.onload = (e) => {
+            if (currentFormat && headerPreviewUrls.value[currentFormat] !== undefined) {
+                headerPreviewUrls.value[currentFormat] = e.target.result;
+            }
+            form.value.header.example = file;
+            imagePreviewFailed.value = false;
+            videoPreviewFailed.value = false;
+        };
         reader.readAsDataURL(file);
     };
-    const removeFile = () => { form.value.header.example = ''; };
+    const removeFile = () => {
+        const currentFormat = form.value.header?.format;
+        if (currentFormat && headerPreviewUrls.value[currentFormat] !== undefined) {
+            headerPreviewUrls.value[currentFormat] = null;
+        }
+        form.value.header.example = '';
+        imagePreviewFailed.value = false;
+        videoPreviewFailed.value = false;
+    };
 
     const characterCount = (type) => {
         if (type === 'footer' && form.value.footer.text) {

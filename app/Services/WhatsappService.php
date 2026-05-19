@@ -1711,62 +1711,47 @@ class WhatsappService
                     'buttons' => []
                 ];
 
-                $quickReplyButtons = [];
-
                 foreach ($request->buttons as $button) {
                     $buttonType = strtoupper($button['type'] ?? '');
 
                     if ($buttonType === 'QUICK_REPLY') {
-                        $quickReplyButtons[] = [
+                        $buttonsComponent['buttons'][] = [
                             'type' => $buttonType,
                             'text' => $button['text'],
                         ];
-                    }
-                }
-            
-                foreach ($request->buttons as $button) {
-                    $buttonType = strtoupper($button['type'] ?? '');
+                    } elseif ($buttonType === 'URL') {
+                        $urlButton = [
+                            'type' => $buttonType,
+                            'text' => $button['text'],
+                            'url' => $button['url'],
+                        ];
 
-                    if ($buttonType !== 'QUICK_REPLY') {
-                        if ($buttonType === 'URL') {
-                            $urlButton = [
-                                'type' => $buttonType,
-                                'text' => $button['text'],
-                                'url' => $button['url'],
-                            ];
-
-                            if (str_contains($button['url'] ?? '', '{{') && !empty($button['example'])) {
-                                $urlButton['example'] = is_array($button['example'])
-                                    ? array_values($button['example'])
-                                    : [$button['example']];
-                            }
-
-                            $buttonsComponent['buttons'][] = $urlButton;
-                        } elseif ($buttonType === 'PHONE_NUMBER') {
-                            $buttonsComponent['buttons'][] = [
-                                'type' => $buttonType,
-                                'text' => $button['text'],
-                                'phone_number' => ($button['country'] ?? '') . ($button['phone_number'] ?? ''),
-                            ];
-                        } elseif ($buttonType === 'COPY_CODE') {
-                            $buttonsComponent['buttons'][] = [
-                                'type' => $buttonType,
-                                'example' => $button['example'] ?? '',
-                            ];
-                        } elseif ($buttonType === 'FLOW') {
-                            $buttonsComponent['buttons'][] = [
-                                'type'            => 'FLOW',
-                                'text'            => $button['text'],
-                                'flow_id'         => $button['flow_id'],
-                                'navigate_screen' => $button['navigate_screen'],
-                            ];
+                        if (str_contains($button['url'] ?? '', '{{') && !empty($button['example'])) {
+                            $urlButton['example'] = is_array($button['example'])
+                                ? array_values($button['example'])
+                                : [$button['example']];
                         }
-                    }
-                }
 
-                // Add the quick reply buttons at the start
-                if (!empty($quickReplyButtons)) {
-                    $buttonsComponent['buttons'] = array_merge($quickReplyButtons, $buttonsComponent['buttons']);
+                        $buttonsComponent['buttons'][] = $urlButton;
+                    } elseif ($buttonType === 'PHONE_NUMBER') {
+                        $buttonsComponent['buttons'][] = [
+                            'type' => $buttonType,
+                            'text' => $button['text'],
+                            'phone_number' => ($button['country'] ?? '') . ($button['phone_number'] ?? ''),
+                        ];
+                    } elseif ($buttonType === 'COPY_CODE') {
+                        $buttonsComponent['buttons'][] = [
+                            'type' => $buttonType,
+                            'example' => $button['example'] ?? '',
+                        ];
+                    } elseif ($buttonType === 'FLOW') {
+                        $buttonsComponent['buttons'][] = [
+                            'type'            => 'FLOW',
+                            'text'            => $button['text'],
+                            'flow_id'         => $button['flow_id'],
+                            'navigate_screen' => $button['navigate_screen'],
+                        ];
+                    }
                 }
 
                 if (!empty($buttonsComponent['buttons'])) {
@@ -2155,62 +2140,47 @@ class WhatsappService
                     'buttons' => []
                 ];
 
-                $quickReplyButtons = [];
-
                 foreach ($request->buttons as $button) {
                     $buttonType = strtoupper($button['type'] ?? '');
 
                     if ($buttonType === 'QUICK_REPLY') {
-                        $quickReplyButtons[] = [
+                        $buttonsComponent['buttons'][] = [
                             'type' => $buttonType,
                             'text' => $button['text'],
                         ];
-                    }
-                }
-            
-                foreach ($request->buttons as $button) {
-                    $buttonType = strtoupper($button['type'] ?? '');
+                    } elseif ($buttonType === 'URL') {
+                        $urlButton = [
+                            'type' => $buttonType,
+                            'text' => $button['text'],
+                            'url' => $button['url'],
+                        ];
 
-                    if ($buttonType !== 'QUICK_REPLY') {
-                        if ($buttonType === 'URL') {
-                            $urlButton = [
-                                'type' => $buttonType,
-                                'text' => $button['text'],
-                                'url' => $button['url'],
-                            ];
-
-                            if (str_contains($button['url'] ?? '', '{{') && !empty($button['example'])) {
-                                $urlButton['example'] = is_array($button['example'])
-                                    ? array_values($button['example'])
-                                    : [$button['example']];
-                            }
-
-                            $buttonsComponent['buttons'][] = $urlButton;
-                        } elseif ($buttonType === 'PHONE_NUMBER') {
-                            $buttonsComponent['buttons'][] = [
-                                'type' => $buttonType,
-                                'text' => $button['text'],
-                                'phone_number' => ($button['country'] ?? '') . ($button['phone_number'] ?? ''),
-                            ];
-                        } elseif ($buttonType === 'COPY_CODE') {
-                            $buttonsComponent['buttons'][] = [
-                                'type' => $buttonType,
-                                'example' => $button['example'] ?? '',
-                            ];
-                        } elseif ($buttonType === 'FLOW') {
-                            $buttonsComponent['buttons'][] = [
-                                'type'            => 'FLOW',
-                                'text'            => $button['text'],
-                                'flow_id'         => $button['flow_id'],
-                                'navigate_screen' => $button['navigate_screen'],
-                            ];
+                        if (str_contains($button['url'] ?? '', '{{') && !empty($button['example'])) {
+                            $urlButton['example'] = is_array($button['example'])
+                                ? array_values($button['example'])
+                                : [$button['example']];
                         }
-                    }
-                }
 
-                // Add the quick reply buttons at the start
-                if (!empty($quickReplyButtons)) {
-                    $buttonsComponent['buttons'] = array_merge($quickReplyButtons, $buttonsComponent['buttons']);
+                        $buttonsComponent['buttons'][] = $urlButton;
+                    } elseif ($buttonType === 'PHONE_NUMBER') {
+                        $buttonsComponent['buttons'][] = [
+                            'type' => $buttonType,
+                            'text' => $button['text'],
+                            'phone_number' => ($button['country'] ?? '') . ($button['phone_number'] ?? ''),
+                        ];
+                    } elseif ($buttonType === 'COPY_CODE') {
+                        $buttonsComponent['buttons'][] = [
+                            'type' => $buttonType,
+                            'example' => $button['example'] ?? '',
+                        ];
+                    } elseif ($buttonType === 'FLOW') {
+                        $buttonsComponent['buttons'][] = [
+                            'type'            => 'FLOW',
+                            'text'            => $button['text'],
+                            'flow_id'         => $button['flow_id'],
+                            'navigate_screen' => $button['navigate_screen'],
+                        ];
+                    }
                 }
 
                 if (!empty($buttonsComponent['buttons'])) {
