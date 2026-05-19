@@ -802,6 +802,307 @@ class ChatService
         return $this->whatsappService->sendTemplateMessage($contact->uuid, $template, $userId, NULL, $mediaId);
     }
 
+    public function sendTemplateToPhone(object $request)
+    {
+        // Clean phone number of non-digit characters
+        $phone = preg_replace('/\D+/', '', $request->phone);
+
+        if (empty($phone)) {
+            return (object) [
+                'success' => false,
+                'message' => 'phone number is invalid',
+            ];
+        }
+
+        // Try to find existing contact, otherwise create new one
+        $contact = Contact::where('organization_id', $this->organizationId)
+            ->where(function ($query) use ($phone) {
+                $query->where('contacts.phone', $phone)
+                    ->orWhereRaw("REPLACE(REPLACE(REPLACE(REPLACE(phone, '+', ''), '-', ''), ' ', ''), '(', '') = ?", [$phone]);
+            })
+            ->first();
+
+        if (! $contact) {
+            $contact = Contact::create([
+                'organization_id' => $this->organizationId,
+                'phone' => $phone,
+                'created_by' => $this->getUserId() ?: 0,
+            ]);
+        }
+
+        // Load the template
+        $templateRef = (string) $request->template;
+        $template = Template::where('organization_id', $this->organizationId)
+            ->where(function ($query) use ($templateRef) {
+                $query->where('uuid', $templateRef);
+
+                if (ctype_digit($templateRef)) {
+                    $query->orWhere('id', (int) $templateRef);
+                }
+            })
+            ->first();
+
+        if (! $template) {
+            return (object) [
+                'success' => false,
+                'message' => 'template not found.',
+            ];
+        }
+
+        try {
+            $metadata = json_decode($template->metadata, true) ?? [];
+
+            if ($this->isCarouselTemplateMetadata($metadata)) {
+                $templatePayload = $this->buildCarouselTemplateRequest((int) $template->id, $contact, $template);
+            } else {
+                $sendMetadata = $this->buildDefaultTemplateSendMetadata($template, $metadata);
+                $this->applyTemplateDefaultHeaderMedia($sendMetadata, $template);
+
+                $templatePayload = $this->buildTemplate(
+                    $template->name,
+                    $template->language,
+                    json_decode(json_encode($sendMetadata)),
+                    $contact
+                );
+            }
+        } catch (\Throwable $e) {
+            Log::error('Send template to phone failed while building payload', [
+                'error' => $e->getMessage(),
+                'template_id' => $template->id,
+                'contact_id' => $contact->id,
+            ]);
+
+            return (object) [
+                'success' => false,
+                'message' => $e->getMessage(),
+            ];
+        }
+
+        return $this->whatsappService->sendTemplateMessage(
+            $contact->uuid,
+            $templatePayload,
+            $this->getUserId(),
+            null,
+            null,
+            $contact,
+            null,
+            $template
+        );
+    }
+
+    private function buildDefaultTemplateSendMetadata(Template $template, array $metadata): array
+    {
+        $sendMetadata = [
+            'header' => null,
+            'body' => ['text' => '', 'parameters' => []],
+            'footer' => ['text' => null],
+            'buttons' => [],
+            'media' => null,
+        ];
+
+        $components = $metadata['components'] ?? [];
+
+        if (empty($components)) {
+            $sendMetadata['header'] = $metadata['header'] ?? null;
+            $sendMetadata['body'] = $metadata['body'] ?? ['text' => '', 'parameters' => []];
+            $sendMetadata['footer'] = $metadata['footer'] ?? ['text' => null];
+            $sendMetadata['buttons'] = $metadata['buttons'] ?? [];
+            $sendMetadata['media'] = $metadata['media'] ?? null;
+
+            return $this->fillFlatTemplateMetadataDefaults($sendMetadata, $template);
+        }
+
+        foreach ($components as $component) {
+            $type = strtoupper((string) ($component['type'] ?? ''));
+
+            if ($type === 'HEADER') {
+                $sendMetadata['header'] = $this->buildDefaultHeaderMetadata($component);
+            } elseif ($type === 'BODY') {
+                $sendMetadata['body'] = $this->buildDefaultBodyMetadata($component);
+            } elseif ($type === 'FOOTER') {
+                $sendMetadata['footer'] = [
+                    'text' => $component['text'] ?? null,
+                ];
+            } elseif ($type === 'BUTTONS') {
+                $sendMetadata['buttons'] = $this->buildDefaultButtonsMetadata($component['buttons'] ?? []);
+            }
+        }
+
+        return $sendMetadata;
+    }
+
+    private function fillFlatTemplateMetadataDefaults(array $metadata, Template $template): array
+    {
+        if (isset($metadata['header']['format'])) {
+            $format = strtoupper((string) $metadata['header']['format']);
+            $text = $metadata['header']['text'] ?? '';
+
+            if ($format === 'TEXT' && empty($metadata['header']['parameters'])) {
+                $examples = $this->normalizeTemplateExamples($metadata['header']['example'] ?? []);
+                $metadata['header']['parameters'] = $this->buildStaticTextParameters($text, $examples);
+            }
+        }
+
+        if (isset($metadata['body']) && empty($metadata['body']['parameters'])) {
+            $bodyText = $metadata['body']['text'] ?? '';
+            $examples = $this->normalizeTemplateExamples($metadata['body']['example'] ?? []);
+            $metadata['body']['parameters'] = $this->buildStaticTextParameters($bodyText, $examples);
+        }
+
+        $metadata['buttons'] = $this->buildDefaultButtonsMetadata($metadata['buttons'] ?? []);
+
+        return $metadata;
+    }
+
+    private function buildDefaultHeaderMetadata(array $component): ?array
+    {
+        $format = strtoupper((string) ($component['format'] ?? ''));
+
+        if ($format === '') {
+            return null;
+        }
+
+        $header = [
+            'format' => $format,
+            'text' => $component['text'] ?? '',
+            'parameters' => [],
+        ];
+
+        if ($format === 'TEXT') {
+            $examples = $this->normalizeTemplateExamples($component['example']['header_text'] ?? []);
+            $header['parameters'] = $this->buildStaticTextParameters($component['text'] ?? '', $examples);
+        }
+
+        return $header;
+    }
+
+    private function buildDefaultBodyMetadata(array $component): array
+    {
+        $examples = $this->normalizeTemplateExamples($component['example']['body_text'] ?? []);
+
+        return [
+            'text' => $component['text'] ?? '',
+            'parameters' => $this->buildStaticTextParameters($component['text'] ?? '', $examples),
+        ];
+    }
+
+    private function buildDefaultButtonsMetadata(array $buttons): array
+    {
+        $sendButtons = [];
+
+        foreach ($buttons as $button) {
+            $type = strtoupper((string) ($button['type'] ?? ''));
+            $sendButton = $button;
+            $sendButton['type'] = $type;
+            $sendButton['parameters'] = [];
+
+            if ($type === 'URL' && $this->countTemplatePlaceholders($button['url'] ?? '') > 0) {
+                $sendButton['parameters'][] = [
+                    'type' => 'static',
+                    'value' => $this->resolveDefaultUrlButtonValue($button),
+                ];
+            } elseif ($type === 'COPY_CODE') {
+                $example = $button['example'] ?? null;
+                $sendButton['parameters'][] = [
+                    'type' => 'static',
+                    'value' => is_array($example) ? (string) reset($example) : (string) ($example ?: 'N/A'),
+                ];
+            }
+
+            $sendButtons[] = $sendButton;
+        }
+
+        return $sendButtons;
+    }
+
+    private function buildStaticTextParameters(string $text, array $examples): array
+    {
+        $count = $this->countTemplatePlaceholders($text);
+        $parameters = [];
+
+        for ($index = 0; $index < $count; $index++) {
+            $value = $examples[$index] ?? 'N/A';
+
+            if ($value === null || trim((string) $value) === '') {
+                $value = 'N/A';
+            }
+
+            $parameters[] = [
+                'type' => 'text',
+                'selection' => 'static',
+                'value' => (string) $value,
+            ];
+        }
+
+        return $parameters;
+    }
+
+    private function normalizeTemplateExamples($examples): array
+    {
+        if (!is_array($examples)) {
+            return $examples === null || $examples === '' ? [] : [(string) $examples];
+        }
+
+        if (isset($examples[0]) && is_array($examples[0])) {
+            $examples = $examples[0];
+        }
+
+        return array_values(array_map(static function ($value) {
+            return is_array($value) ? (string) reset($value) : (string) $value;
+        }, $examples));
+    }
+
+    private function countTemplatePlaceholders(?string $text): int
+    {
+        if (!$text) {
+            return 0;
+        }
+
+        preg_match_all('/{{\s*\d+\s*}}/', $text, $matches);
+
+        return count($matches[0]);
+    }
+
+    private function resolveDefaultUrlButtonValue(array $button): string
+    {
+        $example = $button['example'] ?? null;
+        $value = is_array($example) ? (string) reset($example) : (string) ($example ?? '');
+
+        if ($value === '') {
+            return 'N/A';
+        }
+
+        $url = (string) ($button['url'] ?? '');
+        $placeholderPosition = strpos($url, '{{');
+
+        if ($placeholderPosition !== false) {
+            $prefix = substr($url, 0, $placeholderPosition);
+
+            if ($prefix !== '' && str_starts_with($value, $prefix)) {
+                $value = substr($value, strlen($prefix));
+            }
+        }
+
+        return $value !== '' ? $value : 'N/A';
+    }
+
+    private function isCarouselTemplateMetadata(array $metadata): bool
+    {
+        if (($metadata['template_type'] ?? null) === 'carousel' || !empty($metadata['carousel_cards'] ?? [])) {
+            return true;
+        }
+
+        foreach (($metadata['components'] ?? []) as $component) {
+            if (strtoupper((string) ($component['type'] ?? '')) === 'CAROUSEL') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+
+
     public function clearMessage($uuid)
     {
         Chat::where('uuid', $uuid)

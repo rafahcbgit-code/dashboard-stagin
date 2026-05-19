@@ -31,7 +31,7 @@ const props = defineProps({
   },
   sendText: {
     type: String,
-    default: "Save",
+    default: "Send",
   },
   contactFields: Array,
 });
@@ -71,6 +71,19 @@ const hasButtonVariables = computed(() => {
   return form.buttons.some(
     (button) => button.parameters && button.parameters.length > 0,
   );
+});
+
+const isHeaderParameterVisible = (parameter) => {
+  if (!parameter) return false;
+
+  if (parameter.type === "text") return true;
+
+  return !["IMAGE", "DOCUMENT", "VIDEO"].includes(parameter.type)
+    || parameter.selection !== "default";
+};
+
+const hasVisibleHeaderVariables = computed(() => {
+  return form.header.parameters.some(isHeaderParameterVisible);
 });
 
 const dynamicOptions = computed(() => {
@@ -667,7 +680,7 @@ onMounted(() => {
           </div>
 
           <!-- Submit button for carousel -->
-          <div class="flex items-center justify-end space-x-3 mt-3">
+          <div class="flex items-center justify-end gap-3 mt-3">
             <div v-if="displayCancelBtn">
               <Link
                 href="/campaigns"
@@ -682,7 +695,7 @@ onMounted(() => {
               :disabled="isLoading"
             >
               <span v-if="!isLoading">{{
-                sendText ? sendText : $t("Save")
+                sendText ? $t(sendText) : $t("Send")
               }}</span>
               <svg
                 v-else
@@ -717,7 +730,7 @@ onMounted(() => {
         <!-- ── STANDARD: header / body / button variables (unchanged) ────── -->
         <div v-if="!isCarouselTemplate">
           <div
-            v-if="form.header.parameters.length > 0"
+            v-if="hasVisibleHeaderVariables"
             class="bg-slate-100 p-3 mt-4 text-sm"
           >
             <h2
@@ -754,6 +767,7 @@ onMounted(() => {
             <div
               v-for="(item, index) in form.header.parameters"
               :key="index"
+              v-show="isHeaderParameterVisible(item)"
               class="mt-2 flex items-center space-x-4"
             >
               <div
@@ -1030,7 +1044,7 @@ onMounted(() => {
           </div>
 
           <!-- Standard submit button -->
-          <div class="flex items-center justify-end space-x-3 mt-3">
+          <div class="flex items-center justify-end gap-3 mt-3">
             <div v-if="displayCancelBtn">
               <Link
                 href="/campaigns"
@@ -1046,7 +1060,7 @@ onMounted(() => {
                 :disabled="isLoading"
               >
                 <span v-if="!isLoading">{{
-                  sendText ? sendText : $t("Save")
+                  sendText ? $t(sendText) : $t("Send")
                 }}</span>
                 <svg
                   v-else

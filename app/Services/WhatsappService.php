@@ -272,6 +272,8 @@ class WhatsappService
             $templateModel = $this->resolveTemplateFromPayload($templateContent);
         }
 
+        $displayHeaderMedia = $this->extractTemplateHeaderMediaForDisplay($templateContent, $templateModel);
+
         try {
             $templateContent = $this->enrichTemplateHeaderWithMediaId(
                 $templateContent,
@@ -351,7 +353,7 @@ class WhatsappService
                     $metadata = $this->buildCarouselTemplateChatMessage($contactUuId, $templateId);
                 } else {
                     // Standard direct send
-                    $metadata = $this->buildTemplateChatMessage($templateContent, $contact);
+                    $metadata = $this->buildTemplateChatMessage($templateContent, $contact, $displayHeaderMedia);
                 }
             }
 
@@ -1161,7 +1163,7 @@ class WhatsappService
         return json_encode($array);
     }
 
-    private function buildTemplateChatMessage($templateContent, $contact){
+    private function buildTemplateChatMessage($templateContent, $contact, ?array $displayHeaderMedia = null){
         //Get the template
         $template = Template::where('organization_id', $contact->organization_id)
             ->where('name', $templateContent['name'])
@@ -1265,8 +1267,60 @@ class WhatsappService
             }
         }
 
+        if (
+            $displayHeaderMedia
+            && isset($array['type'])
+            && in_array($array['type'], ['image', 'video', 'document'], true)
+            && !empty($displayHeaderMedia['url'])
+        ) {
+            $array[$array['type']]['url'] = $displayHeaderMedia['url'];
+            $array[$array['type']]['link'] = $displayHeaderMedia['url'];
+            if (!empty($displayHeaderMedia['name'])) {
+                $array[$array['type']]['filename'] = $displayHeaderMedia['name'];
+            }
+        }
+
         //Log::info(json_encode($array));
         return json_encode($array);
+    }
+
+    private function extractTemplateHeaderMediaForDisplay(array $templateContent, ?Template $templateModel): ?array
+    {
+        foreach (($templateContent['components'] ?? []) as $component) {
+            if (strtolower((string) ($component['type'] ?? '')) !== 'header') {
+                continue;
+            }
+
+            foreach (($component['parameters'] ?? []) as $parameter) {
+                $mediaType = strtolower((string) ($parameter['type'] ?? ''));
+
+                if (!in_array($mediaType, ['image', 'video', 'document'], true)) {
+                    continue;
+                }
+
+                $mediaUrl = $parameter[$mediaType]['link'] ?? null;
+
+                if (is_string($mediaUrl) && filter_var($mediaUrl, FILTER_VALIDATE_URL)) {
+                    return [
+                        'type' => $mediaType,
+                        'url' => $mediaUrl,
+                        'name' => $parameter[$mediaType]['filename'] ?? null,
+                    ];
+                }
+            }
+        }
+
+        $templateMedia = $this->resolveTemplateHeaderMedia($templateModel);
+
+        if (!$templateMedia || empty($templateMedia['url'])) {
+            return null;
+        }
+
+        return [
+            'type' => strtolower((string) ($templateMedia['type'] ?? '')),
+            'url' => $templateMedia['url'],
+            'name' => $templateMedia['name'] ?? null,
+        ];
     }
 
     private function getParameters($contact, $parameter){
@@ -1711,62 +1765,47 @@ class WhatsappService
                     'buttons' => []
                 ];
 
-                $quickReplyButtons = [];
-
                 foreach ($request->buttons as $button) {
                     $buttonType = strtoupper($button['type'] ?? '');
 
                     if ($buttonType === 'QUICK_REPLY') {
-                        $quickReplyButtons[] = [
+                        $buttonsComponent['buttons'][] = [
                             'type' => $buttonType,
                             'text' => $button['text'],
                         ];
-                    }
-                }
-            
-                foreach ($request->buttons as $button) {
-                    $buttonType = strtoupper($button['type'] ?? '');
+                    } elseif ($buttonType === 'URL') {
+                        $urlButton = [
+                            'type' => $buttonType,
+                            'text' => $button['text'],
+                            'url' => $button['url'],
+                        ];
 
-                    if ($buttonType !== 'QUICK_REPLY') {
-                        if ($buttonType === 'URL') {
-                            $urlButton = [
-                                'type' => $buttonType,
-                                'text' => $button['text'],
-                                'url' => $button['url'],
-                            ];
-
-                            if (str_contains($button['url'] ?? '', '{{') && !empty($button['example'])) {
-                                $urlButton['example'] = is_array($button['example'])
-                                    ? array_values($button['example'])
-                                    : [$button['example']];
-                            }
-
-                            $buttonsComponent['buttons'][] = $urlButton;
-                        } elseif ($buttonType === 'PHONE_NUMBER') {
-                            $buttonsComponent['buttons'][] = [
-                                'type' => $buttonType,
-                                'text' => $button['text'],
-                                'phone_number' => ($button['country'] ?? '') . ($button['phone_number'] ?? ''),
-                            ];
-                        } elseif ($buttonType === 'COPY_CODE') {
-                            $buttonsComponent['buttons'][] = [
-                                'type' => $buttonType,
-                                'example' => $button['example'] ?? '',
-                            ];
-                        } elseif ($buttonType === 'FLOW') {
-                            $buttonsComponent['buttons'][] = [
-                                'type'            => 'FLOW',
-                                'text'            => $button['text'],
-                                'flow_id'         => $button['flow_id'],
-                                'navigate_screen' => $button['navigate_screen'],
-                            ];
+                        if (str_contains($button['url'] ?? '', '{{') && !empty($button['example'])) {
+                            $urlButton['example'] = is_array($button['example'])
+                                ? array_values($button['example'])
+                                : [$button['example']];
                         }
-                    }
-                }
 
-                // Add the quick reply buttons at the start
-                if (!empty($quickReplyButtons)) {
-                    $buttonsComponent['buttons'] = array_merge($quickReplyButtons, $buttonsComponent['buttons']);
+                        $buttonsComponent['buttons'][] = $urlButton;
+                    } elseif ($buttonType === 'PHONE_NUMBER') {
+                        $buttonsComponent['buttons'][] = [
+                            'type' => $buttonType,
+                            'text' => $button['text'],
+                            'phone_number' => ($button['country'] ?? '') . ($button['phone_number'] ?? ''),
+                        ];
+                    } elseif ($buttonType === 'COPY_CODE') {
+                        $buttonsComponent['buttons'][] = [
+                            'type' => $buttonType,
+                            'example' => $button['example'] ?? '',
+                        ];
+                    } elseif ($buttonType === 'FLOW') {
+                        $buttonsComponent['buttons'][] = [
+                            'type'            => 'FLOW',
+                            'text'            => $button['text'],
+                            'flow_id'         => $button['flow_id'],
+                            'navigate_screen' => $button['navigate_screen'],
+                        ];
+                    }
                 }
 
                 if (!empty($buttonsComponent['buttons'])) {
@@ -2155,62 +2194,47 @@ class WhatsappService
                     'buttons' => []
                 ];
 
-                $quickReplyButtons = [];
-
                 foreach ($request->buttons as $button) {
                     $buttonType = strtoupper($button['type'] ?? '');
 
                     if ($buttonType === 'QUICK_REPLY') {
-                        $quickReplyButtons[] = [
+                        $buttonsComponent['buttons'][] = [
                             'type' => $buttonType,
                             'text' => $button['text'],
                         ];
-                    }
-                }
-            
-                foreach ($request->buttons as $button) {
-                    $buttonType = strtoupper($button['type'] ?? '');
+                    } elseif ($buttonType === 'URL') {
+                        $urlButton = [
+                            'type' => $buttonType,
+                            'text' => $button['text'],
+                            'url' => $button['url'],
+                        ];
 
-                    if ($buttonType !== 'QUICK_REPLY') {
-                        if ($buttonType === 'URL') {
-                            $urlButton = [
-                                'type' => $buttonType,
-                                'text' => $button['text'],
-                                'url' => $button['url'],
-                            ];
-
-                            if (str_contains($button['url'] ?? '', '{{') && !empty($button['example'])) {
-                                $urlButton['example'] = is_array($button['example'])
-                                    ? array_values($button['example'])
-                                    : [$button['example']];
-                            }
-
-                            $buttonsComponent['buttons'][] = $urlButton;
-                        } elseif ($buttonType === 'PHONE_NUMBER') {
-                            $buttonsComponent['buttons'][] = [
-                                'type' => $buttonType,
-                                'text' => $button['text'],
-                                'phone_number' => ($button['country'] ?? '') . ($button['phone_number'] ?? ''),
-                            ];
-                        } elseif ($buttonType === 'COPY_CODE') {
-                            $buttonsComponent['buttons'][] = [
-                                'type' => $buttonType,
-                                'example' => $button['example'] ?? '',
-                            ];
-                        } elseif ($buttonType === 'FLOW') {
-                            $buttonsComponent['buttons'][] = [
-                                'type'            => 'FLOW',
-                                'text'            => $button['text'],
-                                'flow_id'         => $button['flow_id'],
-                                'navigate_screen' => $button['navigate_screen'],
-                            ];
+                        if (str_contains($button['url'] ?? '', '{{') && !empty($button['example'])) {
+                            $urlButton['example'] = is_array($button['example'])
+                                ? array_values($button['example'])
+                                : [$button['example']];
                         }
-                    }
-                }
 
-                // Add the quick reply buttons at the start
-                if (!empty($quickReplyButtons)) {
-                    $buttonsComponent['buttons'] = array_merge($quickReplyButtons, $buttonsComponent['buttons']);
+                        $buttonsComponent['buttons'][] = $urlButton;
+                    } elseif ($buttonType === 'PHONE_NUMBER') {
+                        $buttonsComponent['buttons'][] = [
+                            'type' => $buttonType,
+                            'text' => $button['text'],
+                            'phone_number' => ($button['country'] ?? '') . ($button['phone_number'] ?? ''),
+                        ];
+                    } elseif ($buttonType === 'COPY_CODE') {
+                        $buttonsComponent['buttons'][] = [
+                            'type' => $buttonType,
+                            'example' => $button['example'] ?? '',
+                        ];
+                    } elseif ($buttonType === 'FLOW') {
+                        $buttonsComponent['buttons'][] = [
+                            'type'            => 'FLOW',
+                            'text'            => $button['text'],
+                            'flow_id'         => $button['flow_id'],
+                            'navigate_screen' => $button['navigate_screen'],
+                        ];
+                    }
                 }
 
                 if (!empty($buttonsComponent['buttons'])) {

@@ -12,11 +12,73 @@ const props = defineProps({
 
 const metadata = computed(() => {
     try {
-        return JSON.parse(props.content.metadata)
+        if (!props.content?.metadata) return {};
+        return typeof props.content.metadata === 'string'
+            ? JSON.parse(props.content.metadata)
+            : props.content.metadata;
     } catch {
         return {}
     }
 })
+
+const getHeaderMediaParameter = (messageType) => {
+    const parameters = metadata.value?.header?.parameters || [];
+    return parameters.find((parameter) => {
+        return String(parameter?.type || '').toLowerCase() === messageType;
+    }) || {};
+};
+
+const getFileNameFromUrl = (url) => {
+    if (!url) return null;
+
+    try {
+        const pathname = new URL(url, window.location.origin).pathname;
+        const filename = pathname.split('/').filter(Boolean).pop();
+        return filename ? decodeURIComponent(filename) : null;
+    } catch {
+        const filename = String(url).split('/').filter(Boolean).pop();
+        return filename ? decodeURIComponent(filename.split('?')[0]) : null;
+    }
+};
+
+const mediaSource = computed(() => {
+    const messageType = String(metadata.value?.type || '').toLowerCase();
+    const media = props.content?.media || {};
+    const typedMetadata = metadata.value?.[messageType] || {};
+    const headerParameter = getHeaderMediaParameter(messageType);
+    const path = media.path
+        || typedMetadata.path
+        || typedMetadata.url
+        || typedMetadata.link
+        || typedMetadata.value
+        || headerParameter.path
+        || headerParameter.url
+        || headerParameter.link
+        || headerParameter.value
+        || metadata.value?.media_url
+        || metadata.value?.url
+        || null;
+
+    return {
+        path,
+        name: media.name
+            || typedMetadata.filename
+            || typedMetadata.name
+            || headerParameter.filename
+            || headerParameter.name
+            || getFileNameFromUrl(path)
+            || 'media',
+        type: media.type
+            || typedMetadata.mime_type
+            || typedMetadata.type
+            || headerParameter.mime_type
+            || messageType,
+        size: media.size
+            || typedMetadata.size
+            || headerParameter.size
+            || 0,
+    };
+});
 
 
 // Check if it's a contact type
@@ -51,10 +113,18 @@ const getExtension = (fileFormat) => {
         'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'XLSX',
     };
 
-    return formatMap[fileFormat] || 'Unknown';
+    if (!fileFormat) return 'Unknown';
+
+    return formatMap[fileFormat] || String(fileFormat).split('/').pop().toUpperCase();
 };
 
 const formatFileSize = (sizeInBytes) => {
+    if (typeof sizeInBytes === 'string' && /[a-z]/i.test(sizeInBytes)) {
+        return sizeInBytes;
+    }
+
+    sizeInBytes = Number(sizeInBytes);
+    if (!Number.isFinite(sizeInBytes)) return '0 Bytes';
     if (sizeInBytes === 0) return '0 Bytes';
     const k = 1024;
     const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
@@ -379,7 +449,7 @@ const viewContactDetails = async (data) => {
 
             <!--Image formatting-->
             <div v-else-if="JSON.parse(content.metadata).type === 'image'">
-                <img v-if="content.media != null" :src="content?.media?.path" alt="Image" class="mb-2 max-w-[300px]" />
+                <img v-if="mediaSource.path" :src="mediaSource.path" alt="Image" class="mb-2 max-w-[300px]" />
                 <div v-else class="text-slate-500 flex justify-center items-center space-x-4">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
                         <g fill="none">
@@ -426,12 +496,12 @@ const viewContactDetails = async (data) => {
                 <div class="relative w-[300px]">
                     <div class="flex space-x-2 w-full h-1/3 bg-white opacity-90 pt-2">
                         <div>
-                            <svg v-if="getExtension(content?.media?.type) === 'PDF'" xmlns="http://www.w3.org/2000/svg"
+                            <svg v-if="getExtension(mediaSource.type) === 'PDF'" xmlns="http://www.w3.org/2000/svg"
                                 width="36" height="36" viewBox="0 0 1024 1024">
                                 <path fill="red"
                                     d="m531.3 574.4l.3-1.4c5.8-23.9 13.1-53.7 7.4-80.7c-3.8-21.3-19.5-29.6-32.9-30.2c-15.8-.7-29.9 8.3-33.4 21.4c-6.6 24-.7 56.8 10.1 98.6c-13.6 32.4-35.3 79.5-51.2 107.5c-29.6 15.3-69.3 38.9-75.2 68.7c-1.2 5.5.2 12.5 3.5 18.8c3.7 7 9.6 12.4 16.5 15c3 1.1 6.6 2 10.8 2c17.6 0 46.1-14.2 84.1-79.4c5.8-1.9 11.8-3.9 17.6-5.9c27.2-9.2 55.4-18.8 80.9-23.1c28.2 15.1 60.3 24.8 82.1 24.8c21.6 0 30.1-12.8 33.3-20.5c5.6-13.5 2.9-30.5-6.2-39.6c-13.2-13-45.3-16.4-95.3-10.2c-24.6-15-40.7-35.4-52.4-65.8zM421.6 726.3c-13.9 20.2-24.4 30.3-30.1 34.7c6.7-12.3 19.8-25.3 30.1-34.7zm87.6-235.5c5.2 8.9 4.5 35.8.5 49.4c-4.9-19.9-5.6-48.1-2.7-51.4c.8.1 1.5.7 2.2 2zm-1.6 120.5c10.7 18.5 24.2 34.4 39.1 46.2c-21.6 4.9-41.3 13-58.9 20.2c-4.2 1.7-8.3 3.4-12.3 5c13.3-24.1 24.4-51.4 32.1-71.4zm155.6 65.5c.1.2.2.5-.4.9h-.2l-.2.3c-.8.5-9 5.3-44.3-8.6c40.6-1.9 45 7.3 45.1 7.4zm191.4-388.2L639.4 73.4c-6-6-14.1-9.4-22.6-9.4H192c-17.7 0-32 14.3-32 32v832c0 17.7 14.3 32 32 32h640c17.7 0 32-14.3 32-32V311.3c0-8.5-3.4-16.7-9.4-22.7zM790.2 326H602V137.8L790.2 326zm1.8 562H232V136h302v216a42 42 0 0 0 42 42h216v494z" />
                             </svg>
-                            <svg v-if="getExtension(content?.media?.type) === 'XLSX' || getExtension(content?.media?.type) === 'XLS'"
+                            <svg v-if="getExtension(mediaSource.type) === 'XLSX' || getExtension(mediaSource.type) === 'XLS'"
                                 xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 32 32">
                                 <defs>
                                     <linearGradient id="vscodeIconsFileTypeExcel0" x1="4.494" x2="13.832" y1="-2092.086"
@@ -466,7 +536,7 @@ const viewContactDetails = async (data) => {
                                 <path fill="#33c481" d="M28.806 3h-9.225v6.5H30V4.191A1.192 1.192 0 0 0 28.806 3Z" />
                                 <path fill="#107c41" d="M19.581 16H30v6.5H19.581Z" />
                             </svg>
-                            <svg v-if="getExtension(content?.media?.type) === 'DOC' || getExtension(content?.media?.type) === 'DOCX'"
+                            <svg v-if="getExtension(mediaSource.type) === 'DOC' || getExtension(mediaSource.type) === 'DOCX'"
                                 xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 32 32">
                                 <defs>
                                     <linearGradient id="vscodeIconsFileTypeWord0" x1="4.494" x2="13.832" y1="-1712.086"
@@ -500,7 +570,7 @@ const viewContactDetails = async (data) => {
                                 <path fill="#fff"
                                     d="M6.9 17.988c.023.184.039.344.046.481h.028c.01-.13.032-.287.065-.47s.062-.338.089-.465l1.255-5.407h1.624l1.3 5.326a7.761 7.761 0 0 1 .162 1h.022a7.6 7.6 0 0 1 .135-.975l1.039-5.358h1.477l-1.824 7.748h-1.727l-1.237-5.126q-.054-.222-.122-.578t-.084-.52h-.021q-.021.189-.084.561c-.042.249-.075.432-.1.552L7.78 19.871H6.024L4.19 12.127h1.5l1.131 5.418a4.469 4.469 0 0 1 .079.443Z" />
                             </svg>
-                            <svg v-if="getExtension(content?.media?.type) === 'PPT' || getExtension(content?.media?.type) === 'PPTX'"
+                            <svg v-if="getExtension(mediaSource.type) === 'PPT' || getExtension(mediaSource.type) === 'PPTX'"
                                 xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 32 32">
                                 <defs>
                                     <linearGradient id="vscodeIconsFileTypePowerpoint0" x1="4.494" x2="13.832"
@@ -537,24 +607,24 @@ const viewContactDetails = async (data) => {
                         <div>
                             <div>
                                 <p class="overflow-ellipsis overflow-hidden line-clamp-2 w-[200px]">{{
-                                    content?.media?.name }}</p>
+                                    mediaSource.name }}</p>
                             </div>
                             <div class="flex items-center text-slate-500 text-[11px]">
                                 <!--<span>6 pages</span>
                                 <span>
                                     <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24"><circle cx="12.1" cy="12.1" r="1" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"/></svg>
                                 </span>-->
-                                <span>{{ getExtension(content?.media?.type) }}</span>
+                                <span>{{ getExtension(mediaSource.type) }}</span>
                                 <span>
                                     <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24">
                                         <circle cx="12.1" cy="12.1" r="1" fill="none" stroke="currentColor"
                                             stroke-linecap="round" stroke-linejoin="round" stroke-width="2" />
                                     </svg>
                                 </span>
-                                <span>{{ formatFileSize(content?.media?.size) }}</span>
+                                <span>{{ formatFileSize(mediaSource.size) }}</span>
                             </div>
                         </div>
-                        <a :href="content?.media?.path" :download="content?.media?.name" target="_blank"
+                        <a :href="mediaSource.path" :download="mediaSource.name" target="_blank"
                             @click="downloadClicked" class="flex justify-end w-full">
                             <svg v-if="!downloading" xmlns="http://www.w3.org/2000/svg" width="30" height="30"
                                 viewBox="0 0 24 24">
@@ -630,7 +700,7 @@ const viewContactDetails = async (data) => {
 
             <!--Sticker formatting-->
             <div v-else-if="JSON.parse(content.metadata).type === 'sticker'">
-                <img v-if="content.media != null" :src="content?.media?.path" alt="Image" class="mb-2 max-w-[100px]" />
+                <img v-if="mediaSource.path" :src="mediaSource.path" alt="Image" class="mb-2 max-w-[100px]" />
                 <div v-else class="text-slate-500 flex justify-center items-center space-x-4">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
                         <g fill="none">
@@ -661,8 +731,8 @@ const viewContactDetails = async (data) => {
 
             <!--Audio formatting-->
             <div v-else-if="JSON.parse(content.metadata).type === 'audio'">
-                <audio v-if="content.media != null" controls>
-                    <source :src="content?.media?.path">
+                <audio v-if="mediaSource.path" controls>
+                    <source :src="mediaSource.path">
                     {{ $t('Your browser does not support the audio element') }}
                 </audio>
                 <div v-else class="text-slate-500 flex justify-center items-center space-x-4">
@@ -680,8 +750,8 @@ const viewContactDetails = async (data) => {
 
             <!--Video formatting-->
             <div v-else-if="JSON.parse(content.metadata).type === 'video'">
-                <video v-if="content.media != null" controls width="300" class="max-h-[350px]">
-                    <source :src="content?.media?.path" type="video/mp4">
+                <video v-if="mediaSource.path" controls width="300" class="max-h-[350px]">
+                    <source :src="mediaSource.path" :type="mediaSource.type">
                     {{ $t('Your browser does not support the video element') }}
                 </video>
                 <div v-else class="text-slate-500 flex justify-center items-center space-x-4">
