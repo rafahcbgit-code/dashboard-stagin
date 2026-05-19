@@ -79,8 +79,8 @@
     />
 
     <!-- Edit Modal -->
-    <div v-if="showEditModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div class="bg-white rounded-lg max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto">
+    <div v-if="showEditModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" @wheel.stop>
+      <div class="bg-white rounded-lg max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto" @wheel.stop>
         <div class="px-6 py-4 border-b border-gray-200">
           <h3 class="text-lg font-semibold text-gray-900">Edit Portal Node</h3>
         </div>
@@ -154,13 +154,12 @@
             </div>
 
             <!-- Create trigger toggle -->
-            <div class="flex items-center gap-2">
+            <div>
               <FormCheckbox
                 v-model="editForm.create_trigger"
                 label="Create trigger keyword"
-                class="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded"
               />
-              <span class="text-xs text-gray-500">Creates a trigger so the keyword works outside this flow too</span>
+              <p class="text-xs text-gray-500 -mt-1 ml-6">Creates a trigger so the keyword works outside this flow too</p>
             </div>
 
             <!-- Info callout -->
