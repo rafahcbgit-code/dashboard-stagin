@@ -882,7 +882,7 @@ class WhatsappService
         return false;
     }
 
-    private function carouselPayloadHasMediaLinks(array $templateContent): bool
+    public function carouselPayloadHasMediaLinks(array $templateContent): bool
     {
         foreach ($templateContent['components'] ?? [] as $component) {
             if (strtolower((string) ($component['type'] ?? '')) !== 'carousel') {
