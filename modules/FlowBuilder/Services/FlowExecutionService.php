@@ -73,6 +73,23 @@ class FlowExecutionService
         $timeoutMinutes = app(BotSettingsService::class)->getFlowTimeoutMinutes($this->organizationId);
         if ($flowData->updated_at && $flowData->updated_at->diffInMinutes(now()) >= $timeoutMinutes) {
             Log::info("FlowExecution: flow timed out for contact {$chat->contact_id} after {$timeoutMinutes} min");
+
+            // Log the timed-out flow run
+            try {
+                FlowLog::create([
+                    'flow_id' => $flowData->flow_id,
+                    'contact_id' => $chat->contact_id,
+                    'organization_id' => $this->organizationId,
+                    'status' => 'timed_out',
+                    'nodes_processed' => 0,
+                ]);
+            } catch (\Throwable $e) {
+                Log::error('FlowExecution: failed to create FlowLog on timeout, continuing cleanup', [
+                    'contact_id' => $chat->contact_id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+
             $flowData->delete();
             return false;
         }
@@ -144,6 +161,23 @@ class FlowExecutionService
                 'current_step' => $startNodeId ?? '1',
             ]);
 
+            // Log the flow run so it's counted in the Runs column
+            try {
+                FlowLog::create([
+                    'flow_id' => $flow->id,
+                    'contact_id' => $chat->contact_id,
+                    'organization_id' => $this->organizationId,
+                    'status' => 'started',
+                    'nodes_processed' => 0,
+                ]);
+            } catch (\Throwable $e) {
+                Log::error('FlowExecution: failed to create FlowLog on start, continuing', [
+                    'flow_id' => $flow->id,
+                    'contact_id' => $chat->contact_id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+
             Log::info('FlowExecution::startFlow - FlowUserData created', [
                 'flow_data_id' => $flowData->id,
                 'contact_id' => $flowData->contact_id,
@@ -169,6 +203,23 @@ class FlowExecutionService
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
+
+            // Log the failed flow run
+            try {
+                FlowLog::create([
+                    'flow_id' => $flowId,
+                    'contact_id' => $chat->contact_id ?? 0,
+                    'organization_id' => $this->organizationId,
+                    'status' => 'error',
+                    'nodes_processed' => 0,
+                ]);
+            } catch (\Throwable $logError) {
+                Log::error('FlowExecution: failed to create FlowLog on error', [
+                    'flow_id' => $flowId,
+                    'error' => $logError->getMessage(),
+                ]);
+            }
+
             // Clean up stale flow state to prevent resumeActiveFlow from re-processing
             FlowUserData::where('contact_id', $chat->contact_id ?? 0)->delete();
             return false;
@@ -188,6 +239,22 @@ class FlowExecutionService
 
         $timeoutMinutes = app(BotSettingsService::class)->getFlowTimeoutMinutes($this->organizationId);
         if ($activeFlow->updated_at && $activeFlow->updated_at->diffInMinutes(now()) >= $timeoutMinutes) {
+            // Log the timed-out flow run
+            try {
+                FlowLog::create([
+                    'flow_id' => $activeFlow->flow_id,
+                    'contact_id' => $chat->contact_id,
+                    'organization_id' => $this->organizationId,
+                    'status' => 'timed_out',
+                    'nodes_processed' => 0,
+                ]);
+            } catch (\Throwable $e) {
+                Log::error('FlowExecution: failed to create FlowLog on timeout, continuing cleanup', [
+                    'contact_id' => $chat->contact_id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+
             $activeFlow->delete();
             Log::info("FlowExecution: flow timed out for contact {$chat->contact_id}");
             return false;
