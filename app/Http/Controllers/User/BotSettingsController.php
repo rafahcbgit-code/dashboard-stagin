@@ -70,12 +70,17 @@ class BotSettingsController extends BaseController
             'ai_followup_question' => 'nullable|string|max:60',
             'ai_followup_yes_text' => 'nullable|string|max:20',
             'ai_followup_no_text' => 'nullable|string|max:20',
+            'flow_rejoin_enabled' => 'nullable|boolean',
+            'flow_rejoin_reminder_minutes' => 'nullable|integer|min:1|max:1440',
+            'flow_rejoin_message' => 'nullable|string|max:500',
         ]);
 
         // Convert checkboxes to booleans
         $validated['automation_enabled'] = isset($validated['automation_enabled']) ? (bool) $validated['automation_enabled'] : false;
         $validated['ai_fallback_enabled'] = isset($validated['ai_fallback_enabled']) ? (bool) $validated['ai_fallback_enabled'] : false;
         $validated['escalation_transfer_message_enabled'] = isset($validated['escalation_transfer_message_enabled']) ? (bool) $validated['escalation_transfer_message_enabled'] : false;
+        $validated['ai_followup_enabled'] = isset($validated['ai_followup_enabled']) ? (bool) $validated['ai_followup_enabled'] : false;
+        $validated['flow_rejoin_enabled'] = isset($validated['flow_rejoin_enabled']) ? (bool) $validated['flow_rejoin_enabled'] : false;
         $validated['ai_followup_enabled'] = isset($validated['ai_followup_enabled']) ? (bool) $validated['ai_followup_enabled'] : false;
 
         $organizationId = session()->get('current_organization');

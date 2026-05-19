@@ -353,7 +353,7 @@
                                     <div class="w-1 h-5 rounded-full bg-blue-500"></div>
                                     <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wide">{{ $t('Flow Behavior') }}</h3>
                                 </div>
-                                <p class="text-xs text-slate-400 mb-4">{{ $t('How long flows stay active.') }}</p>
+                                <p class="text-xs text-slate-400 mb-4">{{ $t('How long flows stay active and when to remind users to rejoin.') }}</p>
 
                                 <!-- Flow Timeout -->
                                 <div class="rounded-lg border border-slate-200 p-5">
@@ -432,8 +432,68 @@
                                             <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
                                         </a>
                                     </div>
+
+                                    <!-- Rejoin Reminder -->
+                                    <div class="rounded-lg border border-slate-200 p-5 mt-6">
+                                        <div class="flex items-start gap-3">
+                                            <div class="flex-shrink-0 w-9 h-9 rounded-lg bg-indigo-100 flex items-center justify-center">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-indigo-600"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                                            </div>
+                                            <div class="flex-1">
+                                                <label class="block text-sm font-semibold text-slate-800">{{ $t('Rejoin Reminder') }}</label>
+                                                <p class="text-xs text-slate-500 mt-0.5">{{ $t('Automatically remind users to continue their conversation when they stop responding mid-flow.') }}</p>
+                                            </div>
+                                            <button
+                                                type="button"
+                                                @click="form.flow_rejoin_enabled = !form.flow_rejoin_enabled"
+                                                class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-1 shrink-0"
+                                                :class="form.flow_rejoin_enabled ? 'bg-primary' : 'bg-slate-300'"
+                                            >
+                                                <span
+                                                    class="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform duration-200"
+                                                    :class="form.flow_rejoin_enabled ? 'translate-x-[18px]' : 'translate-x-[3px]'"
+                                                />
+                                            </button>
+                                        </div>
+                                        <div v-if="form.flow_rejoin_enabled" class="mt-4 space-y-3">
+                                            <div>
+                                                <label class="block text-xs font-medium text-slate-700 mb-1">{{ $t('Send reminder after') }}</label>
+                                                <div class="flex items-center gap-3">
+                                                    <input
+                                                        v-model.number="form.flow_rejoin_reminder_minutes"
+                                                        type="number"
+                                                        min="1"
+                                                        max="1440"
+                                                        class="w-20 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-center text-slate-800 focus:border-primary focus:ring-1 focus:ring-primary/30 focus:outline-none transition-colors"
+                                                        required
+                                                    />
+                                                    <span class="text-sm text-slate-500">{{ $t('minutes of inactivity') }}</span>
+                                                </div>
+                                                <p class="text-xs text-slate-400 mt-1">{{ $t('Must be less than the Flow Expiration Time above. The reminder is sent once per flow session.') }}</p>
+                                            </div>
+                                            <div>
+                                                <label class="block text-xs font-medium text-slate-700 mb-1">{{ $t('Reminder message') }}</label>
+                                                <textarea
+                                                    v-model="form.flow_rejoin_message"
+                                                    rows="2"
+                                                    maxlength="500"
+                                                    class="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-primary focus:ring-1 focus:ring-primary/30 focus:outline-none transition-colors resize-none"
+                                                    :placeholder="$t('You have an active conversation with us. Reply to continue where you left off.')"
+                                                />
+                                                <p class="text-[10px] text-slate-400 mt-1">{{ form.flow_rejoin_message.length }}/500</p>
+                                            </div>
+                                            <div class="rounded-md bg-slate-50 border border-slate-200 px-3 py-2 text-xs text-slate-500">
+                                                <div class="flex items-start gap-2">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 mt-0.5 text-slate-400"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                                                    <p>{{ $t('The reminder is sent once per flow session. If the user doesn\'t respond, the flow will still expire according to the Flow Expiration Time setting.') }}</p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                        <div v-else class="mt-2 text-xs text-slate-400">
+                                            {{ $t('Users who stop responding mid-flow will not receive a reminder.') }}
+                                        </div>
+                                    </div>
                                 </div>
-                            </div>
 
                             <!-- ============================================ -->
                             <!-- SECTION 5: AI Matching Defaults -->
@@ -524,6 +584,9 @@ const form = ref({
     ai_followup_question: props.settings?.ai_followup_question || 'Was this helpful?',
     ai_followup_yes_text: props.settings?.ai_followup_yes_text || 'Yes, this helped',
     ai_followup_no_text: props.settings?.ai_followup_no_text || 'No, I need more help',
+    flow_rejoin_enabled: props.settings?.flow_rejoin_enabled ?? false,
+    flow_rejoin_reminder_minutes: props.settings?.flow_rejoin_reminder_minutes || 15,
+    flow_rejoin_message: props.settings?.flow_rejoin_message || "You have an active conversation with us. Reply to continue where you left off.",
     // AI Settings fields
     ai_enabled: props.aiSettings?.ai_enabled || false,
     ai_only_mode: props.aiSettings?.ai_only_mode || false,
@@ -564,6 +627,9 @@ async function submitForm() {
         ai_followup_question: form.value.ai_followup_question,
         ai_followup_yes_text: form.value.ai_followup_yes_text,
         ai_followup_no_text: form.value.ai_followup_no_text,
+        flow_rejoin_enabled: form.value.flow_rejoin_enabled,
+        flow_rejoin_reminder_minutes: form.value.flow_rejoin_reminder_minutes,
+        flow_rejoin_message: form.value.flow_rejoin_message,
     };
 
     const aiSettings = {

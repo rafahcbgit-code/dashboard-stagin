@@ -18,6 +18,9 @@ class BotSettingsService
         'ai_followup_question' => 'Was this helpful?',
         'ai_followup_yes_text' => 'Yes, this helped',
         'ai_followup_no_text' => 'No, I need more help',
+        'flow_rejoin_enabled' => false,
+        'flow_rejoin_reminder_minutes' => 15,
+        'flow_rejoin_message' => "You have an active conversation with us. Reply to continue where you left off.",
     ];
 
     /**
@@ -124,6 +127,30 @@ class BotSettingsService
     public function getAiFollowupNoText(int $organizationId): string
     {
         return $this->getSetting($organizationId, 'ai_followup_no_text', self::DEFAULTS['ai_followup_no_text']);
+    }
+
+    /**
+     * Check if flow rejoin reminder is enabled.
+     */
+    public function isFlowRejoinEnabled(int $organizationId): bool
+    {
+        return (bool) $this->getSetting($organizationId, 'flow_rejoin_enabled', self::DEFAULTS['flow_rejoin_enabled']);
+    }
+
+    /**
+     * Get the flow rejoin reminder delay in minutes.
+     */
+    public function getFlowRejoinReminderMinutes(int $organizationId): int
+    {
+        return (int) $this->getSetting($organizationId, 'flow_rejoin_reminder_minutes', self::DEFAULTS['flow_rejoin_reminder_minutes']);
+    }
+
+    /**
+     * Get the flow rejoin reminder message text.
+     */
+    public function getFlowRejoinMessage(int $organizationId): string
+    {
+        return $this->getSetting($organizationId, 'flow_rejoin_message', self::DEFAULTS['flow_rejoin_message']);
     }
 
 }
