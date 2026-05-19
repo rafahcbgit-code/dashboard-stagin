@@ -5,8 +5,10 @@ namespace Modules\FlowBuilder\Services;
 use App\Helpers\CustomHelper;
 use App\Models\Contact;
 use App\Models\Organization;
+use App\Models\Template;
 use App\Services\BotSettingsService;
 use App\Services\WhatsappService;
+use App\Traits\TemplateTrait;
 use Illuminate\Support\Facades\Log;
 use Modules\FlowBuilder\Models\Flow;
 use Modules\FlowBuilder\Models\FlowLog;
@@ -17,6 +19,7 @@ use Modules\FlowBuilder\Services\ActionExecutionService;
 
 class FlowExecutionService
 {
+    use TemplateTrait;
     private WhatsappService $whatsappService;
     private int $organizationId;
     private $metaPayload;
@@ -633,6 +636,10 @@ class FlowExecutionService
                 );
                 break;
 
+            case 'template':
+                $response = $this->sendTemplateMessage($fields, $contact, $flowVariables);
+                break;
+
             default:
                 return false;
         }
@@ -690,6 +697,169 @@ class FlowExecutionService
         }
 
         return [];
+    }
+
+    /**
+     * Send a WhatsApp template message from a flow node.
+     */
+    private function sendTemplateMessage(array $fields, Contact $contact, array $flowVariables)
+    {
+        $templateUuid = $fields['template_uuid'] ?? null;
+        if (!$templateUuid) {
+            Log::warning('FlowExecution: template node missing template_uuid');
+            return false;
+        }
+
+        $template = Template::where('uuid', $templateUuid)
+            ->where('organization_id', $this->organizationId)
+            ->where('status', 'APPROVED')
+            ->first();
+
+        if (!$template) {
+            Log::warning('FlowExecution: template not found or not approved', [
+                'template_uuid' => $templateUuid,
+                'organization_id' => $this->organizationId,
+            ]);
+            return false;
+        }
+
+        // Build metadata object that TemplateTrait::buildTemplate() expects
+        $parameters = $fields['parameters'] ?? [];
+        $metadata = $this->buildTemplateMetadataFromConfig($parameters, $template, $contact, $flowVariables);
+
+        try {
+            $templateContent = $this->buildTemplate(
+                $template->name,
+                $template->language,
+                $metadata,
+                $contact
+            );
+
+            $response = $this->whatsappService->sendTemplateMessage(
+                $contact->uuid,
+                $templateContent,
+                null,
+                null,
+                null,
+                $contact,
+                null,
+                $template
+            );
+
+            return $response !== null && $response !== false;
+        } catch (\Throwable $e) {
+            Log::error('FlowExecution: failed to send template message', [
+                'template_uuid' => $templateUuid,
+                'contact_id' => $contact->id,
+                'error' => $e->getMessage(),
+            ]);
+            return false;
+        }
+    }
+
+    /**
+     * Build the metadata object for TemplateTrait::buildTemplate()
+     * from the node config parameters and the template's stored metadata.
+     */
+    private function buildTemplateMetadataFromConfig(array $parameters, Template $template, Contact $contact, array $flowVariables): object
+    {
+        $templateMetadata = is_string($template->metadata)
+            ? json_decode($template->metadata, true)
+            : (is_array($template->metadata) ? $template->metadata : []);
+
+        $components = $templateMetadata['components'] ?? [];
+
+        // Parse components into header/body/footer/buttons
+        $header = null;
+        $bodyText = null;
+        $footer = null;
+        $buttons = [];
+
+        foreach ($components as $component) {
+            $type = $component['type'] ?? '';
+            if ($type === 'HEADER') {
+                $header = [
+                    'format' => $component['format'] ?? 'TEXT',
+                    'text' => $component['text'] ?? '',
+                    'parameters' => [],
+                ];
+            } elseif ($type === 'BODY') {
+                $bodyText = $component['text'] ?? '';
+            } elseif ($type === 'FOOTER') {
+                $footer = ['text' => $component['text'] ?? ''];
+            } elseif ($type === 'BUTTONS') {
+                foreach ($component['buttons'] ?? [] as $idx => $btn) {
+                    $buttons[] = [
+                        'type' => $btn['type'] ?? 'QUICK_REPLY',
+                        'text' => $btn['text'] ?? '',
+                        'parameters' => [],
+                    ];
+                    if (($btn['type'] ?? '') === 'URL' && !empty($btn['url'])) {
+                        $buttons[count($buttons) - 1]['url'] = $btn['url'];
+                    }
+                }
+            }
+        }
+
+        // Fill header parameters from node config
+        $headerParams = $parameters['header'] ?? [];
+        if ($header && !empty($headerParams)) {
+            foreach ($headerParams as $param) {
+                $value = $this->replacePlaceholders($contact->uuid, $param['value'] ?? '', $flowVariables);
+                $header['parameters'][] = [
+                    'type' => 'text',
+                    'selection' => 'static',
+                    'value' => $value,
+                ];
+            }
+        } elseif ($header && $header['format'] === 'TEXT') {
+            // Auto-extract placeholder count from header text
+            preg_match_all('/\{\{(\d+)\}\}/', $header['text'], $matches);
+            $count = count($matches[0]);
+            for ($i = 0; $i < $count; $i++) {
+                $header['parameters'][] = [
+                    'type' => 'text',
+                    'selection' => 'static',
+                    'value' => $headerParams[$i]['value'] ?? 'N/A',
+                ];
+            }
+        }
+
+        // Fill body parameters from node config
+        $bodyParams = $parameters['body'] ?? [];
+        if (!empty($bodyParams)) {
+            foreach ($bodyParams as $param) {
+                $value = $this->replacePlaceholders($contact->uuid, $param['value'] ?? '', $flowVariables);
+                $bodyParamsResolved[] = [
+                    'type' => 'text',
+                    'selection' => 'static',
+                    'value' => $value,
+                ];
+            }
+        } else {
+            // Auto-extract from body text
+            $bodyParamsResolved = [];
+            preg_match_all('/\{\{(\d+)\}\}/', $bodyText ?? '', $matches);
+            for ($i = 0; $i < count($matches[0]); $i++) {
+                $bodyParamsResolved[] = [
+                    'type' => 'text',
+                    'selection' => 'static',
+                    'value' => 'N/A',
+                ];
+            }
+        }
+
+        $metadata = [
+            'header' => $header,
+            'body' => [
+                'text' => $bodyText ?? '',
+                'parameters' => $bodyParamsResolved ?? [],
+            ],
+            'footer' => $footer,
+            'buttons' => $buttons,
+        ];
+
+        return json_decode(json_encode($metadata));
     }
 
     // ─── Flow State ─────────────────────────────────────────────

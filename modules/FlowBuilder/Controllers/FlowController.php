@@ -97,9 +97,25 @@ class FlowController extends BaseController
             }
         }
 
+        // Get approved templates for the current organization
+        $templates = \App\Models\Template::where('organization_id', $organizationId)
+            ->where('status', 'APPROVED')
+            ->whereNull('deleted_at')
+            ->orderBy('name')
+            ->get()
+            ->map(function($template) {
+                return [
+                    'uuid' => $template->uuid,
+                    'name' => $template->name,
+                    'language' => $template->language,
+                    'category' => $template->category,
+                ];
+            });
+
         $data['contactGroups'] = $contactGroups;
         $data['contactFields'] = $contactFields;
         $data['labels'] = $labels;
+        $data['templates'] = $templates;
         $data['availableActions'] = $availableActions;
 
         return Inertia::render('FlowBuilder::User/View', $data);

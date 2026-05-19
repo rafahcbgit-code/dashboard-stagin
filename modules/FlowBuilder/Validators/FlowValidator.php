@@ -60,6 +60,13 @@ class FlowValidator
                     }
                     break;
 
+                case 'template':
+                    $templateValidation = $this->validateTemplate($data);
+                    if ($templateValidation !== true) {
+                        $errors['template'] = $templateValidation;
+                    }
+                    break;
+
                 case 'action':
                     $actionValidation = $this->validateAction($node['data']);
                     if ($actionValidation !== true) {
@@ -297,6 +304,47 @@ class FlowValidator
 
         if (isset($data['max_retries']) && ($data['max_retries'] < 1 || $data['max_retries'] > 10)) {
             $errors[] = 'Max retries must be between 1 and 10.';
+        }
+
+        return !empty($errors) ? $errors : true;
+    }
+
+    /**
+     * Validate a template message node.
+     */
+    private function validateTemplate(array $data)
+    {
+        $errors = [];
+
+        if (empty($data['template_uuid'])) {
+            $errors[] = 'A template must be selected for template nodes.';
+        }
+
+        // Validate that template_uuid references an existing approved template
+        if (!empty($data['template_uuid'])) {
+            $template = \App\Models\Template::where('uuid', $data['template_uuid'])
+                ->where('status', 'APPROVED')
+                ->first();
+
+            if (!$template) {
+                $errors[] = 'The selected template is not approved or does not exist.';
+            }
+        }
+
+        // Validate parameter values are filled
+        $parameters = $data['parameters'] ?? [];
+        $bodyParams = $parameters['body'] ?? [];
+        foreach ($bodyParams as $index => $param) {
+            if (empty($param['value']) && $param['value'] !== '0') {
+                $errors[] = 'Body parameter ' . ($index + 1) . ' must have a value.';
+            }
+        }
+
+        $headerParams = $parameters['header'] ?? [];
+        foreach ($headerParams as $index => $param) {
+            if (empty($param['value']) && $param['value'] !== '0') {
+                $errors[] = 'Header parameter ' . ($index + 1) . ' must have a value.';
+            }
         }
 
         return !empty($errors) ? $errors : true;

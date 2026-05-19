@@ -12,11 +12,12 @@ import MediaNode from '@modules/FlowBuilder/Pages/User/Components/vue-flow/nodes
 import TextNode from '@modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/Text-node.vue'
 import QuestionNode from '@modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/Question-node.vue'
 import ActionNode from '@modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/Action-node.vue'
+import TemplateNode from '@modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/Template-node.vue'
 import { Test_data } from '@/lib/constant'
 
 import type { Dimensions, Elements } from '@vue-flow/core'
 
-const props = defineProps(['uuid', 'flow', 'contactGroups', 'contactFields', 'labels']);
+const props = defineProps(['uuid', 'flow', 'contactGroups', 'contactFields', 'labels', 'templates']);
 
 // Provide contact groups to child components
 provide('contactGroups', props.contactGroups || []);
@@ -24,6 +25,8 @@ provide('contactGroups', props.contactGroups || []);
 provide('contactFields', props.contactFields || []);
 // Provide labels to child components
 provide('labels', props.labels || []);
+// Provide templates to child components
+provide('templates', props.templates || []);
 
 const elements = ref<Elements>()
 
@@ -34,6 +37,7 @@ const nodeTypes = {
   media: markRaw(MediaNode),
   text: markRaw(TextNode),
   question: markRaw(QuestionNode),
+  template: markRaw(TemplateNode),
   action: markRaw(ActionNode),
 }
 
@@ -184,6 +188,8 @@ const getDefaultConfig = (actionType: string) => {
       return { assignment_type: 'specific_agent', agent_id: '' }
     case 'label':
       return { action: 'add', label_ids: [] }
+    case 'template':
+      return { template_uuid: '', template_name: '', template_language: '', parameters: {} }
     default:
       return {}
   }
@@ -249,6 +255,14 @@ function handleOnDrop(event: DragEvent) {
         max_retries: 3,
         retry_message: '',
         validation_pattern: '',
+      }
+    } else if (type === 'template') {
+      defaultFields = {
+        type: 'template',
+        template_uuid: '',
+        template_name: '',
+        template_language: '',
+        parameters: {},
       }
     }
 
