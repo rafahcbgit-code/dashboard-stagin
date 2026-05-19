@@ -7,12 +7,13 @@ use App\Models\Chat;
 use Inertia\Inertia;
 use App\Models\Label;
 use App\Models\Contact;
-use App\Models\Team;
 use App\Models\Organization;
 use Illuminate\Http\Request;
 use App\Services\ChatService;
-use App\Services\WhatsappService;
+use Illuminate\Support\Facades\Log;
 use App\Http\Controllers\Controller as BaseController;
+use App\Models\Team;
+use App\Models\Template;
 
 class ChatController extends BaseController
 {
@@ -30,7 +31,7 @@ class ChatController extends BaseController
     {
         $request->session()->put('chat_sort_direction', $request->sort);
 
-        return Redirect::back();
+        return redirect()->back();
     }
 
     public function sendMessage(Request $request)
@@ -105,13 +106,29 @@ class ChatController extends BaseController
     {
         $res = $this->chatService()->sendTemplateMessage($request, $uuid);
 
-        return Redirect::back()->with(
+        return redirect()->back()->with(
             'status', [
                 'type' => $res->success === true ? 'success' : 'error', 
                 'message' => $res->success === true ? __('Message sent successfully!') : $res->message,
                 'res' => $res
             ]
         );
+    }
+
+
+    public function sendTemplateToPhone(Request $request)
+    {
+        $request->validate([
+            'phone' => 'required|string|max:40',
+            'template' => 'required|string',
+        ]);
+
+        $res = $this->chatService()->sendTemplateToPhone($request);
+
+        return response()->json([
+            'success' => $res->success === true,
+            'message' => $res->success === true ? __('Message sent successfully!') : ($res->message ?? __('Failed to send message.')),
+        ], $res->success === true ? 200 : 422);
     }
 
     /**
@@ -130,12 +147,12 @@ class ChatController extends BaseController
         $organizationId = session()->get('current_organization');
 
         // Resolve template UUID → model
-        $template = \App\Models\Template::where('uuid', $request->template)
+        $template = Template::where('uuid', $request->template)
             ->where('organization_id', $organizationId)
             ->first();
 
         if (! $template) {
-            return Redirect::back()->with('status', [
+            return redirect()->back()->with('status', [
                 'type'    => 'error',
                 'message' => __('Template not found'),
             ]);
@@ -144,7 +161,7 @@ class ChatController extends BaseController
         // Verify it's actually a carousel template
         $metadata = json_decode($template->metadata, true);
         if (($metadata['template_type'] ?? null) !== 'carousel') {
-            return Redirect::back()->with('status', [
+            return redirect()->back()->with('status', [
                 'type'    => 'error',
                 'message' => __('Invalid template type. Use the standard send method for non-carousel templates.'),
             ]);
@@ -153,7 +170,7 @@ class ChatController extends BaseController
         $chatService = new \App\Services\ChatService($organizationId);
         $res = $chatService->sendCarouselTemplateMessage($uuid, $template->id);
 
-        return Redirect::back()->with('status', [
+        return redirect()->back()->with('status', [
             'type'    => $res->success === true ? 'success' : 'error',
             'message' => $res->success === true ? __('Message sent successfully!') : ($res->message ?? __('Something went wrong.')),
             'res'     => $res,
@@ -164,7 +181,7 @@ class ChatController extends BaseController
     {
         $this->chatService()->clearContactChat($uuid);
 
-        return Redirect::back()->with(
+        return redirect()->back()->with(
             'status', [
                 'type' => 'success', 
                 'message' => __('Chat cleared successfully!')
@@ -202,13 +219,13 @@ class ChatController extends BaseController
         $organizationId = session()->get('current_organization');
         
         // Get all team members with their user info
-        $teamMembers = \App\Models\Team::where('organization_id', $organizationId)
+        $teamMembers = Team::where('organization_id', $organizationId)
             ->join('users', 'teams.user_id', '=', 'users.id')
             ->select('teams.user_id', 'users.first_name', 'teams.role')
             ->orderBy('users.first_name')
             ->get();
 
-        \Log::info('Team members for filter:', [
+        Log::info('Team members for filter:', [
             'organization_id' => $organizationId,
             'count' => $teamMembers->count(),
             'members' => $teamMembers->toArray()
