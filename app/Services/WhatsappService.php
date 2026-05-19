@@ -272,6 +272,8 @@ class WhatsappService
             $templateModel = $this->resolveTemplateFromPayload($templateContent);
         }
 
+        $displayHeaderMedia = $this->extractTemplateHeaderMediaForDisplay($templateContent, $templateModel);
+
         try {
             $templateContent = $this->enrichTemplateHeaderWithMediaId(
                 $templateContent,
@@ -351,7 +353,7 @@ class WhatsappService
                     $metadata = $this->buildCarouselTemplateChatMessage($contactUuId, $templateId);
                 } else {
                     // Standard direct send
-                    $metadata = $this->buildTemplateChatMessage($templateContent, $contact);
+                    $metadata = $this->buildTemplateChatMessage($templateContent, $contact, $displayHeaderMedia);
                 }
             }
 
@@ -1161,7 +1163,7 @@ class WhatsappService
         return json_encode($array);
     }
 
-    private function buildTemplateChatMessage($templateContent, $contact){
+    private function buildTemplateChatMessage($templateContent, $contact, ?array $displayHeaderMedia = null){
         //Get the template
         $template = Template::where('organization_id', $contact->organization_id)
             ->where('name', $templateContent['name'])
@@ -1265,8 +1267,60 @@ class WhatsappService
             }
         }
 
+        if (
+            $displayHeaderMedia
+            && isset($array['type'])
+            && in_array($array['type'], ['image', 'video', 'document'], true)
+            && !empty($displayHeaderMedia['url'])
+        ) {
+            $array[$array['type']]['url'] = $displayHeaderMedia['url'];
+            $array[$array['type']]['link'] = $displayHeaderMedia['url'];
+            if (!empty($displayHeaderMedia['name'])) {
+                $array[$array['type']]['filename'] = $displayHeaderMedia['name'];
+            }
+        }
+
         //Log::info(json_encode($array));
         return json_encode($array);
+    }
+
+    private function extractTemplateHeaderMediaForDisplay(array $templateContent, ?Template $templateModel): ?array
+    {
+        foreach (($templateContent['components'] ?? []) as $component) {
+            if (strtolower((string) ($component['type'] ?? '')) !== 'header') {
+                continue;
+            }
+
+            foreach (($component['parameters'] ?? []) as $parameter) {
+                $mediaType = strtolower((string) ($parameter['type'] ?? ''));
+
+                if (!in_array($mediaType, ['image', 'video', 'document'], true)) {
+                    continue;
+                }
+
+                $mediaUrl = $parameter[$mediaType]['link'] ?? null;
+
+                if (is_string($mediaUrl) && filter_var($mediaUrl, FILTER_VALIDATE_URL)) {
+                    return [
+                        'type' => $mediaType,
+                        'url' => $mediaUrl,
+                        'name' => $parameter[$mediaType]['filename'] ?? null,
+                    ];
+                }
+            }
+        }
+
+        $templateMedia = $this->resolveTemplateHeaderMedia($templateModel);
+
+        if (!$templateMedia || empty($templateMedia['url'])) {
+            return null;
+        }
+
+        return [
+            'type' => strtolower((string) ($templateMedia['type'] ?? '')),
+            'url' => $templateMedia['url'],
+            'name' => $templateMedia['name'] ?? null,
+        ];
     }
 
     private function getParameters($contact, $parameter){
