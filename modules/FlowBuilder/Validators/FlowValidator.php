@@ -67,6 +67,13 @@ class FlowValidator
                     }
                     break;
 
+                case 'metaflow':
+                    $metaflowValidation = $this->validateMetaFlow($data);
+                    if ($metaflowValidation !== true) {
+                        $errors['metaflow'] = $metaflowValidation;
+                    }
+                    break;
+
                 case 'action':
                     $actionValidation = $this->validateAction($node['data']);
                     if ($actionValidation !== true) {
@@ -345,6 +352,38 @@ class FlowValidator
             if (empty($param['value']) && $param['value'] !== '0') {
                 $errors[] = 'Header parameter ' . ($index + 1) . ' must have a value.';
             }
+        }
+
+        return !empty($errors) ? $errors : true;
+    }
+
+    /**
+     * Validate a metaflow message node.
+     */
+    private function validateMetaFlow(array $data)
+    {
+        $errors = [];
+
+        if (empty($data['metaflow_uuid'])) {
+            $errors[] = 'A MetaFlow must be selected for metaflow nodes.';
+        }
+
+        if (!empty($data['metaflow_uuid'])) {
+            $metaFlow = \Modules\MetaFlows\Models\MetaFlow::where('uuid', $data['metaflow_uuid'])
+                ->where('status', 'published')
+                ->first();
+
+            if (!$metaFlow) {
+                $errors[] = 'The selected MetaFlow is not published or does not exist.';
+            }
+        }
+
+        if (!empty($data['body']) && mb_strlen($data['body'], 'UTF-8') > 1024) {
+            $errors[] = 'Body text must not exceed 1024 characters.';
+        }
+
+        if (!empty($data['cta']) && mb_strlen($data['cta'], 'UTF-8') > 20) {
+            $errors[] = 'CTA button text must not exceed 20 characters.';
         }
 
         return !empty($errors) ? $errors : true;

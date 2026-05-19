@@ -112,10 +112,24 @@ class FlowController extends BaseController
                 ];
             });
 
+        // Get published meta flows for the current organization
+        $metaFlows = \Modules\MetaFlows\Models\MetaFlow::where('organization_id', $organizationId)
+            ->where('status', 'published')
+            ->whereNotNull('meta_flow_id')
+            ->whereNotNull('asset_content')
+            ->orderBy('name')
+            ->get()
+            ->map(fn($flow) => [
+                'uuid' => $flow->uuid,
+                'name' => $flow->name,
+                'meta_flow_id' => $flow->meta_flow_id,
+            ]);
+
         $data['contactGroups'] = $contactGroups;
         $data['contactFields'] = $contactFields;
         $data['labels'] = $labels;
         $data['templates'] = $templates;
+        $data['metaFlows'] = $metaFlows;
         $data['availableActions'] = $availableActions;
 
         return Inertia::render('FlowBuilder::User/View', $data);

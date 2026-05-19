@@ -3,6 +3,7 @@
 namespace Modules\FlowBuilder\Services;
 
 use App\Helpers\CustomHelper;
+use App\Models\Chat;
 use App\Models\Contact;
 use App\Models\Organization;
 use App\Models\Template;
@@ -16,6 +17,8 @@ use Modules\FlowBuilder\Models\FlowMedia;
 use Modules\FlowBuilder\Models\FlowSubmission;
 use Modules\FlowBuilder\Models\FlowUserData;
 use Modules\FlowBuilder\Services\ActionExecutionService;
+use Modules\MetaFlows\Models\MetaFlow;
+use Modules\MetaFlows\Services\MetaFlowService;
 
 class FlowExecutionService
 {
@@ -640,6 +643,10 @@ class FlowExecutionService
                 $response = $this->sendTemplateMessage($fields, $contact, $flowVariables);
                 break;
 
+            case 'metaflow':
+                $response = $this->sendMetaFlowMessage($fields, $contact, $flowVariables);
+                break;
+
             default:
                 return false;
         }
@@ -750,6 +757,93 @@ class FlowExecutionService
         } catch (\Throwable $e) {
             Log::error('FlowExecution: failed to send template message', [
                 'template_uuid' => $templateUuid,
+                'contact_id' => $contact->id,
+                'error' => $e->getMessage(),
+            ]);
+            return false;
+        }
+    }
+
+    /**
+     * Send a WhatsApp Flow (MetaFlow) message from a flow node.
+     */
+    private function sendMetaFlowMessage(array $fields, Contact $contact, array $flowVariables)
+    {
+        $metaflowUuid = $fields['metaflow_uuid'] ?? null;
+        if (!$metaflowUuid) {
+            Log::warning('FlowExecution: metaflow node missing metaflow_uuid');
+            return false;
+        }
+
+        $metaFlow = MetaFlow::where('uuid', $metaflowUuid)
+            ->where('organization_id', $this->organizationId)
+            ->where('status', 'published')
+            ->first();
+
+        if (!$metaFlow) {
+            Log::warning('FlowExecution: metaflow not found or not published', [
+                'metaflow_uuid' => $metaflowUuid,
+                'organization_id' => $this->organizationId,
+            ]);
+            return false;
+        }
+
+        $body = $this->replacePlaceholders($contact->uuid, $fields['body'] ?? 'Please complete the form.', $flowVariables);
+        $cta = $fields['cta'] ?? 'Open';
+
+        $options = [
+            'body'   => $body,
+            'cta'    => $cta,
+            'header' => $metaFlow->name,
+        ];
+
+        try {
+            $metaFlowService = MetaFlowService::fromOrganization($this->organizationId);
+            $sendResult = $metaFlowService->sendFlowToContact($metaFlow, $contact, $options);
+
+            if (!$sendResult['success']) {
+                Log::error('FlowExecution: metaflow send failed', [
+                    'metaflow_uuid' => $metaflowUuid,
+                    'contact_id' => $contact->id,
+                    'error' => $sendResult['message'] ?? 'Unknown error',
+                ]);
+                return false;
+            }
+
+            // Create a Chat record for rendering in the chat thread
+            $chatMetadata = [
+                'type'        => 'interactive',
+                'flow_name'   => $metaFlow->name,
+                'flow_uuid'   => $metaFlow->uuid,
+                'flow_token'  => $sendResult['flow_token'],
+                'interactive' => [
+                    'type' => 'flow',
+                    'body' => ['text' => $body],
+                    'action' => [
+                        'name'       => 'flow',
+                        'parameters' => [
+                            'flow_id'  => $metaFlow->meta_flow_id,
+                            'flow_cta' => $cta,
+                        ],
+                    ],
+                ],
+            ];
+
+            Chat::create([
+                'organization_id' => $this->organizationId,
+                'wam_id'          => $sendResult['data']->messages[0]->id ?? null,
+                'contact_id'      => $contact->id,
+                'type'            => 'outbound',
+                'user_id'         => null,
+                'metadata'        => json_encode($chatMetadata),
+                'status'          => 'delivered',
+                'created_at'      => now(),
+            ]);
+
+            return true;
+        } catch (\Throwable $e) {
+            Log::error('FlowExecution: failed to send metaflow message', [
+                'metaflow_uuid' => $metaflowUuid,
                 'contact_id' => $contact->id,
                 'error' => $e->getMessage(),
             ]);

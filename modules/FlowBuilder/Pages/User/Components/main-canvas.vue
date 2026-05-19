@@ -13,11 +13,12 @@ import TextNode from '@modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/
 import QuestionNode from '@modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/Question-node.vue'
 import ActionNode from '@modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/Action-node.vue'
 import TemplateNode from '@modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/Template-node.vue'
+import MetaFlowNode from '@modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/MetaFlow-node.vue'
 import { Test_data } from '@/lib/constant'
 
 import type { Dimensions, Elements } from '@vue-flow/core'
 
-const props = defineProps(['uuid', 'flow', 'contactGroups', 'contactFields', 'labels', 'templates']);
+const props = defineProps(['uuid', 'flow', 'contactGroups', 'contactFields', 'labels', 'templates', 'metaFlows']);
 
 // Provide contact groups to child components
 provide('contactGroups', props.contactGroups || []);
@@ -27,6 +28,8 @@ provide('contactFields', props.contactFields || []);
 provide('labels', props.labels || []);
 // Provide templates to child components
 provide('templates', props.templates || []);
+// Provide meta flows to child components
+provide('metaFlows', props.metaFlows || []);
 
 const elements = ref<Elements>()
 
@@ -38,6 +41,7 @@ const nodeTypes = {
   text: markRaw(TextNode),
   question: markRaw(QuestionNode),
   template: markRaw(TemplateNode),
+  metaflow: markRaw(MetaFlowNode),
   action: markRaw(ActionNode),
 }
 
@@ -190,6 +194,8 @@ const getDefaultConfig = (actionType: string) => {
       return { action: 'add', label_ids: [] }
     case 'template':
       return { template_uuid: '', template_name: '', template_language: '', parameters: {} }
+    case 'metaflow':
+      return { metaflow_uuid: '', metaflow_name: '', body: 'Please complete the form.', cta: 'Open' }
     default:
       return {}
   }
@@ -263,6 +269,14 @@ function handleOnDrop(event: DragEvent) {
         template_name: '',
         template_language: '',
         parameters: {},
+      }
+    } else if (type === 'metaflow') {
+      defaultFields = {
+        type: 'metaflow',
+        metaflow_uuid: '',
+        metaflow_name: '',
+        body: 'Please complete the form.',
+        cta: 'Open',
       }
     }
 
