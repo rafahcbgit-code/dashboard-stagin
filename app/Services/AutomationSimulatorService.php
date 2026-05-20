@@ -51,8 +51,8 @@ class AutomationSimulatorService
         $workingHoursOverridden = ($duringWorkingHours !== $actualWorkingHours);
 
         // Build debug trace by checking each trigger manually
-        // This uses the effective (simulated) working hours so the trace
-        // accurately reflects what would happen under the simulated conditions
+        // Uses the same 3-phase evaluation order as TriggerEvaluationService:
+        // keyword (intent) → context (circumstance) → fallback (last resort)
         $triggerGroups = TriggerGroup::forOrganization($organizationId)
             ->enabled()
             ->orderedByPriority()
@@ -63,10 +63,11 @@ class AutomationSimulatorService
         $cachedEvaluateResult = null;
         $evaluateCalled = false;
 
-        // Fallback triggers evaluate last, same as TriggerEvaluationService
-        $nonFallback = $triggerGroups->filter(fn($tg) => $tg->type !== 'fallback');
-        $fallbacks = $triggerGroups->filter(fn($tg) => $tg->type === 'fallback');
-        $orderedGroups = $nonFallback->merge($fallbacks);
+        // Same evaluation order as TriggerEvaluationService::evaluate()
+        $keywordTriggers = $triggerGroups->filter(fn($tg) => $tg->type === 'new_message');
+        $contextTriggers = $triggerGroups->filter(fn($tg) => in_array($tg->type, ['new_contact', 'greeting', 'away']));
+        $fallbackTriggers = $triggerGroups->filter(fn($tg) => $tg->type === 'fallback');
+        $orderedGroups = $keywordTriggers->merge($contextTriggers)->merge($fallbackTriggers);
 
         foreach ($orderedGroups as $tg) {
             $entry = [
