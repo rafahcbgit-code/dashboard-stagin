@@ -362,7 +362,7 @@ class WhatsappService
                     $metadata = $this->buildCarouselTemplateChatMessage($contactUuId, $template->id, $template);
                 } else {
                     // Standard campaign
-                    $metadata = $this->buildCampaignTemplateChatMessage($campaignMetadata, $contactUuId, $contact);
+                    $metadata = $this->buildCampaignTemplateChatMessage($campaignMetadata, $contactUuId, $contact, $displayHeaderMedia);
                 }
             } else {
                 // Direct send flow
@@ -659,7 +659,22 @@ class WhatsappService
             }
         }
 
-        return $url ? ['url' => $url, 'media_id' => $mediaId] : null;
+        $header = null;
+        foreach (($metadata['components'] ?? []) as $component) {
+            if (strtoupper((string) ($component['type'] ?? '')) === 'HEADER') {
+                $header = $component;
+                break;
+            }
+        }
+
+        $format = strtolower((string) ($header['format'] ?? ''));
+
+        return $url ? [
+            'type' => in_array($format, ['image', 'video', 'document'], true) ? $format : null,
+            'url' => $url,
+            'name' => is_array($storedMedia) ? ($storedMedia['name'] ?? $storedMedia['filename'] ?? null) : null,
+            'media_id' => $mediaId,
+        ] : null;
     }
 
     private function inspectMediaUrlAccessibility(string $mediaUrl): array
@@ -1206,7 +1221,7 @@ class WhatsappService
         return $mediaId;
     }
 
-    public function buildCampaignTemplateChatMessage($templateMetadata, $contactUuId, ?Contact $contact = null){
+    public function buildCampaignTemplateChatMessage($templateMetadata, $contactUuId, ?Contact $contact = null, ?array $displayHeaderMedia = null, ?Template $templateModel = null){
         $contact = $contact ?? Contact::where('uuid', $contactUuId)->first();
         $array = [];
         
@@ -1287,8 +1302,57 @@ class WhatsappService
                 }
             }
         }
+
+        $displayHeaderMedia = $displayHeaderMedia
+            ?? $this->extractCampaignHeaderMediaForDisplay($templateMetadata)
+            ?? $this->resolveTemplateHeaderMedia($templateModel);
+
+        if (
+            $displayHeaderMedia
+            && isset($array['type'])
+            && in_array($array['type'], ['image', 'video', 'document'], true)
+            && !empty($displayHeaderMedia['url'])
+        ) {
+            $array[$array['type']]['url'] = $displayHeaderMedia['url'];
+            $array[$array['type']]['link'] = $displayHeaderMedia['url'];
+            if (!empty($displayHeaderMedia['name'])) {
+                $array[$array['type']]['filename'] = $displayHeaderMedia['name'];
+            }
+        }
         
         return json_encode($array);
+    }
+
+    private function extractCampaignHeaderMediaForDisplay(object $templateMetadata): ?array
+    {
+        if (!isset($templateMetadata->header->parameters) || empty($templateMetadata->header->parameters)) {
+            return null;
+        }
+
+        foreach ($templateMetadata->header->parameters as $parameter) {
+            $mediaType = strtolower((string) ($parameter->type ?? ''));
+
+            if (!in_array($mediaType, ['image', 'video', 'document'], true)) {
+                continue;
+            }
+
+            $mediaPayload = $parameter->{$mediaType} ?? null;
+            $mediaUrl = $mediaPayload->link
+                ?? $mediaPayload->url
+                ?? $parameter->url
+                ?? $parameter->value
+                ?? null;
+
+            if (is_string($mediaUrl) && filter_var($mediaUrl, FILTER_VALIDATE_URL)) {
+                return [
+                    'type' => $mediaType,
+                    'url' => $mediaUrl,
+                    'name' => $mediaPayload->filename ?? $mediaPayload->name ?? null,
+                ];
+            }
+        }
+
+        return null;
     }
 
     private function buildTemplateChatMessage($templateContent, $contact, ?array $displayHeaderMedia = null){

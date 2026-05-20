@@ -281,7 +281,9 @@ class ProcessCampaignChunkJob implements ShouldQueue
                         $chatMetadata = $whatsappService->buildCampaignTemplateChatMessage(
                             $campaignMetadata,
                             $contact->uuid,
-                            $contact
+                            $contact,
+                            null,
+                            $template
                         );
                     }
 
