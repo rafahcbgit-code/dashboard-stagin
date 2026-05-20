@@ -21,9 +21,10 @@
 
                     <!-- Resend rate-limited messages button (only for completed/cancelled campaigns with rate-limited failures) -->
                     <button
+
                         v-if="canResendFailed && !isResending"
                         @click="showResendConfirmation = true"
-                        class="rounded-md bg-amber-500 hover:bg-amber-600 px-3 py-2 text-sm text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500"
+                        class="hidden rounded-md bg-amber-500 hover:bg-amber-600 px-3 py-2 text-sm text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-amber-500"
                     >
                         {{ $t('Resend Rate-Limited') }}
                     </button>

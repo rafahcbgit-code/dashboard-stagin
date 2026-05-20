@@ -99,7 +99,7 @@ class ProcessCampaignChunkJob implements ShouldQueue
 
         foreach ($logs as $log) {
             $contact = $contacts->get($log->contact_id);
-            if (!$contact || ($contact->is_blocked ?? false)) {
+            if (!$contact || ($contact->is_blocked ?? false) || empty($contact->phone)) {
                 $log->update(['status' => 'failed']);
                 continue;
             }
@@ -609,6 +609,21 @@ class ProcessCampaignChunkJob implements ShouldQueue
             unset($cleaned->data->chat);
         }
         return json_encode($cleaned);
+    }
+
+    public function failed(\Throwable $exception): void
+    {
+        Log::error('ProcessCampaignChunkJob failed after retries', [
+            'campaign_id' => $this->campaignId,
+            'log_ids' => $this->logIds,
+            'error' => $exception->getMessage(),
+        ]);
+
+        CampaignLog::whereIn('id', $this->logIds)
+            ->where('status', 'ongoing')
+            ->update(['status' => 'failed']);
+
+        $this->checkAndUpdateCampaignStatus();
     }
 
     public static function resetProgressState(?int $campaignId = null): void

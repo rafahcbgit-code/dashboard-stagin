@@ -113,11 +113,20 @@ class CreateCampaignLogsJob implements ShouldQueue
             ->pluck('contact_id')
             ->toArray();
 
-        // Filter out contacts that already have logs
-        $newContacts = $contactIds->diff($existingLogs);
+        // Filter out contacts that already have logs and contacts without phone
+        $contactsWithoutPhone = $contacts->filter(fn($c) => empty($c->phone))->pluck('id');
+        $newContacts = $contactIds->diff($existingLogs)->diff($contactsWithoutPhone);
 
         if ($newContacts->isEmpty()) {
             return false; // nothing new
+        }
+
+        // Log skipped contacts
+        if ($contactsWithoutPhone->isNotEmpty()) {
+            Log::warning('Skipped contacts without phone for campaign', [
+                'campaign_id' => $campaign->id,
+                'skipped_contact_ids' => $contactsWithoutPhone->values()->toArray(),
+            ]);
         }
 
         // Prepare new campaign logs
