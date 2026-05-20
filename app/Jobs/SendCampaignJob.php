@@ -257,7 +257,7 @@ class SendCampaignJob implements ShouldQueue
                               ->first();
                    
             if ($log) {  
-                if (!$campaignLog->contact) {
+                if (!$campaignLog->contact || empty($campaignLog->contact->phone)) {
                     $log->status = 'failed';
                     $log->save();
                     
@@ -312,7 +312,7 @@ class SendCampaignJob implements ShouldQueue
                               ->first();
                    
             if ($log) {  
-                if (!$campaignLog->contact) {
+                if (!$campaignLog->contact || empty($campaignLog->contact->phone)) {
                     $log->status = 'failed';
                     $log->save();
                     
