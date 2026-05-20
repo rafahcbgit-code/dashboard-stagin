@@ -3,12 +3,8 @@
 namespace App\Http\Controllers\User;
 
 use App\Http\Controllers\Controller as BaseController;
-use App\Helpers\CustomHelper;
-use App\Models\AiKnowledgeBase;
-use App\Models\Organization;
 use App\Services\AiSettingsService;
 use Illuminate\Http\Request;
-use Inertia\Inertia;
 
 class AiSettingsController extends BaseController
 {
@@ -21,24 +17,7 @@ class AiSettingsController extends BaseController
 
     public function index(Request $request)
     {
-        $organizationId = session()->get('current_organization');
-        $aimodule = CustomHelper::isModuleEnabled('AI Assistant');
-        $fbmodule = CustomHelper::isModuleEnabled('Flow builder');
-
-        $settings = $this->aiSettingsService->get($organizationId);
-
-        // KB entry count for summary
-        $kbEntryCount = AiKnowledgeBase::forOrganization($organizationId)
-            ->enabled()
-            ->count();
-
-        return Inertia::render('User/Automation/AiSettings/Index', [
-            'title' => __('AI Settings'),
-            'settings' => $settings,
-            'kbEntryCount' => $kbEntryCount,
-            'aimodule' => $aimodule,
-            'fbmodule' => $fbmodule,
-        ]);
+        return redirect()->route('bot-settings.index');
     }
 
     public function update(Request $request)

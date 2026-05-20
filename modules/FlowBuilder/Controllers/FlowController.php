@@ -60,6 +60,19 @@ class FlowController extends BaseController
                 ];
             });
 
+        // Get labels for the current organization
+        $labels = \App\Models\Label::where('organization_id', $organizationId)
+            ->whereNull('deleted_at')
+            ->orderBy('title')
+            ->get()
+            ->map(function($label) {
+                return [
+                    'value' => $label->id,
+                    'label' => $label->title,
+                    'color' => $label->color,
+                ];
+            });
+
         // Get contact fields for the current organization
         $contactFields = \App\Models\ContactField::where('organization_id', $organizationId)
             ->whereNull('deleted_at')
@@ -84,8 +97,53 @@ class FlowController extends BaseController
             }
         }
 
+        // Get approved templates for the current organization
+        $templates = \App\Models\Template::where('organization_id', $organizationId)
+            ->where('status', 'APPROVED')
+            ->whereNull('deleted_at')
+            ->orderBy('name')
+            ->get()
+            ->map(function($template) {
+                return [
+                    'uuid' => $template->uuid,
+                    'name' => $template->name,
+                    'language' => $template->language,
+                    'category' => $template->category,
+                ];
+            });
+
+        // Get published meta flows for the current organization
+        $metaFlows = \Modules\MetaFlows\Models\MetaFlow::where('organization_id', $organizationId)
+            ->where('status', 'published')
+            ->whereNotNull('meta_flow_id')
+            ->whereNotNull('asset_content')
+            ->orderBy('name')
+            ->get()
+            ->map(fn($flow) => [
+                'uuid' => $flow->uuid,
+                'name' => $flow->name,
+                'meta_flow_id' => $flow->meta_flow_id,
+            ]);
+
         $data['contactGroups'] = $contactGroups;
         $data['contactFields'] = $contactFields;
+        $data['labels'] = $labels;
+        $data['templates'] = $templates;
+        $data['metaFlows'] = $metaFlows;
+
+        // Get active flows for Portal node (exclude current flow)
+        $activeFlows = Flow::where('organization_id', $organizationId)
+            ->where('status', 'active')
+            ->where('id', '!=', $data['flow']->id)
+            ->orderBy('name')
+            ->get()
+            ->map(fn($f) => [
+                'id' => $f->id,
+                'uuid' => $f->uuid,
+                'name' => $f->name,
+            ]);
+        $data['activeFlows'] = $activeFlows;
+
         $data['availableActions'] = $availableActions;
 
         return Inertia::render('FlowBuilder::User/View', $data);

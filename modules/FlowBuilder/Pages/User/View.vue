@@ -14,7 +14,7 @@
     import { Button } from '@modules/FlowBuilder/Pages/User/Components/ui/button'
     import { Toaster, useToast } from '@modules/FlowBuilder/Pages/User/Components/ui/toast'
 
-    const props = defineProps(['uuid', 'flow', 'contactGroups', 'contactFields', 'availableActions']);
+    const props = defineProps(['uuid', 'flow', 'contactGroups', 'contactFields', 'availableActions', 'labels', 'templates', 'metaFlows', 'activeFlows']);
     const isOpenFormModal = ref(false);
     const activeTab = ref('basic-nodes');
 
@@ -109,13 +109,14 @@
     // Get availableActions from backend props
     const availableActions = props.availableActions || [
         'add_to_group',
-        'remove_from_group', 
+        'remove_from_group',
         'update_contact',
         'send_email',
         'delay',
         'webhook',
         'conditional',
-        'assign_to_agent'
+        'assign_to_agent',
+        'label'
     ];
 </script>
 
@@ -280,9 +281,74 @@
                     </span>
                   </div>
                 </div>
+
+                <div
+                  class="mb-4 cursor-grab rounded-md bg-white px-4 py-3 border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
+                  :draggable="true"
+                  @dragstart="handleOnDragStart($event, 'template')"
+                >
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-x-2 text-sm">
+                      <span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/>
+                          <polyline points="22,6 12,13 2,6"/>
+                        </svg>
+                      </span>
+                      Template
+                    </div>
+                    <span>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M9 19.23q-.508 0-.87-.36q-.36-.362-.36-.87t.36-.87t.87-.36t.87.36q.36.362.36.87t-.36.87t-.87.36m6 0q-.508 0-.87-.36q-.36-.362-.36-.87t.36-.87t.87-.36t.87.36q.36.362.36.87t-.36.87t-.87.36m-6-6q-.508 0-.87-.36q-.36-.362-.36-.87t.36-.87t.87-.36t.87.36q.36.362.36.87t-.36.87t-.87.36m6 0q-.508 0-.87-.36q-.36-.362-.36-.87t.36-.87t.87-.36t.87.36q.36.362.36.87t-.36.87t-.87.36m-6-6q-.508 0-.87-.36q-.36-.362-.36-.87t.36-.87t.87-.36t.87.36q.36.362.36.87t-.36.87t-.87.36m6 0q-.508 0-.87-.36q-.36-.362-.36-.87t.36-.87t.87-.36t.87.36q.36.362.36.87t-.36.87t-.87.36"></path></svg>
+                    </span>
+                  </div>
+                </div>
+
+                <div
+                  class="mb-4 cursor-grab rounded-md bg-white px-4 py-3 border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
+                  :draggable="true"
+                  @dragstart="handleOnDragStart($event, 'metaflow')"
+                >
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-x-2 text-sm">
+                      <span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <rect x="3" y="3" width="18" height="18" rx="2"/>
+                          <path d="M3 9h18"/>
+                          <path d="M9 21V9"/>
+                        </svg>
+                      </span>
+                      MetaFlow
+                    </div>
+                    <span>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M9 19.23q-.508 0-.87-.36q-.36-.362-.36-.87t.36-.87t.87-.36t.87.36q.36.362.36.87t-.36.87t-.87.36m6 0q-.508 0-.87-.36q-.36-.362-.36-.87t.36-.87t.87-.36t.87.36q.36.362.36.87t-.36.87t-.87.36m-6-6q-.508 0-.87-.36q-.36-.362-.36-.87t.36-.87t.87-.36t.87.36q.36.362.36.87t-.36.87t-.87.36m6 0q-.508 0-.87-.36q-.36-.362-.36-.87t.36-.87t.87-.36t.87.36q.36.362.36.87t-.36.87t-.87.36m-6-6q-.508 0-.87-.36q-.36-.362-.36-.87t.36-.87t.87-.36t.87.36q.36.362.36.87t-.36.87t-.87.36m6 0q-.508 0-.87-.36q-.36-.362-.36-.87t.36-.87t.87-.36t.87.36q.36.362.36.87t-.36.87t-.87.36"></path></svg>
+                    </span>
+                  </div>
+                </div>
+
+                <div
+                  class="mb-4 cursor-grab rounded-md bg-white px-4 py-3 border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
+                  :draggable="true"
+                  @dragstart="handleOnDragStart($event, 'portal')"
+                >
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-x-2 text-sm">
+                      <span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <circle cx="12" cy="12" r="10"/>
+                          <path d="M12 2a10 10 0 0 1 0 20"/>
+                          <path d="M2 12h20"/>
+                        </svg>
+                      </span>
+                      Portal
+                    </div>
+                    <span>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M9 19.23q-.508 0-.87-.36q-.36-.362-.36-.87t.36-.87t.87-.36t.87.36q.36.362.36.87t-.36.87t-.87.36m6 0q-.508 0-.87-.36q-.36-.362-.36-.87t.36-.87t.87-.36t.87.36q.36.362.36.87t-.36.87t-.87.36m-6-6q-.508 0-.87-.36q-.36-.362-.36-.87t.36-.87t.87-.36t.87.36q.36.362.36.87t-.36.87t-.87.36m6 0q-.508 0-.87-.36q-.36-.362-.36-.87t.36-.87t.87-.36t.87.36q.36.362.36.87t-.36.87t-.87.36m-6-6q-.508 0-.87-.36q-.36-.362-.36-.87t.36-.87t.87-.36t.87.36q.36.362.36.87t-.36.87t-.87.36m6 0q-.508 0-.87-.36q-.36-.362-.36-.87t.36-.87t.87-.36t.87.36q.36.362.36.87t-.36.87t-.87.36"></path></svg>
+                    </span>
+                  </div>
+                </div>
               </ScrollArea>
             </TabsContent>
-            
+
             <TabsContent value="actions">
               <ScrollArea class="h-[calc(100vh-150px)] w-full px-4">
                 <div
@@ -516,12 +582,37 @@
                     </span>
                   </div>
                 </div>
+
+                <div
+                  v-if="availableActions.includes('label')"
+                  class="mb-4 cursor-grab rounded-md bg-white px-4 py-3 border border-gray-200 shadow-sm hover:shadow-md transition-shadow"
+                  :draggable="true"
+                  @dragstart="handleOnDragStart($event, 'action-label')"
+                >
+                  <div class="flex items-center justify-between">
+                    <div class="flex items-center gap-x-2 text-sm">
+                      <span>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                          <path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/>
+                          <line x1="7" y1="7" x2="7.01" y2="7"/>
+                        </svg>
+                      </span>
+                      Label
+                    </div>
+                    <span>
+                      <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <path d="M5 12h14"/>
+                        <path d="M12 5v14"/>
+                      </svg>
+                    </span>
+                  </div>
+                </div>
               </ScrollArea>
             </TabsContent>
           </Tabs>
         </div>
         <div class="relative h-full flex-1 overflow-hidden">
-          <main-canvas :uuid="props.uuid" :flow="props.flow" :contactGroups="props.contactGroups" :contactFields="props.contactFields" @updateStatus="handleStatusUpdate" @updatePayload="handlePayloadUpdate"/>
+          <main-canvas :uuid="props.uuid" :flow="props.flow" :contactGroups="props.contactGroups" :contactFields="props.contactFields" :labels="props.labels" :templates="props.templates" :metaFlows="props.metaFlows" :activeFlows="props.activeFlows" @updateStatus="handleStatusUpdate" @updatePayload="handlePayloadUpdate"/>
         </div>
       </main>
     </div>

@@ -3,10 +3,13 @@
 namespace Modules\FlowBuilder\Services;
 
 use App\Helpers\CustomHelper;
+use App\Models\Chat;
 use App\Models\Contact;
 use App\Models\Organization;
+use App\Models\Template;
 use App\Services\BotSettingsService;
 use App\Services\WhatsappService;
+use App\Traits\TemplateTrait;
 use Illuminate\Support\Facades\Log;
 use Modules\FlowBuilder\Models\Flow;
 use Modules\FlowBuilder\Models\FlowLog;
@@ -14,9 +17,12 @@ use Modules\FlowBuilder\Models\FlowMedia;
 use Modules\FlowBuilder\Models\FlowSubmission;
 use Modules\FlowBuilder\Models\FlowUserData;
 use Modules\FlowBuilder\Services\ActionExecutionService;
+use Modules\MetaFlows\Models\MetaFlow;
+use Modules\MetaFlows\Services\MetaFlowService;
 
 class FlowExecutionService
 {
+    use TemplateTrait;
     private WhatsappService $whatsappService;
     private int $organizationId;
     private $metaPayload;
@@ -73,6 +79,23 @@ class FlowExecutionService
         $timeoutMinutes = app(BotSettingsService::class)->getFlowTimeoutMinutes($this->organizationId);
         if ($flowData->updated_at && $flowData->updated_at->diffInMinutes(now()) >= $timeoutMinutes) {
             Log::info("FlowExecution: flow timed out for contact {$chat->contact_id} after {$timeoutMinutes} min");
+
+            // Log the timed-out flow run
+            try {
+                FlowLog::create([
+                    'flow_id' => $flowData->flow_id,
+                    'contact_id' => $chat->contact_id,
+                    'organization_id' => $this->organizationId,
+                    'status' => 'timed_out',
+                    'nodes_processed' => 0,
+                ]);
+            } catch (\Throwable $e) {
+                Log::error('FlowExecution: failed to create FlowLog on timeout, continuing cleanup', [
+                    'contact_id' => $chat->contact_id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+
             $flowData->delete();
             return false;
         }
@@ -144,6 +167,23 @@ class FlowExecutionService
                 'current_step' => $startNodeId ?? '1',
             ]);
 
+            // Log the flow run so it's counted in the Runs column
+            try {
+                FlowLog::create([
+                    'flow_id' => $flow->id,
+                    'contact_id' => $chat->contact_id,
+                    'organization_id' => $this->organizationId,
+                    'status' => 'started',
+                    'nodes_processed' => 0,
+                ]);
+            } catch (\Throwable $e) {
+                Log::error('FlowExecution: failed to create FlowLog on start, continuing', [
+                    'flow_id' => $flow->id,
+                    'contact_id' => $chat->contact_id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+
             Log::info('FlowExecution::startFlow - FlowUserData created', [
                 'flow_data_id' => $flowData->id,
                 'contact_id' => $flowData->contact_id,
@@ -169,6 +209,23 @@ class FlowExecutionService
                 'error' => $e->getMessage(),
                 'trace' => $e->getTraceAsString(),
             ]);
+
+            // Log the failed flow run
+            try {
+                FlowLog::create([
+                    'flow_id' => $flowId,
+                    'contact_id' => $chat->contact_id ?? 0,
+                    'organization_id' => $this->organizationId,
+                    'status' => 'error',
+                    'nodes_processed' => 0,
+                ]);
+            } catch (\Throwable $logError) {
+                Log::error('FlowExecution: failed to create FlowLog on error', [
+                    'flow_id' => $flowId,
+                    'error' => $logError->getMessage(),
+                ]);
+            }
+
             // Clean up stale flow state to prevent resumeActiveFlow from re-processing
             FlowUserData::where('contact_id', $chat->contact_id ?? 0)->delete();
             return false;
@@ -188,6 +245,22 @@ class FlowExecutionService
 
         $timeoutMinutes = app(BotSettingsService::class)->getFlowTimeoutMinutes($this->organizationId);
         if ($activeFlow->updated_at && $activeFlow->updated_at->diffInMinutes(now()) >= $timeoutMinutes) {
+            // Log the timed-out flow run
+            try {
+                FlowLog::create([
+                    'flow_id' => $activeFlow->flow_id,
+                    'contact_id' => $chat->contact_id,
+                    'organization_id' => $this->organizationId,
+                    'status' => 'timed_out',
+                    'nodes_processed' => 0,
+                ]);
+            } catch (\Throwable $e) {
+                Log::error('FlowExecution: failed to create FlowLog on timeout, continuing cleanup', [
+                    'contact_id' => $chat->contact_id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+
             $activeFlow->delete();
             Log::info("FlowExecution: flow timed out for contact {$chat->contact_id}");
             return false;
@@ -372,6 +445,45 @@ class FlowExecutionService
                     'variable_name' => $variableName,
                 ]);
                 return true;
+            }
+
+            // Portal node: end current flow, start target flow
+            if ($nodeType === 'portal') {
+                $fields = \Arr::get($node, 'data.metadata.fields', []);
+                $targetFlowUuid = $fields['target_flow_uuid'] ?? null;
+
+                if (!$targetFlowUuid) {
+                    Log::warning('FlowExecution: portal node missing target_flow_uuid', [
+                        'node_id' => $currentNodeId,
+                    ]);
+                    $this->endFlow($chat->contact_id);
+                    return false;
+                }
+
+                $targetFlow = Flow::where('uuid', $targetFlowUuid)
+                    ->where('organization_id', $this->organizationId)
+                    ->where('status', 'active')
+                    ->first();
+
+                if (!$targetFlow) {
+                    Log::warning('FlowExecution: portal target flow not found or inactive', [
+                        'target_flow_uuid' => $targetFlowUuid,
+                        'node_id' => $currentNodeId,
+                    ]);
+                    $this->endFlow($chat->contact_id);
+                    return false;
+                }
+
+                Log::info('FlowExecution: portal redirect', [
+                    'from_flow' => $flow->id,
+                    'to_flow' => $targetFlow->id,
+                    'contact_id' => $chat->contact_id,
+                    'node_id' => $currentNodeId,
+                ]);
+
+                $this->endFlow($chat->contact_id, 'portal_redirect');
+
+                return $this->startFlow($targetFlow->id, $chat);
             }
 
             // Message node: if this is an interactive node (buttons/list/CTA) and we're
@@ -566,6 +678,14 @@ class FlowExecutionService
                 );
                 break;
 
+            case 'template':
+                $response = $this->sendTemplateMessage($fields, $contact, $flowVariables);
+                break;
+
+            case 'metaflow':
+                $response = $this->sendMetaFlowMessage($fields, $contact, $flowVariables);
+                break;
+
             default:
                 return false;
         }
@@ -623,6 +743,256 @@ class FlowExecutionService
         }
 
         return [];
+    }
+
+    /**
+     * Send a WhatsApp template message from a flow node.
+     */
+    private function sendTemplateMessage(array $fields, Contact $contact, array $flowVariables)
+    {
+        $templateUuid = $fields['template_uuid'] ?? null;
+        if (!$templateUuid) {
+            Log::warning('FlowExecution: template node missing template_uuid');
+            return false;
+        }
+
+        $template = Template::where('uuid', $templateUuid)
+            ->where('organization_id', $this->organizationId)
+            ->where('status', 'APPROVED')
+            ->first();
+
+        if (!$template) {
+            Log::warning('FlowExecution: template not found or not approved', [
+                'template_uuid' => $templateUuid,
+                'organization_id' => $this->organizationId,
+            ]);
+            return false;
+        }
+
+        // Build metadata object that TemplateTrait::buildTemplate() expects
+        $parameters = $fields['parameters'] ?? [];
+        $metadata = $this->buildTemplateMetadataFromConfig($parameters, $template, $contact, $flowVariables);
+
+        try {
+            $templateContent = $this->buildTemplate(
+                $template->name,
+                $template->language,
+                $metadata,
+                $contact
+            );
+
+            $response = $this->whatsappService->sendTemplateMessage(
+                $contact->uuid,
+                $templateContent,
+                null,
+                null,
+                null,
+                $contact,
+                null,
+                $template
+            );
+
+            return $response !== null && $response !== false;
+        } catch (\Throwable $e) {
+            Log::error('FlowExecution: failed to send template message', [
+                'template_uuid' => $templateUuid,
+                'contact_id' => $contact->id,
+                'error' => $e->getMessage(),
+            ]);
+            return false;
+        }
+    }
+
+    /**
+     * Send a WhatsApp Flow (MetaFlow) message from a flow node.
+     */
+    private function sendMetaFlowMessage(array $fields, Contact $contact, array $flowVariables)
+    {
+        $metaflowUuid = $fields['metaflow_uuid'] ?? null;
+        if (!$metaflowUuid) {
+            Log::warning('FlowExecution: metaflow node missing metaflow_uuid');
+            return false;
+        }
+
+        $metaFlow = MetaFlow::where('uuid', $metaflowUuid)
+            ->where('organization_id', $this->organizationId)
+            ->where('status', 'published')
+            ->first();
+
+        if (!$metaFlow) {
+            Log::warning('FlowExecution: metaflow not found or not published', [
+                'metaflow_uuid' => $metaflowUuid,
+                'organization_id' => $this->organizationId,
+            ]);
+            return false;
+        }
+
+        $body = $this->replacePlaceholders($contact->uuid, $fields['body'] ?? 'Please complete the form.', $flowVariables);
+        $cta = $fields['cta'] ?? 'Open';
+
+        $options = [
+            'body'   => $body,
+            'cta'    => $cta,
+            'header' => $metaFlow->name,
+        ];
+
+        try {
+            $metaFlowService = MetaFlowService::fromOrganization($this->organizationId);
+            $sendResult = $metaFlowService->sendFlowToContact($metaFlow, $contact, $options);
+
+            if (!$sendResult['success']) {
+                Log::error('FlowExecution: metaflow send failed', [
+                    'metaflow_uuid' => $metaflowUuid,
+                    'contact_id' => $contact->id,
+                    'error' => $sendResult['message'] ?? 'Unknown error',
+                ]);
+                return false;
+            }
+
+            // Create a Chat record for rendering in the chat thread
+            $chatMetadata = [
+                'type'        => 'interactive',
+                'flow_name'   => $metaFlow->name,
+                'flow_uuid'   => $metaFlow->uuid,
+                'flow_token'  => $sendResult['flow_token'],
+                'interactive' => [
+                    'type' => 'flow',
+                    'body' => ['text' => $body],
+                    'action' => [
+                        'name'       => 'flow',
+                        'parameters' => [
+                            'flow_id'  => $metaFlow->meta_flow_id,
+                            'flow_cta' => $cta,
+                        ],
+                    ],
+                ],
+            ];
+
+            Chat::create([
+                'organization_id' => $this->organizationId,
+                'wam_id'          => $sendResult['data']->messages[0]->id ?? null,
+                'contact_id'      => $contact->id,
+                'type'            => 'outbound',
+                'user_id'         => null,
+                'metadata'        => json_encode($chatMetadata),
+                'status'          => 'delivered',
+                'created_at'      => now(),
+            ]);
+
+            return true;
+        } catch (\Throwable $e) {
+            Log::error('FlowExecution: failed to send metaflow message', [
+                'metaflow_uuid' => $metaflowUuid,
+                'contact_id' => $contact->id,
+                'error' => $e->getMessage(),
+            ]);
+            return false;
+        }
+    }
+
+    /**
+     * Build the metadata object for TemplateTrait::buildTemplate()
+     * from the node config parameters and the template's stored metadata.
+     */
+    private function buildTemplateMetadataFromConfig(array $parameters, Template $template, Contact $contact, array $flowVariables): object
+    {
+        $templateMetadata = is_string($template->metadata)
+            ? json_decode($template->metadata, true)
+            : (is_array($template->metadata) ? $template->metadata : []);
+
+        $components = $templateMetadata['components'] ?? [];
+
+        // Parse components into header/body/footer/buttons
+        $header = null;
+        $bodyText = null;
+        $footer = null;
+        $buttons = [];
+
+        foreach ($components as $component) {
+            $type = $component['type'] ?? '';
+            if ($type === 'HEADER') {
+                $header = [
+                    'format' => $component['format'] ?? 'TEXT',
+                    'text' => $component['text'] ?? '',
+                    'parameters' => [],
+                ];
+            } elseif ($type === 'BODY') {
+                $bodyText = $component['text'] ?? '';
+            } elseif ($type === 'FOOTER') {
+                $footer = ['text' => $component['text'] ?? ''];
+            } elseif ($type === 'BUTTONS') {
+                foreach ($component['buttons'] ?? [] as $idx => $btn) {
+                    $buttons[] = [
+                        'type' => $btn['type'] ?? 'QUICK_REPLY',
+                        'text' => $btn['text'] ?? '',
+                        'parameters' => [],
+                    ];
+                    if (($btn['type'] ?? '') === 'URL' && !empty($btn['url'])) {
+                        $buttons[count($buttons) - 1]['url'] = $btn['url'];
+                    }
+                }
+            }
+        }
+
+        // Fill header parameters from node config
+        $headerParams = $parameters['header'] ?? [];
+        if ($header && !empty($headerParams)) {
+            foreach ($headerParams as $param) {
+                $value = $this->replacePlaceholders($contact->uuid, $param['value'] ?? '', $flowVariables);
+                $header['parameters'][] = [
+                    'type' => 'text',
+                    'selection' => 'static',
+                    'value' => $value,
+                ];
+            }
+        } elseif ($header && $header['format'] === 'TEXT') {
+            // Auto-extract placeholder count from header text
+            preg_match_all('/\{\{(\d+)\}\}/', $header['text'], $matches);
+            $count = count($matches[0]);
+            for ($i = 0; $i < $count; $i++) {
+                $header['parameters'][] = [
+                    'type' => 'text',
+                    'selection' => 'static',
+                    'value' => $headerParams[$i]['value'] ?? 'N/A',
+                ];
+            }
+        }
+
+        // Fill body parameters from node config
+        $bodyParams = $parameters['body'] ?? [];
+        if (!empty($bodyParams)) {
+            foreach ($bodyParams as $param) {
+                $value = $this->replacePlaceholders($contact->uuid, $param['value'] ?? '', $flowVariables);
+                $bodyParamsResolved[] = [
+                    'type' => 'text',
+                    'selection' => 'static',
+                    'value' => $value,
+                ];
+            }
+        } else {
+            // Auto-extract from body text
+            $bodyParamsResolved = [];
+            preg_match_all('/\{\{(\d+)\}\}/', $bodyText ?? '', $matches);
+            for ($i = 0; $i < count($matches[0]); $i++) {
+                $bodyParamsResolved[] = [
+                    'type' => 'text',
+                    'selection' => 'static',
+                    'value' => 'N/A',
+                ];
+            }
+        }
+
+        $metadata = [
+            'header' => $header,
+            'body' => [
+                'text' => $bodyText ?? '',
+                'parameters' => $bodyParamsResolved ?? [],
+            ],
+            'footer' => $footer,
+            'buttons' => $buttons,
+        ];
+
+        return json_decode(json_encode($metadata));
     }
 
     // ─── Flow State ─────────────────────────────────────────────

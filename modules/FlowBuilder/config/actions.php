@@ -11,6 +11,7 @@ return [
     'ai_response'       => true,
     'conditional'       => true,
     'assign_to_agent'   => true,
+    'label'             => true,
 
     // Add more actions as needed
 ]; 
