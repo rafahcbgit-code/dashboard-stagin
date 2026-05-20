@@ -84,7 +84,9 @@ class ActionExecutionService
                 
                 case 'assign_to_agent':
                     return $this->executeAssignToAgent($config, $contact);
-                
+
+                case 'label':
+                    return $this->executeLabel($config, $contact);
                 default:
                     Log::warning("Unknown action type: {$actionType}");
                     return false;
@@ -137,7 +139,41 @@ class ActionExecutionService
 
         $contact->contactGroups()->detach($groupId);
         // Log::info("Contact {$contact->id} removed from group {$groupId}");
-        
+
+        return true;
+    }
+
+    /**
+     * Add or remove labels on a contact
+     */
+    private function executeLabel($config, $contact)
+    {
+        $action = $config['action'] ?? 'add';
+        $labelIds = $config['label_ids'] ?? [];
+
+        if (empty($labelIds) || !is_array($labelIds)) {
+            Log::warning("No label_ids specified for label action");
+            return false;
+        }
+
+        // Validate that all labels belong to this organization
+        $validIds = \App\Models\Label::where('organization_id', $this->organizationId)
+            ->whereNull('deleted_at')
+            ->whereIn('id', $labelIds)
+            ->pluck('id')
+            ->toArray();
+
+        if (empty($validIds)) {
+            Log::warning("No valid labels found for label action", ['label_ids' => $labelIds]);
+            return false;
+        }
+
+        if ($action === 'add') {
+            $contact->labels()->syncWithoutDetaching($validIds);
+        } else {
+            $contact->labels()->detach($validIds);
+        }
+
         return true;
     }
 

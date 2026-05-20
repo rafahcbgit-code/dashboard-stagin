@@ -344,6 +344,7 @@ Route::middleware(['auth:user'])->group(function () {
 
                 // Trigger Groups
                 Route::get('/automation/triggers', [App\Http\Controllers\User\TriggerGroupController::class, 'index'])->name('triggers.index');
+                Route::get('/automation/triggers/check-keyword', [App\Http\Controllers\User\TriggerGroupController::class, 'checkKeyword'])->name('triggers.checkKeyword');
                 Route::post('/automation/triggers', [App\Http\Controllers\User\TriggerGroupController::class, 'store'])->name('triggers.store');
                 Route::put('/automation/triggers/{uuid}', [App\Http\Controllers\User\TriggerGroupController::class, 'update'])->name('triggers.update');
                 Route::delete('/automation/triggers/{uuid}', [App\Http\Controllers\User\TriggerGroupController::class, 'destroy'])->name('triggers.destroy');
@@ -373,6 +374,13 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::delete('/automation/escalation/{uuid}', [App\Http\Controllers\User\AiEscalationInstructionController::class, 'destroy'])->name('escalation.destroy');
                 Route::post('/automation/escalation/reorder', [App\Http\Controllers\User\AiEscalationInstructionController::class, 'reorder'])->name('escalation.reorder');
                 Route::post('/automation/escalation/{uuid}/toggle', [App\Http\Controllers\User\AiEscalationInstructionController::class, 'toggle'])->name('escalation.toggle');
+
+                // Automation Test / Simulator
+                Route::get('/automation/test', [App\Http\Controllers\User\AutomationTestController::class, 'index'])->name('automation-test.index');
+                Route::post('/automation/test/trigger', [App\Http\Controllers\User\AutomationTestController::class, 'testTrigger'])->name('automation-test.trigger');
+                Route::post('/automation/test/flow/start', [App\Http\Controllers\User\AutomationTestController::class, 'startFlow'])->name('automation-test.flow-start');
+                Route::post('/automation/test/flow/step', [App\Http\Controllers\User\AutomationTestController::class, 'stepFlow'])->name('automation-test.flow-step');
+                Route::post('/automation/test/ai', [App\Http\Controllers\User\AutomationTestController::class, 'testAi'])->name('automation-test.ai');
 
                 Route::resource('pre-created-replies', App\Http\Controllers\User\PreCreatedReplyController::class)->parameters([
                     'pre-created-replies' => 'uuid',

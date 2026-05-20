@@ -462,7 +462,7 @@ function formatTypeDescription(type, rateLimitType) {
 
 function addKeyword() {
     const val = keywordInput.value.trim();
-    if (val && !form.value.keywords.includes(val)) {
+    if (val && !form.value.keywords.some(k => k.toLowerCase() === val.toLowerCase())) {
         form.value.keywords.push(val);
     }
     keywordInput.value = '';

@@ -7,6 +7,8 @@ use App\Models\Contact;
 use App\Models\ChatTicket;
 use App\Models\ChatTicketLog;
 use App\Models\ChatLog;
+use App\Jobs\SendAssignmentEmailJob;
+use App\Services\ApiNotificationService;
 use App\Models\Team;
 use App\Models\User;
 use Illuminate\Http\Request;
@@ -238,6 +240,27 @@ class TicketController extends Controller
                 'entity_id' => $ticketLogId,
                 'created_at' => now()
             ]);
+
+            // Send push + email notification to the assigned agent
+            if ($assignToUserId) {
+                try {
+                    $notificationService = new ApiNotificationService();
+                    $notificationService->sendAssignmentNotification(
+                        $contact->id,
+                        $assignToUserId,
+                        $currentUserId,
+                        $organizationId
+                    );
+                } catch (\Exception $e) {
+                    \Illuminate\Support\Facades\Log::error('Failed to send assignment notification: ' . $e->getMessage());
+                }
+
+                try {
+                    SendAssignmentEmailJob::dispatch($organizationId, $assignToUserId, $contact->id);
+                } catch (\Exception $e) {
+                    \Illuminate\Support\Facades\Log::error('Failed to dispatch assignment email: ' . $e->getMessage());
+                }
+            }
 
             // Prepare response
             $assignedUser = null;

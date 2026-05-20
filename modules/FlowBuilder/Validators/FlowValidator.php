@@ -60,6 +60,27 @@ class FlowValidator
                     }
                     break;
 
+                case 'template':
+                    $templateValidation = $this->validateTemplate($data);
+                    if ($templateValidation !== true) {
+                        $errors['template'] = $templateValidation;
+                    }
+                    break;
+
+                case 'metaflow':
+                    $metaflowValidation = $this->validateMetaFlow($data);
+                    if ($metaflowValidation !== true) {
+                        $errors['metaflow'] = $metaflowValidation;
+                    }
+                    break;
+
+                case 'portal':
+                    $portalValidation = $this->validatePortal($data);
+                    if ($portalValidation !== true) {
+                        $errors['portal'] = $portalValidation;
+                    }
+                    break;
+
                 case 'action':
                     $actionValidation = $this->validateAction($node['data']);
                     if ($actionValidation !== true) {
@@ -303,6 +324,103 @@ class FlowValidator
     }
 
     /**
+     * Validate a template message node.
+     */
+    private function validateTemplate(array $data)
+    {
+        $errors = [];
+
+        if (empty($data['template_uuid'])) {
+            $errors[] = 'A template must be selected for template nodes.';
+        }
+
+        // Validate that template_uuid references an existing approved template
+        if (!empty($data['template_uuid'])) {
+            $template = \App\Models\Template::where('uuid', $data['template_uuid'])
+                ->where('status', 'APPROVED')
+                ->first();
+
+            if (!$template) {
+                $errors[] = 'The selected template is not approved or does not exist.';
+            }
+        }
+
+        // Validate parameter values are filled
+        $parameters = $data['parameters'] ?? [];
+        $bodyParams = $parameters['body'] ?? [];
+        foreach ($bodyParams as $index => $param) {
+            if (empty($param['value']) && $param['value'] !== '0') {
+                $errors[] = 'Body parameter ' . ($index + 1) . ' must have a value.';
+            }
+        }
+
+        $headerParams = $parameters['header'] ?? [];
+        foreach ($headerParams as $index => $param) {
+            if (empty($param['value']) && $param['value'] !== '0') {
+                $errors[] = 'Header parameter ' . ($index + 1) . ' must have a value.';
+            }
+        }
+
+        return !empty($errors) ? $errors : true;
+    }
+
+    /**
+     * Validate a metaflow message node.
+     */
+    private function validateMetaFlow(array $data)
+    {
+        $errors = [];
+
+        if (empty($data['metaflow_uuid'])) {
+            $errors[] = 'A MetaFlow must be selected for metaflow nodes.';
+        }
+
+        if (!empty($data['metaflow_uuid'])) {
+            $metaFlow = \Modules\MetaFlows\Models\MetaFlow::where('uuid', $data['metaflow_uuid'])
+                ->where('status', 'published')
+                ->first();
+
+            if (!$metaFlow) {
+                $errors[] = 'The selected MetaFlow is not published or does not exist.';
+            }
+        }
+
+        if (!empty($data['body']) && mb_strlen($data['body'], 'UTF-8') > 1024) {
+            $errors[] = 'Body text must not exceed 1024 characters.';
+        }
+
+        if (!empty($data['cta']) && mb_strlen($data['cta'], 'UTF-8') > 20) {
+            $errors[] = 'CTA button text must not exceed 20 characters.';
+        }
+
+        return !empty($errors) ? $errors : true;
+    }
+
+    /**
+     * Validate a portal node.
+     */
+    private function validatePortal(array $data)
+    {
+        $errors = [];
+
+        if (empty($data['target_flow_uuid'])) {
+            $errors[] = 'A target flow must be selected for portal nodes.';
+        }
+
+        if (!empty($data['target_flow_uuid'])) {
+            $targetFlow = \Modules\FlowBuilder\Models\Flow::where('uuid', $data['target_flow_uuid'])
+                ->where('status', 'active')
+                ->first();
+
+            if (!$targetFlow) {
+                $errors[] = 'The selected target flow is not active or does not exist.';
+            }
+        }
+
+        return !empty($errors) ? $errors : true;
+    }
+
+    /**
      * Validate action node.
      *
      * @param array $data
@@ -390,6 +508,15 @@ class FlowValidator
             case 'assign_to_agent':
                 if (empty($config['agent_id'])) {
                     $errors[] = 'Agent ID is required for assign_to_agent action.';
+                }
+                break;
+
+            case 'label':
+                if (!in_array($config['action'] ?? '', ['add', 'remove'])) {
+                    $errors[] = 'Action must be "add" or "remove" for label action.';
+                }
+                if (empty($config['label_ids']) || !is_array($config['label_ids'])) {
+                    $errors[] = 'At least one label is required for label action.';
                 }
                 break;
 

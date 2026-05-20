@@ -11,6 +11,8 @@ use App\Models\Contact;
 use App\Models\Organization;
 use App\Models\Team;
 use App\Models\User;
+use App\Jobs\SendAssignmentEmailJob;
+use App\Services\ApiNotificationService;
 use App\Services\ChatService;
 use App\Services\WhatsappService;
 use Illuminate\Http\Request;
@@ -60,11 +62,12 @@ class ChatTicketController extends BaseController
     }
 
     public function assign(Request $request, $uuid)
-    { 
+    {
         $contact = Contact::where('uuid', $uuid)->first();
         $team = Team::where('organization_id', session()->get('current_organization'))->where('user_id', $request->id)->first();
         $user = User::where('id', $request->id)->first();
-        
+        $organizationId = session()->get('current_organization');
+
         if($team && $user){
             ChatTicket::where('contact_id', $contact->id)->update([
                 'assigned_to' => $request->id,
@@ -86,9 +89,28 @@ class ChatTicketController extends BaseController
                 'updated_at' => now(),
             ]);
 
+            // Send push + email notification to the assigned agent
+            try {
+                $notificationService = new ApiNotificationService();
+                $notificationService->sendAssignmentNotification(
+                    $contact->id,
+                    $request->id,
+                    auth()->id(),
+                    $organizationId
+                );
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error('Failed to send assignment notification: ' . $e->getMessage());
+            }
+
+            try {
+                SendAssignmentEmailJob::dispatch($organizationId, $request->id, $contact->id);
+            } catch (\Exception $e) {
+                \Illuminate\Support\Facades\Log::error('Failed to dispatch assignment email: ' . $e->getMessage());
+            }
+
             return Redirect::back()->with(
                 'status', [
-                    'type' => 'success', 
+                    'type' => 'success',
                     'message' => __('Ticket assigned successfully!')
                 ]
             );

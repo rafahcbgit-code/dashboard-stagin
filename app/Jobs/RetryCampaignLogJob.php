@@ -44,7 +44,16 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
     {
         $log = CampaignLog::with('campaign', 'campaign.organization', 'campaign.template', 'contact')->find($this->campaignLogId);
 
-        if (! $log || $log->status !== 'failed') {
+        if (! $log || $log->status !== 'failed' || ! $log->contact || empty($log->contact->phone)) {
+            if ($log && $log->status === 'failed' && (empty($log->contact) || empty($log->contact->phone))) {
+                $log->status = 'permanently_failed';
+                $log->save();
+                Log::warning('Campaign log permanently failed: contact missing or has no phone', [
+                    'campaign_log_id' => $log->id,
+                    'campaign_id' => $log->campaign_id,
+                    'contact_id' => $log->contact_id,
+                ]);
+            }
             return;
         }
 

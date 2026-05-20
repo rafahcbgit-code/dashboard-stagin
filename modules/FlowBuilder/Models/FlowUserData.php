@@ -16,6 +16,16 @@ class FlowUserData extends Model
         'variables' => 'array',
     ];
 
+    public function flow()
+    {
+        return $this->belongsTo(Flow::class);
+    }
+
+    public function contact()
+    {
+        return $this->belongsTo(\App\Models\Contact::class);
+    }
+
     public function incrementStep()
     {
         $this->current_step += 1;

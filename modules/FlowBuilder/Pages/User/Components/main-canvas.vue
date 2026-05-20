@@ -12,16 +12,27 @@ import MediaNode from '@modules/FlowBuilder/Pages/User/Components/vue-flow/nodes
 import TextNode from '@modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/Text-node.vue'
 import QuestionNode from '@modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/Question-node.vue'
 import ActionNode from '@modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/Action-node.vue'
+import TemplateNode from '@modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/Template-node.vue'
+import MetaFlowNode from '@modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/MetaFlow-node.vue'
+import PortalNode from '@modules/FlowBuilder/Pages/User/Components/vue-flow/nodes/Portal-node.vue'
 import { Test_data } from '@/lib/constant'
 
 import type { Dimensions, Elements } from '@vue-flow/core'
 
-const props = defineProps(['uuid', 'flow', 'contactGroups', 'contactFields']);
+const props = defineProps(['uuid', 'flow', 'contactGroups', 'contactFields', 'labels', 'templates', 'metaFlows', 'activeFlows']);
 
 // Provide contact groups to child components
 provide('contactGroups', props.contactGroups || []);
 // Provide contact fields to child components
 provide('contactFields', props.contactFields || []);
+// Provide labels to child components
+provide('labels', props.labels || []);
+// Provide templates to child components
+provide('templates', props.templates || []);
+// Provide meta flows to child components
+provide('metaFlows', props.metaFlows || []);
+// Provide active flows to child components
+provide('activeFlows', props.activeFlows || []);
 
 const elements = ref<Elements>()
 
@@ -32,6 +43,9 @@ const nodeTypes = {
   media: markRaw(MediaNode),
   text: markRaw(TextNode),
   question: markRaw(QuestionNode),
+  template: markRaw(TemplateNode),
+  metaflow: markRaw(MetaFlowNode),
+  portal: markRaw(PortalNode),
   action: markRaw(ActionNode),
 }
 
@@ -180,6 +194,14 @@ const getDefaultConfig = (actionType: string) => {
       }
     case 'assign_to_agent':
       return { assignment_type: 'specific_agent', agent_id: '' }
+    case 'label':
+      return { action: 'add', label_ids: [] }
+    case 'template':
+      return { template_uuid: '', template_name: '', template_language: '', parameters: {} }
+    case 'metaflow':
+      return { metaflow_uuid: '', metaflow_name: '', body: 'Please complete the form.', cta: 'Open' }
+    case 'portal':
+      return { target_flow_uuid: '', target_flow_name: '', trigger_name: '', trigger_keyword: '', trigger_created: false }
     default:
       return {}
   }
@@ -245,6 +267,31 @@ function handleOnDrop(event: DragEvent) {
         max_retries: 3,
         retry_message: '',
         validation_pattern: '',
+      }
+    } else if (type === 'template') {
+      defaultFields = {
+        type: 'template',
+        template_uuid: '',
+        template_name: '',
+        template_language: '',
+        parameters: {},
+      }
+    } else if (type === 'metaflow') {
+      defaultFields = {
+        type: 'metaflow',
+        metaflow_uuid: '',
+        metaflow_name: '',
+        body: 'Please complete the form.',
+        cta: 'Open',
+      }
+    } else if (type === 'portal') {
+      defaultFields = {
+        type: 'portal',
+        target_flow_uuid: '',
+        target_flow_name: '',
+        trigger_name: '',
+        trigger_keyword: '',
+        trigger_created: false,
       }
     }
 

@@ -3,6 +3,7 @@
 namespace App\Console;
 
 use App\Jobs\CreateCampaignLogsJob;
+use App\Jobs\Flow\SendFlowRejoinRemindersJob;
 use App\Jobs\ProcessCampaignMessagesJob;
 use App\Models\Campaign;
 use Illuminate\Console\Scheduling\Schedule;
@@ -44,6 +45,11 @@ class Kernel extends ConsoleKernel
 
         // Run ticket creation check every 5 minutes
         $schedule->job(new \App\Jobs\EnsureTicketsExistJob())
+            ->everyFiveMinutes()
+            ->withoutOverlapping();
+
+        // Send flow rejoin reminders every 5 minutes
+        $schedule->job(new SendFlowRejoinRemindersJob)
             ->everyFiveMinutes()
             ->withoutOverlapping();
 
