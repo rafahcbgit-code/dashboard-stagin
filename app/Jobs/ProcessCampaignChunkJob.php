@@ -115,6 +115,18 @@ class ProcessCampaignChunkJob implements ShouldQueue
                         $templatePayload,
                         $this->campaignId
                     );
+
+                    if ($whatsappService->carouselPayloadHasMediaLinks($templatePayload)) {
+                        $log->update([
+                            'status' => 'failed',
+                            'metadata' => json_encode([
+                                'success' => false,
+                                'message' => 'Unable to upload carousel media before sending.',
+                                'code' => 'CAROUSEL_MEDIA_UPLOAD_FAILED',
+                            ]),
+                        ]);
+                        continue;
+                    }
                 } else {
                     $templatePayload = $this->buildTemplateRequest(
                         $this->campaignId,
@@ -269,7 +281,9 @@ class ProcessCampaignChunkJob implements ShouldQueue
                         $chatMetadata = $whatsappService->buildCampaignTemplateChatMessage(
                             $campaignMetadata,
                             $contact->uuid,
-                            $contact
+                            $contact,
+                            null,
+                            $template
                         );
                     }
 

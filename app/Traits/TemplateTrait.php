@@ -554,7 +554,13 @@ trait TemplateTrait
 
             // Add header if exists
             $headerType = strtolower($card['header_type'] ?? 'image');
-            $headerHandle = $card['header_handle'] ?? null;
+            $headerHandle = $card['local_url'] ?? null;
+
+            if (!$headerHandle && !empty($card['local_path'] ?? null)) {
+                $headerHandle = rtrim(config('app.url'), '/') . '/media/' . ltrim($card['local_path'], '/');
+            }
+
+            $headerHandle = $headerHandle ?? $card['header_handle'] ?? null;
 
             if ($headerHandle) {
                 $cardComponents[] = [
