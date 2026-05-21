@@ -463,7 +463,7 @@
                                                     <input
                                                         v-model.number="form.flow_rejoin_reminder_minutes"
                                                         type="number"
-                                                        min="1"
+                                                        min="5"
                                                         max="1440"
                                                         class="w-20 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-center text-slate-800 focus:border-primary focus:ring-1 focus:ring-primary/30 focus:outline-none transition-colors"
                                                         required
@@ -482,6 +482,62 @@
                                                     :placeholder="$t('You have an active conversation with us. Reply to continue where you left off.')"
                                                 />
                                                 <p class="text-[10px] text-slate-400 mt-1">{{ form.flow_rejoin_message.length }}/500</p>
+                                            </div>
+                                            <div>
+                                                <div class="flex flex-wrap items-center justify-between gap-2 mb-2">
+                                                    <div>
+                                                        <label class="block text-xs font-medium text-slate-700">{{ $t('Send only for selected flows') }}</label>
+                                                        <p class="text-[10px] text-slate-400 mt-0.5">{{ $t('Choose one or more flows that should receive this reminder.') }}</p>
+                                                    </div>
+                                                    <div v-if="availableFlows.length > 0" class="flex items-center gap-2">
+                                                        <span class="text-[10px] text-slate-400">{{ selectedRejoinFlowCount }} {{ $t('selected') }}</span>
+                                                        <button
+                                                            type="button"
+                                                            @click="selectAllRejoinFlows"
+                                                            class="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-600 hover:border-primary/40 hover:text-primary transition-colors"
+                                                        >
+                                                            {{ $t('Select all') }}
+                                                        </button>
+                                                        <button
+                                                            type="button"
+                                                            @click="clearRejoinFlows"
+                                                            class="rounded-md border border-slate-200 px-2.5 py-1 text-xs font-medium text-slate-500 hover:border-red-200 hover:text-red-600 transition-colors"
+                                                        >
+                                                            {{ $t('Clear') }}
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                <div v-if="availableFlows.length > 0" class="max-h-48 overflow-y-auto rounded-lg border border-slate-200 divide-y divide-slate-100">
+                                                    <label
+                                                        v-for="flow in availableFlows"
+                                                        :key="flow.id"
+                                                        class="flex cursor-pointer items-center gap-3 px-3 py-2.5 hover:bg-slate-50 transition-colors"
+                                                    >
+                                                        <input
+                                                            v-model="form.flow_rejoin_flow_ids"
+                                                            type="checkbox"
+                                                            :value="flow.id"
+                                                            class="h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary/30"
+                                                        />
+                                                        <span class="min-w-0 flex-1">
+                                                            <span class="block truncate text-sm font-medium text-slate-700">{{ flow.name }}</span>
+                                                            <span class="text-[10px] text-slate-400">{{ flow.uuid }}</span>
+                                                        </span>
+                                                        <span
+                                                            class="shrink-0 rounded-full px-2 py-0.5 text-[10px] font-medium capitalize"
+                                                            :class="flow.status === 'active' ? 'bg-emerald-50 text-emerald-700 border border-emerald-100' : 'bg-slate-100 text-slate-500 border border-slate-200'"
+                                                        >
+                                                            {{ flow.status }}
+                                                        </span>
+                                                    </label>
+                                                </div>
+                                                <div v-else class="rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-700">
+                                                    {{ $t('No flows are available. Create a flow before enabling Rejoin Reminder.') }}
+                                                </div>
+                                                <p v-if="hasRejoinFlowSelectionError" class="text-xs text-red-500 mt-2">
+                                                    {{ $t('Select at least one flow to enable Rejoin Reminder.') }}
+                                                </p>
                                             </div>
                                             <div class="rounded-md bg-slate-50 border border-slate-200 px-3 py-2 text-xs text-slate-500">
                                                 <div class="flex items-start gap-2">
@@ -549,7 +605,7 @@
 
                             <!-- Save -->
                             <div class="flex justify-end pt-2">
-                                <button type="submit" :disabled="saving" class="inline-flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-[#045a47] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
+                                <button type="submit" :disabled="saving || hasRejoinFlowSelectionError" class="inline-flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-[#045a47] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
                                     <svg v-if="!saving" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
                                     <svg v-else class="animate-spin h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
                                     {{ saving ? $t('Saving...') : $t('Save Settings') }}
@@ -568,7 +624,7 @@ import SettingLayout from './../Layout.vue';
 import { ref, computed } from 'vue';
 import { router } from '@inertiajs/vue3';
 
-const props = defineProps(['settings', 'aiSettings', 'workingHours', 'kbEntryCount', 'aimodule', 'fbmodule']);
+const props = defineProps(['settings', 'aiSettings', 'workingHours', 'kbEntryCount', 'flows', 'aimodule', 'fbmodule']);
 
 const saving = ref(false);
 
@@ -588,6 +644,9 @@ const form = ref({
     flow_rejoin_enabled: props.settings?.flow_rejoin_enabled ?? false,
     flow_rejoin_reminder_minutes: props.settings?.flow_rejoin_reminder_minutes || 15,
     flow_rejoin_message: props.settings?.flow_rejoin_message || "You have an active conversation with us. Reply to continue where you left off.",
+    flow_rejoin_flow_ids: Array.isArray(props.settings?.flow_rejoin_flow_ids)
+        ? props.settings.flow_rejoin_flow_ids.map(id => Number(id))
+        : [],
     // AI Settings fields
     ai_enabled: props.aiSettings?.ai_enabled || false,
     ai_only_mode: props.aiSettings?.ai_only_mode || false,
@@ -595,6 +654,25 @@ const form = ref({
 });
 
 const hasKbEntries = computed(() => (props.kbEntryCount || 0) > 0);
+
+const availableFlows = computed(() => (props.flows || []).map(flow => ({
+    ...flow,
+    id: Number(flow.id),
+})));
+
+const selectedRejoinFlowCount = computed(() => form.value.flow_rejoin_flow_ids.length);
+
+const hasRejoinFlowSelectionError = computed(() => (
+    form.value.flow_rejoin_enabled && selectedRejoinFlowCount.value === 0
+));
+
+function selectAllRejoinFlows() {
+    form.value.flow_rejoin_flow_ids = availableFlows.value.map(flow => flow.id);
+}
+
+function clearRejoinFlows() {
+    form.value.flow_rejoin_flow_ids = [];
+}
 
 const workingHours = computed(() => props.workingHours || { enabled: false, schedule: [], timezone: 'UTC' });
 
@@ -614,6 +692,10 @@ const scheduleSummary = computed(() => {
 });
 
 async function submitForm() {
+    if (hasRejoinFlowSelectionError.value) {
+        return;
+    }
+
     saving.value = true;
 
     const payload = {
@@ -632,6 +714,7 @@ async function submitForm() {
         flow_rejoin_enabled: form.value.flow_rejoin_enabled,
         flow_rejoin_reminder_minutes: form.value.flow_rejoin_reminder_minutes,
         flow_rejoin_message: form.value.flow_rejoin_message,
+        flow_rejoin_flow_ids: form.value.flow_rejoin_flow_ids,
         // AI settings
         ai_enabled: form.value.ai_enabled,
         ai_only_mode: form.value.ai_only_mode,

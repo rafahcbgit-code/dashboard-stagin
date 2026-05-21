@@ -21,6 +21,7 @@ class BotSettingsService
         'flow_rejoin_enabled' => false,
         'flow_rejoin_reminder_minutes' => 15,
         'flow_rejoin_message' => "You have an active conversation with us. Reply to continue where you left off.",
+        'flow_rejoin_flow_ids' => [],
     ];
 
     /**
@@ -36,7 +37,15 @@ class BotSettingsService
         $metadata = $org->metadata ? json_decode($org->metadata, true) : [];
         $botSettings = $metadata['bot_settings'] ?? [];
 
-        return array_merge(self::DEFAULTS, $botSettings);
+        $settings = array_merge(self::DEFAULTS, $botSettings);
+        $settings['flow_rejoin_reminder_minutes'] = max(5, (int) ($settings['flow_rejoin_reminder_minutes'] ?? self::DEFAULTS['flow_rejoin_reminder_minutes']));
+        $settings['flow_rejoin_flow_ids'] = $this->normalizeFlowIds($settings['flow_rejoin_flow_ids'] ?? []);
+
+        if (($settings['flow_rejoin_enabled'] ?? false) && empty($settings['flow_rejoin_flow_ids'])) {
+            $settings['flow_rejoin_enabled'] = false;
+        }
+
+        return $settings;
     }
 
     /**
@@ -142,7 +151,7 @@ class BotSettingsService
      */
     public function getFlowRejoinReminderMinutes(int $organizationId): int
     {
-        return (int) $this->getSetting($organizationId, 'flow_rejoin_reminder_minutes', self::DEFAULTS['flow_rejoin_reminder_minutes']);
+        return max(5, (int) $this->getSetting($organizationId, 'flow_rejoin_reminder_minutes', self::DEFAULTS['flow_rejoin_reminder_minutes']));
     }
 
     /**
@@ -151,6 +160,25 @@ class BotSettingsService
     public function getFlowRejoinMessage(int $organizationId): string
     {
         return $this->getSetting($organizationId, 'flow_rejoin_message', self::DEFAULTS['flow_rejoin_message']);
+    }
+
+    /**
+     * Get flow IDs that should receive rejoin reminders.
+     */
+    public function getFlowRejoinFlowIds(int $organizationId): array
+    {
+        $flowIds = $this->getSetting($organizationId, 'flow_rejoin_flow_ids', self::DEFAULTS['flow_rejoin_flow_ids']);
+
+        return $this->normalizeFlowIds($flowIds);
+    }
+
+    private function normalizeFlowIds($flowIds): array
+    {
+        if (!is_array($flowIds)) {
+            return [];
+        }
+
+        return array_values(array_unique(array_map('intval', $flowIds)));
     }
 
 }
