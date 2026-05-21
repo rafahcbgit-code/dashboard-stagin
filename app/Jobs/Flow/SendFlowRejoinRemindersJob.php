@@ -43,16 +43,25 @@ class SendFlowRejoinRemindersJob implements ShouldQueue
 
                             // Load and cache org settings for this chunk
                             if (!isset($orgSettings[$organizationId])) {
+                                $selectedFlowIds = $botSettings->getFlowRejoinFlowIds($organizationId);
+
                                 $orgSettings[$organizationId] = [
-                                    'enabled' => $botSettings->isFlowRejoinEnabled($organizationId) && $botSettings->isAutomationEnabled($organizationId),
+                                    'enabled' => $botSettings->isFlowRejoinEnabled($organizationId)
+                                        && $botSettings->isAutomationEnabled($organizationId)
+                                        && !empty($selectedFlowIds),
                                     'reminder_minutes' => $botSettings->getFlowRejoinReminderMinutes($organizationId),
                                     'timeout_minutes' => $botSettings->getFlowTimeoutMinutes($organizationId),
                                     'message' => $botSettings->getFlowRejoinMessage($organizationId),
+                                    'flow_ids' => $selectedFlowIds,
                                 ];
                             }
 
                             // Skip if rejoin is disabled for this org
                             if (!$orgSettings[$organizationId]['enabled']) {
+                                continue;
+                            }
+
+                            if (!in_array((int) $flowData->flow_id, $orgSettings[$organizationId]['flow_ids'], true)) {
                                 continue;
                             }
 
