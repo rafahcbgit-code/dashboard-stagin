@@ -47,6 +47,11 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
         if (! $log || $log->status !== 'failed' || ! $log->contact || empty($log->contact->phone)) {
             if ($log && $log->status === 'failed' && (empty($log->contact) || empty($log->contact->phone))) {
                 $log->status = 'permanently_failed';
+                $log->metadata = $this->failureMetadata(
+                    empty($log->contact) ? 'Contact not found.' : 'Contact phone is missing.',
+                    'CAMPAIGN_RETRY_CONTACT_NOT_SENDABLE',
+                    ['contact_id' => $log->contact_id]
+                );
                 $log->save();
                 Log::warning('Campaign log permanently failed: contact missing or has no phone', [
                     'campaign_log_id' => $log->id,
@@ -137,6 +142,15 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error("Retry failed for campaign_log {$this->campaignLogId}: ".$e->getMessage());
+
+            CampaignLog::where('id', $this->campaignLogId)->update([
+                'status' => 'failed',
+                'metadata' => $this->failureMetadata($e->getMessage(), 'CAMPAIGN_RETRY_JOB_FAILED', [
+                    'exception' => get_class($e),
+                    'retry_index' => $this->retryIndex,
+                ]),
+                'updated_at' => now(),
+            ]);
         }
     }
 
@@ -260,5 +274,15 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
             $wabaId,
             $this->organizationId
         );
+    }
+
+    private function failureMetadata(string $message, string $code, array $context = []): string
+    {
+        return json_encode(array_filter([
+            'success' => false,
+            'message' => $message,
+            'code' => $code,
+            'context' => $context ?: null,
+        ], static fn ($value) => $value !== null));
     }
 }

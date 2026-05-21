@@ -78,7 +78,25 @@ class ProcessCampaignChunkJob implements ShouldQueue
 
         // 4. Load template (static-cached)
         $template = $this->getTemplateCached();
+        if (!$template) {
+            $this->markLogsFailed($logs->pluck('id')->all(), 'Template not found.', 'CAMPAIGN_TEMPLATE_NOT_FOUND', [
+                'template_id' => $this->templateId,
+            ]);
+            $this->broadcastProgressIfNeeded();
+            $this->checkAndUpdateCampaignStatus();
+            return;
+        }
+
         $templateMetadata = json_decode($template->metadata, true);
+        if (!is_array($templateMetadata)) {
+            $this->markLogsFailed($logs->pluck('id')->all(), 'Template metadata is invalid JSON.', 'CAMPAIGN_TEMPLATE_METADATA_INVALID', [
+                'template_id' => $template->id,
+            ]);
+            $this->broadcastProgressIfNeeded();
+            $this->checkAndUpdateCampaignStatus();
+            return;
+        }
+
         $isCarousel = ($templateMetadata['template_type'] ?? '') === 'carousel';
 
         // 5. Initialize WhatsappService once
@@ -100,7 +118,13 @@ class ProcessCampaignChunkJob implements ShouldQueue
         foreach ($logs as $log) {
             $contact = $contacts->get($log->contact_id);
             if (!$contact || ($contact->is_blocked ?? false) || empty($contact->phone)) {
-                $log->update(['status' => 'failed']);
+                $reason = !$contact
+                    ? 'Contact not found.'
+                    : (($contact->is_blocked ?? false) ? 'Contact is blocked.' : 'Contact phone is missing.');
+
+                $this->markLogFailed($log, $reason, 'CAMPAIGN_CONTACT_NOT_SENDABLE', [
+                    'contact_id' => $log->contact_id,
+                ]);
                 continue;
             }
 
@@ -189,12 +213,17 @@ class ProcessCampaignChunkJob implements ShouldQueue
                     'templateContent' => $templatePayload,
                     'flowStubs' => $flowStubs,
                 ];
-            } catch (\Exception $e) {
+            } catch (\Throwable $e) {
                 Log::error('Error building template payload for campaign log', [
                     'log_id' => $log->id,
                     'error' => $e->getMessage(),
                 ]);
-                $log->update(['status' => 'failed']);
+
+                $this->markLogFailed($log, $e->getMessage(), 'CAMPAIGN_PAYLOAD_BUILD_FAILED', [
+                    'exception' => get_class($e),
+                    'template_id' => $template?->id,
+                    'contact_id' => $contact->id,
+                ]);
             }
         }
 
@@ -635,9 +664,49 @@ class ProcessCampaignChunkJob implements ShouldQueue
 
         CampaignLog::whereIn('id', $this->logIds)
             ->where('status', 'ongoing')
-            ->update(['status' => 'failed']);
+            ->update([
+                'status' => 'failed',
+                'metadata' => $this->failureMetadata(
+                    $exception->getMessage(),
+                    'CAMPAIGN_CHUNK_JOB_FAILED',
+                    ['exception' => get_class($exception)]
+                ),
+                'updated_at' => now(),
+            ]);
 
         $this->checkAndUpdateCampaignStatus();
+    }
+
+    private function markLogFailed(CampaignLog $log, string $message, string $code, array $context = []): void
+    {
+        $log->update([
+            'status' => 'failed',
+            'metadata' => $this->failureMetadata($message, $code, $context),
+            'updated_at' => now(),
+        ]);
+    }
+
+    private function markLogsFailed(array $logIds, string $message, string $code, array $context = []): void
+    {
+        if (empty($logIds)) {
+            return;
+        }
+
+        CampaignLog::whereIn('id', $logIds)->update([
+            'status' => 'failed',
+            'metadata' => $this->failureMetadata($message, $code, $context),
+            'updated_at' => now(),
+        ]);
+    }
+
+    private function failureMetadata(string $message, string $code, array $context = []): string
+    {
+        return json_encode(array_filter([
+            'success' => false,
+            'message' => $message,
+            'code' => $code,
+            'context' => $context ?: null,
+        ], static fn ($value) => $value !== null));
     }
 
     public static function resetProgressState(?int $campaignId = null): void
