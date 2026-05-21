@@ -353,6 +353,13 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::post('/automation/triggers/{uuid}/toggle', [App\Http\Controllers\User\TriggerGroupController::class, 'toggle'])->name('triggers.toggle');
                 Route::post('/automation/triggers/{uuid}/link', [App\Http\Controllers\User\TriggerGroupController::class, 'linkFlow'])->name('triggers.linkFlow');
 
+                // Smart Followup
+                Route::get('/automation/smart-followup', [App\Http\Controllers\User\SmartFollowupController::class, 'index'])->name('smart-followup.index');
+                Route::post('/automation/smart-followup/rejoin-reminders', [App\Http\Controllers\User\SmartFollowupController::class, 'store'])->name('smart-followup.rejoin-reminders.store');
+                Route::put('/automation/smart-followup/rejoin-reminders/{uuid}', [App\Http\Controllers\User\SmartFollowupController::class, 'update'])->name('smart-followup.rejoin-reminders.update');
+                Route::delete('/automation/smart-followup/rejoin-reminders/{uuid}', [App\Http\Controllers\User\SmartFollowupController::class, 'destroy'])->name('smart-followup.rejoin-reminders.destroy');
+                Route::post('/automation/smart-followup/rejoin-reminders/{uuid}/toggle', [App\Http\Controllers\User\SmartFollowupController::class, 'toggle'])->name('smart-followup.rejoin-reminders.toggle');
+
                 // Knowledge Base
                 Route::get('/automation/knowledge-base', [App\Http\Controllers\User\AiKnowledgeBaseController::class, 'index'])->name('knowledge-base.index');
                 Route::post('/automation/knowledge-base', [App\Http\Controllers\User\AiKnowledgeBaseController::class, 'store'])->name('knowledge-base.store');
