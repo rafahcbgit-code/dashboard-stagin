@@ -166,6 +166,46 @@ class TriggerGroupController extends BaseController
     }
 
     /**
+     * Store a trigger via JSON API (for FlowBuilder portal nodes).
+     * Returns the created trigger's UUID instead of an Inertia redirect.
+     */
+    public function apiStore(Request $request)
+    {
+        $validated = $request->validate([
+            'name' => 'required|string|max:255',
+            'type' => 'required|in:new_contact,new_message,greeting,away,fallback',
+            'keywords' => 'nullable|array',
+            'keywords.*' => 'string|max:255',
+            'match_mode' => 'nullable|in:exact,ai',
+            'ai_confidence' => 'nullable|integer|min:0|max:100',
+            'flow_id' => 'nullable|exists:flows,id',
+            'rate_limit_type' => 'nullable|in:none,lifetime,24h',
+        ]);
+
+        $organizationId = session()->get('current_organization');
+        $validated['match_mode'] = $validated['match_mode'] ?? 'exact';
+        $validated['ai_confidence'] = $validated['ai_confidence'] ?? 75;
+        $validated['rate_limit_type'] = $validated['rate_limit_type'] ?? 'none';
+
+        // Check for duplicate keywords
+        if (!empty($validated['keywords']) && ($validated['type'] ?? '') === 'new_message') {
+            $duplicates = $this->findDuplicateKeywords($validated['keywords'], $organizationId);
+            if (!empty($duplicates)) {
+                return response()->json([
+                    'error' => 'Keyword(s) already exist in another trigger: ' . implode(', ', $duplicates),
+                ], 422);
+            }
+        }
+
+        $triggerGroup = $this->triggerGroupService->create($organizationId, $validated);
+
+        return response()->json([
+            'uuid' => $triggerGroup->uuid,
+            'name' => $triggerGroup->name,
+        ]);
+    }
+
+    /**
      * Check if a keyword is available (not used in any other trigger group).
      * Returns JSON for API-style requests.
      */
