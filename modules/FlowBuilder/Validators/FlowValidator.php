@@ -417,6 +417,17 @@ class FlowValidator
             }
         }
 
+        $connectionMode = $data['connection_mode'] ?? 'with_trigger';
+        if (!in_array($connectionMode, ['simple', 'with_trigger'])) {
+            $errors[] = 'Invalid connection mode for portal node.';
+        }
+
+        if ($connectionMode === 'with_trigger') {
+            if (empty($data['trigger_keyword'])) {
+                $errors[] = 'A trigger keyword is required when connection mode is "with trigger".';
+            }
+        }
+
         return !empty($errors) ? $errors : true;
     }
 

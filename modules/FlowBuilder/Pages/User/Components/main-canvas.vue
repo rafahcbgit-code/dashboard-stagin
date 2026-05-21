@@ -106,7 +106,12 @@ onConnect((params) => {
   // For all nodes except the first one, exit handles should only connect to one target
   const sourceNode = findNode(params.source);
   const targetNode = findNode(params.target);
-  
+
+  // Portal nodes are terminal — no connections allowed from them
+  if (sourceNode && sourceNode.type === 'portal') {
+    return;
+  }
+
   // Skip constraint for the first node (start node)
   if (sourceNode && sourceNode.type === 'start') {
     addEdges(params);
@@ -289,6 +294,7 @@ function handleOnDrop(event: DragEvent) {
         type: 'portal',
         target_flow_uuid: '',
         target_flow_name: '',
+        connection_mode: 'with_trigger',
         trigger_name: '',
         trigger_keyword: '',
         trigger_created: false,
