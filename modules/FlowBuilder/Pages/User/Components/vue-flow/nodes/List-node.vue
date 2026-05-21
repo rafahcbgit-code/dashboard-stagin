@@ -56,15 +56,46 @@ watch(
   { deep: true }
 )
 
+let rowIdCounter = 0
+
+function initRowIds() {
+  fields.value.sections.forEach(section => {
+    section.rows.forEach(row => {
+      if (row.id) {
+        const num = parseInt(row.id, 10)
+        if (!isNaN(num) && num > rowIdCounter) {
+          rowIdCounter = num
+        }
+      }
+    })
+  })
+}
+
+function getNextRowId() {
+  rowIdCounter++
+  return String(rowIdCounter)
+}
+
+// Initialize counter from existing data
+initRowIds()
+// Ensure existing rows without an ID get one
+fields.value.sections.forEach(section => {
+  section.rows.forEach(row => {
+    if (!row.id) {
+      row.id = getNextRowId()
+    }
+  })
+})
+
 function addSection() {
   if (fields.value.sections.length < 10) {
-    fields.value.sections.push({ rows: [{}] })
+    fields.value.sections.push({ rows: [{ id: getNextRowId() }] })
   }
 }
 
 function addRow(sectionIndex) {
   if (fields.value.sections[sectionIndex].rows.length < 10) {
-    fields.value.sections[sectionIndex].rows.push({})
+    fields.value.sections[sectionIndex].rows.push({ id: getNextRowId() })
   }
 }
 
@@ -244,25 +275,11 @@ function getCharsCount(input: string): number {
             </button>
           </div>
 
-          <div class="grid grid-cols-2 gap-x-6">
-            <div class="mb-4">
-              <label class="text-sm mb-2"><span class="text-red-500">*</span> ID</label>
-              <FormInput v-model="row.id" maxLength="200" :name="''" :placeholder="'Enter ID'" :type="'text'" :class="'col-span-4'"/>
-              <span class="text-sm">{{ getCharsCount(row?.id ?? '') }}/200</span>
-            </div>
-
-            <div class="mb-2">
+          <div class="mb-2">
               <label class="text-sm mb-2"><span class="text-red-500">*</span> Title</label>
               <FormInput v-model="row.title" maxLength="24" :name="''" :placeholder="'Enter row title'" :type="'text'" :class="'col-span-4'"/>
               <span class="text-sm">{{ getCharsCount(row?.title ?? '') }}/24</span>
             </div>
-          </div>
-
-          <div class="mb-2">
-            <label class="text-sm mb-2"><span class="text-red-500">*</span> Description</label>
-            <FormInput v-model="row.description" maxLength="72" :name="''" :placeholder="'Enter description'" :type="'text'" :class="'col-span-4'"/>
-            <span class="text-sm">{{ getCharsCount(row?.description ?? '') }}/72</span>
-          </div>
 
           <Handle :id="'a' + sectionIndex + rowIndex" type="source" :position="Position.Right" style="right: -25px"/>
         </div>
