@@ -105,7 +105,9 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
 
                     $contact = Contact::find($this->contactId);
                     if (!$contact) {
-                        $lockedLog->update(['status' => 'failed']);
+                        $this->markLogFailed($lockedLog, 'Contact not found.', 'CAMPAIGN_CONTACT_NOT_FOUND', [
+                            'contact_id' => $this->contactId,
+                        ]);
                         return;
                     }
 
@@ -193,7 +195,11 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
                     ]);
                 } catch (\Exception $e) {
                     // Reset status to failed so the log can be retried, preventing stuck "ongoing" state
-                    $lockedLog->update(['status' => 'failed']);
+                    $this->markLogFailed($lockedLog, $e->getMessage(), 'CAMPAIGN_SINGLE_LOG_FAILED', [
+                        'exception' => get_class($e),
+                        'contact_id' => $this->contactId,
+                        'template_id' => $this->templateId,
+                    ]);
                     throw $e;
                 }
             }
@@ -223,6 +229,20 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
 
         // Check if campaign is completed
         $this->checkAndUpdateCampaignStatus($log->campaign_id);
+    }
+
+    private function markLogFailed(CampaignLog $log, string $message, string $code, array $context = []): void
+    {
+        $log->update([
+            'status' => 'failed',
+            'metadata' => json_encode(array_filter([
+                'success' => false,
+                'message' => $message,
+                'code' => $code,
+                'context' => $context ?: null,
+            ], static fn ($value) => $value !== null)),
+            'updated_at' => now(),
+        ]);
     }
 
     protected function checkAndUpdateCampaignStatus($campaignId)

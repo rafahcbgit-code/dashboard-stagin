@@ -555,6 +555,10 @@ class WhatsappService
                 );
 
                 if (!$mediaId) {
+                    if ($this->canSendTemplateHeaderMediaByLink($mediaUrl, $mediaType, $context)) {
+                        return $templateContent;
+                    }
+
                     throw new \RuntimeException(__('Unable to upload template header media before sending.'));
                 }
 
@@ -572,6 +576,33 @@ class WhatsappService
         }
 
         return $templateContent;
+    }
+
+    private function canSendTemplateHeaderMediaByLink(string $mediaUrl, string $mediaType, array $context = []): bool
+    {
+        $access = $this->inspectMediaUrlAccessibility($mediaUrl);
+        $httpStatus = $access['http_status'] ?? null;
+
+        $canFallback = is_int($httpStatus) && $httpStatus >= 200 && $httpStatus < 400;
+
+        if ($canFallback) {
+            Log::warning('Template header media upload failed; falling back to media link', array_merge($context, [
+                'media_type' => $mediaType,
+                'media_url' => $this->sanitizeMediaUrlForLog($mediaUrl),
+                'http_status' => $httpStatus,
+                'source' => $access['source'] ?? null,
+            ]));
+        } else {
+            Log::error('Template header media upload failed and link is not accessible', array_merge($context, [
+                'media_type' => $mediaType,
+                'media_url' => $this->sanitizeMediaUrlForLog($mediaUrl),
+                'http_status' => $httpStatus,
+                'source' => $access['source'] ?? null,
+                'access_error' => $access['error'] ?? null,
+            ]));
+        }
+
+        return $canFallback;
     }
 
     private function getOrUploadTemplateHeaderMediaId(string $mediaUrl, string $mediaType, ?Template $templateModel = null, array $context = []): ?string
@@ -680,11 +711,9 @@ class WhatsappService
     private function inspectMediaUrlAccessibility(string $mediaUrl): array
     {
         try {
-            $appUrl = rtrim(config('app.url'), '/');
+            $relativePath = $this->localMediaPathFromUrl($mediaUrl);
 
-            if (str_starts_with($mediaUrl, $appUrl . '/media/')) {
-                $relativePath = urldecode(str_replace($appUrl . '/media/', '', $mediaUrl));
-
+            if ($relativePath) {
                 return [
                     'source' => 'local',
                     'http_status' => \Storage::disk('local')->exists($relativePath) ? 200 : 404,
@@ -1095,9 +1124,17 @@ class WhatsappService
             return urldecode(substr($url, strlen($mediaPrefix)));
         }
 
-        $path = parse_url($url, PHP_URL_PATH);
+        $urlParts = parse_url($url);
+        $path = $urlParts['path'] ?? null;
 
         if (!$path) {
+            return null;
+        }
+
+        $host = $urlParts['host'] ?? null;
+        $appHost = parse_url($appUrl, PHP_URL_HOST);
+
+        if ($host && $appHost && strcasecmp($host, $appHost) !== 0) {
             return null;
         }
 
