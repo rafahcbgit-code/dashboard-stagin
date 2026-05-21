@@ -2,6 +2,7 @@
 
 namespace App\Jobs\Flow;
 
+use App\Models\SmartFollowup;
 use App\Services\BotSettingsService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -29,8 +30,9 @@ class SendFlowRejoinRemindersJob implements ShouldQueue
             FlowUserData::whereNull('rejoin_sent_at')
                 ->whereNotNull('flow_id')
                 ->chunkById(200, function ($stalledFlows) use ($botSettings, &$dispatchedCount) {
-                    // Group by organization to batch settings lookups
+                    // Group by organization to batch settings and followup lookups
                     $orgSettings = [];
+                    $orgFollowups = [];
 
                     foreach ($stalledFlows as $flowData) {
                         try {
@@ -43,25 +45,24 @@ class SendFlowRejoinRemindersJob implements ShouldQueue
 
                             // Load and cache org settings for this chunk
                             if (!isset($orgSettings[$organizationId])) {
-                                $selectedFlowIds = $botSettings->getFlowRejoinFlowIds($organizationId);
-
                                 $orgSettings[$organizationId] = [
-                                    'enabled' => $botSettings->isFlowRejoinEnabled($organizationId)
-                                        && $botSettings->isAutomationEnabled($organizationId)
-                                        && !empty($selectedFlowIds),
-                                    'reminder_minutes' => $botSettings->getFlowRejoinReminderMinutes($organizationId),
+                                    'enabled' => $botSettings->isAutomationEnabled($organizationId),
                                     'timeout_minutes' => $botSettings->getFlowTimeoutMinutes($organizationId),
-                                    'message' => $botSettings->getFlowRejoinMessage($organizationId),
-                                    'flow_ids' => $selectedFlowIds,
                                 ];
+
+                                $orgFollowups[$organizationId] = SmartFollowup::forOrganization($organizationId)
+                                    ->rejoinReminder()
+                                    ->enabled()
+                                    ->get()
+                                    ->keyBy('flow_id');
                             }
 
-                            // Skip if rejoin is disabled for this org
                             if (!$orgSettings[$organizationId]['enabled']) {
                                 continue;
                             }
 
-                            if (!in_array((int) $flowData->flow_id, $orgSettings[$organizationId]['flow_ids'], true)) {
+                            $followup = $orgFollowups[$organizationId]->get((int) $flowData->flow_id);
+                            if (!$followup) {
                                 continue;
                             }
 
@@ -72,7 +73,7 @@ class SendFlowRejoinRemindersJob implements ShouldQueue
                             $inactiveMinutes = $flowData->updated_at->diffInMinutes(now());
 
                             // Not enough inactivity yet
-                            if ($inactiveMinutes < $orgSettings[$organizationId]['reminder_minutes']) {
+                            if ($inactiveMinutes < $followup->reminder_minutes) {
                                 continue;
                             }
 
@@ -91,7 +92,7 @@ class SendFlowRejoinRemindersJob implements ShouldQueue
                                 $flowData->id,
                                 $organizationId,
                                 $contact->uuid,
-                                $orgSettings[$organizationId]['message']
+                                $followup->message
                             );
 
                             $dispatchedCount++;

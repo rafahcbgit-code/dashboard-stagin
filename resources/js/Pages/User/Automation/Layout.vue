@@ -20,6 +20,12 @@
                                 <div class="overflow-hidden text-ellipsis">{{ $t('Triggers') }}</div>
                             </Link>
                         </li>
+                        <li v-if="fbmodule" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-1 truncate cursor-pointer" :class="$page.url.startsWith('/automation/smart-followup') ? 'bg-slate-50 text-black' : ''">
+                            <Link rel="noopener noreferrer" href="/automation/smart-followup" class="flex items-center p-2 space-s-3 rounded-md">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H8l-5 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path d="M8 8h8"/><path d="M8 12h5"/></svg>
+                                <div class="overflow-hidden text-ellipsis">{{ $t('Smart Followup') }}</div>
+                            </Link>
+                        </li>
                         <li v-if="fbmodule" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-1 truncate cursor-pointer" :class="$page.url.startsWith('/automation/knowledge-base') ? 'bg-slate-50 text-black' : ''">
                             <Link rel="noopener noreferrer" href="/automation/knowledge-base" class="flex items-center p-2 space-s-3 rounded-md">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M8 7h8m-8 4h8m-8 4h5"/></svg>
