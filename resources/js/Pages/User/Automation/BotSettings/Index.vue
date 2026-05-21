@@ -616,7 +616,8 @@ const scheduleSummary = computed(() => {
 async function submitForm() {
     saving.value = true;
 
-    const botSettings = {
+    const payload = {
+        // Bot settings
         automation_enabled: form.value.automation_enabled,
         fallback_threshold: form.value.fallback_threshold,
         flow_timeout_minutes: form.value.flow_timeout_minutes,
@@ -631,19 +632,14 @@ async function submitForm() {
         flow_rejoin_enabled: form.value.flow_rejoin_enabled,
         flow_rejoin_reminder_minutes: form.value.flow_rejoin_reminder_minutes,
         flow_rejoin_message: form.value.flow_rejoin_message,
-    };
-
-    const aiSettings = {
+        // AI settings
         ai_enabled: form.value.ai_enabled,
         ai_only_mode: form.value.ai_only_mode,
         default_confidence_threshold: form.value.default_confidence_threshold,
     };
 
     try {
-        await Promise.all([
-            router.put('/automation/bot-settings', botSettings, { preserveScroll: true }),
-            router.put('/automation/ai-settings', aiSettings, { preserveScroll: true }),
-        ]);
+        await router.put('/automation/bot-settings', payload, { preserveScroll: true });
     } finally {
         saving.value = false;
     }

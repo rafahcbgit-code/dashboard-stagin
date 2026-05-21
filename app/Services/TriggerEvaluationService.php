@@ -28,6 +28,11 @@ class TriggerEvaluationService
      * Evaluate all trigger groups for an organization against an incoming message.
      * Returns the first matching trigger group with its linked flow, or null.
      *
+     * Evaluation order (intent beats circumstance):
+     * 1. Keyword triggers (new_message) — customer explicitly typed a keyword
+     * 2. Context triggers (new_contact, greeting, away) — circumstantial
+     * 3. Fallback triggers — always last
+     *
      * @param int $organizationId
      * @param mixed $contact The contact model
      * @param string $message The incoming message text
@@ -45,11 +50,15 @@ class TriggerEvaluationService
             return null;
         }
 
-        // Fallback triggers always evaluate last, regardless of their priority number
-        $nonFallback = $triggerGroups->filter(fn($tg) => $tg->type !== 'fallback');
-        $fallbacks = $triggerGroups->filter(fn($tg) => $tg->type === 'fallback');
+        // Split into three evaluation groups: intent → context → fallback
+        // Keyword triggers (new_message) are evaluated first because customer
+        // intent should always beat circumstantial triggers.
+        $keywordTriggers = $triggerGroups->filter(fn($tg) => $tg->type === 'new_message');
+        $contextTriggers = $triggerGroups->filter(fn($tg) => in_array($tg->type, ['new_contact', 'greeting', 'away']));
+        $fallbackTriggers = $triggerGroups->filter(fn($tg) => $tg->type === 'fallback');
 
-        foreach ($nonFallback as $triggerGroup) {
+        // 1. Evaluate keyword (intent) triggers first
+        foreach ($keywordTriggers as $triggerGroup) {
             $match = $this->matchesTrigger($triggerGroup, $message, $isNewContact, $organizationId, $contact);
 
             if ($match !== null) {
@@ -71,7 +80,31 @@ class TriggerEvaluationService
             }
         }
 
-        foreach ($fallbacks as $triggerGroup) {
+        // 2. Evaluate context triggers (new_contact, greeting, away)
+        foreach ($contextTriggers as $triggerGroup) {
+            $match = $this->matchesTrigger($triggerGroup, $message, $isNewContact, $organizationId, $contact);
+
+            if ($match !== null) {
+                Log::info('TriggerEvaluationService: Trigger matched', [
+                    'trigger_group_id' => $triggerGroup->id,
+                    'trigger_name' => $triggerGroup->name,
+                    'trigger_type' => $triggerGroup->type,
+                    'match_mode' => $match->matchMode,
+                    'contact_id' => $contact->id ?? null,
+                ]);
+
+                return new TriggerMatchResult(
+                    triggerGroup: $triggerGroup,
+                    flow: $triggerGroup->flow,
+                    matchMode: $match->matchMode,
+                    matchedKeyword: $match->matchedKeyword,
+                    confidence: $match->confidence
+                );
+            }
+        }
+
+        // 3. Evaluate fallback triggers last
+        foreach ($fallbackTriggers as $triggerGroup) {
             $match = $this->matchesTrigger($triggerGroup, $message, $isNewContact, $organizationId, $contact);
 
             if ($match !== null) {

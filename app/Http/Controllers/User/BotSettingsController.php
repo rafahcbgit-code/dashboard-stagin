@@ -59,6 +59,7 @@ class BotSettingsController extends BaseController
     public function update(Request $request)
     {
         $validated = $request->validate([
+            // Bot settings
             'automation_enabled' => 'nullable|boolean',
             'fallback_threshold' => 'sometimes|integer|min:1|max:20',
             'flow_timeout_minutes' => 'sometimes|integer|min:5|max:1440',
@@ -73,6 +74,10 @@ class BotSettingsController extends BaseController
             'flow_rejoin_enabled' => 'nullable|boolean',
             'flow_rejoin_reminder_minutes' => 'nullable|integer|min:1|max:1440',
             'flow_rejoin_message' => 'nullable|string|max:500',
+            // AI settings
+            'ai_enabled' => 'nullable|boolean',
+            'ai_only_mode' => 'nullable|boolean',
+            'default_confidence_threshold' => 'nullable|integer|min:0|max:100',
         ]);
 
         // Convert checkboxes to booleans
@@ -81,14 +86,30 @@ class BotSettingsController extends BaseController
         $validated['escalation_transfer_message_enabled'] = isset($validated['escalation_transfer_message_enabled']) ? (bool) $validated['escalation_transfer_message_enabled'] : false;
         $validated['ai_followup_enabled'] = isset($validated['ai_followup_enabled']) ? (bool) $validated['ai_followup_enabled'] : false;
         $validated['flow_rejoin_enabled'] = isset($validated['flow_rejoin_enabled']) ? (bool) $validated['flow_rejoin_enabled'] : false;
-        $validated['ai_followup_enabled'] = isset($validated['ai_followup_enabled']) ? (bool) $validated['ai_followup_enabled'] : false;
+        $validated['ai_enabled'] = isset($validated['ai_enabled']) ? (bool) $validated['ai_enabled'] : false;
+        $validated['ai_only_mode'] = isset($validated['ai_only_mode']) ? (bool) $validated['ai_only_mode'] : false;
 
         $organizationId = session()->get('current_organization');
-        $this->botSettingsService->update($organizationId, $validated);
+
+        // Split into bot/AI settings and save atomically
+        $botKeys = [
+            'automation_enabled', 'fallback_threshold', 'flow_timeout_minutes',
+            'ai_fallback_enabled', 'ai_fallback_confidence',
+            'escalation_transfer_message_enabled', 'escalation_transfer_message',
+            'ai_followup_enabled', 'ai_followup_question', 'ai_followup_yes_text', 'ai_followup_no_text',
+            'flow_rejoin_enabled', 'flow_rejoin_reminder_minutes', 'flow_rejoin_message',
+        ];
+        $aiKeys = ['ai_enabled', 'ai_only_mode', 'default_confidence_threshold'];
+
+        $botSettings = array_intersect_key($validated, array_flip($botKeys));
+        $aiSettings = array_intersect_key($validated, array_flip($aiKeys));
+
+        $this->botSettingsService->update($organizationId, $botSettings);
+        $this->aiSettingsService->update($organizationId, $aiSettings);
 
         return redirect()->back()->with('status', [
             'type' => 'success',
-            'message' => 'Bot settings updated successfully',
+            'message' => 'Settings updated successfully',
         ]);
     }
 }
