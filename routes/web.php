@@ -346,6 +346,7 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::get('/automation/triggers', [App\Http\Controllers\User\TriggerGroupController::class, 'index'])->name('triggers.index');
                 Route::get('/automation/triggers/check-keyword', [App\Http\Controllers\User\TriggerGroupController::class, 'checkKeyword'])->name('triggers.checkKeyword');
                 Route::post('/automation/triggers', [App\Http\Controllers\User\TriggerGroupController::class, 'store'])->name('triggers.store');
+                Route::post('/automation/triggers/api-store', [App\Http\Controllers\User\TriggerGroupController::class, 'apiStore'])->name('triggers.apiStore');
                 Route::put('/automation/triggers/{uuid}', [App\Http\Controllers\User\TriggerGroupController::class, 'update'])->name('triggers.update');
                 Route::delete('/automation/triggers/{uuid}', [App\Http\Controllers\User\TriggerGroupController::class, 'destroy'])->name('triggers.destroy');
                 Route::post('/automation/triggers/reorder', [App\Http\Controllers\User\TriggerGroupController::class, 'reorder'])->name('triggers.reorder');
