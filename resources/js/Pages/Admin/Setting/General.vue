@@ -58,6 +58,43 @@
                     </div>
 
                     <div class="pt-5">
+                        <h2 class="text-base text-gray-900">{{ $t('AI Confidence Settings') }}</h2>
+                        <p class="text-sm leading-6 mb-5">{{ $t('Set the global confidence threshold used for AI trigger matching and Knowledge Base answers. This applies to all organizations.') }}</p>
+
+                        <div class="md:w-2/3 pb-10 border-b">
+                            <div class="rounded-lg border border-slate-200 p-5">
+                                <div class="flex items-start gap-3">
+                                    <div class="flex-shrink-0 w-9 h-9 rounded-lg bg-violet-100 flex items-center justify-center">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-violet-600"><path d="M12 2a5 5 0 0 1 5 5v3a5 5 0 0 1-10 0V7a5 5 0 0 1 5-5z"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="m4.93 19.07 1.41-1.41"/><path d="m17.66 6.34 1.41-1.41"/></svg>
+                                    </div>
+                                    <div class="flex-1">
+                                        <label class="block text-sm font-semibold text-slate-800">{{ $t('AI Confidence Threshold') }}</label>
+                                        <p class="text-xs text-slate-500 mt-0.5">{{ $t('Controls how confident AI must be for both trigger matching and Knowledge Base answers. Higher = stricter matching, fewer false positives. Lower = more matches but less accurate.') }}</p>
+                                    </div>
+                                </div>
+                                <div class="mt-4 rounded-lg border border-violet-100 bg-violet-50/50 p-4">
+                                    <div class="flex items-center justify-between mb-2">
+                                        <label class="text-xs font-medium text-slate-600">{{ $t('Confidence required') }}</label>
+                                        <span class="text-sm font-bold text-primary tabular-nums">{{ form.ai_confidence_threshold }}%</span>
+                                    </div>
+                                    <input
+                                        v-model.number="form.ai_confidence_threshold"
+                                        type="range"
+                                        min="0"
+                                        max="100"
+                                        step="5"
+                                        class="w-full h-2 rounded-lg appearance-none cursor-pointer accent-primary"
+                                    />
+                                    <div class="flex justify-between text-[10px] text-slate-400 mt-1">
+                                        <span>{{ $t('More matches (50%)') }}</span>
+                                        <span>{{ $t('Stricter matching (95%)') }}</span>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="pt-5">
                         <h2 class="text-base text-gray-900">{{ $t('Site logo and favicon') }}</h2>
                         <p class="text-sm leading-6 mb-5">{{ $t('Add your logo and favicon') }}</p>
 
@@ -132,6 +169,7 @@
         google_maps_api_key: getValueByKey('google_maps_api_key'),
         app_environment: getValueByKey('app_environment'),
         display_frontend:  getValueByKey('display_frontend') == 1 || getValueByKey('display_frontend') == '' ? true : false,
+        ai_confidence_threshold: parseInt(getValueByKey('ai_confidence_threshold')) || 85,
         logo: null,
         favicon: null,
         socials: {

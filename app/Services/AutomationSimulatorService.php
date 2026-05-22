@@ -621,7 +621,7 @@ class AutomationSimulatorService
     {
         $aiEnabled = $this->aiSettingsService->isEnabled($organizationId);
         $aiFallbackEnabled = (bool) $this->botSettings->getSetting($organizationId, 'ai_fallback_enabled', false);
-        $confidenceThreshold = (int) $this->botSettings->getSetting($organizationId, 'ai_fallback_confidence', 75);
+        $confidenceThreshold = $this->aiSettingsService->getDefaultConfidence($organizationId);
 
         if (!$aiEnabled) {
             return [

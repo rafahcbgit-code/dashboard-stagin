@@ -166,27 +166,6 @@
                                             </span>
                                         </div>
 
-                                        <!-- Confidence slider -->
-                                        <div class="rounded-lg border border-violet-100 bg-violet-50/50 p-4">
-                                            <div class="flex items-center justify-between mb-2">
-                                                <label class="text-sm font-semibold text-slate-700">{{ $t('Answer Confidence') }}</label>
-                                                <span class="text-sm font-bold text-primary tabular-nums">{{ form.ai_fallback_confidence }}%</span>
-                                            </div>
-                                            <input
-                                                v-model.number="form.ai_fallback_confidence"
-                                                type="range"
-                                                min="0"
-                                                max="100"
-                                                step="5"
-                                                class="w-full h-2 rounded-lg appearance-none cursor-pointer accent-primary"
-                                            />
-                                            <div class="flex justify-between text-[10px] text-slate-400 mt-1">
-                                                <span>{{ $t('Answers more questions (50%)') }}</span>
-                                                <span>{{ $t('Only very sure answers (90%)') }}</span>
-                                            </div>
-                                            <p class="text-xs text-slate-500 mt-2">{{ $t('Controls how confident AI must be before sending an answer. At 50%, AI answers most questions but may be wrong. At 90%, AI only responds when very sure.') }}</p>
-                                        </div>
-
                                         <!-- Follow-up Message Toggle -->
                                         <div class="rounded-lg border border-slate-200 p-4">
                                             <div class="flex items-start gap-3">
@@ -553,51 +532,23 @@
                             </div>
 
                             <!-- ============================================ -->
-                            <!-- SECTION 5: AI Matching Defaults -->
+                            <!-- SECTION 5: AI Matching Defaults (now managed by site admin) -->
                             <!-- ============================================ -->
                             <div :class="{ 'opacity-50 pointer-events-none': !form.automation_enabled }">
                                 <div class="flex items-center gap-2 mt-4 mb-2">
                                     <div class="w-1 h-5 rounded-full bg-emerald-500"></div>
                                     <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wide">{{ $t('AI Matching Defaults') }}</h3>
                                 </div>
-                                <p class="text-xs text-slate-400 mb-4">{{ $t('Default confidence for AI-powered trigger matching.') }}</p>
 
-                                <!-- Default Confidence Threshold -->
-                                <div class="rounded-lg border border-slate-200 p-5" :class="!form.ai_enabled ? 'opacity-50 pointer-events-none' : ''">
+                                <!-- Info callout explaining this is now a global setting -->
+                                <div class="rounded-lg border border-slate-200 p-5">
                                     <div class="flex items-start gap-3">
                                         <div class="flex-shrink-0 w-9 h-9 rounded-lg bg-emerald-100 flex items-center justify-center">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-emerald-600"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
                                         </div>
                                         <div class="flex-1">
-                                            <label class="block text-sm font-semibold text-slate-800">{{ $t('Trigger Matching Confidence') }}</label>
-                                            <p class="text-xs text-slate-500 mt-0.5">{{ $t('The default confidence level for triggers using AI Match mode. Lower = more triggers activate. Higher = stricter matching. Individual triggers can override this.') }}</p>
-                                        </div>
-                                    </div>
-                                    <div class="mt-4 rounded-lg border border-violet-100 bg-violet-50/50 p-4">
-                                        <div class="flex items-center justify-between mb-2">
-                                            <label class="text-xs font-medium text-slate-600">{{ $t('Confidence required') }}</label>
-                                            <span class="text-sm font-bold text-primary tabular-nums">{{ form.default_confidence_threshold }}%</span>
-                                        </div>
-                                        <input
-                                            v-model.number="form.default_confidence_threshold"
-                                            type="range"
-                                            min="0"
-                                            max="100"
-                                            step="5"
-                                            class="w-full h-2 rounded-lg appearance-none cursor-pointer accent-primary"
-                                        />
-                                        <div class="flex justify-between text-[10px] text-slate-400 mt-1">
-                                            <span>{{ $t('More triggers match (50%)') }}</span>
-                                            <span>{{ $t('Stricter matching (90%)') }}</span>
-                                        </div>
-                                    </div>
-                                    <!-- Clarifying callout -->
-                                    <div class="rounded-md bg-slate-50 border border-slate-200 px-3 py-2 text-xs text-slate-500 mt-3">
-                                        <div class="flex items-start gap-2">
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 mt-0.5 text-slate-400"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                                            <span>{{ $t('This is separate from the Answer Confidence above. This setting controls when AI triggers match a message, not when AI answers from the Knowledge Base.') }}
-                                                <a href="/automation/triggers" class="text-primary hover:underline">{{ $t('Manage individual trigger settings') }} &rarr;</a>
-                                            </span>
+                                            <label class="block text-sm font-semibold text-slate-800">{{ $t('AI Confidence Threshold') }}</label>
+                                            <p class="text-xs text-slate-500 mt-0.5">{{ $t('The confidence threshold for AI trigger matching and Knowledge Base answers is managed by your site admin in the Admin Settings. This ensures consistent behavior across all organizations.') }}</p>
                                         </div>
                                     </div>
                                 </div>
@@ -634,7 +585,7 @@ const form = ref({
     fallback_threshold: props.settings?.fallback_threshold || 3,
     flow_timeout_minutes: props.settings?.flow_timeout_minutes || 30,
     ai_fallback_enabled: props.settings?.ai_fallback_enabled || false,
-    ai_fallback_confidence: props.settings?.ai_fallback_confidence || 75,
+    ai_fallback_confidence: props.settings?.ai_fallback_confidence || 85,
     escalation_transfer_message_enabled: props.settings?.escalation_transfer_message_enabled ?? false,
     escalation_transfer_message: props.settings?.escalation_transfer_message || "You're being connected to a team member who can help. Please hold on a moment.",
     ai_followup_enabled: props.settings?.ai_followup_enabled ?? false,
@@ -650,7 +601,7 @@ const form = ref({
     // AI Settings fields
     ai_enabled: props.aiSettings?.ai_enabled || false,
     ai_only_mode: props.aiSettings?.ai_only_mode || false,
-    default_confidence_threshold: props.aiSettings?.default_confidence_threshold || 75,
+    default_confidence_threshold: props.aiSettings?.default_confidence_threshold || 85,
 });
 
 const hasKbEntries = computed(() => (props.kbEntryCount || 0) > 0);

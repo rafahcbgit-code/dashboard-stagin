@@ -76,12 +76,8 @@ class AiFallbackService
             return null;
         }
 
-        // 6. Get confidence threshold
-        $confidenceThreshold = (int) $this->botSettings->getSetting(
-            $organizationId,
-            'ai_fallback_confidence',
-            75
-        );
+        // 6. Get confidence threshold (global admin setting)
+        $confidenceThreshold = $this->aiSettingsService->getDefaultConfidence($organizationId);
 
         // 7. Build system prompt
         $systemPrompt = $this->buildSystemPrompt($kbContext);
