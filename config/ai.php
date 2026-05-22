@@ -27,12 +27,12 @@ return [
     |
     | Default settings for intent classification via AI. The confidence
     | threshold determines how confident the AI must be to consider a match.
-    | Individual trigger groups can override this threshold.
+    | This is the global threshold used for all AI triggers, managed by admins.
     |
     */
 
     'intent_classification' => [
-        'default_confidence_threshold' => 75,
+        'default_confidence_threshold' => 85,
         'max_retries' => 1,
         'retry_delay_ms' => 500,
     ],

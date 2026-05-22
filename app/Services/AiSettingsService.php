@@ -3,13 +3,14 @@
 namespace App\Services;
 
 use App\Models\Organization;
+use App\Models\Setting;
 
 class AiSettingsService
 {
     const DEFAULTS = [
         'ai_enabled' => false,
         'ai_only_mode' => false,
-        'default_confidence_threshold' => 75,
+        'default_confidence_threshold' => 85,
     ];
 
     public function get(int $organizationId): array
@@ -57,8 +58,17 @@ class AiSettingsService
         return (bool) ($this->get($organizationId)['ai_only_mode'] ?? false);
     }
 
+    /**
+     * Get the global AI confidence threshold set by the site admin.
+     * Falls back to the DEFAULTS constant if no admin setting exists.
+     */
     public function getDefaultConfidence(int $organizationId): int
     {
-        return (int) ($this->get($organizationId)['default_confidence_threshold'] ?? self::DEFAULTS['default_confidence_threshold']);
+        $globalValue = Setting::getValueByKey('ai_confidence_threshold');
+        if ($globalValue !== null && $globalValue !== '') {
+            return (int) $globalValue;
+        }
+
+        return self::DEFAULTS['default_confidence_threshold'];
     }
 }

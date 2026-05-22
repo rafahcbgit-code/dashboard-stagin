@@ -279,7 +279,7 @@ class TriggerEvaluationService
             $message,
             $triggerGroup->keywords,
             $triggerGroup->match_mode,
-            $triggerGroup->ai_confidence
+            $this->aiSettingsService->getDefaultConfidence($organizationId)
         );
 
         if ($result === null) {

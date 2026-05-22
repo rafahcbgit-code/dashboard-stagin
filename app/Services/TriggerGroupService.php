@@ -23,6 +23,34 @@ class TriggerGroupService
     }
 
     /**
+     * Get system trigger groups for an organization (not paginated).
+     */
+    public function listSystem(int $organizationId)
+    {
+        return TriggerGroup::forOrganization($organizationId)
+            ->where('is_system', true)
+            ->with('flow')
+            ->orderedByPriority()
+            ->get();
+    }
+
+    /**
+     * Get custom (non-system) trigger groups for an organization (paginated).
+     */
+    public function listCustom(int $organizationId, ?string $searchTerm = null)
+    {
+        return TriggerGroup::forOrganization($organizationId)
+            ->where('is_system', false)
+            ->with('flow')
+            ->orderedByPriority()
+            ->when($searchTerm, function ($query) use ($searchTerm) {
+                $query->where('name', 'like', '%' . $searchTerm . '%');
+            })
+            ->paginate(10)
+            ->withQueryString();
+    }
+
+    /**
      * Create a new trigger group.
      */
     public function create(int $organizationId, array $data): TriggerGroup

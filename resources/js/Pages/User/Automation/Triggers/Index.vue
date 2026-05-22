@@ -8,7 +8,7 @@
                         <div class="flex items-center justify-between pt-5 pb-4 border-b border-slate-100">
                             <div>
                                 <h4 class="text-lg font-semibold text-slate-800">{{ $t('Triggers') }}</h4>
-                                <p class="text-sm text-slate-500 mt-0.5">{{ $t('Define how your bot responds to messages. Drag to reorder priority.') }}</p>
+                                <p class="text-sm text-slate-500 mt-0.5">{{ $t('Define how your bot responds to messages.') }}</p>
                             </div>
                             <button
                                 v-if="!aiOnlyMode"
@@ -18,12 +18,6 @@
                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14m7-7H5"/></svg>
                                 {{ $t('Create Trigger') }}
                             </button>
-                        </div>
-
-                        <!-- Priority Info Banner -->
-                        <div class="mt-4 flex items-start gap-2 rounded-lg bg-emerald-50 border border-emerald-100 px-3.5 py-2.5 text-xs text-emerald-800">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 mt-0.5"><circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/></svg>
-                            <span>{{ $t('Triggers evaluate top-to-bottom. The first match wins. Drag to reorder priority.') }}</span>
                         </div>
 
                         <!-- AI-Only Mode Banner -->
@@ -49,25 +43,111 @@
                             </span>
                         </div>
 
-                        <!-- Empty State -->
-                        <div v-if="triggerGroups.data.length === 0" class="flex flex-col items-center justify-center py-16 text-slate-400">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="mb-3 opacity-40"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
-                            <p class="text-sm font-medium text-slate-500">{{ $t('No triggers yet') }}</p>
-                            <p class="text-xs text-slate-400 mt-1">{{ $t('Create your first trigger to control how your bot responds.') }}</p>
+                        <!-- System Triggers Section -->
+                        <div v-if="systemTriggersList.length > 0" class="mt-4">
+                            <div class="flex items-center gap-2 mb-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-sky-500"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+                                <h5 class="text-xs font-semibold uppercase tracking-wider text-slate-400">{{ $t('System Triggers') }}</h5>
+                            </div>
+                            <div class="space-y-2">
+                                <div
+                                    v-for="trigger in systemTriggersList"
+                                    :key="trigger.uuid"
+                                    class="group relative flex items-center gap-3 rounded-lg border px-4 py-3 transition-all duration-150"
+                                    :class="[
+                                        (aiOnlyMode && trigger.type !== 'fallback')
+                                            ? 'bg-slate-50/60 border-slate-100 opacity-50 pointer-events-none'
+                                            : trigger.is_enabled
+                                                ? 'bg-slate-50 border-slate-200 hover:border-slate-300'
+                                                : 'bg-slate-50/60 border-slate-100 opacity-70'
+                                    ]"
+                                >
+                                    <!-- Type Icon -->
+                                    <div
+                                        class="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center text-white text-sm font-bold"
+                                        :class="typeIconColor(trigger.type)"
+                                    >
+                                        {{ typeIcon(trigger.type) }}
+                                    </div>
+
+                                    <!-- Trigger Info -->
+                                    <div class="flex-1 min-w-0">
+                                        <div class="flex items-center gap-2">
+                                            <span class="font-medium text-sm text-slate-800 truncate">{{ trigger.name }}</span>
+                                            <span class="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-sky-50 text-sky-600 border border-sky-100">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12c5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg>
+                                                {{ $t('System') }}
+                                            </span>
+                                            <span v-if="aiOnlyMode && trigger.type === 'fallback'" class="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-indigo-50 text-indigo-600 border border-indigo-200">
+                                                {{ $t('AI-Only') }}
+                                            </span>
+                                            <span v-if="aiOnlyMode && trigger.type !== 'fallback'" class="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-slate-100 text-slate-400 border border-slate-200">
+                                                {{ $t('Bypassed') }}
+                                            </span>
+                                        </div>
+                                        <div class="flex items-center gap-1.5 mt-0.5 flex-wrap">
+                                            <template v-if="trigger.flow">
+                                                <span class="text-xs text-slate-500">
+                                                    {{ $t('Flow') }}: <a :href="'/automation/flows/' + trigger.flow.uuid" target="_blank" class="font-medium text-primary hover:underline">{{ trigger.flow.name }}</a>
+                                                </span>
+                                            </template>
+                                            <template v-else>
+                                                <span class="text-xs text-slate-400 italic">{{ $t('No flow linked') }}</span>
+                                            </template>
+
+                                            <!-- Rate Limit -->
+                                            <template v-if="trigger.rate_limit_type !== 'none'">
+                                                <span class="text-slate-200">·</span>
+                                                <span class="text-[11px] text-slate-400">{{ formatRateLimit(trigger.rate_limit_type) }}</span>
+                                            </template>
+                                        </div>
+                                    </div>
+
+                                    <!-- Actions -->
+                                    <div class="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity" :class="trigger.is_enabled ? '' : 'opacity-100'">
+                                        <!-- Toggle -->
+                                        <button
+                                            @click="toggleTrigger(trigger)"
+                                            class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-1"
+                                            :class="trigger.is_enabled ? 'bg-primary' : 'bg-slate-300'"
+                                        >
+                                            <span
+                                                class="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform duration-200"
+                                                :class="trigger.is_enabled ? 'translate-x-[18px]' : 'translate-x-[3px]'"
+                                            />
+                                        </button>
+                                        <!-- Edit -->
+                                        <button
+                                            @click="openEditModal(trigger)"
+                                            class="p-1 rounded text-slate-400 hover:text-primary hover:bg-slate-50 transition-colors"
+                                            :title="$t('Edit')"
+                                        >
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
 
-                        <!-- Trigger List -->
-                        <draggable
-                            v-else
-                            v-model="localTriggers"
-                            item-key="uuid"
-                            handle=".drag-handle"
-                            ghost-class="opacity-40"
-                            class="mt-3 space-y-2"
-                            @end="onDragEnd"
-                        >
-                            <template #item="{ element: trigger }">
+                        <!-- Custom Triggers Section -->
+                        <div class="mt-4">
+                            <div class="flex items-center gap-2 mb-2">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-slate-400"><path d="M12 5v14m7-7H5"/></svg>
+                                <h5 class="text-xs font-semibold uppercase tracking-wider text-slate-400">{{ $t('Custom Triggers') }}</h5>
+                            </div>
+
+                            <!-- Custom Triggers Empty State -->
+                            <div v-if="localTriggers.length === 0" class="flex flex-col items-center justify-center py-10 text-slate-400">
+                                <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="mb-2 opacity-40"><circle cx="12" cy="12" r="10"/><path d="M12 8v4l3 3"/></svg>
+                                <p class="text-sm font-medium text-slate-500">{{ $t('No custom triggers yet') }}</p>
+                                <p class="text-xs text-slate-400 mt-1">{{ $t('Create your first trigger to control how your bot responds to specific keywords.') }}</p>
+                            </div>
+
+                            <!-- Custom Trigger List -->
+                            <div v-else class="space-y-2">
                                 <div
+                                    v-for="trigger in localTriggers"
+                                    :key="trigger.uuid"
                                     class="group relative flex items-center gap-3 rounded-lg border px-4 py-3 transition-all duration-150"
                                     :class="[
                                         (aiOnlyMode && trigger.type !== 'fallback')
@@ -77,12 +157,6 @@
                                                 : 'bg-slate-50/60 border-slate-100 opacity-70'
                                     ]"
                                 >
-                                    <!-- Drag Handle -->
-                                    <div v-if="!(aiOnlyMode && trigger.type !== 'fallback')" class="drag-handle cursor-grab active:cursor-grabbing text-slate-300 hover:text-slate-500 transition-colors py-1">
-                                        <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="9" cy="5" r="1"/><circle cx="9" cy="12" r="1"/><circle cx="9" cy="19" r="1"/><circle cx="15" cy="5" r="1"/><circle cx="15" cy="12" r="1"/><circle cx="15" cy="19" r="1"/></svg>
-                                    </div>
-                                    <div v-else class="w-[18px] py-1"></div>
-
                                     <!-- Type Icon -->
                                     <div
                                         class="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center text-white text-sm font-bold"
@@ -188,8 +262,8 @@
                                         </button>
                                     </div>
                                 </div>
-                            </template>
-                        </draggable>
+                            </div>
+                        </div>
                         <Pagination v-if="triggerGroups.last_page > 1" class="mt-3" :pagination="triggerGroups" />
                     </div>
                 </div>
@@ -258,9 +332,16 @@
                                 @keydown.enter.prevent="addKeyword"
                             />
                         </div>
+                        <!-- Keyword duplicate error -->
+                        <div v-if="keywordError" class="mt-1.5 flex items-start gap-1.5 text-xs text-red-600">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 mt-0.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                            <span>{{ keywordError }}</span>
+                        </div>
+                        <div v-if="keywordChecking" class="mt-1.5 flex items-center gap-1.5 text-xs text-slate-400">
+                            <svg class="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                            <span>Checking keyword...</span>
+                        </div>
                     </div>
-
-                    <!-- Match Mode Toggle -->
                     <div>
                         <label class="block text-sm font-semibold text-slate-700 mb-1.5">{{ $t('Match Mode') }}</label>
                         <div class="grid grid-cols-2 gap-2">
@@ -295,25 +376,20 @@
                         </div>
                     </div>
 
-                    <!-- AI Confidence Slider (only when AI mode) -->
+                    <!-- AI Match Explanation (only when AI mode) -->
                     <div v-if="form.match_mode === 'ai'" class="rounded-lg border border-violet-100 bg-violet-50/50 p-4">
-                        <div class="flex items-center justify-between mb-2">
-                            <label class="text-sm font-semibold text-slate-700">{{ $t('AI Confidence Threshold') }}</label>
-                            <span class="text-sm font-bold text-primary tabular-nums">{{ form.ai_confidence }}%</span>
+                        <div class="flex items-start gap-2 mb-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 mt-0.5 text-violet-500"><path d="M12 2a5 5 0 0 1 5 5v3a5 5 0 0 1-10 0V7a5 5 0 0 1 5-5z"/><path d="M2 12h2"/><path d="M20 12h2"/><path d="M12 20v2"/><path d="m4.93 4.93 1.41 1.41"/><path d="m17.66 17.66 1.41 1.41"/><path d="m4.93 19.07 1.41-1.41"/><path d="m17.66 6.34 1.41-1.41"/></svg>
+                            <span class="text-sm font-semibold text-slate-700">{{ $t('How AI Match Works') }}</span>
                         </div>
-                        <input
-                            v-model.number="form.ai_confidence"
-                            type="range"
-                            min="0"
-                            max="100"
-                            step="5"
-                            class="w-full h-2 rounded-lg appearance-none cursor-pointer accent-primary"
-                        />
-                        <div class="flex justify-between text-[10px] text-slate-400 mt-1">
-                            <span>{{ $t('More matches') }}</span>
-                            <span>{{ $t('More accurate') }}</span>
-                        </div>
-                        <p class="text-xs text-slate-500 mt-2">{{ $t('Lower = more matches but less accurate. Higher = stricter matching.') }}</p>
+                        <p class="text-xs text-slate-600 mb-2">{{ $t('AI Match understands the intent behind messages, not just exact words. When a trigger named "Orders" has keywords like [order, ordering, place order], AI will match:') }}</p>
+                        <ul class="text-xs text-slate-600 space-y-1 ml-4 mb-2">
+                            <li>{{ $t('Exact phrases: "order" → matches') }}</li>
+                            <li>{{ $t('Synonyms & paraphrases: "I want to buy" → matches') }}</li>
+                            <li>{{ $t('Natural language: "Can I place an order?" → matches') }}</li>
+                            <li>{{ $t('Misspellings: "ordr" → matches') }}</li>
+                        </ul>
+                        <p class="text-xs text-slate-500">{{ $t('The confidence threshold is managed by your admin in Bot Settings and controls how strictly AI matches — higher means fewer but more accurate matches.') }}</p>
                     </div>
                 </div>
 
@@ -351,18 +427,23 @@ import SettingLayout from './../Layout.vue';
 import { Link } from '@inertiajs/vue3';
 import { ref, computed, watch } from 'vue';
 import { router } from '@inertiajs/vue3';
-import draggable from 'vuedraggable';
+import axios from 'axios';
 import Modal from '@/Components/Modal.vue';
 import Pagination from '@/Components/Pagination.vue';
 import { trans } from 'laravel-vue-i18n';
 import debounce from 'lodash/debounce';
 
-const props = defineProps(['triggerGroups', 'flows', 'filters', 'aimodule', 'fbmodule', 'aiOnlyMode']);
+const props = defineProps(['systemTriggers', 'triggerGroups', 'flows', 'filters', 'aimodule', 'fbmodule', 'aiOnlyMode']);
 
+const systemTriggersList = ref([...(props.systemTriggers || [])]);
 const localTriggers = ref([...(props.triggerGroups?.data || [])]);
 
 watch(() => props.triggerGroups?.data, (newGroups) => {
     localTriggers.value = [...(newGroups || [])];
+}, { deep: true });
+
+watch(() => props.systemTriggers, (newSystem) => {
+    systemTriggersList.value = [...(newSystem || [])];
 }, { deep: true });
 
 const params = ref({
@@ -393,13 +474,15 @@ const showCreateModal = ref(false);
 const showEditModal = ref(false);
 const editingTrigger = ref(null);
 const keywordInput = ref('');
+const keywordError = ref('');
+const keywordChecking = ref(false);
+let keywordCheckTimeout = null;
 
 const defaultForm = () => ({
     name: '',
     type: 'new_message',
     keywords: [],
     match_mode: 'exact',
-    ai_confidence: 75,
     flow_id: null,
     rate_limit_type: 'none',
     is_enabled: true,
@@ -460,11 +543,43 @@ function formatTypeDescription(type, rateLimitType) {
     return descriptions[type] || '';
 }
 
-function addKeyword() {
+async function addKeyword() {
     const val = keywordInput.value.trim();
-    if (val && !form.value.keywords.some(k => k.toLowerCase() === val.toLowerCase())) {
-        form.value.keywords.push(val);
+    if (!val) {
+        keywordInput.value = '';
+        return;
     }
+
+    // Check for duplicates within the current form
+    if (form.value.keywords.some(k => k.toLowerCase() === val.toLowerCase())) {
+        keywordError.value = 'This keyword already exists in this trigger.';
+        keywordInput.value = '';
+        return;
+    }
+
+    // Check against existing triggers in the organization
+    keywordChecking.value = true;
+    keywordError.value = '';
+    try {
+        const response = await axios.get('/automation/triggers/check-keyword', {
+            params: {
+                keyword: val.toLowerCase(),
+                exclude: editingTrigger.value?.uuid || '',
+            },
+        });
+
+        if (!response.data.available) {
+            keywordError.value = 'Keyword "' + val + '" is already used in trigger: ' + (response.data.trigger_name || 'another trigger');
+            keywordInput.value = '';
+            return;
+        }
+    } catch (error) {
+        // If API fails, allow the keyword — backend validation is the safety net
+    } finally {
+        keywordChecking.value = false;
+    }
+
+    form.value.keywords.push(val);
     keywordInput.value = '';
 }
 
@@ -479,7 +594,6 @@ function openEditModal(trigger) {
         type: trigger.type,
         keywords: trigger.keywords ? [...trigger.keywords] : [],
         match_mode: trigger.match_mode || 'exact',
-        ai_confidence: trigger.ai_confidence || 75,
         flow_id: trigger.flow_id,
         rate_limit_type: trigger.rate_limit_type || 'none',
         is_enabled: trigger.is_enabled,
@@ -493,13 +607,38 @@ function closeModal() {
     editingTrigger.value = null;
     form.value = defaultForm();
     keywordInput.value = '';
+    keywordError.value = '';
+    keywordChecking.value = false;
 }
 
-function submitForm() {
+async function submitForm() {
     const payload = { ...form.value };
     if (payload.type !== 'new_message') {
         payload.keywords = null;
         payload.match_mode = 'exact';
+    }
+
+    // Remove ai_confidence since it's no longer user-configurable
+    delete payload.ai_confidence;
+
+    // Validate keywords against organization duplicates before submitting
+    if (payload.type === 'new_message' && payload.keywords && payload.keywords.length > 0) {
+        for (const kw of payload.keywords) {
+            try {
+                const response = await axios.get('/automation/triggers/check-keyword', {
+                    params: {
+                        keyword: kw.toLowerCase(),
+                        exclude: editingTrigger.value?.uuid || '',
+                    },
+                });
+                if (!response.data.available) {
+                    keywordError.value = 'Keyword "' + kw + '" is already used in trigger: ' + (response.data.trigger_name || 'another trigger');
+                    return;
+                }
+            } catch (error) {
+                // If API fails, continue — backend validation is the safety net
+            }
+        }
     }
 
     if (editingTrigger.value) {
@@ -526,17 +665,4 @@ function deleteTrigger(trigger) {
     router.delete(`/automation/triggers/${trigger.uuid}`, { preserveScroll: true });
 }
 
-function onDragEnd() {
-    const orderedUuids = localTriggers.value.map(t => t.uuid);
-    router.post('/automation/triggers/reorder', {
-        ordered_uuids: orderedUuids,
-    }, {
-        preserveScroll: true,
-        onSuccess: () => {
-            localTriggers.value.forEach((t, i) => {
-                t.priority = i;
-            });
-        },
-    });
-}
 </script>

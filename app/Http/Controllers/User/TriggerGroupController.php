@@ -29,7 +29,8 @@ class TriggerGroupController extends BaseController
         $this->triggerGroupService->initializeSystemTriggers($organizationId);
 
         $searchTerm = $request->query('search');
-        $triggerGroups = $this->triggerGroupService->listAll($organizationId, $searchTerm);
+        $systemTriggers = $this->triggerGroupService->listSystem($organizationId);
+        $triggerGroups = $this->triggerGroupService->listCustom($organizationId, $searchTerm);
 
         // Get available flows for linking
         $flows = \Modules\FlowBuilder\Models\Flow::where('organization_id', $organizationId)
@@ -44,6 +45,7 @@ class TriggerGroupController extends BaseController
 
         return Inertia::render('User/Automation/Triggers/Index', [
             'title' => __('Triggers'),
+            'systemTriggers' => $systemTriggers,
             'triggerGroups' => $triggerGroups,
             'flows' => $flows,
             'filters' => request()->all(),
