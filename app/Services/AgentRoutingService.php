@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\ChatTicket;
 use App\Models\Contact;
+use App\Models\ContactBotReenable;
 use App\Models\Organization;
 use App\Models\User;
 use App\Jobs\ReEnableBotForContactJob;
@@ -334,9 +335,18 @@ class AgentRoutingService
             $autoReenableMinutes = app(BotSettingsService::class)->getAutoReenableBotMinutes($organizationId);
 
             $contact->bot_enable = false;
+            $contact->updated_at = now();
+            $contact->save();
+
+            // Remove any existing re-enable record
+            ContactBotReenable::where('contact_id', $contactId)->delete();
 
             if ($autoReenableMinutes > 0) {
-                $contact->bot_auto_reenable_at = now()->addMinutes($autoReenableMinutes);
+                ContactBotReenable::create([
+                    'contact_id' => $contactId,
+                    'organization_id' => $organizationId,
+                    'reenable_at' => now()->addMinutes($autoReenableMinutes),
+                ]);
 
                 ReEnableBotForContactJob::dispatch($contactId, $organizationId)
                     ->delay($autoReenableMinutes * 60)
@@ -347,15 +357,10 @@ class AgentRoutingService
                     'auto_reenable_minutes' => $autoReenableMinutes,
                 ]);
             } else {
-                $contact->bot_auto_reenable_at = null;
-
                 Log::info('AgentRoutingService: Bot auto-disabled on escalation, no auto-reenable', [
                     'contact_id' => $contactId,
                 ]);
             }
-
-            $contact->updated_at = now();
-            $contact->save();
         } catch (\Throwable $e) {
             Log::error('AgentRoutingService: Failed to disable bot on escalation', [
                 'contact_id' => $contactId,
