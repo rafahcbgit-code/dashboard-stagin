@@ -3,6 +3,7 @@
 namespace App\Jobs;
 
 use App\Models\Contact;
+use App\Models\ContactBotReenable;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -29,34 +30,37 @@ class ReEnableBotForContactJob implements ShouldQueue
 
     public function handle(): void
     {
+        $reenableRecord = ContactBotReenable::find($this->contactId);
+
+        if (!$reenableRecord) {
+            Log::info('ReEnableBotForContactJob: no re-enable record found (agent manually toggled or already processed), skipping', [
+                'contact_id' => $this->contactId,
+            ]);
+            return;
+        }
+
+        if ($reenableRecord->reenable_at->isFuture()) {
+            Log::info('ReEnableBotForContactJob: re-enable time not yet reached, skipping', [
+                'contact_id' => $this->contactId,
+                'reenable_at' => $reenableRecord->reenable_at->toDateTimeString(),
+            ]);
+            return;
+        }
+
         $contact = Contact::find($this->contactId);
-
         if (!$contact) {
-            Log::info('ReEnableBotForContactJob: contact not found, skipping', [
+            Log::info('ReEnableBotForContactJob: contact not found, cleaning up record', [
                 'contact_id' => $this->contactId,
             ]);
-            return;
-        }
-
-        if ($contact->bot_auto_reenable_at === null) {
-            Log::info('ReEnableBotForContactJob: agent manually toggled bot, skipping auto-reenable', [
-                'contact_id' => $this->contactId,
-            ]);
-            return;
-        }
-
-        if ($contact->bot_auto_reenable_at->isFuture()) {
-            Log::info('ReEnableBotForContactJob: auto-reenable time not yet reached, skipping', [
-                'contact_id' => $this->contactId,
-                'auto_reenable_at' => $contact->bot_auto_reenable_at->toDateTimeString(),
-            ]);
+            $reenableRecord->delete();
             return;
         }
 
         $contact->bot_enable = true;
-        $contact->bot_auto_reenable_at = null;
         $contact->updated_at = now();
         $contact->save();
+
+        $reenableRecord->delete();
 
         Log::info('ReEnableBotForContactJob: bot re-enabled automatically', [
             'contact_id' => $this->contactId,

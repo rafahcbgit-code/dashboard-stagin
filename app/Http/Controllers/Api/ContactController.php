@@ -249,9 +249,11 @@ class ContactController extends Controller
 
             // Update bot status
             $contact->bot_enable = $request->input('enabled') ? 1 : 0;
-            $contact->bot_auto_reenable_at = null;
             $contact->updated_at = now();
             $contact->save();
+
+            // Cancel any pending auto-reenable
+            \App\Models\ContactBotReenable::where('contact_id', $contact->id)->delete();
 
             return response()->json([
                 'success' => true,
