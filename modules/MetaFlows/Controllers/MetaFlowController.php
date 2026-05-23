@@ -339,7 +339,7 @@ class MetaFlowController extends BaseController
             'reply_message_template'            => 'sometimes|nullable|string|max:5000',
             'interactive_reply_enabled'          => 'sometimes|boolean',
             'interactive_reply_config'           => 'sometimes|nullable|array',
-            'interactive_reply_config.body'      => 'sometimes|string|max:5000',
+            'interactive_reply_config.body'      => 'sometimes|nullable|string|max:5000',
             'interactive_reply_config.buttons'   => 'sometimes|array|max:3',
             'interactive_reply_config.buttons.*.id'    => 'sometimes|string|max:50',
             'interactive_reply_config.buttons.*.title'  => 'sometimes|string|max:20',
@@ -347,8 +347,8 @@ class MetaFlowController extends BaseController
             'email_notification_config'          => 'sometimes|nullable|array',
             'email_notification_config.recipients'         => 'sometimes|array',
             'email_notification_config.recipients.*'       => 'sometimes|email',
-            'email_notification_config.subject_template'   => 'sometimes|string|max:500',
-            'email_notification_config.body_template'      => 'sometimes|string|max:5000',
+            'email_notification_config.subject_template'   => 'sometimes|nullable|string|max:500',
+            'email_notification_config.body_template'      => 'sometimes|nullable|string|max:5000',
         ]);
 
         $flow = MetaFlow::where('uuid', $uuid)
