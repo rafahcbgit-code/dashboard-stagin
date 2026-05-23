@@ -734,6 +734,7 @@ class ContactController extends BaseController
 
         // Update the bot_enable field
         $contact->bot_enable = $validated['bot_enable'];
+        $contact->bot_auto_reenable_at = null;
         $contact->updated_at = now();
         $contact->save();
 

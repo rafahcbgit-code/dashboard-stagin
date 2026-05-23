@@ -69,6 +69,7 @@ class BotSettingsController extends BaseController
             'ai_fallback_confidence' => 'nullable|integer|min:0|max:100',
             'escalation_transfer_message_enabled' => 'nullable|boolean',
             'escalation_transfer_message' => 'nullable|string|max:500',
+            'auto_reenable_bot_minutes' => 'nullable|integer|in:0,10,30,60,120',
             'ai_followup_enabled' => 'nullable|boolean',
             'ai_followup_question' => 'nullable|string|max:60',
             'ai_followup_yes_text' => 'nullable|string|max:20',
@@ -92,6 +93,7 @@ class BotSettingsController extends BaseController
             'automation_enabled', 'fallback_threshold', 'flow_timeout_minutes',
             'ai_fallback_enabled', 'ai_fallback_confidence',
             'escalation_transfer_message_enabled', 'escalation_transfer_message',
+            'auto_reenable_bot_minutes',
             'ai_followup_enabled', 'ai_followup_question', 'ai_followup_yes_text', 'ai_followup_no_text',
         ];
         $aiKeys = ['ai_enabled', 'ai_only_mode', 'default_confidence_threshold'];

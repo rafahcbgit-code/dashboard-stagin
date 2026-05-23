@@ -19,6 +19,9 @@ class Contact extends Model
     protected $guarded = [];
     protected $appends = ['full_name', 'formatted_phone_number'];
     protected $dates = ['deleted_at'];
+    protected $casts = [
+        'bot_auto_reenable_at' => 'datetime',
+    ];
     public $timestamps = false;
     protected static array $phoneMaskingEnabledCache = [];
     protected static array $viewerRoleCache = [];

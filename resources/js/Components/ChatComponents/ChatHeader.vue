@@ -34,6 +34,7 @@ const user = ref({
 watchEffect(() => {
     displayContact.value = props.displayContactInfo;
     ticketState.value = props.ticket?.status;
+    form4.bot_enable = props.contact?.bot_enable;
 });
 
 const emit = defineEmits(['toggleView', 'deleteThread', 'closeThread', 'labelsUpdated']);
@@ -361,6 +362,28 @@ onUnmounted(() => {
                 :class="{ 'bg-primary': form3.ai_assistant }" @click="submitForm3()">
                 <div class="bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out"
                     :class="{ 'translate-x-6': form3.ai_assistant }"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bot Status Bar -->
+    <div class="flex justify-between items-center bg-white border-b border-1 py-2 px-4 md:px-4">
+        <div class="text-sm py-1 px-3 rounded-md flex items-center gap-x-2 w-[fit-content]"
+            :class="form4.bot_enable ? 'bg-green-50' : 'bg-amber-50'">
+            <span :class="form4.bot_enable ? 'text-green-500' : 'text-amber-500'">
+                <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24">
+                    <path fill="currentColor"
+                        d="M12 22q-2.075 0-3.9-.788t-3.175-2.137T2.788 15.9T2 12t.788-3.9t2.137-3.175T8.1 2.788T12 2t3.9.788t3.175 2.137T21.213 8.1T22 12t-.788 3.9t-2.137 3.175t-3.175 2.138T12 22" />
+                </svg>
+            </span>
+            <span>{{ form4.bot_enable ? $t('Bot Active') : $t('Bot Paused') }}</span>
+        </div>
+        <div class="flex items-center gap-x-2">
+            <span class="text-[13px]">{{ $t('Enable/disable chatbot') }}</span>
+            <div class="w-12 h-6 flex items-center bg-gray-300 rounded-full p-1 cursor-pointer"
+                :class="{ 'bg-primary': form4.bot_enable }" @click="toggleBot()">
+                <div class="bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out"
+                    :class="{ 'translate-x-6': form4.bot_enable }"></div>
             </div>
         </div>
     </div>
