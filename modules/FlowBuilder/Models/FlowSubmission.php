@@ -13,11 +13,20 @@ class FlowSubmission extends Model
         'organization_id',
         'flow_id',
         'contact_id',
+        'run_uuid',
+        'node_id',
+        'variable_name',
+        'question_text',
+        'input_type',
+        'answer_value',
+        'status',
+        'answered_at',
         'submission_data',
     ];
 
     protected $casts = [
         'submission_data' => 'array',
+        'answered_at' => 'datetime',
     ];
 
     public function organization()
