@@ -322,6 +322,37 @@
                                         {{ $t('No message will be sent when escalating to a human agent.') }}
                                     </div>
                                 </div>
+
+                                <!-- Auto Re-enable Bot After Escalation -->
+                                <div class="rounded-lg border border-slate-200 p-5 mt-6">
+                                    <div class="flex items-start gap-3">
+                                        <div class="flex-shrink-0 w-9 h-9 rounded-lg bg-amber-100 flex items-center justify-center">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-amber-600"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                                        </div>
+                                        <div class="flex-1">
+                                            <label class="block text-sm font-semibold text-slate-800">{{ $t('Auto Re-enable Bot') }}</label>
+                                            <p class="text-xs text-slate-500 mt-0.5">{{ $t('After a conversation is escalated to a human, the bot is automatically disabled. Choose how long to wait before re-enabling it, or leave it off until an agent manually re-enables it.') }}</p>
+                                        </div>
+                                    </div>
+                                    <div class="mt-4 flex items-center gap-3">
+                                        <select v-model.number="form.auto_reenable_bot_minutes"
+                                            class="w-28 rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 focus:border-primary focus:ring-1 focus:ring-primary/30 focus:outline-none transition-colors">
+                                            <option :value="0">{{ $t('Off') }}</option>
+                                            <option :value="10">{{ $t('10 min') }}</option>
+                                            <option :value="30">{{ $t('30 min') }}</option>
+                                            <option :value="60">{{ $t('1 hour') }}</option>
+                                            <option :value="120">{{ $t('2 hours') }}</option>
+                                        </select>
+                                        <span class="text-sm text-slate-500">{{ $t('after escalation') }}</span>
+                                    </div>
+                                    <div v-if="form.auto_reenable_bot_minutes > 0" class="mt-3 flex items-start gap-2 rounded-md bg-amber-50 border border-amber-100 px-3 py-2 text-xs text-amber-700">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="flex-shrink-0 mt-0.5"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+                                        <span>{{ $t("If an agent manually toggles the bot before the timer expires, the auto-reenable is cancelled and the agent's choice takes priority.") }}</span>
+                                    </div>
+                                    <div v-else class="mt-3 text-xs text-slate-400">
+                                        {{ $t('The bot will stay disabled after escalation until an agent manually re-enables it from the chat thread.') }}
+                                    </div>
+                                </div>
                             </div>
 
                             <!-- ============================================ -->
@@ -471,6 +502,7 @@ const form = ref({
     ai_fallback_confidence: props.settings?.ai_fallback_confidence || 85,
     escalation_transfer_message_enabled: props.settings?.escalation_transfer_message_enabled ?? false,
     escalation_transfer_message: props.settings?.escalation_transfer_message || "You're being connected to a team member who can help. Please hold on a moment.",
+    auto_reenable_bot_minutes: props.settings?.auto_reenable_bot_minutes || 0,
     ai_followup_enabled: props.settings?.ai_followup_enabled ?? false,
     ai_followup_question: props.settings?.ai_followup_question || 'Was this helpful?',
     ai_followup_yes_text: props.settings?.ai_followup_yes_text || 'Yes, this helped',
@@ -512,6 +544,7 @@ async function submitForm() {
         ai_fallback_confidence: form.value.ai_fallback_confidence,
         escalation_transfer_message_enabled: form.value.escalation_transfer_message_enabled,
         escalation_transfer_message: form.value.escalation_transfer_message,
+        auto_reenable_bot_minutes: form.value.auto_reenable_bot_minutes,
         ai_followup_enabled: form.value.ai_followup_enabled,
         ai_followup_question: form.value.ai_followup_question,
         ai_followup_yes_text: form.value.ai_followup_yes_text,

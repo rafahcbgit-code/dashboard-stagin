@@ -3,9 +3,12 @@
 namespace App\Services;
 
 use App\Models\ChatTicket;
+use App\Models\Contact;
 use App\Models\Organization;
 use App\Models\User;
+use App\Jobs\ReEnableBotForContactJob;
 use App\Jobs\SendAssignmentEmailJob;
+use App\Services\BotSettingsService;
 use App\Services\RateLimitService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
@@ -26,6 +29,9 @@ class AgentRoutingService
         try {
             // Reset fallback counter — escalation served its purpose
             app(RateLimitService::class)->resetFallbackCounter($organizationId, $contactId);
+
+            // Disable bot for this contact on escalation
+            $this->disableBotOnEscalation($organizationId, $contactId);
 
             $existingTicket = ChatTicket::where('contact_id', $contactId)
                 ->where('organization_id', $organizationId)
@@ -312,6 +318,47 @@ class AgentRoutingService
             ]);
         } catch (\Throwable $e) {
             Log::error('AgentRoutingService: Failed to log ticket event', [
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    private function disableBotOnEscalation(int $organizationId, int $contactId): void
+    {
+        try {
+            $contact = Contact::find($contactId);
+            if (!$contact) {
+                return;
+            }
+
+            $autoReenableMinutes = app(BotSettingsService::class)->getAutoReenableBotMinutes($organizationId);
+
+            $contact->bot_enable = false;
+
+            if ($autoReenableMinutes > 0) {
+                $contact->bot_auto_reenable_at = now()->addMinutes($autoReenableMinutes);
+
+                ReEnableBotForContactJob::dispatch($contactId, $organizationId)
+                    ->delay($autoReenableMinutes * 60)
+                    ->onQueue('default');
+
+                Log::info('AgentRoutingService: Bot auto-disabled on escalation, auto-reenable scheduled', [
+                    'contact_id' => $contactId,
+                    'auto_reenable_minutes' => $autoReenableMinutes,
+                ]);
+            } else {
+                $contact->bot_auto_reenable_at = null;
+
+                Log::info('AgentRoutingService: Bot auto-disabled on escalation, no auto-reenable', [
+                    'contact_id' => $contactId,
+                ]);
+            }
+
+            $contact->updated_at = now();
+            $contact->save();
+        } catch (\Throwable $e) {
+            Log::error('AgentRoutingService: Failed to disable bot on escalation', [
+                'contact_id' => $contactId,
                 'error' => $e->getMessage(),
             ]);
         }
