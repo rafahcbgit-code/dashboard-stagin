@@ -53,6 +53,7 @@
             :messages="chatMessages"
             :is-typing="isTyping"
             :input-message="inputMessage"
+            :input-hint="activeInputHint"
             @update:input-message="inputMessage = $event"
             @send="sendMessage"
             @select-option="selectOption"
@@ -77,6 +78,7 @@
               :variables="variables"
               :bot-settings="botSettings"
               :session-info="sessionInfo"
+              :working-hours="workingHours"
               :unmatched-message-count="unmatchedMessageCount"
               @close="showDebug = false"
             />
@@ -120,6 +122,8 @@ const {
   botSettings,
   sessionInfo,
   unmatchedMessageCount,
+  activeInputHint,
+  workingHours,
   sendMessage,
   selectOption,
   testAiDirectly,

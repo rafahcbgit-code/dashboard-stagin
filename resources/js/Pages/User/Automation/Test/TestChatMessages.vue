@@ -42,20 +42,30 @@
           </div>
 
           <!-- Question -->
-          <div v-else-if="msg.whatsapp?.type === 'question'" class="whitespace-pre-wrap">{{ msg.whatsapp.body }}</div>
-
-          <!-- Template label -->
-          <div v-else-if="msg.whatsapp?.type === 'template'" class="flex items-center gap-1.5">
-            <span class="text-xs">&#128203;</span>
-            <span class="whitespace-pre-wrap">{{ msg.whatsapp.body }}</span>
+          <div v-else-if="msg.whatsapp?.type === 'question'">
+            <div class="whitespace-pre-wrap">{{ msg.whatsapp.body }}</div>
+            <div v-if="msg.whatsapp.input_type && msg.whatsapp.input_type !== 'text'" class="text-[11px] text-gray-400 mt-1 border-t border-gray-100 pt-1">
+              Expects: {{ msg.whatsapp.input_type }}
+            </div>
           </div>
 
-          <!-- MetaFlow label -->
+          <!-- Template message -->
+          <div v-else-if="msg.whatsapp?.type === 'template'">
+            <div class="flex items-center gap-1.5 mb-1">
+              <span class="text-xs">&#128203;</span>
+              <span class="text-[11px] font-medium text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded">Template</span>
+              <span class="text-[11px] text-gray-400">{{ msg.whatsapp.name }}</span>
+              <span v-if="msg.whatsapp.language" class="text-[10px] text-gray-400">({{ msg.whatsapp.language }})</span>
+            </div>
+          </div>
+
+          <!-- MetaFlow / WhatsApp Flow -->
           <div v-else-if="msg.whatsapp?.type === 'flow'">
             <div class="whitespace-pre-wrap">{{ msg.whatsapp.body }}</div>
             <div class="mt-2 bg-[#034737] text-white text-center py-2 rounded-lg text-sm font-medium opacity-60 cursor-default">
               {{ msg.whatsapp.cta }}
             </div>
+            <div class="text-[11px] text-gray-400 mt-1">WhatsApp Flow: {{ msg.whatsapp.name }}</div>
           </div>
 
           <!-- Portal redirect -->

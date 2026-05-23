@@ -64,14 +64,19 @@
       </div>
 
       <!-- Working Hours -->
-      <div v-if="workingHours" class="space-y-1 pt-2 border-t border-gray-100">
+      <div v-if="workingHours && workingHours.days" class="space-y-1 pt-2 border-t border-gray-100">
         <div class="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Working Hours</div>
-        <div v-for="day in workingHours" :key="day.day" class="flex items-center justify-between text-xs">
+        <div v-if="workingHours.timezone" class="text-[10px] text-gray-400 mb-1">{{ workingHours.timezone }}</div>
+        <div v-for="day in workingHours.days" :key="day.day" class="flex items-center justify-between text-xs">
           <span class="text-gray-600">{{ day.day }}</span>
           <span :class="day.active ? 'text-gray-800' : 'text-gray-400'" class="font-medium">
             {{ day.active ? `${day.from} - ${day.to}` : 'Off' }}
           </span>
         </div>
+      </div>
+      <div v-else-if="botSettings.automation_enabled !== undefined" class="space-y-1 pt-2 border-t border-gray-100">
+        <div class="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Working Hours</div>
+        <div class="text-xs text-gray-400">No schedule configured</div>
       </div>
     </div>
   </div>
@@ -83,7 +88,7 @@ import { ref, computed } from 'vue'
 const props = defineProps({
   botSettings: { type: Object, default: () => ({}) },
   sessionInfo: { type: Object, default: null },
-  workingHours: { type: Array, default: () => [] },
+  workingHours: { type: Object, default: null },
   unmatchedMessageCount: { type: Number, default: 0 },
 })
 

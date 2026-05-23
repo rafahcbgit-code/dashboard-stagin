@@ -170,6 +170,7 @@ class AutomationTestController extends BaseController
             'working_hours' => [
                 'enabled' => (bool) $botSettings->getSetting($organizationId, 'enable_working_hours', false),
                 'within' => $workingHours->isWithinWorkingHours($organizationId),
+                'schedule' => $workingHours->getSchedule($organizationId),
             ],
             'triggers' => $triggers,
             'flows' => $flows,

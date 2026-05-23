@@ -362,6 +362,7 @@ class AutomationSimulatorService
         $visitedNodes = [];
         $needsInput = null;
         $stoppedForInput = false;
+        $loopDetected = false;
 
         while ($currentNodeId && !isset($visitedNodes[$currentNodeId])) {
             $visitedNodes[$currentNodeId] = true;
@@ -407,9 +408,12 @@ class AutomationSimulatorService
             $currentNodeId = (string) $nextNode['id'];
         }
 
-        // Only add loop detection if we exited the while loop because of a revisit
-        // (not because we stopped for user input or end-of-flow)
-        if (!$stoppedForInput && isset($visitedNodes[$currentNodeId])) {
+        // Loop detection: the while condition failed because next node was already visited
+        if (!$stoppedForInput && $currentNodeId && isset($visitedNodes[$currentNodeId])) {
+            $loopDetected = true;
+        }
+
+        if ($loopDetected) {
             $messages[] = (new SimulationStep(
                 nodeId: $currentNodeId,
                 nodeType: 'loop',
@@ -572,6 +576,7 @@ class AutomationSimulatorService
         $currentNodeId = (string) $nextNode['id'];
         $needsInput = null;
         $stoppedForInput = false;
+        $loopDetected = false;
 
         while ($currentNodeId && !isset($visitedNodes[$currentNodeId])) {
             $visitedNodes[$currentNodeId] = true;
@@ -616,8 +621,12 @@ class AutomationSimulatorService
             $currentNodeId = (string) $nextNode['id'];
         }
 
-        // Only add loop detection if we exited because of a revisit (not stopped for input)
-        if (!$stoppedForInput && isset($visitedNodes[$currentNodeId])) {
+        // Loop detection: the while condition failed because next node was already visited
+        if (!$stoppedForInput && $currentNodeId && isset($visitedNodes[$currentNodeId])) {
+            $loopDetected = true;
+        }
+
+        if ($loopDetected) {
             $messages[] = (new SimulationStep(
                 nodeId: $currentNodeId,
                 nodeType: 'loop',
@@ -775,7 +784,7 @@ class AutomationSimulatorService
                 ))->toArray();
 
             case 'text':
-                $text = $fields['text'] ?? '';
+                $text = $fields['body'] ?? '';
                 return (new SimulationStep(
                     nodeId: $nodeId,
                     nodeType: 'text',

@@ -54,6 +54,13 @@
             <div v-if="step.condition_result" class="text-[11px] mt-0.5" :class="step.condition_result.result ? 'text-green-600' : 'text-red-500'">
               Condition: {{ step.condition_result.expression }} → {{ step.condition_result.result ? 'True' : 'False' }} ({{ step.condition_result.branch }})
             </div>
+            <div v-if="step.validation_rules" class="text-[11px] text-gray-500 mt-0.5">
+              <div class="flex items-center gap-2">
+                <span v-if="step.validation_rules.input_type" class="inline-flex px-1 py-0.5 rounded bg-blue-50 text-blue-600">Input: {{ step.validation_rules.input_type }}</span>
+                <span v-if="step.validation_rules.variable_name" class="inline-flex px-1 py-0.5 rounded bg-purple-50 text-purple-600">Saves: {{ step.validation_rules.variable_name }}</span>
+                <span v-if="step.validation_rules.retry_limit" class="inline-flex px-1 py-0.5 rounded bg-amber-50 text-amber-600">Retries: {{ step.validation_rules.retry_limit }}</span>
+              </div>
+            </div>
             <div v-if="step.variables_set && step.variables_set.length > 0" class="text-[11px] text-gray-500 mt-0.5">
               Variables: {{ step.variables_set.map(v => `${v.name}="${v.value}"`).join(', ') }}
             </div>

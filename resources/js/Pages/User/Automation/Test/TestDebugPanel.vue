@@ -86,7 +86,7 @@ const props = defineProps({
   contactContext: { type: Object, default: null },
   botSettings: { type: Object, default: () => ({}) },
   sessionInfo: { type: Object, default: null },
-  workingHours: { type: Array, default: () => [] },
+  workingHours: { type: Object, default: null },
   unmatchedMessageCount: { type: Number, default: 0 },
 })
 

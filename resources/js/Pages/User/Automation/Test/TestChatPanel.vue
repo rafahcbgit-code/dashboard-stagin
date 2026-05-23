@@ -19,6 +19,7 @@
       :model-value="inputMessage"
       @update:model-value="$emit('update:input-message', $event)"
       :disabled="isTyping"
+      :hint="inputHint"
       @send="$emit('send')"
     />
   </div>
@@ -39,6 +40,7 @@ defineProps({
   messages: { type: Array, required: true },
   isTyping: { type: Boolean, default: false },
   inputMessage: { type: String, default: '' },
+  inputHint: { type: String, default: null },
 })
 
 defineEmits(['send', 'select-option', 'update:input-message'])

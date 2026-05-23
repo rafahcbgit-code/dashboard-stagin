@@ -3,13 +3,14 @@ import axios from 'axios'
 
 export function useAutomationTest(props) {
   const isNewContact = ref(false)
-  const duringWorkingHours = ref(props.withinWorkingHours)
+  const duringWorkingHours = ref(true)
   const showDebug = ref(true)
   const inputMessage = ref('')
   const isTyping = ref(false)
   const chatMessages = ref([])
   const debugEntries = ref([])
   const flowSessionId = ref(null)
+  const activeInputHint = ref(null)
 
   // Structured debug data
   const triggerTraces = ref([])
@@ -19,7 +20,7 @@ export function useAutomationTest(props) {
   const botSettings = ref({})
   const sessionInfo = ref(null)
   const unmatchedMessageCount = ref(0)
-  const workingHours = ref([])
+  const workingHours = ref(null)
 
   // Load context on mount
   onMounted(async () => {
@@ -28,6 +29,9 @@ export function useAutomationTest(props) {
       const data = response.data
       if (data.bot_settings) {
         botSettings.value = data.bot_settings
+      }
+      if (data.working_hours?.schedule) {
+        workingHours.value = data.working_hours.schedule
       }
     } catch (error) {
       // Silently fail — context is for debug panel enrichment, not critical
@@ -89,6 +93,7 @@ export function useAutomationTest(props) {
     variables.value = []
     flowSessionId.value = null
     inputMessage.value = ''
+    activeInputHint.value = null
     unmatchedMessageCount.value = 0
   }
 
@@ -260,6 +265,9 @@ export function useAutomationTest(props) {
 
       if (data.needs_input) {
         addDebug('warning', `Waiting for ${data.needs_input.node_type} input`)
+        activeInputHint.value = data.needs_input.input_type || null
+      } else {
+        activeInputHint.value = null
       }
     } catch (error) {
       isTyping.value = false
@@ -287,6 +295,7 @@ export function useAutomationTest(props) {
         addBotMessage({ type: 'text', body: data.message || 'Error.' })
         addDebug('error', 'Error', data.message)
         flowSessionId.value = null
+        activeInputHint.value = null
         return
       }
 
@@ -300,9 +309,13 @@ export function useAutomationTest(props) {
 
       if (data.needs_input) {
         addDebug('warning', `Waiting for ${data.needs_input.node_type} input`)
+        activeInputHint.value = data.needs_input.input_type || null
       } else if (botMessages.some(m => m.category === 'flow_ended')) {
         flowSessionId.value = null
+        activeInputHint.value = null
         addDebug('info', 'Flow complete')
+      } else {
+        activeInputHint.value = null
       }
     } catch (error) {
       isTyping.value = false
@@ -342,9 +355,13 @@ export function useAutomationTest(props) {
 
       if (data.needs_input) {
         addDebug('warning', `Waiting for ${data.needs_input.node_type} input`)
+        activeInputHint.value = data.needs_input.input_type || null
       } else if (botMessages.some(m => m.category === 'flow_ended')) {
         flowSessionId.value = null
+        activeInputHint.value = null
         addDebug('info', 'Flow complete')
+      } else {
+        activeInputHint.value = null
       }
     } catch (error) {
       isTyping.value = false
@@ -426,6 +443,7 @@ export function useAutomationTest(props) {
         description: msg.description,
         condition_result: msg.condition_result || null,
         variables_set: msg.variables_set || null,
+        validation_rules: msg.validation_rules || null,
       })
 
       // Detect human transfer — show a clear indicator and end session
@@ -433,7 +451,11 @@ export function useAutomationTest(props) {
         hasHumanTransfer = true
       }
 
-      if (msg.whatsapp) {
+      // Technical/debug messages should only appear in the debug panel, not in chat
+      const isTechnicalFlowMessage = msg.category === 'flow_ended'
+        && (msg.node_type === 'end' || msg.node_type === 'loop' || msg.node_type === 'unknown')
+
+      if (msg.whatsapp && !isTechnicalFlowMessage) {
         const options = msg.options || null
         addBotMessage(msg.whatsapp, options)
       }
@@ -475,6 +497,7 @@ export function useAutomationTest(props) {
     botSettings,
     sessionInfo,
     unmatchedMessageCount,
+    activeInputHint,
     workingHours,
     // Methods
     sendMessage,
