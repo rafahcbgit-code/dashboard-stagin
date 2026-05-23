@@ -38,6 +38,9 @@ Route::middleware(['auth:user'])->prefix('/automation/meta-flows')->group(functi
     Route::get('/{uuid}/sheet-headers', [MetaFlowController::class, 'getSheetHeaders']);
     Route::put('/{uuid}/sheet-config',  [MetaFlowController::class, 'saveSheetConfig']);
 
+    // Post-submission settings (reply message, interactive reply, email notification)
+    Route::put('/{uuid}/submission-settings', [MetaFlowController::class, 'saveSubmissionSettings']);
+
     Route::get('/{uuid}', [MetaFlowController::class, 'view']);
     Route::put('/{uuid}', [MetaFlowController::class, 'update']);
     Route::delete('/{uuid}', [MetaFlowController::class, 'destroy']);

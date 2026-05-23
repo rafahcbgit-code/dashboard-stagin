@@ -331,6 +331,44 @@ class MetaFlowController extends BaseController
         return response()->json(['message' => 'Google Sheets configuration saved.']);
     }
 
+    // Save post-submission settings (reply message, interactive reply, email notification)
+    public function saveSubmissionSettings(Request $request, string $uuid): JsonResponse
+    {
+        $request->validate([
+            'reply_message_enabled'             => 'sometimes|boolean',
+            'reply_message_template'            => 'sometimes|nullable|string|max:5000',
+            'interactive_reply_enabled'          => 'sometimes|boolean',
+            'interactive_reply_config'           => 'sometimes|nullable|array',
+            'interactive_reply_config.body'      => 'sometimes|nullable|string|max:5000',
+            'interactive_reply_config.buttons'   => 'sometimes|array|max:3',
+            'interactive_reply_config.buttons.*.id'    => 'sometimes|string|max:50',
+            'interactive_reply_config.buttons.*.title'  => 'sometimes|string|max:20',
+            'email_notification_enabled'        => 'sometimes|boolean',
+            'email_notification_config'          => 'sometimes|nullable|array',
+            'email_notification_config.recipients'         => 'sometimes|array',
+            'email_notification_config.recipients.*'       => 'sometimes|email',
+            'email_notification_config.subject_template'   => 'sometimes|nullable|string|max:500',
+            'email_notification_config.body_template'      => 'sometimes|nullable|string|max:5000',
+        ]);
+
+        $flow = MetaFlow::where('uuid', $uuid)
+            ->where('organization_id', session()->get('current_organization'))
+            ->firstOrFail();
+
+        $updates = $request->only([
+            'reply_message_enabled',
+            'reply_message_template',
+            'interactive_reply_enabled',
+            'interactive_reply_config',
+            'email_notification_enabled',
+            'email_notification_config',
+        ]);
+
+        $flow->update($updates);
+
+        return response()->json(['message' => 'Submission settings saved.']);
+    }
+
     // Delete the flow from Meta and soft-delete the local record
     public function destroy(string $uuid)
     {

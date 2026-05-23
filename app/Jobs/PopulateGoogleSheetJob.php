@@ -12,6 +12,7 @@ use Illuminate\Support\Facades\Log;
 use Modules\MetaFlows\Models\MetaFlow;
 use Modules\MetaFlows\Models\MetaFlowResponse;
 use Modules\MetaFlows\Services\GoogleSheetsService;
+use Modules\MetaFlows\Services\MetaFlowResponseNormalizer;
 
 class PopulateGoogleSheetJob implements ShouldQueue
 {
@@ -62,28 +63,13 @@ class PopulateGoogleSheetJob implements ShouldQueue
         // 4. Load the contact for metadata fields
         $contact = Contact::find($response->contact_id);
 
-        // 5. Parse the submitted form JSON
-        $parsedJson = json_decode($response->response_json, true) ?? [];
+        // 5. Normalize response values using the shared normalizer
+        $submittedValues = MetaFlowResponseNormalizer::normalize($response, $flow, $contact);
 
-        Log::info('PopulateGoogleSheetJob: [DEBUG] raw parsed response', [
-            'response_id'    => $this->metaFlowResponseId,
-            'parsed_keys'    => array_keys($parsedJson),
-            'parsed_values'  => $parsedJson,
-            'asset_content_present' => !empty($flow->asset_content),
-            'asset_content_preview' => $flow->asset_content ? substr($flow->asset_content, 0, 400) : null,
-        ]);
-
-        // Meta returns response keys based on the Footer on-click-action.payload keys
-        // (e.g. "screen_0_TextArea_0") rather than the component name attributes
-        // (e.g. "TextArea_de923b") that the sheet mapping was built with.
-        // Build a normalized field_name → value map by reversing the Footer payload
-        // expressions (${form.field_name}) found in the flow JSON.
-        $submittedValues = $this->normalizeResponseValues($parsedJson, $flow);
-
-        Log::info('PopulateGoogleSheetJob: [DEBUG] normalized submitted values', [
-            'response_id'       => $this->metaFlowResponseId,
-            'submitted_values'  => $submittedValues,
-            'sheet_mapping'     => $flow->google_sheet_mapping,
+        Log::info('PopulateGoogleSheetJob: normalized submitted values', [
+            'response_id'      => $this->metaFlowResponseId,
+            'submitted_values' => $submittedValues,
+            'sheet_mapping'    => $flow->google_sheet_mapping,
         ]);
 
         // 6. Build a column-name → value dictionary from the mapping
@@ -98,13 +84,7 @@ class PopulateGoogleSheetJob implements ShouldQueue
                 continue;
             }
 
-            $columnValues[$sheetColumn] = match ($field) {
-                '__timestamp'     => now()->toIso8601String(),
-                '__contact_phone' => $contact?->phone ?? '',
-                '__contact_name'  => trim(($contact?->first_name ?? '') . ' ' . ($contact?->last_name ?? '')),
-                '__flow_token'    => $response->flow_token ?? '',
-                default           => $submittedValues[$field] ?? '',
-            };
+            $columnValues[$sheetColumn] = $submittedValues[$field] ?? '';
         }
 
         // 7. Fetch actual column order from the sheet header row, then build the
@@ -129,85 +109,6 @@ class PopulateGoogleSheetJob implements ShouldQueue
             'organization_id' => $this->organizationId,
             'spreadsheet_id' => $spreadsheetId,
         ]);
-    }
-
-    /**
-     * Normalize the raw Meta response JSON into a field_name → value map.
-     *
-     * Meta returns keys from the Footer on-click-action.payload (e.g. "screen_0_TextArea_0"),
-     * but the sheet mapping references component name attributes (e.g. "TextArea_de923b").
-     * We parse the flow's Footer payload expressions "${form.field_name}" to build the
-     * reverse mapping, so every field_name resolves to the correct submitted value.
-     */
-    private function normalizeResponseValues(array $parsedJson, MetaFlow $flow): array
-    {
-        // Start with direct keys — covers metadata fields and any future Meta format changes
-        $values = $parsedJson;
-
-        if (!$flow->asset_content) {
-            return $values;
-        }
-
-        try {
-            $json    = json_decode($flow->asset_content, true);
-            $screens = $json['screens'] ?? [];
-            $footersFound = 0;
-
-            foreach ($screens as $screen) {
-                $children = $screen['layout']['children'] ?? [];
-
-                foreach ($children as $child) {
-                    // Unwrap Form containers
-                    $items = ($child['type'] === 'Form') ? ($child['children'] ?? []) : [$child];
-
-                    foreach ($items as $item) {
-                        if (($item['type'] ?? '') !== 'Footer') {
-                            continue;
-                        }
-
-                        $footersFound++;
-                        $payload = $item['on-click-action']['payload'] ?? [];
-
-                        Log::info('PopulateGoogleSheetJob: [DEBUG] footer payload found', [
-                            'screen_id'   => $screen['id'] ?? '?',
-                            'payload'     => $payload,
-                        ]);
-
-                        // payload: { "screen_0_TextArea_0": "${form.TextArea_de923b}", ... }
-                        foreach ($payload as $payloadKey => $expression) {
-                            // Extract field name from "${form.field_name}"
-                            if (preg_match('/\$\{form\.(.+?)\}/', (string) $expression, $matches)) {
-                                $fieldName = $matches[1];
-                                $resolved  = $parsedJson[$payloadKey] ?? null;
-
-                                Log::info('PopulateGoogleSheetJob: [DEBUG] payload key resolved', [
-                                    'payload_key'  => $payloadKey,
-                                    'field_name'   => $fieldName,
-                                    'value_found'  => $resolved !== null,
-                                    'value'        => $resolved,
-                                ]);
-
-                                if ($resolved !== null) {
-                                    $values[$fieldName] = $resolved;
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-
-            Log::info('PopulateGoogleSheetJob: [DEBUG] normalization complete', [
-                'footers_found' => $footersFound,
-                'screens_count' => count($screens),
-            ]);
-        } catch (\Throwable $e) {
-            // Malformed flow JSON — fall back to direct key lookup
-            Log::warning('PopulateGoogleSheetJob: [DEBUG] normalizeResponseValues exception', [
-                'error' => $e->getMessage(),
-            ]);
-        }
-
-        return $values;
     }
 
     // Log permanent failures after all retries are exhausted
