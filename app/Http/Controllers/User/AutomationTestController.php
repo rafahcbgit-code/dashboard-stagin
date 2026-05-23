@@ -8,6 +8,7 @@ use App\Services\AutomationSimulatorService;
 use App\Services\AiSettingsService;
 use App\Services\BotSettingsService;
 use App\Services\WorkingHoursService;
+use App\Models\TriggerGroup;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Modules\FlowBuilder\Models\Flow;
@@ -120,5 +121,59 @@ class AutomationTestController extends BaseController
         );
 
         return response()->json($result);
+    }
+
+    public function getTestContext(Request $request)
+    {
+        $organizationId = session()->get('current_organization');
+
+        $botSettings = new BotSettingsService();
+        $aiSettings = new AiSettingsService();
+        $workingHours = new WorkingHoursService();
+
+        $triggers = TriggerGroup::forOrganization($organizationId)
+            ->enabled()
+            ->orderedByPriority()
+            ->get()
+            ->map(fn($tg) => [
+                'id' => $tg->id,
+                'name' => $tg->name,
+                'type' => $tg->type,
+                'priority' => $tg->priority ?? 0,
+                'rate_limit_type' => $tg->rate_limit_type ?? 'none',
+                'match_mode' => $tg->type === 'new_message' ? ($tg->match_mode ?? 'exact') : null,
+                'keywords' => $tg->type === 'new_message' ? ($tg->keywords ?? []) : null,
+            ]);
+
+        $flows = Flow::where('organization_id', $organizationId)
+            ->where('status', 'active')
+            ->select('id', 'uuid', 'name', 'status')
+            ->orderBy('name')
+            ->get();
+
+        return response()->json([
+            'bot_settings' => [
+                'automation_enabled' => $botSettings->isAutomationEnabled($organizationId),
+                'ai_enabled' => $aiSettings->isEnabled($organizationId),
+                'ai_fallback_enabled' => (bool) $botSettings->getSetting($organizationId, 'ai_fallback_enabled', false),
+                'ai_only_mode' => (bool) $aiSettings->isAiOnlyMode($organizationId),
+                'fallback_threshold' => (int) $botSettings->getSetting($organizationId, 'fallback_threshold', 3),
+                'flow_timeout_minutes' => (int) $botSettings->getSetting($organizationId, 'flow_timeout_minutes', 30),
+                'escalation_transfer_enabled' => (bool) $botSettings->getSetting($organizationId, 'escalation_transfer_message_enabled', false),
+                'ai_followup_enabled' => (bool) $botSettings->getSetting($organizationId, 'ai_followup_enabled', false),
+                'flow_rejoin_enabled' => (bool) $botSettings->getSetting($organizationId, 'flow_rejoin_enabled', false),
+            ],
+            'ai_settings' => [
+                'ai_enabled' => $aiSettings->isEnabled($organizationId),
+                'confidence_threshold' => $aiSettings->getDefaultConfidence($organizationId),
+            ],
+            'working_hours' => [
+                'enabled' => (bool) $botSettings->getSetting($organizationId, 'enable_working_hours', false),
+                'within' => $workingHours->isWithinWorkingHours($organizationId),
+                'schedule' => $workingHours->getSchedule($organizationId),
+            ],
+            'triggers' => $triggers,
+            'flows' => $flows,
+        ]);
     }
 }

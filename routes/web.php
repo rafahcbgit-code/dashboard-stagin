@@ -385,6 +385,7 @@ Route::middleware(['auth:user'])->group(function () {
 
                 // Automation Test / Simulator
                 Route::get('/automation/test', [App\Http\Controllers\User\AutomationTestController::class, 'index'])->name('automation-test.index');
+                Route::get('/automation/test/context', [App\Http\Controllers\User\AutomationTestController::class, 'getTestContext'])->name('automation-test.context');
                 Route::post('/automation/test/trigger', [App\Http\Controllers\User\AutomationTestController::class, 'testTrigger'])->name('automation-test.trigger');
                 Route::post('/automation/test/flow/start', [App\Http\Controllers\User\AutomationTestController::class, 'startFlow'])->name('automation-test.flow-start');
                 Route::post('/automation/test/flow/step', [App\Http\Controllers\User\AutomationTestController::class, 'stepFlow'])->name('automation-test.flow-step');

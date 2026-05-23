@@ -20,6 +20,100 @@ class WorkingHoursService
      *
      * @return bool
      */
+    /**
+     * Get the working hours schedule for an organization as a normalized array of day entries.
+     * Returns ['timezone' => string, 'days' => [{day, active, from, to}, ...]]
+     * If working hours are not configured, returns null.
+     */
+    public function getSchedule($organizationId): ?array
+    {
+        try {
+            $organization = Organization::find($organizationId);
+            if (! $organization) {
+                return null;
+            }
+
+            $metadata = $organization->metadata ? json_decode($organization->metadata, true) : [];
+
+            // Check if working hours feature is enabled
+            if (array_key_exists('enable_working_hours', $metadata) && ! (int) $metadata['enable_working_hours']) {
+                return null;
+            }
+
+            $wh = $metadata['working_hours'] ?? null;
+            if (! $wh) {
+                return null;
+            }
+
+            $tz = $wh['timezone'] ?? $metadata['timezone'] ?? config('app.timezone') ?? 'UTC';
+
+            $dayNames = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+
+            // Array of day objects format
+            if (is_array($wh) && array_values($wh) === $wh && isset($wh[0]) && is_array($wh[0]) && isset($wh[0]['day'])) {
+                $days = [];
+                foreach ($dayNames as $dayName) {
+                    $found = null;
+                    foreach ($wh as $entry) {
+                        if (! is_array($entry)) continue;
+                        $entryDay = $entry['day'] ?? ($entry['name'] ?? null);
+                        if ($entryDay && strcasecmp(trim($entryDay), $dayName) === 0) {
+                            $found = $entry;
+                            break;
+                        }
+                    }
+                    if ($found) {
+                        $days[] = [
+                            'day' => $dayName,
+                            'active' => (bool) ($found['active'] ?? true),
+                            'from' => $found['from'] ?? '09:00',
+                            'to' => $found['to'] ?? '17:00',
+                        ];
+                    } else {
+                        $days[] = ['day' => $dayName, 'active' => false, 'from' => '09:00', 'to' => '17:00'];
+                    }
+                }
+                return ['timezone' => $tz, 'days' => $days];
+            }
+
+            // Simple from/to format (same schedule every day)
+            if (isset($wh['from']) && isset($wh['to'])) {
+                $days = array_map(fn($dayName) => [
+                    'day' => $dayName,
+                    'active' => true,
+                    'from' => $wh['from'],
+                    'to' => $wh['to'],
+                ], $dayNames);
+                return ['timezone' => $tz, 'days' => $days];
+            }
+
+            // Per-day map format
+            if (isset($wh['days']) && is_array($wh['days'])) {
+                $dayMap = ['mon' => 'Monday', 'tue' => 'Tuesday', 'wed' => 'Wednesday', 'thu' => 'Thursday', 'fri' => 'Friday', 'sat' => 'Saturday', 'sun' => 'Sunday'];
+                $days = [];
+                foreach ($dayNames as $dayName) {
+                    $shortKey = array_search($dayName, $dayMap);
+                    $dayCfg = $wh['days'][$shortKey] ?? null;
+                    if ($dayCfg) {
+                        $days[] = [
+                            'day' => $dayName,
+                            'active' => true,
+                            'from' => $dayCfg['from'] ?? '09:00',
+                            'to' => $dayCfg['to'] ?? '17:00',
+                        ];
+                    } else {
+                        $days[] = ['day' => $dayName, 'active' => false, 'from' => '09:00', 'to' => '17:00'];
+                    }
+                }
+                return ['timezone' => $tz, 'days' => $days];
+            }
+
+            return null;
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
     public function isWithinWorkingHours($organizationId): bool
     {
         try {
