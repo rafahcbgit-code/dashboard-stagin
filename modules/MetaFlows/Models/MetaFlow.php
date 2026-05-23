@@ -16,9 +16,14 @@ class MetaFlow extends Model
     protected $guarded = [];
 
     protected $casts = [
-        'categories'           => 'array',
-        'google_sheet_mapping' => 'array',
-        'google_sheet_enabled' => 'boolean',
+        'categories'                  => 'array',
+        'google_sheet_mapping'         => 'array',
+        'google_sheet_enabled'         => 'boolean',
+        'reply_message_enabled'        => 'boolean',
+        'interactive_reply_enabled'    => 'boolean',
+        'interactive_reply_config'     => 'array',
+        'email_notification_enabled'   => 'boolean',
+        'email_notification_config'    => 'array',
     ];
 
     // A flow can receive many responses when contacts complete it

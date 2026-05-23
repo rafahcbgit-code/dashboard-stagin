@@ -86,6 +86,32 @@ class OrganizationMailConfigService
     }
 
     /**
+     * Send a custom email to an arbitrary recipient using the organization's SMTP settings.
+     * Used by MetaFlow post-submission email notifications and similar features.
+     */
+    public function sendCustomEmail(int $organizationId, string $toEmail, string $subject, string $body): bool
+    {
+        $org = Organization::find($organizationId);
+        if (!$org) {
+            Log::warning('OrganizationMailConfigService: Organization not found', ['org_id' => $organizationId]);
+            return false;
+        }
+
+        $metadata = $org->metadata ? json_decode($org->metadata, true) : [];
+        $emailSettings = $metadata['email_settings'] ?? [];
+
+        if (empty($emailSettings['active'])) {
+            Log::info('OrganizationMailConfigService: Email notifications disabled for org', ['org_id' => $organizationId]);
+            return false;
+        }
+
+        $fromName = $emailSettings['from_name'] ?? $org->name ?? 'Chatberry';
+        $fromAddress = $emailSettings['from_address'] ?? $emailSettings['username'] ?? config('mail.from.address');
+
+        return $this->sendWithOrgConfig($emailSettings, $toEmail, $subject, $body, $fromName, $fromAddress);
+    }
+
+    /**
      * Send a plain text email using organization SMTP config.
      * Purges the mailer transport to avoid singleton caching issues.
      */

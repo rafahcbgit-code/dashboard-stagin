@@ -265,6 +265,213 @@
 
                     </div>
                 </div>
+
+                <!-- Reply Message Panel -->
+                <div class="border border-slate-200 rounded-xl overflow-hidden">
+                    <button
+                        @click="showReplySection = !showReplySection"
+                        class="w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-slate-50 text-xs text-slate-600 transition-colors"
+                    >
+                        <div class="flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                            <span class="font-medium text-slate-700">{{ $t('Reply Message') }}</span>
+                            <span v-if="replyEnabled" class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                        </div>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" :class="showReplySection ? 'rotate-180' : ''" class="transition-transform"><path d="m6 9 6 6 6-6"/></svg>
+                    </button>
+
+                    <div v-if="showReplySection" class="border-t border-slate-100 p-4 space-y-4 text-xs">
+                        <div>
+                            <label class="text-slate-400 text-[11px] uppercase tracking-wide font-medium block mb-1">{{ $t('Message Template') }}</label>
+                            <textarea
+                                v-model="replyTemplate"
+                                rows="4"
+                                :placeholder="replyPlaceholder"
+                                class="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-primary resize-none"
+                            ></textarea>
+                        </div>
+
+                        <div class="text-[11px] text-slate-400 space-y-0.5">
+                            <p class="font-medium text-slate-500">{{ $t('Available variables:') }}</p>
+                            <p v-text="variableHintMeta"></p>
+                            <p v-text="variableHintFields"></p>
+                        </div>
+
+                        <div class="flex items-center justify-between pt-1">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <div
+                                    @click="replyEnabled = !replyEnabled"
+                                    :class="['w-8 h-4 rounded-full transition-colors relative', replyEnabled ? 'bg-green-500' : 'bg-slate-300']"
+                                >
+                                    <div :class="['absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform', replyEnabled ? 'translate-x-4' : 'translate-x-0.5']"></div>
+                                </div>
+                                <span class="text-slate-600">{{ replyEnabled ? $t('Enabled') : $t('Disabled') }}</span>
+                            </label>
+
+                            <button
+                                @click="saveReplyConfig"
+                                :disabled="savingReply"
+                                class="px-3 py-1.5 rounded-lg bg-primary text-white text-xs hover:opacity-90 disabled:opacity-50 transition-opacity"
+                            >
+                                {{ savingReply ? $t('Saving...') : $t('Save') }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Interactive Reply Panel -->
+                <div class="border border-slate-200 rounded-xl overflow-hidden">
+                    <button
+                        @click="showInteractiveSection = !showInteractiveSection"
+                        class="w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-slate-50 text-xs text-slate-600 transition-colors"
+                    >
+                        <div class="flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg>
+                            <span class="font-medium text-slate-700">{{ $t('Interactive Reply') }}</span>
+                            <span v-if="interactiveEnabled" class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                        </div>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" :class="showInteractiveSection ? 'rotate-180' : ''" class="transition-transform"><path d="m6 9 6 6 6-6"/></svg>
+                    </button>
+
+                    <div v-if="showInteractiveSection" class="border-t border-slate-100 p-4 space-y-4 text-xs">
+                        <div>
+                            <label class="text-slate-400 text-[11px] uppercase tracking-wide font-medium block mb-1">{{ $t('Body Text') }}</label>
+                            <textarea
+                                v-model="interactiveBody"
+                                rows="3"
+                                :placeholder="$t('Thank you for your submission!')"
+                                class="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-primary resize-none"
+                            ></textarea>
+                        </div>
+
+                        <div>
+                            <label class="text-slate-400 text-[11px] uppercase tracking-wide font-medium block mb-1">{{ $t('Buttons') }} ({{ $t('max 3') }})</label>
+                            <div class="space-y-1.5">
+                                <div v-for="(btn, idx) in interactiveButtons" :key="idx" class="flex items-center gap-2">
+                                    <input
+                                        v-model="btn.title"
+                                        type="text"
+                                        maxlength="20"
+                                        :placeholder="$t('Button text')"
+                                        class="flex-1 border border-slate-200 rounded px-2 py-1 text-[11px] outline-none focus:border-primary"
+                                    />
+                                    <button
+                                        v-if="interactiveButtons.length > 1"
+                                        @click="interactiveButtons.splice(idx, 1)"
+                                        class="text-red-400 hover:text-red-600 text-sm leading-none"
+                                    >&times;</button>
+                                </div>
+                                <button
+                                    v-if="interactiveButtons.length < 3"
+                                    @click="interactiveButtons.push({ id: 'btn_' + Date.now(), title: '' })"
+                                    class="text-primary text-[11px] font-medium hover:underline"
+                                >+ {{ $t('Add Button') }}</button>
+                            </div>
+                        </div>
+
+                        <div class="flex items-center justify-between pt-1">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <div
+                                    @click="interactiveEnabled = !interactiveEnabled"
+                                    :class="['w-8 h-4 rounded-full transition-colors relative', interactiveEnabled ? 'bg-green-500' : 'bg-slate-300']"
+                                >
+                                    <div :class="['absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform', interactiveEnabled ? 'translate-x-4' : 'translate-x-0.5']"></div>
+                                </div>
+                                <span class="text-slate-600">{{ interactiveEnabled ? $t('Enabled') : $t('Disabled') }}</span>
+                            </label>
+
+                            <button
+                                @click="saveInteractiveConfig"
+                                :disabled="savingInteractive"
+                                class="px-3 py-1.5 rounded-lg bg-primary text-white text-xs hover:opacity-90 disabled:opacity-50 transition-opacity"
+                            >
+                                {{ savingInteractive ? $t('Saving...') : $t('Save') }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Email Notification Panel -->
+                <div class="border border-slate-200 rounded-xl overflow-hidden">
+                    <button
+                        @click="showEmailSection = !showEmailSection"
+                        class="w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-slate-50 text-xs text-slate-600 transition-colors"
+                    >
+                        <div class="flex items-center gap-2">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
+                            <span class="font-medium text-slate-700">{{ $t('Email Notification') }}</span>
+                            <span v-if="emailEnabled" class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
+                        </div>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" :class="showEmailSection ? 'rotate-180' : ''" class="transition-transform"><path d="m6 9 6 6 6-6"/></svg>
+                    </button>
+
+                    <div v-if="showEmailSection" class="border-t border-slate-100 p-4 space-y-4 text-xs">
+                        <div>
+                            <label class="text-slate-400 text-[11px] uppercase tracking-wide font-medium block mb-1">{{ $t('Recipient Emails') }}</label>
+                            <div class="space-y-1.5">
+                                <div v-for="(email, idx) in emailRecipients" :key="idx" class="flex items-center gap-2">
+                                    <input
+                                        v-model="emailRecipients[idx]"
+                                        type="email"
+                                        placeholder="recipient@example.com"
+                                        class="flex-1 border border-slate-200 rounded px-2 py-1 text-[11px] outline-none focus:border-primary"
+                                    />
+                                    <button
+                                        v-if="emailRecipients.length > 1"
+                                        @click="emailRecipients.splice(idx, 1)"
+                                        class="text-red-400 hover:text-red-600 text-sm leading-none"
+                                    >&times;</button>
+                                </div>
+                                <button
+                                    @click="emailRecipients.push('')"
+                                    class="text-primary text-[11px] font-medium hover:underline"
+                                >+ {{ $t('Add Email') }}</button>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="text-slate-400 text-[11px] uppercase tracking-wide font-medium block mb-1">{{ $t('Subject Template') }}</label>
+                            <input
+                                v-model="emailSubject"
+                                type="text"
+                                :placeholder="emailSubjectPlaceholder"
+                                class="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-primary"
+                            />
+                        </div>
+
+                        <div>
+                            <label class="text-slate-400 text-[11px] uppercase tracking-wide font-medium block mb-1">{{ $t('Email Body Template') }}</label>
+                            <textarea
+                                v-model="emailBody"
+                                rows="4"
+                                :placeholder="emailBodyPlaceholder"
+                                class="w-full border border-slate-200 rounded-lg px-2.5 py-1.5 text-xs outline-none focus:border-primary resize-none"
+                            ></textarea>
+                            <p class="text-[11px] text-slate-400 mt-1">{{ $t('Leave empty for auto-generated list of submitted fields.') }}</p>
+                        </div>
+
+                        <div class="flex items-center justify-between pt-1">
+                            <label class="flex items-center gap-2 cursor-pointer">
+                                <div
+                                    @click="emailEnabled = !emailEnabled"
+                                    :class="['w-8 h-4 rounded-full transition-colors relative', emailEnabled ? 'bg-green-500' : 'bg-slate-300']"
+                                >
+                                    <div :class="['absolute top-0.5 w-3 h-3 rounded-full bg-white shadow transition-transform', emailEnabled ? 'translate-x-4' : 'translate-x-0.5']"></div>
+                                </div>
+                                <span class="text-slate-600">{{ emailEnabled ? $t('Enabled') : $t('Disabled') }}</span>
+                            </label>
+
+                            <button
+                                @click="saveEmailConfig"
+                                :disabled="savingEmail"
+                                class="px-3 py-1.5 rounded-lg bg-primary text-white text-xs hover:opacity-90 disabled:opacity-50 transition-opacity"
+                            >
+                                {{ savingEmail ? $t('Saving...') : $t('Save') }}
+                            </button>
+                        </div>
+                    </div>
+                </div>
+
             </div>
 
             <!-- Center: builder + JSON panel -->
@@ -345,6 +552,38 @@
     const loadingHeaders   = ref(false);
     // Keyed by field name, value = chosen sheet column (or '' to skip)
     const mappingFor       = ref({});
+
+    // ── Reply Message state ──────────────────────────────────────────────────
+    const showReplySection  = ref(false);
+    const replyEnabled      = ref(props.flow.reply_message_enabled ?? false);
+    const replyTemplate     = ref(props.flow.reply_message_template ?? '');
+    const savingReply       = ref(false);
+
+    // ── Interactive Reply state ────────────────────────────────────────────────
+    const showInteractiveSection = ref(false);
+    const interactiveEnabled     = ref(props.flow.interactive_reply_enabled ?? false);
+    const interactiveBody        = ref(props.flow.interactive_reply_config?.body ?? '');
+    const interactiveButtons     = ref(
+        props.flow.interactive_reply_config?.buttons ?? [{ id: 'btn_1', title: '' }]
+    );
+    const savingInteractive      = ref(false);
+
+    // ── Email Notification state ───────────────────────────────────────────────
+    const showEmailSection   = ref(false);
+    const emailEnabled       = ref(props.flow.email_notification_enabled ?? false);
+    const emailRecipients    = ref(
+        props.flow.email_notification_config?.recipients ?? ['']
+    );
+    const emailSubject       = ref(props.flow.email_notification_config?.subject_template ?? '');
+    const emailBody          = ref(props.flow.email_notification_config?.body_template ?? '');
+    const savingEmail        = ref(false);
+
+    // ── Variable hint strings for template UI (can't use {{ }} in Vue template) ─
+    const variableHintMeta = 'Metadata: {{__timestamp}}, {{__contact_phone}}, {{__contact_name}}, {{__contact_email}}, {{__flow_token}}, {{flow_name}}';
+    const variableHintFields = 'Form fields depend on your flow (e.g. {{full_name}}, {{email}})';
+    const replyPlaceholder = 'Thank you {{__contact_name}} for your submission! We received: {{full_name}}, {{email}}.';
+    const emailBodyPlaceholder = 'A new submission was received from {{__contact_name}}...';
+    const emailSubjectPlaceholder = 'New submission: {{flow_name}}';
 
     // All fields: metadata fields first, then flow form fields
     const allFlowFields = computed(() => {
@@ -628,6 +867,61 @@
             showFeedback(err.response?.data?.message ?? 'Failed to save sheet config.', true);
         } finally {
             savingSheet.value = false;
+        }
+    };
+
+    // ── Reply Message save ──────────────────────────────────────────────────
+    const saveReplyConfig = async () => {
+        savingReply.value = true;
+        try {
+            await axios.put(`/automation/meta-flows/${props.flow.uuid}/submission-settings`, {
+                reply_message_enabled: replyEnabled.value,
+                reply_message_template: replyTemplate.value,
+            });
+            showFeedback('Reply message settings saved.', false);
+        } catch (err) {
+            showFeedback(err.response?.data?.message ?? 'Failed to save reply settings.', true);
+        } finally {
+            savingReply.value = false;
+        }
+    };
+
+    // ── Interactive Reply save ────────────────────────────────────────────────
+    const saveInteractiveConfig = async () => {
+        savingInteractive.value = true;
+        try {
+            await axios.put(`/automation/meta-flows/${props.flow.uuid}/submission-settings`, {
+                interactive_reply_enabled: interactiveEnabled.value,
+                interactive_reply_config: {
+                    body: interactiveBody.value,
+                    buttons: interactiveButtons.value.filter(b => b.title.trim()),
+                },
+            });
+            showFeedback('Interactive reply settings saved.', false);
+        } catch (err) {
+            showFeedback(err.response?.data?.message ?? 'Failed to save interactive settings.', true);
+        } finally {
+            savingInteractive.value = false;
+        }
+    };
+
+    // ── Email Notification save ───────────────────────────────────────────────
+    const saveEmailConfig = async () => {
+        savingEmail.value = true;
+        try {
+            await axios.put(`/automation/meta-flows/${props.flow.uuid}/submission-settings`, {
+                email_notification_enabled: emailEnabled.value,
+                email_notification_config: {
+                    recipients: emailRecipients.value.filter(r => r.trim()),
+                    subject_template: emailSubject.value,
+                    body_template: emailBody.value,
+                },
+            });
+            showFeedback('Email notification settings saved.', false);
+        } catch (err) {
+            showFeedback(err.response?.data?.message ?? 'Failed to save email settings.', true);
+        } finally {
+            savingEmail.value = false;
         }
     };
 </script>
