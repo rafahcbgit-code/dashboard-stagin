@@ -3,6 +3,9 @@
 namespace Modules\MetaFlows\Services;
 
 use App\Jobs\PopulateGoogleSheetJob;
+use App\Jobs\SendMetaFlowReplyMessageJob;
+use App\Jobs\SendMetaFlowInteractiveReplyJob;
+use App\Jobs\SendMetaFlowEmailNotificationJob;
 use App\Models\Organization;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ConnectException;
@@ -507,6 +510,45 @@ class MetaFlowService
             }
         } catch (\Throwable $e) {
             Log::warning('MetaFlows: failed to dispatch PopulateGoogleSheetJob', [
+                'response_id' => $flowResponse->id,
+                'error'       => $e->getMessage(),
+            ]);
+        }
+
+        // Reload flow to pick up any fresh post-submission settings
+        $flow = $flow ?? MetaFlow::find($flowResponse->meta_flow_id);
+
+        // Dispatch reply message job if enabled
+        try {
+            if ($flow && $flow->reply_message_enabled && $flow->reply_message_template) {
+                SendMetaFlowReplyMessageJob::dispatch($flowResponse->id, $this->organizationId);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('MetaFlows: failed to dispatch SendMetaFlowReplyMessageJob', [
+                'response_id' => $flowResponse->id,
+                'error'       => $e->getMessage(),
+            ]);
+        }
+
+        // Dispatch interactive reply job if enabled
+        try {
+            if ($flow && $flow->interactive_reply_enabled && $flow->interactive_reply_config) {
+                SendMetaFlowInteractiveReplyJob::dispatch($flowResponse->id, $this->organizationId);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('MetaFlows: failed to dispatch SendMetaFlowInteractiveReplyJob', [
+                'response_id' => $flowResponse->id,
+                'error'       => $e->getMessage(),
+            ]);
+        }
+
+        // Dispatch email notification job if enabled
+        try {
+            if ($flow && $flow->email_notification_enabled && $flow->email_notification_config) {
+                SendMetaFlowEmailNotificationJob::dispatch($flowResponse->id, $this->organizationId);
+            }
+        } catch (\Throwable $e) {
+            Log::warning('MetaFlows: failed to dispatch SendMetaFlowEmailNotificationJob', [
                 'response_id' => $flowResponse->id,
                 'error'       => $e->getMessage(),
             ]);
