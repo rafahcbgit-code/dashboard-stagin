@@ -59,16 +59,24 @@ class AiSettingsService
     }
 
     /**
-     * Get the global AI confidence threshold set by the site admin.
-     * Falls back to the DEFAULTS constant if no admin setting exists.
+     * Get the AI confidence threshold.
+     * Priority: global admin setting → org-level setting → hardcoded default.
      */
     public function getDefaultConfidence(int $organizationId): int
     {
+        // 1. Global admin setting (highest priority)
         $globalValue = Setting::getValueByKey('ai_confidence_threshold');
         if ($globalValue !== null && $globalValue !== '') {
             return (int) $globalValue;
         }
 
+        // 2. Org-level setting from ai_settings
+        $orgValue = $this->get($organizationId)['default_confidence_threshold'] ?? null;
+        if ($orgValue !== null && $orgValue !== '') {
+            return (int) $orgValue;
+        }
+
+        // 3. Hardcoded default
         return self::DEFAULTS['default_confidence_threshold'];
     }
 }

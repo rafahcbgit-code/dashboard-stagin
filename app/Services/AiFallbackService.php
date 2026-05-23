@@ -145,7 +145,13 @@ class AiFallbackService
                 'confidence' => $confidence,
                 'threshold' => $confidenceThreshold / 100,
             ]);
-            return null;
+            // Return the answer with below_threshold flag so callers can still see it
+            return [
+                'type' => 'answer',
+                'content' => $content,
+                'confidence' => $confidence,
+                'below_threshold' => true,
+            ];
         }
 
         Log::info('AiFallbackService: AI fallback answer sent', [

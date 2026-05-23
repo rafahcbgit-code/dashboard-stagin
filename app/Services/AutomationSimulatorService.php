@@ -75,6 +75,10 @@ class AutomationSimulatorService
                 'type' => $tg->type,
                 'matched' => false,
                 'reason' => '',
+                'priority' => $tg->priority ?? 0,
+                'rate_limit_type' => $tg->rate_limit_type ?? 'none',
+                'match_mode' => $tg->type === 'new_message' ? ($tg->match_mode ?? 'exact') : null,
+                'keywords' => $tg->type === 'new_message' ? ($tg->keywords ?? []) : null,
             ];
 
             $matched = $this->evaluateTriggerForTrace($tg, $message, $isNewContact, $effectiveWorkingHours, $organizationId, $virtualContact, $cachedEvaluateResult, $evaluateCalled);
@@ -146,11 +150,20 @@ class AutomationSimulatorService
                 $aiResult = $this->aiFallbackService->attemptAnswer($organizationId, $message, $virtualContact);
 
                 if ($aiResult !== null) {
+                    $belowThreshold = !empty($aiResult['below_threshold']);
+
                     if ($aiResult['type'] === 'escalation') {
                         $instruction = $aiResult['instruction'] ?? null;
                         $whatsapp = [
                             'type' => 'text',
                             'body' => $instruction ? $instruction->instruction : 'This would be escalated to a human agent.',
+                        ];
+                    } elseif ($belowThreshold) {
+                        // AI had an answer but confidence was below threshold
+                        // Still show in chat so the user can see what AI would say
+                        $whatsapp = [
+                            'type' => 'text',
+                            'body' => $aiResult['content'] ?? 'No answer found.',
                         ];
                     } else {
                         $whatsapp = [
@@ -172,6 +185,17 @@ class AutomationSimulatorService
             }
         }
 
+        // Build bot settings context for debug panel
+        $botSettingsData = [
+            'automation_enabled' => $this->botSettings->isAutomationEnabled($organizationId),
+            'ai_enabled' => $this->aiSettingsService->isEnabled($organizationId),
+            'ai_fallback_enabled' => (bool) $this->botSettings->getSetting($organizationId, 'ai_fallback_enabled', false),
+            'ai_only_mode' => (bool) $this->aiSettingsService->isAiOnlyMode($organizationId),
+            'fallback_threshold' => (int) $this->botSettings->getSetting($organizationId, 'fallback_threshold', 3),
+            'flow_timeout_minutes' => (int) $this->botSettings->getSetting($organizationId, 'flow_timeout_minutes', 30),
+            'escalation_transfer_enabled' => (bool) $this->botSettings->getSetting($organizationId, 'escalation_transfer_message_enabled', false),
+        ];
+
         return [
             'matched' => $firstMatchedTrigger !== null,
             'trigger' => $trigger,
@@ -182,7 +206,10 @@ class AutomationSimulatorService
             'ai_result' => $aiResult ? [
                 'type' => $aiResult['type'],
                 'content' => $aiResult['content'] ?? null,
+                'confidence' => isset($aiResult['confidence']) ? round($aiResult['confidence'] * 100) : null,
+                'below_threshold' => !empty($aiResult['below_threshold']),
             ] : null,
+            'bot_settings' => $botSettingsData,
         ];
     }
 
@@ -704,7 +731,7 @@ class AutomationSimulatorService
             ];
         }
 
-        return [
+        $response = [
             'success' => true,
             'type' => 'answer',
             'message' => 'AI found an answer.',
@@ -717,6 +744,15 @@ class AutomationSimulatorService
                 'body' => $result['content'] ?? 'No answer available.',
             ],
         ];
+
+        if (isset($result['confidence'])) {
+            $response['confidence'] = $result['confidence'];
+        }
+        if (isset($result['below_threshold'])) {
+            $response['below_threshold'] = $result['below_threshold'];
+        }
+
+        return $response;
     }
 
     /**
@@ -809,6 +845,7 @@ class AutomationSimulatorService
                 $questionText = $fields['question_text'] ?? '';
                 $inputType = $fields['input_type'] ?? 'text';
                 $variableName = $fields['variable_name'] ?? '';
+                $retryLimit = $fields['retry_limit'] ?? null;
                 return (new SimulationStep(
                     nodeId: $nodeId,
                     nodeType: 'question',
@@ -816,6 +853,12 @@ class AutomationSimulatorService
                     description: "Ask question: {$questionText}",
                     whatsapp: ['type' => 'question', 'body' => $questionText, 'input_type' => $inputType, 'variable_name' => $variableName],
                     options: [['id' => 'text_input', 'title' => 'Type your answer']],
+                    variablesSet: $variableName ? [['name' => 'flow.' . $variableName, 'value' => '(pending input)']] : null,
+                    validationRules: [
+                        'input_type' => $inputType,
+                        'variable_name' => $variableName,
+                        'retry_limit' => $retryLimit,
+                    ],
                 ))->toArray();
 
             case 'template':
@@ -905,12 +948,21 @@ class AutomationSimulatorService
                 // conditional evaluates a branch — show it
                 if ($actionType === 'conditional') {
                     $condition = $config['condition'] ?? 'unknown condition';
+                    $conditionType = $config['condition_type'] ?? $config['type'] ?? 'unknown';
+                    $conditionValue = $config['condition_value'] ?? $config['value'] ?? '';
                     return (new SimulationStep(
                         nodeId: $nodeId,
                         nodeType: 'conditional',
                         category: 'action_executed',
                         description: "Check condition: {$condition}",
                         whatsapp: ['type' => 'action', 'action_type' => 'conditional', 'body' => "Checking: {$condition}"],
+                        conditionResult: [
+                            'expression' => $condition,
+                            'condition_type' => $conditionType,
+                            'condition_value' => $conditionValue,
+                            'result' => true,
+                            'branch' => 'yes',
+                        ],
                     ))->toArray();
                 }
 
