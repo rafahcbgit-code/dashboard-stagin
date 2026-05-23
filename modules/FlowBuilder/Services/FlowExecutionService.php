@@ -11,6 +11,7 @@ use App\Services\BotSettingsService;
 use App\Services\WhatsappService;
 use App\Traits\TemplateTrait;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Str;
 use Modules\FlowBuilder\Models\Flow;
 use Modules\FlowBuilder\Models\FlowLog;
 use Modules\FlowBuilder\Models\FlowMedia;
@@ -165,6 +166,9 @@ class FlowExecutionService
                 'contact_id' => $chat->contact_id,
                 'flow_id' => $flow->id,
                 'current_step' => $startNodeId ?? '1',
+                'variables' => [
+                    '_flow_run_uuid' => (string) Str::uuid(),
+                ],
             ]);
 
             // Log the flow run so it's counted in the Runs column
@@ -431,6 +435,7 @@ class FlowExecutionService
                 // Store question config for validation on resume
                 $flowData->setVariable('_question_config', [
                     'node_id' => $currentNodeId,
+                    'question_text' => $questionText,
                     'variable_name' => $variableName,
                     'input_type' => $fields['input_type'] ?? 'text',
                     'max_retries' => (int) ($fields['max_retries'] ?? 3),
@@ -1169,6 +1174,7 @@ class FlowExecutionService
         }
 
         $nodeId = $config['node_id'];
+        $questionText = $config['question_text'] ?? '';
         $variableName = $config['variable_name'];
         $inputType = $config['input_type'] ?? 'text';
         $maxRetries = $config['max_retries'] ?? 3;
@@ -1200,11 +1206,22 @@ class FlowExecutionService
                     'organization_id' => $this->organizationId,
                     'flow_id' => $flowData->flow_id,
                     'contact_id' => $chat->contact_id,
+                    'run_uuid' => $flowData->getVariable('_flow_run_uuid') ?? (string) Str::uuid(),
+                    'node_id' => $nodeId,
+                    'variable_name' => $variableName,
+                    'question_text' => $questionText,
+                    'input_type' => $inputType,
+                    'answer_value' => $message,
+                    'status' => 'answered',
+                    'answered_at' => now(),
                     'submission_data' => [
                         'variable_name' => $variableName,
                         'input_type' => $inputType,
                         'value' => $message,
                         'node_id' => $nodeId,
+                        'question_text' => $questionText,
+                        'run_uuid' => $flowData->getVariable('_flow_run_uuid'),
+                        'status' => 'answered',
                     ],
                 ]);
             } catch (\Throwable $e) {
@@ -1256,6 +1273,8 @@ class FlowExecutionService
         ]);
 
         if ($currentRetries >= $maxRetries) {
+            $this->storeQuestionAttempt($chat, $flowData, $config, $message, 'max_retries_exceeded', $currentRetries);
+
             // Max retries reached — look for fail route or end flow
             $flow = Flow::find($flowData->flow_id);
             if (!$flow) {
@@ -1293,6 +1312,7 @@ class FlowExecutionService
 
         // Send retry message and stay paused
         $flowData->setVariable('_question_retries', $currentRetries);
+        $this->storeQuestionAttempt($chat, $flowData, $config, $message, 'invalid', $currentRetries);
 
         if (!empty($retryMessage)) {
             $retryText = $this->replacePlaceholders($contact->uuid, $retryMessage, $flowData->variables ?? []);
@@ -1300,6 +1320,40 @@ class FlowExecutionService
         }
 
         return true;
+    }
+
+    private function storeQuestionAttempt($chat, FlowUserData $flowData, array $config, string $message, string $status, int $attempt): void
+    {
+        try {
+            FlowSubmission::create([
+                'organization_id' => $this->organizationId,
+                'flow_id' => $flowData->flow_id,
+                'contact_id' => $chat->contact_id,
+                'run_uuid' => $flowData->getVariable('_flow_run_uuid') ?? (string) Str::uuid(),
+                'node_id' => $config['node_id'] ?? null,
+                'variable_name' => $config['variable_name'] ?? null,
+                'question_text' => $config['question_text'] ?? null,
+                'input_type' => $config['input_type'] ?? 'text',
+                'answer_value' => $message,
+                'status' => $status,
+                'answered_at' => now(),
+                'submission_data' => [
+                    'variable_name' => $config['variable_name'] ?? null,
+                    'input_type' => $config['input_type'] ?? 'text',
+                    'value' => $message,
+                    'node_id' => $config['node_id'] ?? null,
+                    'question_text' => $config['question_text'] ?? null,
+                    'run_uuid' => $flowData->getVariable('_flow_run_uuid'),
+                    'status' => $status,
+                    'attempt' => $attempt,
+                ],
+            ]);
+        } catch (\Throwable $e) {
+            Log::error('FlowExecution: failed to save question attempt', [
+                'status' => $status,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**

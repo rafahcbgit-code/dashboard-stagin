@@ -151,6 +151,13 @@
                 </span>
                 Go Back
               </Link>
+              <Link :href="`/automation/flows/${props.uuid}/responses`" class="justify-center whitespace-nowrap text-sm font-medium ring-offset-background transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:pointer-events-none disabled:opacity-50 border border-input bg-background hover:bg-accent hover:text-accent-foreground h-9 rounded-md px-3 flex items-center text-slate-700 gap-x-2">
+                <span>
+                  <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M8 10h8M8 14h5"/></svg>
+                </span>
+                Responses
+                <span v-if="props.flow.submissions_count" class="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500">{{ props.flow.submissions_count }}</span>
+              </Link>
               <Button variant="outline" :class="'bg-green-700 text-white'" size="sm" @click="handleClickSaveBtn"> {{ $t('Save changes') }}</Button>
               <Button v-if="status == 'inactive' && loading == false" variant="outline" :class="'bg-green-700 text-white'" size="sm" @click="handleClickPublishBtn(1)"> {{ $t('Save changes & publish') }}</Button>
               <Button v-else-if="status == 'active' && loading == false" variant="outline" :class="'bg-red-500 text-white'" size="sm" @click="handleClickPublishBtn(0)"> {{ $t('Save changes & unpublish') }}</Button>

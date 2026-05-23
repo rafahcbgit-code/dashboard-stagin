@@ -19,6 +19,11 @@ class Flow extends Model {
         return $this->hasMany(FlowLog::class, 'flow_id', 'id');
     }
 
+    public function submissions()
+    {
+        return $this->hasMany(FlowSubmission::class, 'flow_id', 'id');
+    }
+
     public function listAll($organizationId, $searchTerm)
     {
         return $this->where('organization_id', $organizationId)

@@ -5,6 +5,8 @@ use Illuminate\Support\Facades\Route;
 Route::middleware(['auth:user'])->group(function () {
     Route::prefix('/automation/flows')->group(function () {
         Route::get('/', [Modules\FlowBuilder\Controllers\FlowController::class, 'index']);                      // List all flows
+        Route::get('/{uuid}/responses/export', [Modules\FlowBuilder\Controllers\FlowController::class, 'exportResponses']);
+        Route::get('/{uuid}/responses', [Modules\FlowBuilder\Controllers\FlowController::class, 'responses']);
         Route::get('/{flow}', [Modules\FlowBuilder\Controllers\FlowController::class, 'view']); 
         Route::post('/', [Modules\FlowBuilder\Controllers\FlowController::class, 'store']);                     // Create a new flow
         Route::get('/duplicate/{uuid}', [Modules\FlowBuilder\Controllers\FlowController::class, 'duplicate']);
