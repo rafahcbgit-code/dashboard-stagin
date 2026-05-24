@@ -8,6 +8,7 @@ use App\Models\Organization;
 use App\Models\Template;
 use App\Services\WhatsappService;
 use Illuminate\Http\Request;
+use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 
 use Illuminate\Support\Facades\Log;
@@ -18,6 +19,9 @@ use Validator;
 
 class TemplateService
 {
+    private const MAX_HEADER_IMAGE_BYTES = 5 * 1024 * 1024;
+    private const MAX_HEADER_VIDEO_BYTES = 16 * 1024 * 1024;
+
     private $whatsappService;
     private $organizationId;
 
@@ -115,6 +119,10 @@ class TemplateService
                 return response()->json(['success' => false,'message'=>'Some required fields have not been filled','errors'=>$validator->messages()->get('*')]);
             }
 
+            if ($response = $this->validateTemplateMediaUploads($request)) {
+                return $response;
+            }
+
             // If the frontend sends template_type = "carousel", route to
             // the dedicated carousel creation method on WhatsappService.
             // Everything else (UTILITY, AUTHENTICATION, standard MARKETING)
@@ -163,6 +171,10 @@ class TemplateService
 
         if ($validator->fails()) {
             return response()->json(['success' => false,'message'=>'Some required fields have not been filled','errors'=>$validator->messages()->get('*')]);
+        }
+
+        if ($response = $this->validateTemplateMediaUploads($request)) {
+            return $response;
         }
 
         // Check if the existing template is a carousel by reading its
@@ -220,5 +232,60 @@ class TemplateService
         }
 
         return null;
+    }
+
+    private function validateTemplateMediaUploads(Request $request)
+    {
+        if ($request->get('template_type') === 'carousel') {
+            $cards = $request->input('cards', []);
+            $files = $request->file('card_files', []);
+
+            foreach ($cards as $index => $card) {
+                $headerType = strtoupper((string) ($card['header_type'] ?? ''));
+                $file = $files[$index] ?? null;
+
+                if ($headerType === 'IMAGE' && $file instanceof UploadedFile && $file->getSize() > self::MAX_HEADER_IMAGE_BYTES) {
+                    return $this->templateMediaSizeError('Image', '5MB', 'header_image');
+                }
+
+                if ($headerType === 'VIDEO' && $file instanceof UploadedFile && $file->getSize() > self::MAX_HEADER_VIDEO_BYTES) {
+                    return $this->templateMediaSizeError('Video', '16MB', 'header_video');
+                }
+            }
+
+            return null;
+        }
+
+        $header = $request->input('header', []);
+        $format = strtoupper((string) ($header['format'] ?? ''));
+        $file = data_get($request->allFiles(), 'header.example');
+
+        if ($format === 'IMAGE' && $file instanceof UploadedFile && $file->getSize() > self::MAX_HEADER_IMAGE_BYTES) {
+            return $this->templateMediaSizeError('Image', '5MB', 'header_image');
+        }
+
+        if ($format === 'VIDEO' && $file instanceof UploadedFile && $file->getSize() > self::MAX_HEADER_VIDEO_BYTES) {
+            return $this->templateMediaSizeError('Video', '16MB', 'header_video');
+        }
+
+        return null;
+    }
+
+    private function templateMediaSizeError(string $mediaLabel, string $limit, string $field)
+    {
+        $message = __("{$mediaLabel} size must not exceed {$limit}.");
+
+        return response()->json([
+            'success' => false,
+            'message' => $message,
+            'data' => [
+                'error' => [
+                    'message' => $message,
+                ],
+            ],
+            'errors' => [
+                $field => [$message],
+            ],
+        ]);
     }
 }

@@ -32,6 +32,7 @@ use GuzzleHttp\Exception\ConnectException;
 use Propaganistas\LaravelPhone\PhoneNumber;
 use App\Http\Controllers\Controller as BaseController;
 use App\Jobs\Webhook\ProcessWebhookJob;
+use App\Jobs\Webhook\StoreWhatsappWebhookPayloadSampleJob;
 
 class WebhookController extends BaseController
 {
@@ -192,6 +193,11 @@ class WebhookController extends BaseController
             return Response::json(['status' => 'error', 'message' => 'Invalid payload'], 400);
         }
 
+        $this->storeMultiObjectWebhookPayloadSample(
+            $request->all(),
+            $organization->id
+        );
+
         $res = $entry[0]['changes'][0];
         $webhookType = $res['field'] ?? 'unknown';
 
@@ -221,6 +227,67 @@ class WebhookController extends BaseController
 
         // Return HTTP 200 immediately (AC-1.1.1)
         return Response::json(['status' => 'success'], 200);
+    }
+
+    /**
+     * Store diagnostic samples only when Meta sends a multi-object webhook payload.
+     *
+     * This intentionally does not change processing behavior: handlePostRequest
+     * still dispatches only entry[0].changes[0] after this diagnostic capture.
+     */
+    protected function storeMultiObjectWebhookPayloadSample(array $payload, int $organizationId): void
+    {
+        try {
+            if (! $this->isMultiObjectWhatsappWebhookPayload($payload)) {
+                return;
+            }
+
+            app()->terminating(function () use ($organizationId, $payload) {
+                try {
+                    StoreWhatsappWebhookPayloadSampleJob::dispatch($organizationId, $payload);
+                } catch (\Throwable $e) {
+                    Log::channel('webhook')->warning('Failed to dispatch multi-object WhatsApp webhook payload sample job', [
+                        'organization_id' => $organizationId,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            });
+        } catch (\Throwable $e) {
+            Log::channel('webhook')->warning('Failed to queue multi-object WhatsApp webhook payload sample', [
+                'organization_id' => $organizationId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    protected function isMultiObjectWhatsappWebhookPayload(array $payload): bool
+    {
+        $entries = $payload['entry'] ?? [];
+        if (! is_array($entries)) {
+            return false;
+        }
+
+        if (count($entries) > 1) {
+            return true;
+        }
+
+        foreach ($entries as $entry) {
+            $changes = is_array($entry['changes'] ?? null) ? $entry['changes'] : [];
+            if (count($changes) > 1) {
+                return true;
+            }
+
+            foreach ($changes as $change) {
+                $value = is_array($change['value'] ?? null) ? $change['value'] : [];
+                foreach (['messages', 'statuses', 'message_echoes'] as $key) {
+                    if (is_array($value[$key] ?? null) && count($value[$key]) > 1) {
+                        return true;
+                    }
+                }
+            }
+        }
+
+        return false;
     }
 
     private function downloadMedia($mediaInfo, Organization $organization)

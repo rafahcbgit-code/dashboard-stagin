@@ -292,6 +292,10 @@
     const isLoading = ref(false);
     const isModalOpen = ref(false);
     const error = ref(null);
+    const MAX_HEADER_IMAGE_SIZE = 5 * 1024 * 1024;
+    const MAX_HEADER_VIDEO_SIZE = 16 * 1024 * 1024;
+    const HEADER_IMAGE_SIZE_ERROR = 'Image size must not exceed 5MB.';
+    const HEADER_VIDEO_SIZE_ERROR = 'Video size must not exceed 16MB.';
     const metadata = ref(JSON.parse(props.template.metadata));
 
     // ── CAROUSEL DETECTION ────────────────────────────────────────────────
@@ -403,6 +407,21 @@
         const file = event.target.files[0];
         if (!file) return;
         const currentFormat = form.value.header?.format;
+
+        if (currentFormat === 'IMAGE' && file.size > MAX_HEADER_IMAGE_SIZE) {
+            event.target.value = '';
+            error.value = HEADER_IMAGE_SIZE_ERROR;
+            isModalOpen.value = true;
+            return;
+        }
+
+        if (currentFormat === 'VIDEO' && file.size > MAX_HEADER_VIDEO_SIZE) {
+            event.target.value = '';
+            error.value = HEADER_VIDEO_SIZE_ERROR;
+            isModalOpen.value = true;
+            return;
+        }
+
         const reader = new FileReader();
         reader.onload = (e) => {
             if (currentFormat && headerPreviewUrls.value[currentFormat] !== undefined) {
