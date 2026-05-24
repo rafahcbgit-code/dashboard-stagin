@@ -502,12 +502,16 @@ class FlowExecutionService
                 $nextNode = $parser->getNextNode($currentNodeId, $message);
                 if ($nextNode) {
                     $this->updateStep($chat->contact_id, (string) $nextNode['id']);
+                    $previousNodeId = $currentNodeId;
                     $currentNodeId = (string) $nextNode['id'];
                     Log::info('FlowExecution: interactive input routed', [
-                        'from_node' => $currentNodeId,
-                        'message' => $message,
+                        'from_node' => $previousNodeId,
+                        'user_input' => $message,
                         'next_node' => $currentNodeId,
                     ]);
+                    // Clear message so the next interactive node in the loop
+                    // doesn't try to process this same user input again
+                    $message = '';
                     $flowData = $this->refreshFlowData($chat->contact_id);
                     continue;
                 }
