@@ -178,7 +178,9 @@ const emit = defineEmits([
 ]);
 
 const MAX_HEADER_IMAGE_SIZE = 5 * 1024 * 1024;
+const MAX_HEADER_VIDEO_SIZE = 16 * 1024 * 1024;
 const HEADER_IMAGE_SIZE_ERROR = 'Image size must not exceed 5MB.';
+const HEADER_VIDEO_SIZE_ERROR = 'Video size must not exceed 16MB.';
 
 /* ── Unique ID counter for stable v-for keys ────────────────────────── */
 let uidCounter = 0;
@@ -307,6 +309,12 @@ function handleCardFileUpload(event, cardIndex) {
     if (props.cards[cardIndex]?.header_type === 'IMAGE' && file.size > MAX_HEADER_IMAGE_SIZE) {
         event.target.value = '';
         alert(HEADER_IMAGE_SIZE_ERROR);
+        return;
+    }
+
+    if (props.cards[cardIndex]?.header_type === 'VIDEO' && file.size > MAX_HEADER_VIDEO_SIZE) {
+        event.target.value = '';
+        alert(HEADER_VIDEO_SIZE_ERROR);
         return;
     }
 

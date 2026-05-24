@@ -20,6 +20,7 @@ use Validator;
 class TemplateService
 {
     private const MAX_HEADER_IMAGE_BYTES = 5 * 1024 * 1024;
+    private const MAX_HEADER_VIDEO_BYTES = 16 * 1024 * 1024;
 
     private $whatsappService;
     private $organizationId;
@@ -118,7 +119,7 @@ class TemplateService
                 return response()->json(['success' => false,'message'=>'Some required fields have not been filled','errors'=>$validator->messages()->get('*')]);
             }
 
-            if ($response = $this->validateTemplateImageUploads($request)) {
+            if ($response = $this->validateTemplateMediaUploads($request)) {
                 return $response;
             }
 
@@ -172,7 +173,7 @@ class TemplateService
             return response()->json(['success' => false,'message'=>'Some required fields have not been filled','errors'=>$validator->messages()->get('*')]);
         }
 
-        if ($response = $this->validateTemplateImageUploads($request)) {
+        if ($response = $this->validateTemplateMediaUploads($request)) {
             return $response;
         }
 
@@ -233,7 +234,7 @@ class TemplateService
         return null;
     }
 
-    private function validateTemplateImageUploads(Request $request)
+    private function validateTemplateMediaUploads(Request $request)
     {
         if ($request->get('template_type') === 'carousel') {
             $cards = $request->input('cards', []);
@@ -244,7 +245,11 @@ class TemplateService
                 $file = $files[$index] ?? null;
 
                 if ($headerType === 'IMAGE' && $file instanceof UploadedFile && $file->getSize() > self::MAX_HEADER_IMAGE_BYTES) {
-                    return $this->templateImageSizeError();
+                    return $this->templateMediaSizeError('Image', '5MB', 'header_image');
+                }
+
+                if ($headerType === 'VIDEO' && $file instanceof UploadedFile && $file->getSize() > self::MAX_HEADER_VIDEO_BYTES) {
+                    return $this->templateMediaSizeError('Video', '16MB', 'header_video');
                 }
             }
 
@@ -256,15 +261,19 @@ class TemplateService
         $file = data_get($request->allFiles(), 'header.example');
 
         if ($format === 'IMAGE' && $file instanceof UploadedFile && $file->getSize() > self::MAX_HEADER_IMAGE_BYTES) {
-            return $this->templateImageSizeError();
+            return $this->templateMediaSizeError('Image', '5MB', 'header_image');
+        }
+
+        if ($format === 'VIDEO' && $file instanceof UploadedFile && $file->getSize() > self::MAX_HEADER_VIDEO_BYTES) {
+            return $this->templateMediaSizeError('Video', '16MB', 'header_video');
         }
 
         return null;
     }
 
-    private function templateImageSizeError()
+    private function templateMediaSizeError(string $mediaLabel, string $limit, string $field)
     {
-        $message = __('Image size must not exceed 5MB.');
+        $message = __("{$mediaLabel} size must not exceed {$limit}.");
 
         return response()->json([
             'success' => false,
@@ -275,7 +284,7 @@ class TemplateService
                 ],
             ],
             'errors' => [
-                'header_image' => [$message],
+                $field => [$message],
             ],
         ]);
     }
