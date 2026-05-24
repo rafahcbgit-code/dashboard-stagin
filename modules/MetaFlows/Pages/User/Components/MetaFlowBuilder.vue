@@ -53,11 +53,11 @@
                     <div>
                         <label class="block text-xs font-medium text-slate-500 mb-1">
                             {{ $t('Screen ID') }}
-                            <span class="text-slate-400 font-normal">{{ $t('(UPPERCASE)') }}</span>
+                            <span class="text-slate-400 font-normal">(A-Z and _ only)</span>
                         </label>
-                        <input v-model="activeScreen.id" type="text" placeholder="$t('placeholder.WELCOME')"
+                        <input v-model="activeScreen.id" type="text" placeholder="WELCOME"
                             class="w-full text-sm border border-slate-200 rounded-md px-3 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-primary"
-                            @input="activeScreen.id = activeScreen.id.toUpperCase().replace(/\s+/g, '_')" />
+                            @input="activeScreen.id = activeScreen.id.toUpperCase().replace(/[^A-Z_]/g, '')" />
                     </div>
                     <div>
                         <label class="block text-xs font-medium text-slate-500 mb-1">{{ $t('Screen title') }}</label>
@@ -425,8 +425,8 @@ const parseComponent = (comp) => {
             };
         case 'Footer': {
             const ca = comp['on-click-action'] ?? {};
-            // Meta uses { screen: 'ID' } — also handle legacy { name: 'ID' } from older saves
-            return { type: 'Footer', label: comp.label || 'Continue', action: ca.name || 'complete', nextScreen: ca.next?.screen || ca.next?.name || '' };
+            // Meta uses { type: 'screen', name: 'ID' } — also handle legacy { screen: 'ID' }
+            return { type: 'Footer', label: comp.label || 'Continue', action: ca.name || 'complete', nextScreen: ca.next?.name || ca.next?.screen || '' };
         }
         default:
             return { type: comp.type, _raw: comp };
@@ -450,6 +450,11 @@ const flattenLayoutChildren = (layoutChildren) => {
     return result;
 };
 
+const sanitizeScreenId = (id) => {
+    // Meta requires screen IDs to contain only uppercase letters and underscores
+    return (id || 'SCREEN').toUpperCase().replace(/[^A-Z_]/g, '') || 'SCREEN';
+};
+
 const parseFromJson = (jsonStr) => {
     if (!jsonStr) return [];
     try {
@@ -460,7 +465,7 @@ const parseFromJson = (jsonStr) => {
             // the screen must be terminal regardless of what the JSON says.
             const hasCompleteFooter = components.some(c => c.type === 'Footer' && c.action === 'complete');
             return {
-                id: screen.id || '',
+                id: sanitizeScreenId(screen.id),
                 title: screen.title || '',
                 terminal: hasCompleteFooter ? true : !!screen.terminal,
                 components,
@@ -487,7 +492,7 @@ const compToJson = (comp) => {
             return { type: comp.type, label: comp.label, name: comp.name, required: comp.required, 'data-source': comp.options };
         case 'Footer': {
             const action = comp.action === 'navigate'
-                ? { name: 'navigate', next: { screen: comp.nextScreen }, payload: {} }
+                ? { name: 'navigate', next: { type: 'screen', name: comp.nextScreen }, payload: {} }
                 : { name: 'complete', payload: {} };
             return { type: 'Footer', label: comp.label, 'on-click-action': action };
         }
@@ -520,7 +525,7 @@ const toFlowJson = (screensArr) => JSON.stringify({
         }
 
         return {
-            id: screen.id || 'SCREEN',
+            id: sanitizeScreenId(screen.id),
             title: screen.title || '',
             terminal: screen.terminal || false,
             layout: { type: 'SingleColumnLayout', children: layoutChildren },
@@ -560,7 +565,21 @@ watch(() => props.modelValue, (newVal) => {
 
 // ── CRUD ─────────────────────────────────────────────────────────────────
 const addScreen = () => {
-    screens.value.push({ id: `SCREEN_${screens.value.length + 1}`, title: '', terminal: false, components: [] });
+    // Generate alphabetic screen IDs (Meta requires only A-Z and _)
+    const existingIds = new Set(screens.value.map(s => s.id));
+    const suffixes = ['WELCOME', 'DETAILS', 'THANK_YOU', 'CONFIRM', 'REVIEW', 'SUCCESS', 'FORM', 'INFO', 'QUESTIONS', 'RESULTS'];
+    let newId = '';
+    for (const suffix of suffixes) {
+        if (!existingIds.has(suffix)) { newId = suffix; break; }
+    }
+    if (!newId) {
+        // Fallback: SCREEN_A, SCREEN_B, etc.
+        for (let i = 0; ; i++) {
+            const candidate = 'SCREEN_' + String.fromCharCode(65 + (i % 26));
+            if (!existingIds.has(candidate)) { newId = candidate; break; }
+        }
+    }
+    screens.value.push({ id: newId, title: '', terminal: false, components: [] });
     setActiveScreen(screens.value.length - 1);
 };
 

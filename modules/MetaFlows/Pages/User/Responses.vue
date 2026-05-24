@@ -217,7 +217,12 @@
         }
     };
 
-    const formatKey   = (key) => key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    const formatKey   = (key) => {
+        // Strip Meta auto-generated suffixes like _de923b or _abc123
+        let clean = key.replace(/_[a-z0-9]{5,}$/i, '');
+        // Replace underscores with spaces and title-case
+        return clean.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    };
     const formatValue = (val) => Array.isArray(val) ? val.join(', ') : String(val ?? '');
 
     // ── Export CSV ────────────────────────────────────────────────────────────

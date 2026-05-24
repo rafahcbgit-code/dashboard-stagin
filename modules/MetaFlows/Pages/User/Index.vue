@@ -197,14 +197,8 @@
     const pullIsError     = ref(false);
 
     const categoryOptions = [
-        { value: 'SIGN_UP',             label: 'Sign Up' },
-        { value: 'SIGN_IN',             label: 'Sign In' },
-        { value: 'APPOINTMENT_BOOKING', label: 'Appointment Booking' },
-        { value: 'LEAD_GENERATION',     label: 'Lead Generation' },
-        { value: 'CONTACT_US',          label: 'Contact Us' },
-        { value: 'CUSTOMER_SUPPORT',    label: 'Customer Support' },
-        { value: 'SURVEY',              label: 'Survey' },
         { value: 'OTHER',               label: 'Other' },
+        { value: 'SURVEY',              label: 'Survey' },
     ];
 
     // ── Template definitions — imported from @/Data/metaFlowTemplates.js ────

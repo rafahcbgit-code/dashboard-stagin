@@ -99,7 +99,7 @@
         <div class="flex gap-5 items-start">
 
             <!-- Left sidebar: metadata + tips -->
-            <div class="w-52 shrink-0 space-y-4 sticky top-4">
+            <div class="w-64 shrink-0 space-y-4 sticky top-4">
                 <div class="bg-white border border-slate-200 rounded-xl p-4 text-sm space-y-4">
                     <div v-if="flow.categories?.length">
                         <p class="text-slate-400 text-[11px] uppercase tracking-wide font-medium mb-1">{{ $t('Categories') }}</p>
@@ -221,15 +221,17 @@
                             <!-- Field Mapping Table -->
                             <div v-if="allFlowFields.length && sheetHeaders.length">
                                 <p class="text-slate-400 text-[11px] uppercase tracking-wide font-medium mb-2">{{ $t('Field Mapping') }}</p>
-                                <div class="space-y-1.5">
+                                <div class="space-y-2">
                                     <div
                                         v-for="field in allFlowFields"
                                         :key="field.name"
-                                        class="flex items-center gap-2"
+                                        class="flex items-start gap-2"
                                     >
-                                        <span class="shrink-0 px-2 py-0.5 bg-slate-100 rounded text-slate-600 text-[11px] font-medium w-24 truncate" :title="field.label">
-                                            {{ field.label }}
-                                        </span>
+                                        <div class="shrink-0 w-28">
+                                            <p class="text-slate-700 text-[11px] font-medium leading-tight">{{ field.label }}</p>
+                                            <p v-if="field.type !== 'metadata' && field.label !== field.name" class="text-slate-400 text-[10px] leading-tight truncate" :title="field.name">{{ field.name }}</p>
+                                            <span v-if="field.type === 'metadata'" class="inline-block text-[9px] px-1 py-0.5 rounded bg-slate-100 text-slate-400 font-medium mt-0.5">auto</span>
+                                        </div>
                                         <select
                                             v-model="mappingFor[field.name]"
                                             class="flex-1 border border-slate-200 rounded px-1.5 py-1 text-[11px] outline-none focus:border-primary bg-white"
@@ -578,20 +580,25 @@
     const emailBody          = ref(props.flow.email_notification_config?.body_template ?? '');
     const savingEmail        = ref(false);
 
-    // ── Variable hint strings for template UI (can't use {{ }} in Vue template) ─
+    // ── Variable hint strings for template UI (can't use {{ }} in Vue template directly) ─
     const variableHintMeta = 'Metadata: {{__timestamp}}, {{__contact_phone}}, {{__contact_name}}, {{__contact_email}}, {{__flow_token}}, {{flow_name}}';
-    const variableHintFields = 'Form fields depend on your flow (e.g. {{full_name}}, {{email}})';
-    const replyPlaceholder = 'Thank you {{__contact_name}} for your submission! We received: {{full_name}}, {{email}}.';
+    const variableHintFields = computed(() => {
+        if (!flowFields.value.length) return 'Form fields will appear here after saving the flow.';
+        const names = flowFields.value.slice(0, 4).map(f => '{{' + f.name + '}}').join(', ');
+        return 'Form fields: ' + names + (flowFields.value.length > 4 ? ', ...' : '');
+    });
+    const replyPlaceholder = 'Thank you {{__contact_name}} for your submission!';
     const emailBodyPlaceholder = 'A new submission was received from {{__contact_name}}...';
     const emailSubjectPlaceholder = 'New submission: {{flow_name}}';
 
     // All fields: metadata fields first, then flow form fields
     const allFlowFields = computed(() => {
         const meta = [
-            { name: '__timestamp',     label: 'Timestamp',     type: 'metadata' },
-            { name: '__contact_phone', label: 'Contact Phone', type: 'metadata' },
-            { name: '__contact_name',  label: 'Contact Name',  type: 'metadata' },
-            { name: '__flow_token',    label: 'Flow Token',    type: 'metadata' },
+            { name: '__timestamp',     label: 'Timestamp',      type: 'metadata', screen: '' },
+            { name: '__contact_phone', label: 'Contact Phone',  type: 'metadata', screen: '' },
+            { name: '__contact_name',  label: 'Contact Name',   type: 'metadata', screen: '' },
+            { name: '__contact_email', label: 'Contact Email',  type: 'metadata', screen: '' },
+            { name: '__flow_token',    label: 'Flow Token',     type: 'metadata', screen: '' },
         ];
         return [...meta, ...flowFields.value];
     });
@@ -648,7 +655,7 @@
                 return { type: comp.type, label: comp.label || '', name: comp.name || '', required: !!comp.required, options: (comp['data-source'] || []).map(o => ({ id: o.id || '', title: o.title || '' })) };
             case 'Footer': {
                 const ca = comp['on-click-action'] ?? {};
-                return { type: 'Footer', label: comp.label || 'Continue', action: ca.name || 'complete', nextScreen: ca.next?.screen || ca.next?.name || '' };
+                return { type: 'Footer', label: comp.label || 'Continue', action: ca.name || 'complete', nextScreen: ca.next?.name || ca.next?.screen || '' };
             }
             default: return null;
         }
@@ -762,13 +769,21 @@
 
     // ── Google Sheets methods ─────────────────────────────────────────────────
 
-    // Load Google connection status on mount
+    // Load Google connection status and flow fields on mount
     onMounted(async () => {
         try {
             const res = await axios.get('/automation/meta-flows/google/status');
             googleStatus.value = res.data;
         } catch {
             // Non-critical — ignore errors
+        }
+
+        // Load flow fields for all panels (Sheets mapping, variable hints, etc.)
+        try {
+            const fieldsRes = await axios.get(`/automation/meta-flows/${props.flow.uuid}/flow-fields`);
+            flowFields.value = fieldsRes.data.fields ?? [];
+        } catch {
+            // Non-critical
         }
 
         // Restore mapping from saved config
@@ -779,22 +794,9 @@
         }
     });
 
-    // Open the Google Sheets panel and load flow fields once
-    const openSheetSection = async () => {
+    // Open the Google Sheets panel (fields are already loaded on mount)
+    const openSheetSection = () => {
         showSheetSection.value = !showSheetSection.value;
-
-        if (showSheetSection.value && !flowFields.value.length) {
-            try {
-                const res = await axios.get(`/automation/meta-flows/${props.flow.uuid}/flow-fields`);
-                flowFields.value = res.data.fields ?? [];
-                // Auto-initialize mappingFor for any new fields
-                allFlowFields.value.forEach(f => {
-                    if (!(f.name in mappingFor.value)) mappingFor.value[f.name] = '';
-                });
-            } catch {
-                // Ignore
-            }
-        }
     };
 
     // Save URL on blur, then try to fetch headers if tab is also filled

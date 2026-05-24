@@ -253,10 +253,11 @@ class MetaFlowController extends BaseController
             ->firstOrFail();
 
         $metadataFields = [
-            ['name' => '__timestamp',     'label' => 'Timestamp',     'type' => 'metadata'],
-            ['name' => '__contact_phone', 'label' => 'Contact Phone', 'type' => 'metadata'],
-            ['name' => '__contact_name',  'label' => 'Contact Name',  'type' => 'metadata'],
-            ['name' => '__flow_token',    'label' => 'Flow Token',    'type' => 'metadata'],
+            ['name' => '__timestamp',     'label' => 'Timestamp',     'type' => 'metadata', 'screen' => ''],
+            ['name' => '__contact_phone', 'label' => 'Contact Phone', 'type' => 'metadata', 'screen' => ''],
+            ['name' => '__contact_name',  'label' => 'Contact Name',  'type' => 'metadata', 'screen' => ''],
+            ['name' => '__contact_email', 'label' => 'Contact Email', 'type' => 'metadata', 'screen' => ''],
+            ['name' => '__flow_token',    'label' => 'Flow Token',    'type' => 'metadata', 'screen' => ''],
         ];
 
         return response()->json([
