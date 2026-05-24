@@ -117,6 +117,11 @@ class RateLimitService
      */
     public function shouldEscalate(int $organizationId, int $contactId): bool
     {
+        // If auto-escalation is disabled, never escalate regardless of counter
+        if (!$this->botSettings->isAutoEscalationEnabled($organizationId)) {
+            return false;
+        }
+
         $threshold = $this->botSettings->getFallbackThreshold($organizationId);
         // Find the fallback trigger group for this org
         $fallbackTrigger = TriggerGroup::forOrganization($organizationId)

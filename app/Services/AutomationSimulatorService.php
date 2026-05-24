@@ -194,6 +194,8 @@ class AutomationSimulatorService
             'fallback_threshold' => (int) $this->botSettings->getSetting($organizationId, 'fallback_threshold', 3),
             'flow_timeout_minutes' => (int) $this->botSettings->getSetting($organizationId, 'flow_timeout_minutes', 30),
             'escalation_transfer_enabled' => (bool) $this->botSettings->getSetting($organizationId, 'escalation_transfer_message_enabled', false),
+            'auto_escalation_enabled' => (bool) $this->botSettings->isAutoEscalationEnabled($organizationId),
+            'ai_escalation_enabled' => (bool) $this->botSettings->isAiEscalationEnabled($organizationId),
         ];
 
         return [
@@ -682,7 +684,10 @@ class AutomationSimulatorService
         $virtualContact->id = 0;
         $virtualContact->organization_id = $organizationId;
 
-        $escalationMatch = $this->escalationService->evaluate($organizationId, $message);
+        $escalationMatch = null;
+        if ($this->botSettings->isAiEscalationEnabled($organizationId)) {
+            $escalationMatch = $this->escalationService->evaluate($organizationId, $message);
+        }
 
         if ($escalationMatch !== null) {
             return [

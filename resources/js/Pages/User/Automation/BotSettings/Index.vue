@@ -237,6 +237,35 @@
                                                 </div>
                                             </div>
                                         </div>
+
+                                        <!-- AI Escalation Toggle -->
+                                        <div class="rounded-lg border border-slate-200 p-4">
+                                            <div class="flex items-start gap-3">
+                                                <div class="flex-shrink-0 w-8 h-8 rounded-lg bg-amber-50 flex items-center justify-center">
+                                                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-amber-600"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+                                                </div>
+                                                <div class="flex-1">
+                                                    <label class="block text-sm font-semibold text-slate-800">{{ $t('AI-Powered Escalation Rules') }}</label>
+                                                    <p class="text-xs text-slate-500 mt-0.5">{{ $t('AI evaluates incoming messages against your escalation rules and routes matching ones directly to a human agent, skipping the KB answer.') }}</p>
+                                                </div>
+                                                <button
+                                                    type="button"
+                                                    @click="form.ai_escalation_enabled = !form.ai_escalation_enabled"
+                                                    class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-1 shrink-0"
+                                                    :class="form.ai_escalation_enabled ? 'bg-primary' : 'bg-slate-300'"
+                                                >
+                                                    <span
+                                                        class="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform duration-200"
+                                                        :class="form.ai_escalation_enabled ? 'translate-x-[18px]' : 'translate-x-[3px]'"
+                                                    />
+                                                </button>
+                                            </div>
+                                            <div v-if="form.ai_escalation_enabled" class="mt-3">
+                                                <a href="/automation/escalation" class="inline-flex items-center gap-1 text-xs font-medium text-primary hover:text-[#045a47] transition-colors">
+                                                    {{ $t('Configure escalation rules') }} &rarr;
+                                                </a>
+                                            </div>
+                                        </div>
                                     </div>
                                     <div v-else class="mt-2 text-xs text-slate-400">
                                         {{ $t('AI will not attempt to answer when no trigger matches. Messages will fall through to the Fallback trigger.') }}
@@ -264,8 +293,20 @@
                                             <label class="block text-sm font-semibold text-slate-800">{{ $t('Auto-Escalation After') }}</label>
                                             <p class="text-xs text-slate-500 mt-0.5">{{ $t('After this many unanswered messages, the conversation is automatically sent to a human agent.') }}</p>
                                         </div>
+                                        <!-- Toggle -->
+                                        <button
+                                            type="button"
+                                            @click="form.auto_escalation_enabled = !form.auto_escalation_enabled"
+                                            class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary/30 focus:ring-offset-1 shrink-0"
+                                            :class="form.auto_escalation_enabled ? 'bg-primary' : 'bg-slate-300'"
+                                        >
+                                            <span
+                                                class="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform duration-200"
+                                                :class="form.auto_escalation_enabled ? 'translate-x-[18px]' : 'translate-x-[3px]'"
+                                            />
+                                        </button>
                                     </div>
-                                    <div class="mt-4 flex items-center gap-3">
+                                    <div v-if="form.auto_escalation_enabled" class="mt-4 flex items-center gap-3">
                                         <input
                                             v-model.number="form.fallback_threshold"
                                             type="number"
@@ -276,10 +317,13 @@
                                         />
                                         <span class="text-sm text-slate-500">{{ $t('unanswered messages') }}</span>
                                     </div>
-                                    <div class="mt-2 flex items-center gap-4 text-xs text-slate-400">
-                                        <span>{{ $t('Example: After 3 unanswered messages, the conversation is automatically escalated to a human agent.') }}</span>
+                                    <div v-if="form.auto_escalation_enabled" class="mt-2 flex items-center gap-4 text-xs text-slate-400">
+                                        <span>{{ $t('Example: After unanswered messages, the conversation is automatically escalated to a human agent.') }}</span>
                                     </div>
-                                    <div class="mt-3">
+                                    <div v-else class="mt-2 text-xs text-slate-400">
+                                        {{ $t('Conversations won\'t automatically escalate to a human agent. The fallback flow will keep running instead.') }}
+                                    </div>
+                                    <div v-if="form.auto_escalation_enabled" class="mt-3 hidden">
                                         <a href="/automation/escalation" class="inline-flex items-center gap-1 text-xs font-medium text-primary hover:text-[#045a47] transition-colors">
                                             {{ $t('Configure specific escalation rules') }} &rarr;
                                         </a>
@@ -448,7 +492,7 @@
                             <!-- ============================================ -->
                             <!-- SECTION 5: AI Matching Defaults (now managed by site admin) -->
                             <!-- ============================================ -->
-                            <div :class="{ 'opacity-50 pointer-events-none': !form.automation_enabled }">
+                            <div :class="{ 'opacity-50 pointer-events-none': !form.automation_enabled, 'hidden': true } ">
                                 <div class="flex items-center gap-2 mt-4 mb-2">
                                     <div class="w-1 h-5 rounded-full bg-emerald-500"></div>
                                     <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wide">{{ $t('AI Matching Defaults') }}</h3>
@@ -507,6 +551,8 @@ const form = ref({
     ai_followup_question: props.settings?.ai_followup_question || 'Was this helpful?',
     ai_followup_yes_text: props.settings?.ai_followup_yes_text || 'Yes, this helped',
     ai_followup_no_text: props.settings?.ai_followup_no_text || 'No, I need more help',
+    auto_escalation_enabled: props.settings?.auto_escalation_enabled ?? false,
+    ai_escalation_enabled: props.settings?.ai_escalation_enabled ?? false,
     // AI Settings fields
     ai_enabled: props.aiSettings?.ai_enabled || false,
     ai_only_mode: props.aiSettings?.ai_only_mode || false,
@@ -549,6 +595,8 @@ async function submitForm() {
         ai_followup_question: form.value.ai_followup_question,
         ai_followup_yes_text: form.value.ai_followup_yes_text,
         ai_followup_no_text: form.value.ai_followup_no_text,
+        auto_escalation_enabled: form.value.auto_escalation_enabled,
+        ai_escalation_enabled: form.value.ai_escalation_enabled,
         // AI settings
         ai_enabled: form.value.ai_enabled,
         ai_only_mode: form.value.ai_only_mode,

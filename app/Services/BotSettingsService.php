@@ -23,6 +23,8 @@ class BotSettingsService
         'flow_rejoin_message' => "You have an active conversation with us. Reply to continue where you left off.",
         'flow_rejoin_flow_ids' => [],
         'auto_reenable_bot_minutes' => 0,
+        'auto_escalation_enabled' => false,
+        'ai_escalation_enabled' => false,
     ];
 
     /**
@@ -185,6 +187,16 @@ class BotSettingsService
     public function getAutoReenableBotMinutes(int $organizationId): int
     {
         return (int) $this->getSetting($organizationId, 'auto_reenable_bot_minutes', self::DEFAULTS['auto_reenable_bot_minutes']);
+    }
+
+    public function isAutoEscalationEnabled(int $organizationId): bool
+    {
+        return (bool) $this->getSetting($organizationId, 'auto_escalation_enabled', self::DEFAULTS['auto_escalation_enabled']);
+    }
+
+    public function isAiEscalationEnabled(int $organizationId): bool
+    {
+        return (bool) $this->getSetting($organizationId, 'ai_escalation_enabled', self::DEFAULTS['ai_escalation_enabled']);
     }
 
 }
