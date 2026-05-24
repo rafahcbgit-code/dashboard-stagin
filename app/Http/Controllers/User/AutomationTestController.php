@@ -160,6 +160,8 @@ class AutomationTestController extends BaseController
                 'fallback_threshold' => (int) $botSettings->getSetting($organizationId, 'fallback_threshold', 3),
                 'flow_timeout_minutes' => (int) $botSettings->getSetting($organizationId, 'flow_timeout_minutes', 30),
                 'escalation_transfer_enabled' => (bool) $botSettings->getSetting($organizationId, 'escalation_transfer_message_enabled', false),
+                'auto_escalation_enabled' => (bool) $botSettings->isAutoEscalationEnabled($organizationId),
+                'ai_escalation_enabled' => (bool) $botSettings->isAiEscalationEnabled($organizationId),
                 'ai_followup_enabled' => (bool) $botSettings->getSetting($organizationId, 'ai_followup_enabled', false),
                 'flow_rejoin_enabled' => (bool) $botSettings->getSetting($organizationId, 'flow_rejoin_enabled', false),
             ],

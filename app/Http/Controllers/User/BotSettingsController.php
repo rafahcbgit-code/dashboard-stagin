@@ -74,6 +74,8 @@ class BotSettingsController extends BaseController
             'ai_followup_question' => 'nullable|string|max:60',
             'ai_followup_yes_text' => 'nullable|string|max:20',
             'ai_followup_no_text' => 'nullable|string|max:20',
+            'auto_escalation_enabled' => 'nullable|boolean',
+            'ai_escalation_enabled' => 'nullable|boolean',
             // AI settings
             'ai_enabled' => 'nullable|boolean',
             'ai_only_mode' => 'nullable|boolean',
@@ -85,6 +87,8 @@ class BotSettingsController extends BaseController
         $validated['ai_fallback_enabled'] = isset($validated['ai_fallback_enabled']) ? (bool) $validated['ai_fallback_enabled'] : false;
         $validated['escalation_transfer_message_enabled'] = isset($validated['escalation_transfer_message_enabled']) ? (bool) $validated['escalation_transfer_message_enabled'] : false;
         $validated['ai_followup_enabled'] = isset($validated['ai_followup_enabled']) ? (bool) $validated['ai_followup_enabled'] : false;
+        $validated['auto_escalation_enabled'] = isset($validated['auto_escalation_enabled']) ? (bool) $validated['auto_escalation_enabled'] : false;
+        $validated['ai_escalation_enabled'] = isset($validated['ai_escalation_enabled']) ? (bool) $validated['ai_escalation_enabled'] : false;
         $validated['ai_enabled'] = isset($validated['ai_enabled']) ? (bool) $validated['ai_enabled'] : false;
         $validated['ai_only_mode'] = isset($validated['ai_only_mode']) ? (bool) $validated['ai_only_mode'] : false;
 
@@ -95,6 +99,7 @@ class BotSettingsController extends BaseController
             'escalation_transfer_message_enabled', 'escalation_transfer_message',
             'auto_reenable_bot_minutes',
             'ai_followup_enabled', 'ai_followup_question', 'ai_followup_yes_text', 'ai_followup_no_text',
+            'auto_escalation_enabled', 'ai_escalation_enabled',
         ];
         $aiKeys = ['ai_enabled', 'ai_only_mode', 'default_confidence_threshold'];
 

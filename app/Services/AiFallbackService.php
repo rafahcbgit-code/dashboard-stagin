@@ -51,8 +51,11 @@ class AiFallbackService
             return null;
         }
 
-        // 4. Check escalation instructions first
-        $escalationMatch = $this->escalationService->evaluate($organizationId, $message);
+        // 4. Check escalation instructions first (only if AI escalation is enabled)
+        $escalationMatch = null;
+        if ($this->botSettings->isAiEscalationEnabled($organizationId)) {
+            $escalationMatch = $this->escalationService->evaluate($organizationId, $message);
+        }
         if ($escalationMatch !== null) {
             Log::info('AiFallbackService: Escalation instruction matched, skipping KB answer', [
                 'organization_id' => $organizationId,
