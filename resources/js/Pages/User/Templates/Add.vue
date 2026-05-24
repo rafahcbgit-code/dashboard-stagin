@@ -575,6 +575,8 @@
     const videoPreviewFailed = ref(false);
     const isModalOpen = ref(false);
     const error = ref(null);
+    const MAX_HEADER_IMAGE_SIZE = 5 * 1024 * 1024;
+    const HEADER_IMAGE_SIZE_ERROR = 'Image size must not exceed 5MB.';
     const bodyExamples = ref([]);
     const templateType = ref('standard');
     const metaFlows = ref([]);
@@ -711,6 +713,14 @@
         if (!file) return;
 
         const currentFormat = form.value.header?.format;
+
+        if (currentFormat === 'IMAGE' && file.size > MAX_HEADER_IMAGE_SIZE) {
+            event.target.value = '';
+            error.value = { message: HEADER_IMAGE_SIZE_ERROR };
+            isModalOpen.value = true;
+            return;
+        }
+
         const reader = new FileReader();
         reader.onload = (e) => {
             imageUrl.value = e.target.result;

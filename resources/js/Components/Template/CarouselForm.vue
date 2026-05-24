@@ -177,6 +177,9 @@ const emit = defineEmits([
     'update:messageBody',
 ]);
 
+const MAX_HEADER_IMAGE_SIZE = 5 * 1024 * 1024;
+const HEADER_IMAGE_SIZE_ERROR = 'Image size must not exceed 5MB.';
+
 /* ── Unique ID counter for stable v-for keys ────────────────────────── */
 let uidCounter = 0;
 function ensureUid(card) {
@@ -298,6 +301,12 @@ function handleCardFileUpload(event, cardIndex) {
     // Guard: index within bounds
     if (cardIndex < 0 || cardIndex >= props.cards.length) {
         console.error('CarouselForm: cardIndex out of bounds', cardIndex, props.cards.length);
+        return;
+    }
+
+    if (props.cards[cardIndex]?.header_type === 'IMAGE' && file.size > MAX_HEADER_IMAGE_SIZE) {
+        event.target.value = '';
+        alert(HEADER_IMAGE_SIZE_ERROR);
         return;
     }
 
