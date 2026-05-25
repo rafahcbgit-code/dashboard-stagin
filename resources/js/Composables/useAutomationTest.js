@@ -1,4 +1,4 @@
-import { ref, nextTick, onMounted } from 'vue'
+import { ref, computed, nextTick, onMounted } from 'vue'
 import axios from 'axios'
 
 export function useAutomationTest(props) {
@@ -22,6 +22,52 @@ export function useAutomationTest(props) {
   const unmatchedMessageCount = ref(0)
   const workingHours = ref(null)
 
+  // Session-based overrides (in-memory only, never persisted)
+  const triggers = ref([])
+  const settingOverrides = ref({})
+  const triggerOverrides = ref({})
+  const dbBotSettings = ref({})
+
+  const effectiveBotSettings = computed(() => ({
+    ...botSettings.value,
+    ...settingOverrides.value,
+  }))
+
+  const hasOverrides = computed(() => {
+    return Object.keys(settingOverrides.value).length > 0
+      || Object.keys(triggerOverrides.value).length > 0
+  })
+
+  const overrideCount = computed(() => {
+    return Object.keys(settingOverrides.value).length
+      + Object.keys(triggerOverrides.value).length
+  })
+
+  const setSettingOverride = (key, value) => {
+    if (dbBotSettings.value[key] === value) {
+      const { [key]: _, ...rest } = settingOverrides.value
+      settingOverrides.value = rest
+    } else {
+      settingOverrides.value = { ...settingOverrides.value, [key]: value }
+    }
+  }
+
+  const setTriggerOverride = (triggerId, enabled) => {
+    const trigger = triggers.value.find(t => t.id === triggerId)
+    const dbEnabled = trigger?.is_enabled ?? false
+    if (dbEnabled === enabled) {
+      const { [triggerId]: _, ...rest } = triggerOverrides.value
+      triggerOverrides.value = rest
+    } else {
+      triggerOverrides.value = { ...triggerOverrides.value, [triggerId]: enabled }
+    }
+  }
+
+  const resetOverrides = () => {
+    settingOverrides.value = {}
+    triggerOverrides.value = {}
+  }
+
   // Load context on mount
   onMounted(async () => {
     try {
@@ -29,6 +75,10 @@ export function useAutomationTest(props) {
       const data = response.data
       if (data.bot_settings) {
         botSettings.value = data.bot_settings
+        dbBotSettings.value = { ...data.bot_settings }
+      }
+      if (data.triggers) {
+        triggers.value = data.triggers
       }
       if (data.working_hours?.schedule) {
         workingHours.value = data.working_hours.schedule
@@ -95,6 +145,7 @@ export function useAutomationTest(props) {
     inputMessage.value = ''
     activeInputHint.value = null
     unmatchedMessageCount.value = 0
+    resetOverrides()
   }
 
   const sendMessage = async () => {
@@ -121,6 +172,8 @@ export function useAutomationTest(props) {
         message,
         is_new_contact: isNewContact.value,
         during_working_hours: duringWorkingHours.value,
+        setting_overrides: { ...settingOverrides.value },
+        trigger_overrides: { ...triggerOverrides.value },
       })
       const data = response.data
 
@@ -146,7 +199,12 @@ export function useAutomationTest(props) {
           || whatsappBody.includes('Trigger matched:')
           || whatsappBody.includes('This would be escalated to a human agent')
 
-        if (!isTechnicalMessage) {
+        if (whatsappBody.includes('Automation is disabled')) {
+          addSystemMessage('Automation is disabled — no triggers or AI will respond to messages.')
+          addDebug('warning', 'Automation disabled', 'All auto-reply skipped (automation_enabled = false)')
+          // When automation is off, skip ALL further logic — no fallback counting, no escalation
+          return
+        } else if (!isTechnicalMessage) {
           addBotMessage(data.whatsapp)
         }
       }
@@ -381,7 +439,10 @@ export function useAutomationTest(props) {
     addDebug('info', 'Testing AI directly...', `Message: "${msg}"`)
 
     try {
-      const response = await axios.post('/automation/test/ai', { message: msg })
+      const response = await axios.post('/automation/test/ai', {
+        message: msg,
+        setting_overrides: { ...settingOverrides.value },
+      })
       const data = response.data
 
       isTyping.value = false
@@ -499,6 +560,14 @@ export function useAutomationTest(props) {
     unmatchedMessageCount,
     activeInputHint,
     workingHours,
+    // Override state
+    triggers,
+    settingOverrides,
+    triggerOverrides,
+    dbBotSettings,
+    effectiveBotSettings,
+    hasOverrides,
+    overrideCount,
     // Methods
     sendMessage,
     evaluateAndStart,
@@ -512,5 +581,8 @@ export function useAutomationTest(props) {
     addDebug,
     resetChat,
     scrollToBottom,
+    setSettingOverride,
+    setTriggerOverride,
+    resetOverrides,
   }
 }

@@ -64,7 +64,7 @@
       <DebugFlowSection :flow-steps="flowSteps" />
       <DebugAiSection :ai-decisions="aiDecisions" />
       <DebugVariablesSection :variables="variables" :contact-context="contactContext" />
-      <DebugSessionSection :bot-settings="botSettings" :session-info="sessionInfo" :working-hours="workingHours" :unmatched-message-count="unmatchedMessageCount" />
+      <DebugSessionSection :bot-settings="botSettings" :session-info="sessionInfo" :working-hours="workingHours" :unmatched-message-count="unmatchedMessageCount" :setting-overrides="settingOverrides" :trigger-overrides="triggerOverrides" />
     </div>
   </div>
 </template>
@@ -88,6 +88,8 @@ const props = defineProps({
   sessionInfo: { type: Object, default: null },
   workingHours: { type: Object, default: null },
   unmatchedMessageCount: { type: Number, default: 0 },
+  settingOverrides: { type: Object, default: () => ({}) },
+  triggerOverrides: { type: Object, default: () => ({}) },
 })
 
 defineEmits(['close'])
