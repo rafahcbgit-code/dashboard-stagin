@@ -4,6 +4,7 @@ namespace Modules\MetaFlows\Controllers;
 
 use App\Http\Controllers\Controller as BaseController;
 use App\Helpers\CustomHelper;
+use App\Helpers\DateTimeHelper;
 use App\Models\Organization;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -51,7 +52,12 @@ class MetaFlowController extends BaseController
             ->withCount(['responses' => fn($q) => $q->whereNotNull('response_json')])
             ->firstOrFail();
 
-        $data['flow'] = $flow;
+        $flowArray = $flow->toArray();
+        $flowArray['updated_at_formatted'] = DateTimeHelper::formatDate(
+            DateTimeHelper::convertToOrganizationTimezone($flow->updated_at)
+        );
+
+        $data['flow'] = $flowArray;
 
         return Inertia::render('MetaFlows::User/View', $data);
     }
