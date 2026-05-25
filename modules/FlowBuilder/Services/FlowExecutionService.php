@@ -87,6 +87,7 @@ class FlowExecutionService
                     'flow_id' => $flowData->flow_id,
                     'contact_id' => $chat->contact_id,
                     'organization_id' => $this->organizationId,
+                    'chat_id' => $chat->id,
                     'status' => 'timed_out',
                     'nodes_processed' => 0,
                 ]);
@@ -177,6 +178,7 @@ class FlowExecutionService
                     'flow_id' => $flow->id,
                     'contact_id' => $chat->contact_id,
                     'organization_id' => $this->organizationId,
+                    'chat_id' => $chat->id,
                     'status' => 'started',
                     'nodes_processed' => 0,
                 ]);
@@ -220,6 +222,7 @@ class FlowExecutionService
                     'flow_id' => $flowId,
                     'contact_id' => $chat->contact_id ?? 0,
                     'organization_id' => $this->organizationId,
+                    'chat_id' => $chat->id ?? null,
                     'status' => 'error',
                     'nodes_processed' => 0,
                 ]);
@@ -255,6 +258,7 @@ class FlowExecutionService
                     'flow_id' => $activeFlow->flow_id,
                     'contact_id' => $chat->contact_id,
                     'organization_id' => $this->organizationId,
+                    'chat_id' => $chat->id,
                     'status' => 'timed_out',
                     'nodes_processed' => 0,
                 ]);
@@ -348,7 +352,7 @@ class FlowExecutionService
             // Cycle detection
             if (isset($visited[$currentNodeId])) {
                 Log::warning("FlowExecution: cycle detected at node {$currentNodeId}, ending flow");
-                $this->endFlow($chat->contact_id);
+                $this->endFlow($chat->contact_id, 'completed', $chat->id);
                 return false;
             }
             $visited[$currentNodeId] = true;
@@ -358,7 +362,7 @@ class FlowExecutionService
                 Log::info("FlowExecution: node {$currentNodeId} not found in flow, ending flow", [
                     'available_nodes' => array_keys($parser->nodeMap ?? []),
                 ]);
-                $this->endFlow($chat->contact_id);
+                $this->endFlow($chat->contact_id, 'completed', $chat->id);
                 return false;
             }
 
@@ -377,7 +381,7 @@ class FlowExecutionService
                     Log::warning('FlowExecution: start node has no outgoing edge', [
                         'node_id' => $currentNodeId,
                     ]);
-                    $this->endFlow($chat->contact_id);
+                    $this->endFlow($chat->contact_id, 'completed', $chat->id);
                     return false;
                 }
                 $currentNodeId = (string) $nextNode['id'];
@@ -407,7 +411,7 @@ class FlowExecutionService
                 // Move to next node
                 $nextNode = $parser->getNextNode($currentNodeId);
                 if (!$nextNode) {
-                    $this->endFlow($chat->contact_id);
+                    $this->endFlow($chat->contact_id, 'completed', $chat->id);
                     return false;
                 }
                 $currentNodeId = (string) $nextNode['id'];
@@ -425,7 +429,7 @@ class FlowExecutionService
                     Log::warning('FlowExecution: question node missing question_text or variable_name', [
                         'node_id' => $currentNodeId,
                     ]);
-                    $this->endFlow($chat->contact_id);
+                    $this->endFlow($chat->contact_id, 'completed', $chat->id);
                     return false;
                 }
 
@@ -461,7 +465,7 @@ class FlowExecutionService
                     Log::warning('FlowExecution: portal node missing target_flow_uuid', [
                         'node_id' => $currentNodeId,
                     ]);
-                    $this->endFlow($chat->contact_id);
+                    $this->endFlow($chat->contact_id, 'completed', $chat->id);
                     return false;
                 }
 
@@ -475,7 +479,7 @@ class FlowExecutionService
                         'target_flow_uuid' => $targetFlowUuid,
                         'node_id' => $currentNodeId,
                     ]);
-                    $this->endFlow($chat->contact_id);
+                    $this->endFlow($chat->contact_id, 'completed', $chat->id);
                     return false;
                 }
 
@@ -486,7 +490,7 @@ class FlowExecutionService
                     'node_id' => $currentNodeId,
                 ]);
 
-                $this->endFlow($chat->contact_id, 'portal_redirect');
+                $this->endFlow($chat->contact_id, 'portal_redirect', $chat->id);
 
                 return $this->startFlow($targetFlow->id, $chat);
             }
@@ -520,7 +524,7 @@ class FlowExecutionService
                     'node_id' => $currentNodeId,
                     'message' => $message,
                 ]);
-                $this->endFlow($chat->contact_id);
+                $this->endFlow($chat->contact_id, 'completed', $chat->id);
                 return false;
             }
 
@@ -553,7 +557,7 @@ class FlowExecutionService
         }
 
         Log::warning("FlowExecution: max iterations reached for contact {$chat->contact_id}");
-        $this->endFlow($chat->contact_id);
+        $this->endFlow($chat->contact_id, 'completed', $chat->id);
         return false;
     }
 
@@ -1026,7 +1030,7 @@ class FlowExecutionService
         FlowUserData::where('contact_id', $contactId)->update(['current_step' => $step]);
     }
 
-    private function endFlow(int $contactId, string $reason = 'completed'): void
+    private function endFlow(int $contactId, string $reason = 'completed', ?int $chatId = null): void
     {
         $flowData = FlowUserData::where('contact_id', $contactId)->first();
         if ($flowData) {
@@ -1035,6 +1039,7 @@ class FlowExecutionService
                     'flow_id' => $flowData->flow_id,
                     'contact_id' => $contactId,
                     'organization_id' => $this->organizationId,
+                    'chat_id' => $chatId,
                     'status' => $reason,
                     'nodes_processed' => $this->logNodesProcessed,
                 ]);
@@ -1238,7 +1243,7 @@ class FlowExecutionService
             // Advance past the question node and continue processing
             $flow = Flow::find($flowData->flow_id);
             if (!$flow) {
-                $this->endFlow($chat->contact_id);
+                $this->endFlow($chat->contact_id, 'completed', $chat->id);
                 return false;
             }
 
@@ -1262,7 +1267,7 @@ class FlowExecutionService
             }
 
             // No next node — flow complete
-            $this->endFlow($chat->contact_id);
+            $this->endFlow($chat->contact_id, 'completed', $chat->id);
             return true;
         }
 
@@ -1282,7 +1287,7 @@ class FlowExecutionService
             // Max retries reached — look for fail route or end flow
             $flow = Flow::find($flowData->flow_id);
             if (!$flow) {
-                $this->endFlow($chat->contact_id);
+                $this->endFlow($chat->contact_id, 'completed', $chat->id);
                 return false;
             }
 
@@ -1310,7 +1315,7 @@ class FlowExecutionService
             Log::info('FlowExecution: question max retries reached, no fail route, ending flow', [
                 'contact_id' => $chat->contact_id,
             ]);
-            $this->endFlow($chat->contact_id);
+            $this->endFlow($chat->contact_id, 'completed', $chat->id);
             return false;
         }
 
