@@ -4,64 +4,55 @@
         <div class="bg-white md:bg-inherit pt-0 px-4 md:pt-8 md:p-8 rounded-[5px] text-[#000] overflow-y-scroll">
 
         <!-- ── Page header ─────────────────────────────────────────────────── -->
-        <div class="flex items-center justify-between mb-6 mt-8 md:mt-0 flex-wrap gap-3">
-            <!-- Left: breadcrumb + flow name -->
-            <div class="flex items-center gap-3">
+        <div class="flex items-center justify-between mb-5 mt-8 md:mt-0 flex-wrap gap-3">
+            <!-- Left: breadcrumb + flow name + metadata -->
+            <div class="flex items-center gap-3.5">
                 <a href="/automation/meta-flows"
                    class="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-400 hover:text-slate-700 hover:border-slate-300 transition-colors">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M15 18l-6-6 6-6"/></svg>
                 </a>
                 <div>
-                    <div class="flex items-center gap-2">
-                        <h4 class="text-[15px] font-semibold text-slate-800">{{ flow.name }}</h4>
-                        <span :class="['inline-flex items-center gap-1 text-xs font-medium px-2 py-0.5 rounded-full capitalize', statusColor(currentStatus)]">
+                    <div class="flex items-center gap-2.5">
+                        <h4 class="text-base font-semibold text-slate-800">{{ flow.name }}</h4>
+                        <span :class="['inline-flex items-center gap-1.5 text-[11px] font-medium px-2.5 py-0.5 rounded-full capitalize', statusColor(currentStatus)]">
                             <span :class="['w-1.5 h-1.5 rounded-full', statusDot(currentStatus)]"></span>
                             {{ currentStatus }}
                         </span>
                     </div>
-                    <p class="text-xs text-slate-400 mt-0.5">{{ $t('Meta Flow ID') }}: {{ flow.meta_flow_id ?? '—' }}</p>
+                    <div class="flex items-center gap-4 mt-1 flex-wrap">
+                        <span v-if="flow.categories?.length" class="flex items-center gap-1">
+                            <span v-for="cat in flow.categories.slice(0, 2)" :key="cat" class="px-2 py-0.5 rounded-md bg-slate-100 text-slate-500 text-[11px] font-medium">
+                                {{ cat.replace(/_/g, ' ').toLowerCase() }}
+                            </span>
+                            <span v-if="flow.categories.length > 2" class="text-slate-400 text-[11px]">+{{ flow.categories.length - 2 }}</span>
+                        </span>
+                        <span class="flex items-center gap-1.5 text-slate-500">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                            <span class="text-sm font-semibold text-slate-700">{{ flow.responses_count ?? 0 }}</span>
+                            <span class="text-[11px] text-slate-400">{{ (flow.responses_count ?? 0) === 1 ? $t('Response') : $t('Responses') }}</span>
+                        </span>
+                        <span class="flex items-center gap-1.5 text-slate-400 text-xs">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><polyline points="12,6 12,12 16,14"/></svg>
+                            {{ flow.updated_at_formatted ?? flow.updated_at }}
+                        </span>
+                    </div>
                 </div>
             </div>
 
-            <!-- Right: action buttons -->
-            <div class="flex items-center gap-2 flex-wrap">
+            <!-- Right: primary actions + more dropdown -->
+            <div class="flex items-center gap-2">
+                <!-- Primary: Save -->
                 <button
-                    @click="handleSync"
-                    :disabled="syncing"
-                    class="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-50 transition-colors flex items-center gap-1.5"
+                    @click="handleSave"
+                    :disabled="saving"
+                    class="rounded-lg bg-primary px-4 py-1.5 text-sm text-white shadow-sm hover:opacity-90 disabled:opacity-50 transition-opacity flex items-center gap-1.5"
                 >
-                    <svg v-if="syncing" class="animate-spin" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2A10 10 0 1 0 22 12A10 10 0 0 0 12 2Zm0 18a8 8 0 1 1 8-8A8 8 0 0 1 12 20Z" opacity=".4"/><path fill="currentColor" d="M20 12h2A10 10 0 0 0 12 2V4A8 8 0 0 1 20 12Z"><animateTransform attributeName="transform" dur="1s" from="0 12 12" repeatCount="indefinite" to="360 12 12" type="rotate"/></path></svg>
-                    <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
-                    {{ syncing ? $t('Syncing...') : $t('Sync') }}
+                    <svg v-if="saving" class="animate-spin" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2A10 10 0 1 0 22 12A10 10 0 0 0 12 2Zm0 18a8 8 0 1 1 8-8A8 8 0 0 1 12 20Z" opacity=".4"/><path fill="currentColor" d="M20 12h2A10 10 0 0 0 12 2V4A8 8 0 0 1 20 12Z"><animateTransform attributeName="transform" dur="1s" from="0 12 12" repeatCount="indefinite" to="360 12 12" type="rotate"/></path></svg>
+                    <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17,21 17,13 7,13 7,21"/><polyline points="7,3 7,8 15,8"/></svg>
+                    {{ saving ? $t('Saving...') : $t('Save') }}
                 </button>
 
-                <a
-                    v-if="flow.preview_url"
-                    :href="flow.preview_url"
-                    target="_blank"
-                    class="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 transition-colors flex items-center gap-1.5"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
-                    {{ $t('Preview') }}
-                </a>
-
-                <a
-                    :href="'/automation/meta-flows/' + flow.uuid + '/responses'"
-                    class="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 transition-colors flex items-center gap-1.5"
-                >
-                    <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                    {{ flow.responses_count ?? 0 }} {{ $t('Responses') }}
-                </a>
-
-                <button
-                    v-if="currentStatus === 'published'"
-                    @click="handleDeprecate"
-                    :disabled="acting"
-                    class="rounded-lg border border-orange-200 px-3 py-1.5 text-sm text-orange-600 hover:bg-orange-50 disabled:opacity-50 transition-colors"
-                >
-                    {{ $t('Deprecate') }}
-                </button>
-
+                <!-- Primary: Publish (only for drafts) -->
                 <button
                     v-if="currentStatus === 'draft'"
                     @click="handlePublish"
@@ -72,15 +63,57 @@
                     {{ acting ? $t('Publishing...') : $t('Publish') }}
                 </button>
 
-                <button
-                    @click="handleSave"
-                    :disabled="saving"
-                    class="rounded-lg bg-primary px-4 py-1.5 text-sm text-white shadow-sm hover:opacity-90 disabled:opacity-50 transition-opacity flex items-center gap-1.5"
-                >
-                    <svg v-if="saving" class="animate-spin" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2A10 10 0 1 0 22 12A10 10 0 0 0 12 2Zm0 18a8 8 0 1 1 8-8A8 8 0 0 1 12 20Z" opacity=".4"/><path fill="currentColor" d="M20 12h2A10 10 0 0 0 12 2V4A8 8 0 0 1 20 12Z"><animateTransform attributeName="transform" dur="1s" from="0 12 12" repeatCount="indefinite" to="360 12 12" type="rotate"/></path></svg>
-                    <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17,21 17,13 7,13 7,21"/><polyline points="7,3 7,8 15,8"/></svg>
-                    {{ saving ? $t('Saving...') : $t('Save') }}
-                </button>
+                <!-- More actions dropdown -->
+                <div class="relative" ref="moreMenuRef">
+                    <button
+                        @click="moreMenuOpen = !moreMenuOpen"
+                        class="w-8 h-8 flex items-center justify-center rounded-lg border border-slate-200 text-slate-500 hover:bg-slate-50 hover:text-slate-700 transition-colors"
+                    >
+                        <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg>
+                    </button>
+                    <div
+                        v-if="moreMenuOpen"
+                        class="absolute right-0 top-full mt-1 w-48 bg-white border border-slate-200 rounded-xl shadow-lg z-50 py-1 overflow-hidden"
+                    >
+                        <button
+                            @click="handleSync(); moreMenuOpen = false"
+                            :disabled="syncing"
+                            class="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors disabled:opacity-50"
+                        >
+                            <svg class="animate-spin" v-if="syncing" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2A10 10 0 1 0 22 12A10 10 0 0 0 12 2Zm0 18a8 8 0 1 1 8-8A8 8 0 0 1 12 20Z" opacity=".4"/><path fill="currentColor" d="M20 12h2A10 10 0 0 0 12 2V4A8 8 0 0 1 20 12Z"><animateTransform attributeName="transform" dur="1s" from="0 12 12" repeatCount="indefinite" to="360 12 12" type="rotate"/></path></svg>
+                            <svg v-else xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/><path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"/><path d="M8 16H3v5"/></svg>
+                            {{ syncing ? $t('Syncing...') : $t('Sync from Meta') }}
+                        </button>
+
+                        <a
+                            v-if="flow.preview_url"
+                            :href="flow.preview_url"
+                            target="_blank"
+                            class="flex items-center gap-2.5 px-3.5 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15,3 21,3 21,9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>
+                            {{ $t('Open in WhatsApp') }}
+                        </a>
+
+                        <a
+                            :href="'/automation/meta-flows/' + flow.uuid + '/responses'"
+                            class="flex items-center gap-2.5 px-3.5 py-2 text-sm text-slate-600 hover:bg-slate-50 transition-colors"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
+                            {{ flow.responses_count ?? 0 }} {{ $t('Responses') }}
+                        </a>
+
+                        <button
+                            v-if="currentStatus === 'published'"
+                            @click="handleDeprecate(); moreMenuOpen = false"
+                            :disabled="acting"
+                            class="w-full flex items-center gap-2.5 px-3.5 py-2 text-sm text-orange-600 hover:bg-orange-50 transition-colors disabled:opacity-50"
+                        >
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                            {{ $t('Deprecate') }}
+                        </button>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -92,72 +125,178 @@
             <svg v-if="feedbackIsError" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
             <svg v-else xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="m9 12 2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>
             {{ feedbackMessage }}
-            <button @click="feedbackMessage = null" class="ms-auto text-current opacity-60 hover:opacity-100">×</button>
+            <button @click="feedbackMessage = null" class="ms-auto text-current opacity-60 hover:opacity-100">&times;</button>
         </div>
 
-        <!-- ── Three-column layout ──────────────────────────────────────────── -->
-        <div class="flex gap-5 items-start">
+        <!-- ── Tab Navigation ──────────────────────────────────────────────── -->
+        <!-- ── Tab Navigation ──────────────────────────────────────────────── -->
+        <div class="flex items-center gap-1 border-b border-slate-200 mb-6">
+            <button
+                @click="activeTab = 'builder'"
+                :class="[
+                    'relative px-5 py-2.5 text-sm font-medium transition-colors flex items-center gap-2',
+                    activeTab === 'builder'
+                        ? 'text-primary'
+                        : 'text-slate-400 hover:text-slate-600'
+                ]"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/></svg>
+                {{ $t('Builder') }}
+                <span v-if="activeTab === 'builder'" class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-t-full"></span>
+            </button>
+            <button
+                @click="activeTab = 'settings'"
+                :class="[
+                    'relative px-5 py-2.5 text-sm font-medium transition-colors flex items-center gap-2',
+                    activeTab === 'settings'
+                        ? 'text-primary'
+                        : 'text-slate-400 hover:text-slate-600'
+                ]"
+            >
+                <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></svg>
+                {{ $t('Settings') }}
+                <span v-if="activeTab === 'settings'" class="absolute bottom-0 left-0 right-0 h-0.5 bg-primary rounded-t-full"></span>
+            </button>
+        </div>
 
-            <!-- Left sidebar: metadata + tips -->
-            <div class="w-64 shrink-0 space-y-4 sticky top-4">
-                <div class="bg-white border border-slate-200 rounded-xl p-4 text-sm space-y-4">
-                    <div v-if="flow.categories?.length">
-                        <p class="text-slate-400 text-[11px] uppercase tracking-wide font-medium mb-1">{{ $t('Categories') }}</p>
-                        <div class="flex flex-wrap gap-1">
-                            <span v-for="cat in flow.categories" :key="cat"
-                                  class="text-xs px-2 py-0.5 rounded-md bg-slate-100 text-slate-600 font-medium">
-                                {{ cat.replace(/_/g, ' ') }}
-                            </span>
-                        </div>
-                    </div>
-                    <div>
-                        <p class="text-slate-400 text-[11px] uppercase tracking-wide font-medium mb-1">{{ $t('Responses') }}</p>
-                        <p class="text-2xl font-bold text-slate-800">{{ flow.responses_count ?? 0 }}</p>
-                    </div>
-                    <div>
-                        <p class="text-slate-400 text-[11px] uppercase tracking-wide font-medium mb-1">{{ $t('Last updated') }}</p>
-                        <p class="text-slate-600 text-xs">{{ flow.updated_at }}</p>
-                    </div>
-                </div>
-
-                <!-- How-to -->
-                <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs text-slate-500 space-y-1.5">
-                    <p class="font-semibold text-slate-600 mb-2">{{ $t('How to use') }}</p>
-                    <div class="flex gap-2">
-                        <span class="w-4 h-4 rounded-full bg-primary text-white text-[9px] flex items-center justify-center shrink-0 mt-0.5">1</span>
-                        <span>{{ $t('Add screens and components') }}</span>
-                    </div>
-                    <div class="flex gap-2">
-                        <span class="w-4 h-4 rounded-full bg-primary text-white text-[9px] flex items-center justify-center shrink-0 mt-0.5">2</span>
-                        <span>{{ $t('Click Save to upload to Meta') }}</span>
-                    </div>
-                    <div class="flex gap-2">
-                        <span class="w-4 h-4 rounded-full bg-primary text-white text-[9px] flex items-center justify-center shrink-0 mt-0.5">3</span>
-                        <span>{{ $t('Click Publish when ready') }}</span>
-                    </div>
-                </div>
-
-                <!-- Deletion note -->
-                <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-700 space-y-1">
-                    <p class="font-semibold text-amber-800">{{ $t('Deleting a flow') }}</p>
-                    <p>{{ $t('Meta only allows deleting flows in Draft or Deprecated status.') }}</p>
-                </div>
-
-                <!-- Google Sheets Integration -->
-                <div class="border border-slate-200 rounded-xl overflow-hidden">
+        <!-- ── Builder Tab ─────────────────────────────────────────────── -->
+        <div v-show="activeTab === 'builder'">
+                <div class="relative">
+                    <!-- Show preview button (only when preview is hidden) -->
                     <button
-                        @click="openSheetSection"
-                        class="w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-slate-50 text-xs text-slate-600 transition-colors"
+                        v-if="!showPreview"
+                        @click="showPreview = true"
+                        class="absolute top-0 right-0 z-10 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-200 text-xs font-medium text-slate-500 hover:bg-slate-50 transition-colors"
                     >
-                        <div class="flex items-center gap-2">
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>
-                            <span class="font-medium text-slate-700">{{ $t('Google Sheets') }}</span>
-                            <span v-if="sheetEnabled" class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-                        </div>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" :class="showSheetSection ? 'rotate-180' : ''" class="transition-transform"><path d="m6 9 6 6 6-6"/></svg>
+                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
+                        {{ $t('Show Preview') }}
                     </button>
 
-                    <div v-if="showSheetSection" class="border-t border-slate-100 p-4 space-y-4 text-xs">
+                    <div class="flex gap-5 items-start">
+                        <!-- Builder area -->
+                        <div :class="[showPreview ? 'flex-1 min-w-0' : 'w-full']">
+                            <div class="bg-white border border-slate-200 rounded-xl p-5">
+                                <MetaFlowBuilder
+                                    v-model="assetContent"
+                                    @screenChange="activeScreenIndex = $event"
+                                />
+                            </div>
+
+                            <!-- Advanced: Edit raw JSON -->
+                            <div class="mt-3">
+                                <button
+                                    @click="showAdvanced = !showAdvanced"
+                                    class="flex items-center gap-1.5 text-xs text-slate-400 hover:text-slate-600 transition-colors"
+                                >
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="16,18 22,12 18,6"/><polyline points="8,6 2,12 6,18"/></svg>
+                                    <span>{{ $t('Advanced: Edit raw JSON') }}</span>
+                                    <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" :class="showAdvanced ? 'rotate-180' : ''" class="transition-transform"><path d="m6 9 6 6 6-6"/></svg>
+                                </button>
+                            </div>
+
+                            <div v-if="showAdvanced" class="mt-3 border border-slate-200 rounded-xl overflow-hidden">
+                                <div class="flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-100">
+                                    <span class="font-mono text-xs font-medium text-slate-500">flow.json</span>
+                                    <button @click="formatJson" class="text-primary text-[11px] font-medium hover:underline">{{ $t('Format') }}</button>
+                                </div>
+                                <textarea
+                                    v-model="assetContent"
+                                    class="w-full font-mono text-xs p-4 outline-none resize-none bg-white text-slate-700 leading-relaxed"
+                                    style="min-height: 320px;"
+                                    spellcheck="false"
+                                    :placeholder="$t('Flow JSON will appear here...')"
+                                ></textarea>
+                            </div>
+                        </div>
+
+                        <!-- Phone preview (desktop: beside builder) -->
+                        <Transition
+                            enter-active-class="transition-all duration-200 ease-out"
+                            enter-from-class="opacity-0 translate-x-4"
+                            leave-active-class="transition-all duration-150 ease-in"
+                            leave-to-class="opacity-0 translate-x-4"
+                        >
+                            <div v-if="showPreview" class="hidden lg:block w-72 shrink-0 sticky top-4">
+                                <div class="bg-white border border-slate-200 rounded-xl p-4">
+                                    <div class="flex items-center justify-between mb-4">
+                                        <p class="text-xs font-semibold text-slate-400 uppercase tracking-widest">{{ $t('Live Preview') }}</p>
+                                        <button @click="showPreview = false" class="text-xs text-slate-400 hover:text-slate-600 transition-colors flex items-center gap-1">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                                            {{ $t('Hide') }}
+                                        </button>
+                                    </div>
+                                    <div class="flex justify-center">
+                                        <FlowPhonePreview
+                                            :screens="previewScreens"
+                                            :active-index="activeScreenIndex"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+                        </Transition>
+                    </div>
+
+                    <!-- Phone preview (mobile: below builder) -->
+                    <Transition
+                        enter-active-class="transition-all duration-200 ease-out"
+                        enter-from-class="opacity-0 translate-y-2"
+                        leave-active-class="transition-all duration-150 ease-in"
+                        leave-to-class="opacity-0 translate-y-2"
+                    >
+                        <div v-if="showPreview" class="lg:hidden mt-6">
+                            <div class="bg-white border border-slate-200 rounded-xl p-4">
+                                <div class="flex items-center justify-between mb-4">
+                                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-widest">{{ $t('Live Preview') }}</p>
+                                    <button @click="showPreview = false" class="text-xs text-slate-400 hover:text-slate-600 transition-colors flex items-center gap-1">
+                                        <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>
+                                        {{ $t('Hide') }}
+                                    </button>
+                                </div>
+                                <div class="flex justify-center">
+                                    <FlowPhonePreview
+                                        :screens="previewScreens"
+                                        :active-index="activeScreenIndex"
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    </Transition>
+                </div>
+            </div>
+
+            <!-- ── Settings Tab ─────────────────────────────────────────────── -->
+            <div v-show="activeTab === 'settings'">
+                <div class="max-w-3xl mx-auto space-y-5">
+
+                    <!-- How-to + deletion warning (side by side) -->
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="bg-slate-50 border border-slate-200 rounded-xl p-4 text-xs text-slate-500 space-y-1.5">
+                            <p class="font-semibold text-slate-600 mb-2">{{ $t('How to use') }}</p>
+                            <div class="flex gap-2">
+                                <span class="w-4 h-4 rounded-full bg-primary text-white text-[9px] flex items-center justify-center shrink-0 mt-0.5">1</span>
+                                <span>{{ $t('Add screens and components') }}</span>
+                            </div>
+                            <div class="flex gap-2">
+                                <span class="w-4 h-4 rounded-full bg-primary text-white text-[9px] flex items-center justify-center shrink-0 mt-0.5">2</span>
+                                <span>{{ $t('Click Save to upload to Meta') }}</span>
+                            </div>
+                            <div class="flex gap-2">
+                                <span class="w-4 h-4 rounded-full bg-primary text-white text-[9px] flex items-center justify-center shrink-0 mt-0.5">3</span>
+                                <span>{{ $t('Click Publish when ready') }}</span>
+                            </div>
+                        </div>
+
+                        <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-700 space-y-1">
+                            <p class="font-semibold text-amber-800">{{ $t('Deleting a flow') }}</p>
+                            <p>{{ $t('Meta only allows deleting flows in Draft or Deprecated status.') }}</p>
+                        </div>
+                    </div>
+
+                    <!-- Google Sheets Integration -->
+                    <SettingsCollapsibleSection title="Google Sheets" :enabled="sheetEnabled" :default-open="true">
+                        <template #icon>
+                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18M3 15h18M9 3v18"/></svg>
+                        </template>
 
                         <!-- Connection Status -->
                         <div>
@@ -264,25 +403,14 @@
                                 </button>
                             </div>
                         </template>
+                    </SettingsCollapsibleSection>
 
-                    </div>
-                </div>
-
-                <!-- Reply Message Panel -->
-                <div class="border border-slate-200 rounded-xl overflow-hidden">
-                    <button
-                        @click="showReplySection = !showReplySection"
-                        class="w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-slate-50 text-xs text-slate-600 transition-colors"
-                    >
-                        <div class="flex items-center gap-2">
+                    <!-- Reply Message Panel -->
+                    <SettingsCollapsibleSection title="Reply Message" :enabled="replyEnabled">
+                        <template #icon>
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-                            <span class="font-medium text-slate-700">{{ $t('Reply Message') }}</span>
-                            <span v-if="replyEnabled" class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-                        </div>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" :class="showReplySection ? 'rotate-180' : ''" class="transition-transform"><path d="m6 9 6 6 6-6"/></svg>
-                    </button>
+                        </template>
 
-                    <div v-if="showReplySection" class="border-t border-slate-100 p-4 space-y-4 text-xs">
                         <div>
                             <label class="text-slate-400 text-[11px] uppercase tracking-wide font-medium block mb-1">{{ $t('Message Template') }}</label>
                             <textarea
@@ -318,24 +446,14 @@
                                 {{ savingReply ? $t('Saving...') : $t('Save') }}
                             </button>
                         </div>
-                    </div>
-                </div>
+                    </SettingsCollapsibleSection>
 
-                <!-- Interactive Reply Panel -->
-                <div class="border border-slate-200 rounded-xl overflow-hidden">
-                    <button
-                        @click="showInteractiveSection = !showInteractiveSection"
-                        class="w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-slate-50 text-xs text-slate-600 transition-colors"
-                    >
-                        <div class="flex items-center gap-2">
+                    <!-- Interactive Reply Panel -->
+                    <SettingsCollapsibleSection title="Interactive Reply" :enabled="interactiveEnabled">
+                        <template #icon>
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M9 3v18"/></svg>
-                            <span class="font-medium text-slate-700">{{ $t('Interactive Reply') }}</span>
-                            <span v-if="interactiveEnabled" class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-                        </div>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" :class="showInteractiveSection ? 'rotate-180' : ''" class="transition-transform"><path d="m6 9 6 6 6-6"/></svg>
-                    </button>
+                        </template>
 
-                    <div v-if="showInteractiveSection" class="border-t border-slate-100 p-4 space-y-4 text-xs">
                         <div>
                             <label class="text-slate-400 text-[11px] uppercase tracking-wide font-medium block mb-1">{{ $t('Body Text') }}</label>
                             <textarea
@@ -390,24 +508,14 @@
                                 {{ savingInteractive ? $t('Saving...') : $t('Save') }}
                             </button>
                         </div>
-                    </div>
-                </div>
+                    </SettingsCollapsibleSection>
 
-                <!-- Email Notification Panel -->
-                <div class="border border-slate-200 rounded-xl overflow-hidden">
-                    <button
-                        @click="showEmailSection = !showEmailSection"
-                        class="w-full flex items-center justify-between px-4 py-3 bg-white hover:bg-slate-50 text-xs text-slate-600 transition-colors"
-                    >
-                        <div class="flex items-center gap-2">
+                    <!-- Email Notification Panel -->
+                    <SettingsCollapsibleSection title="Email Notification" :enabled="emailEnabled">
+                        <template #icon>
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-8.97 5.7a1.94 1.94 0 0 1-2.06 0L2 7"/></svg>
-                            <span class="font-medium text-slate-700">{{ $t('Email Notification') }}</span>
-                            <span v-if="emailEnabled" class="w-1.5 h-1.5 rounded-full bg-green-500"></span>
-                        </div>
-                        <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" :class="showEmailSection ? 'rotate-180' : ''" class="transition-transform"><path d="m6 9 6 6 6-6"/></svg>
-                    </button>
+                        </template>
 
-                    <div v-if="showEmailSection" class="border-t border-slate-100 p-4 space-y-4 text-xs">
                         <div>
                             <label class="text-slate-400 text-[11px] uppercase tracking-wide font-medium block mb-1">{{ $t('Recipient Emails') }}</label>
                             <div class="space-y-1.5">
@@ -471,58 +579,10 @@
                                 {{ savingEmail ? $t('Saving...') : $t('Save') }}
                             </button>
                         </div>
-                    </div>
-                </div>
+                    </SettingsCollapsibleSection>
 
-            </div>
-
-            <!-- Center: builder + JSON panel -->
-            <div class="flex-1 min-w-0 space-y-4">
-                <div class="bg-white border border-slate-200 rounded-xl p-5">
-                    <MetaFlowBuilder
-                        v-model="assetContent"
-                        @screenChange="activeScreenIndex = $event"
-                    />
-                </div>
-
-                <!-- Collapsible raw JSON -->
-                <div class="border border-slate-200 rounded-xl overflow-hidden">
-                    <button
-                        @click="showJson = !showJson"
-                        class="w-full flex items-center justify-between px-4 py-2.5 bg-slate-50 border-b border-slate-100 text-xs text-slate-500 hover:bg-slate-100 transition-colors"
-                    >
-                        <span class="font-mono font-medium">flow.json</span>
-                        <div class="flex items-center gap-2">
-                            <span v-if="showJson" class="text-primary text-[11px]" @click.stop="formatJson">{{ $t('Format') }}</span>
-                            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" :class="showJson ? 'rotate-180' : ''" class="transition-transform"><path d="m6 9 6 6 6-6"/></svg>
-                        </div>
-                    </button>
-                    <div v-if="showJson">
-                        <textarea
-                            v-model="assetContent"
-                            class="w-full font-mono text-xs p-4 outline-none resize-none bg-white text-slate-700 leading-relaxed"
-                            style="min-height: 320px;"
-                            spellcheck="false"
-                            :placeholder="$t('Flow JSON will appear here...')"
-                        ></textarea>
-                    </div>
                 </div>
             </div>
-
-            <!-- Right: live phone preview (hidden on small screens) -->
-            <div class="hidden xl:block w-72 shrink-0 sticky top-4">
-                <div class="bg-white border border-slate-200 rounded-xl p-4">
-                    <p class="text-xs font-semibold text-slate-400 uppercase tracking-widest text-center mb-4">{{ $t('Live Preview') }}</p>
-                    <div class="flex justify-center">
-                        <FlowPhonePreview
-                            :screens="previewScreens"
-                            :active-index="activeScreenIndex"
-                        />
-                    </div>
-                </div>
-            </div>
-
-        </div>
 
         </div><!-- end page wrapper -->
     </AppLayout>
@@ -530,16 +590,30 @@
 
 <script setup>
     import AppLayout       from '@/Pages/User/Layout/App.vue';
-    import { ref, computed, onMounted } from 'vue';
+    import { ref, computed, onMounted, onBeforeUnmount } from 'vue';
     import axios           from 'axios';
     import MetaFlowBuilder from '@modules/MetaFlows/Pages/User/Components/MetaFlowBuilder.vue';
     import FlowPhonePreview from '@modules/MetaFlows/Pages/User/Components/FlowPhonePreview.vue';
+    import SettingsCollapsibleSection from '@modules/MetaFlows/Pages/User/Components/SettingsCollapsibleSection.vue';
 
     const props = defineProps(['flow']);
 
     const currentStatus     = ref(props.flow.status);
-    const showJson          = ref(false);
+    const activeTab         = ref('builder');
+    const showAdvanced      = ref(false);
     const activeScreenIndex = ref(0);
+    const showPreview       = ref(true);
+    const moreMenuOpen      = ref(false);
+    const moreMenuRef       = ref(null);
+
+    // ── Close dropdown on click outside ──────────────────────────────────────
+    const onClickOutside = (e) => {
+        if (moreMenuRef.value && !moreMenuRef.value.contains(e.target)) {
+            moreMenuOpen.value = false;
+        }
+    };
+    onMounted(() => document.addEventListener('click', onClickOutside));
+    onBeforeUnmount(() => document.removeEventListener('click', onClickOutside));
 
     // ── Google Sheets state ───────────────────────────────────────────────────
     const googleStatus     = ref({ connected: false, google_email: null });
@@ -549,20 +623,16 @@
     const sheetEnabled     = ref(props.flow.google_sheet_enabled ?? false);
     const sheetHeaders     = ref([]);
     const flowFields       = ref([]);
-    const showSheetSection = ref(false);
     const savingSheet      = ref(false);
     const loadingHeaders   = ref(false);
-    // Keyed by field name, value = chosen sheet column (or '' to skip)
     const mappingFor       = ref({});
 
     // ── Reply Message state ──────────────────────────────────────────────────
-    const showReplySection  = ref(false);
     const replyEnabled      = ref(props.flow.reply_message_enabled ?? false);
     const replyTemplate     = ref(props.flow.reply_message_template ?? '');
     const savingReply       = ref(false);
 
     // ── Interactive Reply state ────────────────────────────────────────────────
-    const showInteractiveSection = ref(false);
     const interactiveEnabled     = ref(props.flow.interactive_reply_enabled ?? false);
     const interactiveBody        = ref(props.flow.interactive_reply_config?.body ?? '');
     const interactiveButtons     = ref(
@@ -571,7 +641,6 @@
     const savingInteractive      = ref(false);
 
     // ── Email Notification state ───────────────────────────────────────────────
-    const showEmailSection   = ref(false);
     const emailEnabled       = ref(props.flow.email_notification_enabled ?? false);
     const emailRecipients    = ref(
         props.flow.email_notification_config?.recipients ?? ['']
@@ -580,7 +649,7 @@
     const emailBody          = ref(props.flow.email_notification_config?.body_template ?? '');
     const savingEmail        = ref(false);
 
-    // ── Variable hint strings for template UI (can't use {{ }} in Vue template directly) ─
+    // ── Variable hint strings for template UI ──────────────────────────────────
     const variableHintMeta = 'Metadata: {{__timestamp}}, {{__contact_phone}}, {{__contact_name}}, {{__contact_email}}, {{__flow_token}}, {{flow_name}}';
     const variableHintFields = computed(() => {
         if (!flowFields.value.length) return 'Form fields will appear here after saving the flow.';
@@ -637,8 +706,6 @@
     };
 
     // ── Parse assetContent → preview-compatible screens ───────────────────────
-    // WhatsApp Flow JSON wraps inputs/choices/footer inside a Form element.
-    // mapPreviewComp handles individual components; flattenForPreview unwraps Form.
     const mapPreviewComp = (comp) => {
         switch (comp.type) {
             case 'TextHeading':
@@ -768,8 +835,6 @@
     const clearFeedback = () => { feedbackMessage.value = null; feedbackIsError.value = false; };
 
     // ── Google Sheets methods ─────────────────────────────────────────────────
-
-    // Load Google connection status and flow fields on mount
     onMounted(async () => {
         try {
             const res = await axios.get('/automation/meta-flows/google/status');
@@ -778,7 +843,6 @@
             // Non-critical — ignore errors
         }
 
-        // Load flow fields for all panels (Sheets mapping, variable hints, etc.)
         try {
             const fieldsRes = await axios.get(`/automation/meta-flows/${props.flow.uuid}/flow-fields`);
             flowFields.value = fieldsRes.data.fields ?? [];
@@ -794,17 +858,10 @@
         }
     });
 
-    // Open the Google Sheets panel (fields are already loaded on mount)
-    const openSheetSection = () => {
-        showSheetSection.value = !showSheetSection.value;
-    };
-
-    // Save URL on blur, then try to fetch headers if tab is also filled
     const onUrlBlur = () => {
         if (sheetUrl.value && sheetTab.value) fetchHeaders();
     };
 
-    // Fetch column headers from the linked Google Sheet tab
     const fetchHeaders = async () => {
         if (!sheetUrl.value || !sheetTab.value) return;
 
@@ -818,7 +875,6 @@
             });
             sheetHeaders.value = res.data.headers ?? [];
 
-            // Auto-map fields where label matches a column header (case-insensitive)
             allFlowFields.value.forEach(field => {
                 if (!mappingFor.value[field.name]) {
                     const match = sheetHeaders.value.find(
@@ -834,7 +890,6 @@
         }
     };
 
-    // Disconnect the linked Google account
     const disconnectGoogle = async () => {
         try {
             await axios.delete('/automation/meta-flows/google/disconnect');
@@ -845,8 +900,7 @@
         }
     };
 
-    // Build the mapping array and save the sheet configuration
-    const saveSheetConfig = async () => {
+    const saveSheetConfig = async (silent = false) => {
         savingSheet.value = true;
 
         const mapping = allFlowFields.value
@@ -864,32 +918,34 @@
                 google_sheet_enabled: sheetEnabled.value,
             });
             sheetMapping.value = mapping;
-            showFeedback('Google Sheets configuration saved.', false);
+            if (!silent) showFeedback('Google Sheets configuration saved.', false);
         } catch (err) {
-            showFeedback(err.response?.data?.message ?? 'Failed to save sheet config.', true);
+            if (!silent) showFeedback(err.response?.data?.message ?? 'Failed to save sheet config.', true);
+            else throw err;
         } finally {
             savingSheet.value = false;
         }
     };
 
     // ── Reply Message save ──────────────────────────────────────────────────
-    const saveReplyConfig = async () => {
+    const saveReplyConfig = async (silent = false) => {
         savingReply.value = true;
         try {
             await axios.put(`/automation/meta-flows/${props.flow.uuid}/submission-settings`, {
                 reply_message_enabled: replyEnabled.value,
                 reply_message_template: replyTemplate.value,
             });
-            showFeedback('Reply message settings saved.', false);
+            if (!silent) showFeedback('Reply message settings saved.', false);
         } catch (err) {
-            showFeedback(err.response?.data?.message ?? 'Failed to save reply settings.', true);
+            if (!silent) showFeedback(err.response?.data?.message ?? 'Failed to save reply settings.', true);
+            else throw err;
         } finally {
             savingReply.value = false;
         }
     };
 
     // ── Interactive Reply save ────────────────────────────────────────────────
-    const saveInteractiveConfig = async () => {
+    const saveInteractiveConfig = async (silent = false) => {
         savingInteractive.value = true;
         try {
             await axios.put(`/automation/meta-flows/${props.flow.uuid}/submission-settings`, {
@@ -899,16 +955,17 @@
                     buttons: interactiveButtons.value.filter(b => b.title.trim()),
                 },
             });
-            showFeedback('Interactive reply settings saved.', false);
+            if (!silent) showFeedback('Interactive reply settings saved.', false);
         } catch (err) {
-            showFeedback(err.response?.data?.message ?? 'Failed to save interactive settings.', true);
+            if (!silent) showFeedback(err.response?.data?.message ?? 'Failed to save interactive settings.', true);
+            else throw err;
         } finally {
             savingInteractive.value = false;
         }
     };
 
     // ── Email Notification save ───────────────────────────────────────────────
-    const saveEmailConfig = async () => {
+    const saveEmailConfig = async (silent = false) => {
         savingEmail.value = true;
         try {
             await axios.put(`/automation/meta-flows/${props.flow.uuid}/submission-settings`, {
@@ -919,9 +976,10 @@
                     body_template: emailBody.value,
                 },
             });
-            showFeedback('Email notification settings saved.', false);
+            if (!silent) showFeedback('Email notification settings saved.', false);
         } catch (err) {
-            showFeedback(err.response?.data?.message ?? 'Failed to save email settings.', true);
+            if (!silent) showFeedback(err.response?.data?.message ?? 'Failed to save email settings.', true);
+            else throw err;
         } finally {
             savingEmail.value = false;
         }

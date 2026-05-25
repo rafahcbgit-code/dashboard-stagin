@@ -9,7 +9,7 @@
                     ? 'bg-primary text-white shadow-sm'
                     : 'bg-slate-100 text-slate-500 hover:bg-slate-200',
             ]">
-                {{ screen.id || $t('ScreenNumber', { number: i + 1 }) }}
+                {{ screen.title || screen.id || $t('ScreenNumber', { number: i + 1 }) }}
             </button>
 
             <!-- Add screen tab -->
@@ -49,28 +49,10 @@
                         {{ $t('Remove screen') }}
                     </button>
                 </div>
-                <div class="p-4 grid grid-cols-2 gap-3">
-                    <div>
-                        <label class="block text-xs font-medium text-slate-500 mb-1">
-                            {{ $t('Screen ID') }}
-                            <span class="text-slate-400 font-normal">(A-Z and _ only)</span>
-                        </label>
-                        <input v-model="activeScreen.id" type="text" placeholder="WELCOME"
-                            class="w-full text-sm border border-slate-200 rounded-md px-3 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-primary"
-                            @input="activeScreen.id = activeScreen.id.toUpperCase().replace(/[^A-Z_]/g, '')" />
-                    </div>
-                    <div>
-                        <label class="block text-xs font-medium text-slate-500 mb-1">{{ $t('Screen title') }}</label>
-                        <input v-model="activeScreen.title" type="text" placeholder="$t('placeholder.welcome')"
-                            class="w-full text-sm border border-slate-200 rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary" />
-                    </div>
-                    <div class="col-span-2">
-                        <label class="flex items-center gap-2 text-xs text-slate-500 cursor-pointer select-none">
-                            <input type="checkbox" v-model="activeScreen.terminal" class="rounded accent-primary" />
-                            <span>{{ $t('Terminal screen') }}</span>
-                            <span class="text-slate-400">({{ $t('marks the end of the flow') }})</span>
-                        </label>
-                    </div>
+                <div class="p-4">
+                    <label class="block text-xs font-medium text-slate-500 mb-1">{{ $t('Screen title') }}</label>
+                    <input v-model="activeScreen.title" type="text" placeholder="Welcome"
+                        class="w-full text-sm border border-slate-200 rounded-md px-3 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary" />
                 </div>
             </div>
 
@@ -86,11 +68,6 @@
                             <span v-html="componentIcon(comp.type)"
                                 class="w-3 h-3 flex items-center justify-center"></span>
                             {{ labelForType(comp.type) }}
-                        </span>
-
-                        <!-- Quick preview of content -->
-                        <span class="text-xs text-slate-400 truncate flex-1 ms-1">
-                            {{ compPreview(comp) }}
                         </span>
 
                         <!-- Controls -->
@@ -123,20 +100,11 @@
 
                         <!-- TextInput / TextArea -->
                         <div v-else-if="['TextInput', 'TextArea'].includes(comp.type)">
-                            <div class="grid grid-cols-2 gap-2 mb-2">
-                                <div>
-                                    <label class="text-xs text-slate-400 block mb-1">{{ $t('Label') }}</label>
-                                    <input v-model="comp.label" type="text" :placeholder="$t('placeholder.first_name_example')"
-                                        class="w-full text-sm border border-slate-200 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary" />
-                                </div>
-                                <div>
-                                    <label class="text-xs text-slate-400 block mb-1">
-                                        {{ $t('Field name') }}
-                                        <span class="text-slate-300">(snake_case)</span>
-                                    </label>
-                                    <input v-model="comp.name" type="text" :placeholder="$t('placeholder.first_name_snake')"
-                                        class="w-full text-sm border border-slate-200 rounded-md px-2.5 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-primary" />
-                                </div>
+                            <div class="mb-2">
+                                <label class="text-xs text-slate-400 block mb-1">{{ $t('Label') }}</label>
+                                <input v-model="comp.label" type="text" :placeholder="$t('placeholder.first_name_example')"
+                                    @input="autoFieldName(comp)"
+                                    class="w-full text-sm border border-slate-200 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary" />
                             </div>
                             <div class="flex items-center gap-4 flex-wrap">
                                 <div v-if="comp.type === 'TextInput'">
@@ -156,17 +124,11 @@
 
                         <!-- Dropdown / CheckboxGroup / RadioButtonsGroup -->
                         <div v-else-if="['Dropdown', 'CheckboxGroup', 'RadioButtonsGroup'].includes(comp.type)">
-                            <div class="grid grid-cols-2 gap-2 mb-2">
-                                <div>
-                                    <label class="text-xs text-slate-400 block mb-1">{{ $t('Label') }}</label>
-                                    <input v-model="comp.label" type="text" placeholder="e.g. Select country"
-                                        class="w-full text-sm border border-slate-200 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary" />
-                                </div>
-                                <div>
-                                    <label class="text-xs text-slate-400 block mb-1">{{ $t('Field name') }}</label>
-                                    <input v-model="comp.name" type="text" placeholder="country"
-                                        class="w-full text-sm border border-slate-200 rounded-md px-2.5 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-primary" />
-                                </div>
+                            <div class="mb-2">
+                                <label class="text-xs text-slate-400 block mb-1">{{ $t('Label') }}</label>
+                                <input v-model="comp.label" type="text" placeholder="e.g. Select country"
+                                    @input="autoFieldName(comp)"
+                                    class="w-full text-sm border border-slate-200 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary" />
                             </div>
                             <label
                                 class="flex items-center gap-1.5 text-xs text-slate-500 cursor-pointer select-none mb-3">
@@ -180,9 +142,8 @@
                                 <div class="space-y-1.5">
                                     <div v-for="(opt, optIndex) in comp.options" :key="optIndex"
                                         class="flex gap-2 items-center">
-                                        <input v-model="opt.id" type="text" placeholder="id"
-                                            class="w-1/3 text-xs border border-slate-200 rounded-md px-2 py-1.5 font-mono focus:outline-none focus:ring-1 focus:ring-primary bg-slate-50" />
-                                        <input v-model="opt.title" type="text" placeholder="Display label"
+                                        <input v-model="opt.title" type="text" placeholder="Option label"
+                                            @input="autoOptionId(opt)"
                                             class="flex-1 text-sm border border-slate-200 rounded-md px-2 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary" />
                                         <button @click="comp.options.splice(optIndex, 1)"
                                             class="text-red-400 hover:text-red-600 w-6 h-6 flex items-center justify-center text-lg leading-none shrink-0">×</button>
@@ -194,37 +155,62 @@
                         </div>
 
                         <!-- Footer -->
-                        <div v-else-if="comp.type === 'Footer'" class="grid grid-cols-3 gap-2">
+                        <div v-else-if="comp.type === 'Footer'" class="space-y-3">
                             <div>
                                 <label class="text-xs text-slate-400 block mb-1">{{ $t('Button label') }}</label>
                                 <input v-model="comp.label" type="text" placeholder="Continue"
                                     class="w-full text-sm border border-slate-200 rounded-md px-2.5 py-1.5 focus:outline-none focus:ring-1 focus:ring-primary" />
                             </div>
                             <div>
-                                <label class="text-xs text-slate-400 block mb-1">{{ $t('Action') }}</label>
-                                <select :value="comp.action" @change="onFooterActionChange(comp, $event.target.value)"
-                                    class="w-full text-sm border border-slate-200 rounded-md px-2.5 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-primary">
-                                    <option value="complete">{{ $t('Submit / complete') }}</option>
-                                    <option value="navigate">{{ $t('Go to next screen') }}</option>
-                                </select>
-                                <!-- Visual reminder of what terminal means -->
-                                <p class="text-[10px] mt-1"
-                                    :class="comp.action === 'complete' ? 'text-green-600' : 'text-slate-400'">
-                                    {{ comp.action === 'complete' ? $t('Ends the flow (terminal)') : $t('Continues to next screen') }}
-                                </p>
+                                <label class="text-xs text-slate-400 block mb-1.5">{{ $t('When user clicks this button') }}</label>
+                                <div class="flex gap-2">
+                                    <button
+                                        @click="onFooterActionChange(comp, 'complete')"
+                                        :class="[
+                                            'flex-1 text-left px-3 py-2 rounded-lg border text-xs transition-colors',
+                                            comp.action === 'complete'
+                                                ? 'border-primary bg-primary/5 text-primary font-medium'
+                                                : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+                                        ]"
+                                    >
+                                        <span class="flex items-center gap-1.5">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="m9 12 2 2 4-4"/><circle cx="12" cy="12" r="9"/></svg>
+                                            {{ $t('Submit and finish') }}
+                                        </span>
+                                        <span class="block text-[10px] mt-0.5" :class="comp.action === 'complete' ? 'text-primary/70' : 'text-slate-400'">
+                                            {{ $t('Ends the flow and submits data') }}
+                                        </span>
+                                    </button>
+                                    <button
+                                        @click="onFooterActionChange(comp, 'navigate')"
+                                        :class="[
+                                            'flex-1 text-left px-3 py-2 rounded-lg border text-xs transition-colors',
+                                            comp.action === 'navigate'
+                                                ? 'border-primary bg-primary/5 text-primary font-medium'
+                                                : 'border-slate-200 text-slate-500 hover:bg-slate-50'
+                                        ]"
+                                    >
+                                        <span class="flex items-center gap-1.5">
+                                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M5 12h14"/><path d="m12 5 7 7-7 7"/></svg>
+                                            {{ $t('Go to next screen') }}
+                                        </span>
+                                        <span class="block text-[10px] mt-0.5" :class="comp.action === 'navigate' ? 'text-primary/70' : 'text-slate-400'">
+                                            {{ $t('Continue to another screen') }}
+                                        </span>
+                                    </button>
+                                </div>
                             </div>
                             <!-- Target screen dropdown — lists all screens except the current one -->
                             <div v-if="comp.action === 'navigate'">
-                                <label class="text-xs text-slate-400 block mb-1">{{ $t('Next screen') }}</label>
+                                <label class="text-xs text-slate-400 block mb-1">{{ $t('Which screen to go to?') }}</label>
                                 <select v-model="comp.nextScreen"
                                     class="w-full text-sm border border-slate-200 rounded-md px-2.5 py-1.5 bg-white focus:outline-none focus:ring-1 focus:ring-primary">
                                     <option value="">{{ $t('— select screen —') }}</option>
                                     <option v-for="sc in screens.filter((_, i) => i !== activeScreenIndex)" :key="sc.id"
                                         :value="sc.id">
-                                        {{ sc.id }}{{ sc.title ? ' — ' + sc.title : '' }}
+                                        {{ sc.title || sc.id }}
                                     </option>
                                 </select>
-                                <!-- Warn if no other screens exist yet -->
                                 <p v-if="screens.length < 2" class="text-[10px] text-amber-500 mt-1">
                                     {{ $t('Add another screen first') }}
                                 </p>
@@ -392,6 +378,23 @@ const compPreview = (comp) => {
     if (comp.label) return comp.label;
     return '';
 };
+
+// Auto-generate field name from label (e.g. "First Name" → "first_name")
+// Only sets the name when it's currently empty or was auto-generated from a previous label
+const autoFieldName = (comp) => {
+    const prevAutoName = slugify((comp._prevLabel || ''));
+    if (!comp.name || comp.name === prevAutoName) {
+        comp.name = slugify(comp.label);
+    }
+    comp._prevLabel = comp.label;
+};
+
+// Auto-generate option ID from title (e.g. "United States" → "united_states")
+const autoOptionId = (opt) => {
+    opt.id = slugify(opt.title);
+};
+
+const slugify = (str) => (str || '').toLowerCase().replace(/[^a-z0-9]+/g, '_').replace(/^_|_$/g, '');
 
 // ── Screen navigation ────────────────────────────────────────────────────
 const setActiveScreen = (index) => {
