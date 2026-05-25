@@ -59,6 +59,11 @@ const variableOptions = ref([
   { value: "dynamic", label: trans("dynamic") },
 ]);
 
+const mediaHeaderOptions = ref([
+  { value: "default", label: trans("Template media") },
+  { value: "upload", label: trans("Upload new file") },
+]);
+
 const baseDynamicOptions = [
   { value: "first name", label: trans("contact first name") },
   { value: "last name", label: trans("contact last name") },
@@ -78,8 +83,7 @@ const isHeaderParameterVisible = (parameter) => {
 
   if (parameter.type === "text") return true;
 
-  return !["IMAGE", "DOCUMENT", "VIDEO"].includes(parameter.type)
-    || parameter.selection !== "default";
+  return ["IMAGE", "DOCUMENT", "VIDEO"].includes(parameter.type);
 };
 
 const hasVisibleHeaderVariables = computed(() => {
@@ -213,17 +217,39 @@ const loadTemplate = async () => {
             selection: "static",
             value: item,
           }));
-        } else if (
-          ["IMAGE", "DOCUMENT", "VIDEO"].includes(form.header.format)
-        ) {
-          form.header.parameters = headerExamples.header_handle.map((item) => ({
-            type: form.header.format,
-            selection: "default",
-            value: item,
-            url: item,
-          }));
         }
-      } else {
+      }
+
+      if (["IMAGE", "DOCUMENT", "VIDEO"].includes(form.header.format)) {
+        const defaultHeaderMedia = resolveDefaultHeaderMedia(metadata);
+        const defaultSelection = form.header.format === "DOCUMENT" ? "upload" : "default";
+        const headerHandles = Array.isArray(headerExamples?.header_handle)
+          ? headerExamples.header_handle
+          : [];
+        const defaultUrls = headerHandles.length > 0
+          ? headerHandles
+          : defaultHeaderMedia?.url
+            ? [defaultHeaderMedia.url]
+            : [];
+
+        form.header.parameters = defaultUrls.length > 0
+          ? defaultUrls.map((item) => ({
+              type: form.header.format,
+              selection: defaultSelection,
+              value: defaultSelection === "default" ? item : null,
+              url: defaultSelection === "default" ? item : null,
+              default_value: item,
+              default_url: item,
+            }))
+          : [{
+              type: form.header.format,
+              selection: "upload",
+              value: null,
+              url: null,
+              default_value: null,
+              default_url: null,
+            }];
+      } else if (!headerExamples) {
         form.header.parameters = [];
       }
 
@@ -284,9 +310,32 @@ const loadTemplate = async () => {
   }
 };
 
-const handleFileUpload = (event) => {
-  const fileSizeLimit = getFileSizeLimit(form.header.parameters[0].type);
+const handleHeaderMediaSelectionChange = (index, selection) => {
+  const parameter = form.header.parameters[index];
+  if (!parameter) return;
+
+  parameter.selection = selection;
+  form.clearErrors(`header.parameters.${index}.value`);
+
+  if (selection === "default") {
+    parameter.value = parameter.default_value || parameter.default_url || null;
+    parameter.url = parameter.default_url || parameter.default_value || null;
+  } else {
+    parameter.value = null;
+    parameter.url = null;
+  }
+};
+
+const handleFileUpload = (event, index = 0) => {
+  const parameter = form.header.parameters[index];
+  if (!parameter) return;
+
+  const fileSizeLimit = getFileSizeLimit(parameter.type);
   const file = event.target.files[0];
+
+  if (!file) {
+    return;
+  }
 
   if (file && file.size > fileSizeLimit) {
     alert(
@@ -299,18 +348,32 @@ const handleFileUpload = (event) => {
   } else {
     const reader = new FileReader();
     reader.onload = (e) => {
-      form.header.parameters[0].url = e.target.result;
+      parameter.url = e.target.result;
     };
-    form.header.parameters[0].selection = "upload";
-    form.header.parameters[0].value = file;
+    parameter.selection = "upload";
+    parameter.value = file;
+    form.clearErrors(`header.parameters.${index}.value`);
     reader.readAsDataURL(file);
   }
+};
+
+const resolveDefaultHeaderMedia = (metadata) => {
+  const stored = metadata?._default_header_media || metadata?.default_header_media || null;
+
+  if (!stored) {
+    return null;
+  }
+
+  return {
+    url: stored.url || stored.path || null,
+    name: stored.name || stored.filename || null,
+  };
 };
 
 const getFileAcceptAttribute = (fileType) => {
   switch (fileType) {
     case "IMAGE":
-      return ".png, .jpg";
+      return ".png, .jpg, .jpeg";
     case "DOCUMENT":
       return ".pdf, .txt, .ppt, .doc, .xls, .docx, .pptx, .xlsx";
     case "VIDEO":
@@ -325,7 +388,7 @@ const getFileSizeLimit = (fileType) => {
     case "IMAGE":
       return 5 * 1024 * 1024;
     case "DOCUMENT":
-      return 30 * 1024 * 1024;
+      return 100 * 1024 * 1024;
     case "VIDEO":
       return 16 * 1024 * 1024;
     default:
@@ -428,6 +491,27 @@ const submitForm = () => {
             }
           }
         });
+      }
+    });
+  }
+
+  if (hasValidationError) {
+    isLoading.value = false;
+    return;
+  }
+
+  if (Array.isArray(form.header?.parameters)) {
+    form.header.parameters.forEach((param, index) => {
+      if (
+        ["IMAGE", "DOCUMENT", "VIDEO"].includes(param?.type) &&
+        param?.selection === "upload" &&
+        !(param?.value instanceof File)
+      ) {
+        form.setError(
+          `header.parameters.${index}.value`,
+          trans("Please choose a file to upload."),
+        );
+        hasValidationError = true;
       }
     });
   }
@@ -810,8 +894,15 @@ onMounted(() => {
                     form.header.parameters[index].type,
                   )
                 "
-                class="w-full mt-3"
+                class="w-full mt-3 space-y-3"
               >
+                <FormSelect
+                  v-model="form.header.parameters[index].selection"
+                  :name="$t('Header media')"
+                  :options="mediaHeaderOptions"
+                  :class="'sm:col-span-6'"
+                  @update:modelValue="(value) => handleHeaderMediaSelectionChange(index, value)"
+                />
                 <div v-if="form.header.parameters[index].selection === 'default'">
                   <div class="flex items-center space-x-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
                     <span class="font-medium">{{ $t("Template media") }}</span>
@@ -843,7 +934,7 @@ onMounted(() => {
                       "
                       ref="fileInput"
                       id="file-upload"
-                      @change="handleFileUpload"
+                      @change="handleFileUpload($event, index)"
                     />
                     <div
                       v-if="form.header.parameters[index].value"

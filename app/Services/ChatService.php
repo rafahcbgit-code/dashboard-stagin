@@ -732,52 +732,30 @@ class ChatService
                 $metadata['header']['parameters'] = [];
 
                 foreach ($request->header['parameters'] as $key => $parameter) {
-                    if ($parameter['selection'] === 'upload' && empty($defaultHeaderMedia['url'])) {
-                        // This is now only for web version (when file object is passed)
-                        $storage = Setting::where('key', 'storage_system')->first()->value;
-                        $fileName = $parameter['value']->getClientOriginalName();
-                        $fileContent = $parameter['value'];
-
-                        if ($storage === 'local') {
-                            $file = Storage::disk('local')->put('public', $fileContent);
-                            $mediaFilePath = $file;
-
-                            $mediaUrl = rtrim(config('app.url'), '/') . '/media/' . ltrim($mediaFilePath, '/');
-                        } else if ($storage === 'aws') {
-                            $file = $parameter['value'];
-                            $uploadedFile = $file->store('uploads/media/sent/' . $this->organizationId, 's3');
-                            $mediaFilePath = Storage::disk('s3')->url($uploadedFile);
-
-                            $mediaUrl = $mediaFilePath;
-                        }
-
-                        $contentType = $this->getContentTypeFromUrl($mediaUrl);
-                        $mediaSize = $this->getMediaSizeInBytesFromUrl($mediaUrl);
-
-                        //save media
-                        $chatMedia = new ChatMedia;
-                        $chatMedia->name = $fileName;
-                        $chatMedia->location = $storage == 'aws' ? 'amazon' : 'local';
-                        $chatMedia->path = $mediaUrl;
-                        $chatMedia->type = $contentType;
-                        $chatMedia->size = $mediaSize;
-                        $chatMedia->created_at = now();
-                        $chatMedia->save();
-
-                        $mediaId = $chatMedia->id;
+                    if (($parameter['selection'] ?? null) === 'upload' && !empty($parameter['value'])) {
+                        $upload = $this->storeTemplateHeaderUpload($parameter['value']);
+                        $mediaUrl = $upload['url'];
+                        $mediaName = $upload['name'];
+                        $mediaId = $upload['media_id'];
                     } else {
                         $mediaUrl = $defaultHeaderMedia['url']
                             ?? $parameter['value']
                             ?? $parameter['url']
+                            ?? null;
+                        $mediaName = $defaultHeaderMedia['name']
+                            ?? $parameter['filename']
+                            ?? $parameter['name']
                             ?? null;
                         $mediaId = $defaultHeaderMedia['media_id'] ?? $mediaId;
                     }
 
                     $metadata['header']['parameters'][] = [
                         'type' => $parameter['type'],
-                        'selection' => $defaultHeaderMedia ? 'default' : $parameter['selection'],
+                        'selection' => ($parameter['selection'] ?? null) === 'upload' ? 'upload' : ($defaultHeaderMedia ? 'default' : ($parameter['selection'] ?? null)),
                         'value' => $mediaUrl,
                         'url' => $mediaUrl,
+                        'filename' => $mediaName,
+                        'name' => $mediaName,
                     ];
                 }
             }
@@ -856,6 +834,13 @@ class ChatService
                 $templatePayload = $this->buildCarouselTemplateRequest((int) $template->id, $contact, $template);
             } else {
                 $sendMetadata = $this->buildDefaultTemplateSendMetadata($template, $metadata);
+
+                if ($request->hasFile('header_media') && $this->metadataHasMediaHeader($sendMetadata)) {
+                    $upload = $this->storeTemplateHeaderUpload($request->file('header_media'));
+                    $mediaId = $upload['media_id'];
+                    $sendMetadata = $this->applyUploadedHeaderMediaToMetadata($sendMetadata, $upload['url'], $upload['name']);
+                }
+
                 $this->applyTemplateDefaultHeaderMedia($sendMetadata, $template);
 
                 $templatePayload = $this->buildTemplate(
@@ -883,11 +868,66 @@ class ChatService
             $templatePayload,
             $this->getUserId(),
             null,
-            null,
+            $mediaId ?? null,
             $contact,
             null,
             $template
         );
+    }
+
+    private function metadataHasMediaHeader(array $metadata): bool
+    {
+        $format = strtoupper((string) ($metadata['header']['format'] ?? ''));
+
+        return in_array($format, ['IMAGE', 'DOCUMENT', 'VIDEO'], true);
+    }
+
+    private function applyUploadedHeaderMediaToMetadata(array $metadata, string $mediaUrl, ?string $mediaName = null): array
+    {
+        $format = strtoupper((string) ($metadata['header']['format'] ?? ''));
+
+        $metadata['header']['parameters'] = [[
+            'type' => $format,
+            'selection' => 'upload',
+            'value' => $mediaUrl,
+            'url' => $mediaUrl,
+            'filename' => $mediaName,
+            'name' => $mediaName,
+        ]];
+        $metadata['media'] = null;
+
+        return $metadata;
+    }
+
+    private function storeTemplateHeaderUpload($file): array
+    {
+        $storage = Setting::where('key', 'storage_system')->value('value') ?: 'local';
+        $fileName = $file->getClientOriginalName();
+        $contentType = $file->getMimeType();
+        $mediaSize = $file->getSize();
+
+        if ($storage === 'aws') {
+            $uploadedFile = $file->store('uploads/media/sent/' . $this->organizationId, 's3');
+            $mediaUrl = Storage::disk('s3')->url($uploadedFile);
+        } else {
+            $storedPath = $file->store('public', 'local');
+            $mediaUrl = rtrim(config('app.url'), '/') . '/media/' . ltrim($storedPath, '/');
+        }
+
+        $chatMedia = ChatMedia::create([
+            'name' => $fileName,
+            'location' => $storage === 'aws' ? 'amazon' : 'local',
+            'path' => $mediaUrl,
+            'type' => $contentType,
+            'size' => $mediaSize,
+            'created_at' => now(),
+        ]);
+
+        return [
+            'media_id' => $chatMedia->id,
+            'url' => $mediaUrl,
+            'name' => $fileName,
+        ];
     }
 
     private function buildDefaultTemplateSendMetadata(Template $template, array $metadata): array

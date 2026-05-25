@@ -710,7 +710,9 @@ class MessageController extends Controller
             $header['parameters'] = [[
                 'type' => $format, // Keep UPPERCASE: IMAGE, VIDEO, DOCUMENT
                 'selection' => 'static', // Use 'static' since we already have URL
-                'value' => $mediaUrl
+                'value' => $mediaUrl,
+                'filename' => $fileName,
+                'name' => $fileName,
             ]];
 
             $header['media_id'] = $chatMedia->id;
@@ -729,7 +731,9 @@ class MessageController extends Controller
             $header['parameters'] = [[
                 'type' => $format, // Keep UPPERCASE: IMAGE, VIDEO, DOCUMENT
                 'selection' => 'static',
-                'value' => $headerLink
+                'value' => $headerLink,
+                'filename' => $request->input('header_filename'),
+                'name' => $request->input('header_filename'),
             ]];
 
             $header['media_id'] = null;
@@ -820,12 +824,12 @@ class MessageController extends Controller
                 break;
             case 'VIDEO':
                 $rules = [
-                    'header_file' => 'required|file|mimes:mp4,3gp,3g2,mov,m4v,mkv,webm,avi|max:65536' // 64MB
+                    'header_file' => 'required|file|mimes:mp4,3gp|max:16384' // 16MB
                 ];
                 break;
             case 'DOCUMENT':
                 $rules = [
-                    'header_file' => 'required|file|mimes:pdf,doc,docx,xls,xlsx,ppt,pptx|max:102400' // 100MB
+                    'header_file' => 'required|file|mimes:pdf,txt,doc,docx,xls,xlsx,ppt,pptx|max:102400' // 100MB
                 ];
                 break;
         }
@@ -938,6 +942,8 @@ class MessageController extends Controller
                 $formatted['value'] = $param['video']['link'];
             } elseif ($param['type'] === 'document') {
                 $formatted['value'] = $param['document']['link'];
+                $formatted['filename'] = $param['document']['filename'] ?? null;
+                $formatted['name'] = $param['document']['filename'] ?? null;
             }
 
             return $formatted;
@@ -1068,7 +1074,7 @@ class MessageController extends Controller
                 break;
             case 'video':
                 $rules = [
-                    'file' => 'required|file|mimes:mp4,3gp,mov|max:65536' // 64MB
+                    'file' => 'required|file|mimes:mp4,3gp|max:16384' // 16MB
                 ];
                 break;
             case 'audio':
@@ -1103,6 +1109,7 @@ class MessageController extends Controller
     private function formatMessage($chat)
     {
         $metadata = json_decode($chat->metadata, true);
+        $metadata = $this->withLegacyMediaMetadata($metadata);
         $messageType = $metadata['type'] ?? 'text';
 
         $message = [
@@ -1113,6 +1120,7 @@ class MessageController extends Controller
             'is_read' => (bool) $chat->is_read,
             'created_at' => $chat->created_at,
             'wam_id' => $chat->wam_id,
+            'metadata' => $metadata,
         ];
 
         // Text message
@@ -1125,23 +1133,23 @@ class MessageController extends Controller
         // Image
         elseif ($messageType === 'image') {
             $message['content'] = [
-                'caption' => $metadata['image']['caption'] ?? null,
-                'media' => $this->getMediaInfo($chat->media)
+                'caption' => $metadata['body']['text'] ?? $metadata['media']['caption'] ?? $metadata['image']['caption'] ?? null,
+                'media' => $this->getMediaInfo($chat->media, $metadata)
             ];
         }
 
         // Video
         elseif ($messageType === 'video') {
             $message['content'] = [
-                'caption' => $metadata['video']['caption'] ?? null,
-                'media' => $this->getMediaInfo($chat->media)
+                'caption' => $metadata['body']['text'] ?? $metadata['media']['caption'] ?? $metadata['video']['caption'] ?? null,
+                'media' => $this->getMediaInfo($chat->media, $metadata)
             ];
         }
 
         // Audio
         elseif ($messageType === 'audio') {
             $message['content'] = [
-                'media' => $this->getMediaInfo($chat->media),
+                'media' => $this->getMediaInfo($chat->media, $metadata),
                 'transcript' => $metadata['transcript'] ?? null
             ];
         }
@@ -1149,15 +1157,15 @@ class MessageController extends Controller
         // Document
         elseif ($messageType === 'document') {
             $message['content'] = [
-                'filename' => $metadata['document']['filename'] ?? 'Document',
-                'media' => $this->getMediaInfo($chat->media)
+                'filename' => $metadata['media']['filename'] ?? $metadata['document']['filename'] ?? 'Document',
+                'media' => $this->getMediaInfo($chat->media, $metadata)
             ];
         }
 
         // Sticker
         elseif ($messageType === 'sticker') {
             $message['content'] = [
-                'media' => $this->getMediaInfo($chat->media)
+                'media' => $this->getMediaInfo($chat->media, $metadata)
             ];
         }
 
@@ -1202,26 +1210,71 @@ class MessageController extends Controller
     /**
      * Get media info from Chat model relationship
      */
-    private function getMediaInfo($mediaRelation)
+    private function getMediaInfo($mediaRelation, ?array $metadata = null)
     {
-        if (!$mediaRelation) {
-            return null;
-        }
-
         // If it's a collection, get the first item
         $media = is_object($mediaRelation) && method_exists($mediaRelation, 'first')
             ? $mediaRelation->first()
             : $mediaRelation;
 
-        if (!$media) {
+        if ($media) {
+            return [
+                'url' => $media->path ?? null,
+                'filename' => $media->name ?? null,
+                'type' => $media->type ?? null,
+                'size' => $media->size ?? null,
+            ];
+        }
+
+        $metadata = $metadata ?? [];
+        $type = strtolower((string) ($metadata['type'] ?? ''));
+        $metadataMedia = $metadata['media'] ?? ($metadata[$type] ?? null);
+
+        if (!is_array($metadataMedia)) {
             return null;
         }
 
         return [
-            'url' => $media->path ?? null,
-            'filename' => $media->name ?? null,
-            'type' => $media->type ?? null,
-            'size' => $media->size ?? null,
+            'url' => $metadataMedia['url'] ?? $metadataMedia['link'] ?? $metadataMedia['path'] ?? null,
+            'filename' => $metadataMedia['filename'] ?? $metadataMedia['name'] ?? null,
+            'type' => $metadataMedia['mime_type'] ?? $metadataMedia['type'] ?? $type,
+            'size' => $metadataMedia['size'] ?? null,
         ];
+    }
+
+    private function withLegacyMediaMetadata(?array $metadata): array
+    {
+        $metadata = $metadata ?? [];
+        $type = strtolower((string) ($metadata['type'] ?? ''));
+
+        if (!in_array($type, ['image', 'video', 'document'], true)) {
+            return $metadata;
+        }
+
+        $media = $metadata['media'] ?? [];
+
+        if (!is_array($media) || empty($media)) {
+            return $metadata;
+        }
+
+        $legacy = $metadata[$type] ?? [];
+        $legacy['url'] = $legacy['url'] ?? $media['url'] ?? $media['link'] ?? $media['path'] ?? null;
+        $legacy['link'] = $legacy['link'] ?? $media['url'] ?? $media['link'] ?? $media['path'] ?? null;
+
+        if ($type === 'document') {
+            $legacy['filename'] = $legacy['filename'] ?? $media['filename'] ?? $media['name'] ?? null;
+        }
+
+        if (in_array($type, ['image', 'video'], true)) {
+            $legacy['caption'] = $legacy['caption'] ?? $metadata['body']['text'] ?? $media['caption'] ?? null;
+        }
+
+        if ($type === 'document' && !empty($metadata['body']['text'])) {
+            $legacy['caption'] = $legacy['caption'] ?? $metadata['body']['text'];
+        }
+
+        $metadata[$type] = array_filter($legacy, static fn ($value) => $value !== null && $value !== '');
+
+        return $metadata;
     }
 }

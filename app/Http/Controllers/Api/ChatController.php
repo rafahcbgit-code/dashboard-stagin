@@ -217,23 +217,27 @@ class ChatController extends Controller
         }
 
         $metadata = json_decode($chat->metadata, true);
+        $metadata = $this->withLegacyMediaMetadata($metadata);
         $messageText = null;
         $messageType = $metadata['type'] ?? 'text';
 
         if ($messageType === 'text' && isset($metadata['text']['body'])) {
             $messageText = $metadata['text']['body'];
         } elseif ($messageType === 'image') {
-            $messageText = isset($metadata['image']['caption'])
-                ? $metadata['image']['caption']
+            $messageText = isset($metadata['body']['text']) || isset($metadata['media']['caption']) || isset($metadata['image']['caption'])
+                ? ($metadata['body']['text'] ?? $metadata['media']['caption'] ?? $metadata['image']['caption'])
                 : '📷 Image';
         } elseif ($messageType === 'video') {
-            $messageText = isset($metadata['video']['caption'])
-                ? $metadata['video']['caption']
+            $messageText = isset($metadata['body']['text']) || isset($metadata['media']['caption']) || isset($metadata['video']['caption'])
+                ? ($metadata['body']['text'] ?? $metadata['media']['caption'] ?? $metadata['video']['caption'])
                 : '🎥 Video';
         } elseif ($messageType === 'audio') {
             $messageText = '🎵 Audio';
         } elseif ($messageType === 'document') {
-            $messageText = isset($metadata['document']['filename'])
+            if (!isset($metadata['document']['filename']) && isset($metadata['media']['filename'])) {
+                $metadata['document']['filename'] = $metadata['media']['filename'];
+            }
+            $messageText = isset($metadata['media']['filename']) || isset($metadata['document']['filename'])
                 ? '📄 ' . $metadata['document']['filename']
                 : '📄 Document';
         } elseif ($messageType === 'sticker') {
@@ -558,6 +562,7 @@ class ChatController extends Controller
     private function formatMessage($chat)
     {
         $metadata = json_decode($chat->metadata, true);
+        $metadata = $this->withLegacyMediaMetadata($metadata);
         $messageType = $metadata['type'] ?? 'text';
 
         $message = [
@@ -568,6 +573,7 @@ class ChatController extends Controller
             'is_read' => (bool) $chat->is_read,
             'created_at' => $chat->created_at,
             'wam_id' => $chat->wam_id,
+            'metadata' => $metadata,
         ];
 
         // Text message
@@ -579,35 +585,35 @@ class ChatController extends Controller
         // Image
         elseif ($messageType === 'image') {
             $message['content'] = [
-                'caption' => $metadata['image']['caption'] ?? null,
-                'media' => $this->getMediaInfo($chat->media)
+                'caption' => $metadata['body']['text'] ?? $metadata['media']['caption'] ?? $metadata['image']['caption'] ?? null,
+                'media' => $this->getMediaInfo($chat->media, $metadata)
             ];
         }
         // Video
         elseif ($messageType === 'video') {
             $message['content'] = [
-                'caption' => $metadata['video']['caption'] ?? null,
-                'media' => $this->getMediaInfo($chat->media)
+                'caption' => $metadata['body']['text'] ?? $metadata['media']['caption'] ?? $metadata['video']['caption'] ?? null,
+                'media' => $this->getMediaInfo($chat->media, $metadata)
             ];
         }
         // Audio
         elseif ($messageType === 'audio') {
             $message['content'] = [
-                'media' => $this->getMediaInfo($chat->media),
+                'media' => $this->getMediaInfo($chat->media, $metadata),
                 'transcript' => $metadata['transcript'] ?? null
             ];
         }
         // Document
         elseif ($messageType === 'document') {
             $message['content'] = [
-                'filename' => $metadata['document']['filename'] ?? 'Document',
-                'media' => $this->getMediaInfo($chat->media)
+                'filename' => $metadata['media']['filename'] ?? $metadata['document']['filename'] ?? 'Document',
+                'media' => $this->getMediaInfo($chat->media, $metadata)
             ];
         }
         // Sticker
         elseif ($messageType === 'sticker') {
             $message['content'] = [
-                'media' => $this->getMediaInfo($chat->media)
+                'media' => $this->getMediaInfo($chat->media, $metadata)
                 //'text' => 'Sticker'
             ];
         }
@@ -711,18 +717,67 @@ class ChatController extends Controller
     /**
      * Get media info
      */
-    private function getMediaInfo($media)
+    private function getMediaInfo($media, ?array $metadata = null)
     {
-        if (!$media) {
+        if ($media) {
+            return [
+                'url' => $media->path,
+                'filename' => $media->name,
+                'type' => $media->type,
+                'size' => $media->size,
+            ];
+        }
+
+        $metadata = $metadata ?? [];
+        $type = strtolower((string) ($metadata['type'] ?? ''));
+        $metadataMedia = $metadata['media'] ?? ($metadata[$type] ?? null);
+
+        if (!is_array($metadataMedia)) {
             return null;
         }
 
         return [
-            'url' => $media->path,
-            'filename' => $media->name,
-            'type' => $media->type,
-            'size' => $media->size,
+            'url' => $metadataMedia['url'] ?? $metadataMedia['link'] ?? $metadataMedia['path'] ?? null,
+            'filename' => $metadataMedia['filename'] ?? $metadataMedia['name'] ?? null,
+            'type' => $metadataMedia['mime_type'] ?? $metadataMedia['type'] ?? $type,
+            'size' => $metadataMedia['size'] ?? null,
         ];
+    }
+
+    private function withLegacyMediaMetadata(?array $metadata): array
+    {
+        $metadata = $metadata ?? [];
+        $type = strtolower((string) ($metadata['type'] ?? ''));
+
+        if (!in_array($type, ['image', 'video', 'document'], true)) {
+            return $metadata;
+        }
+
+        $media = $metadata['media'] ?? [];
+
+        if (!is_array($media) || empty($media)) {
+            return $metadata;
+        }
+
+        $legacy = $metadata[$type] ?? [];
+        $legacy['url'] = $legacy['url'] ?? $media['url'] ?? $media['link'] ?? $media['path'] ?? null;
+        $legacy['link'] = $legacy['link'] ?? $media['url'] ?? $media['link'] ?? $media['path'] ?? null;
+
+        if ($type === 'document') {
+            $legacy['filename'] = $legacy['filename'] ?? $media['filename'] ?? $media['name'] ?? null;
+        }
+
+        if (in_array($type, ['image', 'video'], true)) {
+            $legacy['caption'] = $legacy['caption'] ?? $metadata['body']['text'] ?? $media['caption'] ?? null;
+        }
+
+        if ($type === 'document' && !empty($metadata['body']['text'])) {
+            $legacy['caption'] = $legacy['caption'] ?? $metadata['body']['text'];
+        }
+
+        $metadata[$type] = array_filter($legacy, static fn ($value) => $value !== null && $value !== '');
+
+        return $metadata;
     }
 
     /**

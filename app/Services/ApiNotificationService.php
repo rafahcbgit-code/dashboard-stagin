@@ -164,15 +164,15 @@ class ApiNotificationService
             case 'text':
                 return $metadata['text']['body'] ?? 'New message';
             case 'image':
-                $caption = $metadata['image']['caption'] ?? null;
+                $caption = $metadata['body']['text'] ?? $metadata['media']['caption'] ?? $metadata['image']['caption'] ?? null;
                 return $caption ? $caption : '📷 Photo';
             case 'video':
-                $caption = $metadata['video']['caption'] ?? null;
+                $caption = $metadata['body']['text'] ?? $metadata['media']['caption'] ?? $metadata['video']['caption'] ?? null;
                 return $caption ? $caption : '🎥 Video';
             case 'audio':
                 return '🎵 Audio message';
             case 'document':
-                $filename = $metadata['document']['filename'] ?? 'Document';
+                $filename = $metadata['media']['filename'] ?? $metadata['document']['filename'] ?? 'Document';
                 return "📄 $filename";
             case 'sticker':
                 return '😊 Sticker';

@@ -41,13 +41,30 @@ const getFileNameFromUrl = (url) => {
     }
 };
 
+const getMimeTypeFromFileName = (name) => {
+    const extension = String(name || '').split('.').pop()?.toLowerCase();
+
+    const mimeMap = {
+        pdf: 'application/pdf',
+        txt: 'text/plain',
+        doc: 'application/msword',
+        docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+        ppt: 'application/vnd.ms-powerpoint',
+        pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+        xls: 'application/vnd.ms-excel',
+        xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    };
+
+    return mimeMap[extension] || null;
+};
+
 const mediaSource = computed(() => {
     const messageType = String(metadata.value?.type || '').toLowerCase();
     const media = props.content?.media || {};
+    const metadataMedia = metadata.value?.media || {};
     const typedMetadata = metadata.value?.[messageType] || {};
     const headerParameter = getHeaderMediaParameter(messageType);
-    const path = media.path
-        || typedMetadata.path
+    const path = typedMetadata.path
         || typedMetadata.url
         || typedMetadata.link
         || typedMetadata.value
@@ -55,31 +72,53 @@ const mediaSource = computed(() => {
         || headerParameter.url
         || headerParameter.link
         || headerParameter.value
+        || metadataMedia.path
+        || metadataMedia.url
+        || metadataMedia.link
+        || media.path
         || metadata.value?.media_url
         || metadata.value?.url
         || null;
 
+    const name = typedMetadata.filename
+        || typedMetadata.name
+        || headerParameter.filename
+        || headerParameter.name
+        || metadataMedia.filename
+        || metadataMedia.name
+        || media.name
+        || getFileNameFromUrl(path)
+        || 'media';
+
+    const type = typedMetadata.mime_type
+        || headerParameter.mime_type
+        || metadataMedia.mime_type
+        || getMimeTypeFromFileName(name)
+        || media.type
+        || typedMetadata.type
+        || metadataMedia.type
+        || messageType;
+
     return {
         path,
-        name: media.name
-            || typedMetadata.filename
-            || typedMetadata.name
-            || headerParameter.filename
-            || headerParameter.name
-            || getFileNameFromUrl(path)
-            || 'media',
-        type: media.type
-            || typedMetadata.mime_type
-            || typedMetadata.type
-            || headerParameter.mime_type
-            || messageType,
-        size: media.size
-            || typedMetadata.size
+        name,
+        type,
+        size: typedMetadata.size
             || headerParameter.size
+            || metadataMedia.size
+            || media.size
             || 0,
     };
 });
 
+const mediaCaption = computed(() => {
+    const messageType = String(metadata.value?.type || '').toLowerCase();
+
+    return metadata.value?.body?.text
+        || metadata.value?.media?.caption
+        || metadata.value?.[messageType]?.caption
+        || '';
+});
 
 // Check if it's a contact type
 const isContact = computed(() => metadata.value?.type === 'contacts')
@@ -461,8 +500,7 @@ const viewContactDetails = async (data) => {
                     </svg>
                     <span class="text-xs">{{ props.type === 'outbound' ? $t('Content not available') : $t('Loading media...') }}</span>
                 </div>
-                <div v-if="JSON.parse(content.metadata).image?.caption" class="max-w-[300px]">{{
-                    JSON.parse(content.metadata).image?.caption }}</div>
+                <div v-if="mediaCaption" class="max-w-[300px]">{{ mediaCaption }}</div>
                 <div v-if="JSON.parse(content.metadata)?.buttons"
                     class="mr-auto text-sm text-[#00a5f4] flex flex-col relative max-w-[25em]">
                     <div v-for="(item, index) in JSON.parse(content.metadata)?.buttons" :key="index"
@@ -657,6 +695,7 @@ const viewContactDetails = async (data) => {
                         </a>
                     </div>
                 </div>
+                <div v-if="mediaCaption" class="max-w-[300px] mt-2">{{ mediaCaption }}</div>
                 <div v-if="JSON.parse(content.metadata)?.buttons"
                     class="mr-auto text-sm text-[#00a5f4] flex flex-col relative max-w-[25em]">
                     <div v-for="(item, index) in JSON.parse(content.metadata)?.buttons" :key="index"
@@ -765,8 +804,7 @@ const viewContactDetails = async (data) => {
                     </svg>
                     <span class="text-xs">{{ props.type === 'outbound' ? $t('Content not available') : $t('Loading media...') }}</span>
                 </div>
-                <div v-if="JSON.parse(content.metadata).video?.caption" class="max-w-[300px]">{{
-                    JSON.parse(content.metadata).video?.caption }}</div>
+                <div v-if="mediaCaption" class="max-w-[300px]">{{ mediaCaption }}</div>
                 <div v-if="JSON.parse(content.metadata)?.buttons"
                     class="mr-auto text-sm text-[#00a5f4] flex flex-col relative max-w-[25em]">
                     <div v-for="(item, index) in JSON.parse(content.metadata)?.buttons" :key="index"

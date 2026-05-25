@@ -104,6 +104,14 @@ class ChatController extends BaseController
 
     public function sendTemplateMessage(Request $request, $uuid)
     {
+        if ($request->input('header.parameters.0.selection') === 'upload') {
+            $format = strtoupper((string) $request->input('header.format', ''));
+
+            $request->validate([
+                'header.parameters.0.value' => $this->templateHeaderMediaValidationRule($format),
+            ]);
+        }
+
         $res = $this->chatService()->sendTemplateMessage($request, $uuid);
 
         return redirect()->back()->with(
@@ -123,12 +131,47 @@ class ChatController extends BaseController
             'template' => 'required|string',
         ]);
 
+        if ($request->hasFile('header_media')) {
+            $format = $this->resolveTemplateHeaderFormatForRequest((string) $request->input('template'));
+
+            $request->validate([
+                'header_media' => $this->templateHeaderMediaValidationRule($format, 'nullable'),
+            ]);
+        }
+
         $res = $this->chatService()->sendTemplateToPhone($request);
 
         return response()->json([
             'success' => $res->success === true,
             'message' => $res->success === true ? __('Message sent successfully!') : ($res->message ?? __('Failed to send message.')),
         ], $res->success === true ? 200 : 422);
+    }
+
+    private function templateHeaderMediaValidationRule(string $format, string $presence = 'required'): string
+    {
+        return match (strtoupper($format)) {
+            'IMAGE' => "{$presence}|file|mimes:png,jpg,jpeg|max:5120",
+            'VIDEO' => "{$presence}|file|mimes:mp4,3gp|max:16384",
+            'DOCUMENT' => "{$presence}|file|mimes:pdf,txt,ppt,doc,xls,docx,pptx,xlsx|max:102400",
+            default => "{$presence}|file|mimes:png,jpg,jpeg,pdf,txt,ppt,doc,xls,docx,pptx,xlsx,mp4|max:102400",
+        };
+    }
+
+    private function resolveTemplateHeaderFormatForRequest(string $templateRef): string
+    {
+        $template = Template::where('organization_id', session()->get('current_organization'))
+            ->where(function ($query) use ($templateRef) {
+                $query->where('uuid', $templateRef);
+
+                if (ctype_digit($templateRef)) {
+                    $query->orWhere('id', (int) $templateRef);
+                }
+            })
+            ->first();
+
+        $metadata = json_decode($template?->metadata ?? '[]', true) ?: [];
+
+        return strtoupper((string) ($metadata['header']['format'] ?? ''));
     }
 
     /**
