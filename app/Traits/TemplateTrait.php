@@ -137,6 +137,16 @@ trait TemplateTrait
                 } else if ($paramType === 'document') {
                     $mediaId = $parameter->media_id ?? $parameter->id ?? null;
                     $mediaUrl = $parameter->value ?? $parameter->url ?? null;
+                    $filename = $parameter->filename
+                        ?? $parameter->name
+                        ?? $parameter->document->filename
+                        ?? $parameter->document->name
+                        ?? null;
+
+                    if (!$filename && is_string($mediaUrl)) {
+                        $urlPath = parse_url($mediaUrl, PHP_URL_PATH) ?: $mediaUrl;
+                        $filename = basename($urlPath);
+                    }
 
                     if ($mediaId) {
                         $param['document']['id'] = (string) $mediaId;
@@ -144,6 +154,10 @@ trait TemplateTrait
                         $param['document']['link'] = is_string($mediaUrl) && filter_var($mediaUrl, FILTER_VALIDATE_URL)
                             ? $mediaUrl
                             : null;
+                    }
+
+                    if (!empty($filename)) {
+                        $param['document']['filename'] = (string) $filename;
                     }
                 } else if ($paramType === 'text') {
                     $value = $parameter->selection === 'static'
@@ -194,8 +208,16 @@ trait TemplateTrait
             'url' => $defaultMedia['url'],
         ];
 
+        if (!empty($defaultMedia['name'])) {
+            $defaultParameter['filename'] = $defaultMedia['name'];
+            $defaultParameter['name'] = $defaultMedia['name'];
+        }
+
+        $defaultWasApplied = false;
+
         if ($mediaParameterIndex === null) {
             $metadata['header']['parameters'] = [$defaultParameter];
+            $defaultWasApplied = true;
         } else {
             $current = $parameters[$mediaParameterIndex];
             $hasValue = !empty($current['value'] ?? null) || !empty($current['url'] ?? null);
@@ -203,10 +225,11 @@ trait TemplateTrait
             if (!$hasValue || ($current['selection'] ?? null) === 'default') {
                 $parameters[$mediaParameterIndex] = array_merge($current, $defaultParameter);
                 $metadata['header']['parameters'] = $parameters;
+                $defaultWasApplied = true;
             }
         }
 
-        if (!empty($defaultMedia['media_id'])) {
+        if ($defaultWasApplied && !empty($defaultMedia['media_id'])) {
             $metadata['media'] = $defaultMedia['media_id'];
         }
     }
@@ -233,10 +256,12 @@ trait TemplateTrait
         $storedMedia = $metadata['_default_header_media'] ?? $metadata['default_header_media'] ?? [];
         $mediaId = $storedMedia['media_id'] ?? $storedMedia['chat_media_id'] ?? null;
         $url = $storedMedia['url'] ?? $storedMedia['path'] ?? null;
+        $name = $storedMedia['name'] ?? $storedMedia['filename'] ?? null;
 
         if (!$url && $mediaId) {
             $chatMedia = ChatMedia::find($mediaId);
             $url = $chatMedia?->path;
+            $name = $name ?: $chatMedia?->name;
         }
 
         if (!$url) {
@@ -253,6 +278,7 @@ trait TemplateTrait
         return [
             'format' => $format,
             'url' => $url,
+            'name' => $name,
             'media_id' => $mediaId,
         ];
     }

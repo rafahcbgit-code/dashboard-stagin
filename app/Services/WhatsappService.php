@@ -539,8 +539,8 @@ class WhatsappService
                     return $templateContent;
                 }
 
-                $mediaUrl = $templateMedia['url']
-                    ?? $parameter[$mediaType]['link']
+                $mediaUrl = $parameter[$mediaType]['link']
+                    ?? $templateMedia['url']
                     ?? null;
 
                 if (!$mediaUrl || !filter_var($mediaUrl, FILTER_VALIDATE_URL)) {
@@ -1357,7 +1357,7 @@ class WhatsappService
             }
         }
         
-        return json_encode($array);
+        return json_encode($this->withCompleteTemplateChatMetadata($array));
     }
 
     private function extractCampaignHeaderMediaForDisplay(object $templateMetadata): ?array
@@ -1510,7 +1510,53 @@ class WhatsappService
         }
 
         //Log::info(json_encode($array));
-        return json_encode($array);
+        return json_encode($this->withCompleteTemplateChatMetadata($array));
+    }
+
+    private function withCompleteTemplateChatMetadata(array $metadata): array
+    {
+        $type = strtolower((string) ($metadata['type'] ?? 'text'));
+        $typedPayload = is_array($metadata[$type] ?? null) ? $metadata[$type] : [];
+
+        $bodyText = $typedPayload['body'] ?? $typedPayload['caption'] ?? null;
+        if ($bodyText !== null && $bodyText !== '') {
+            $metadata['body'] = [
+                'text' => $bodyText,
+            ];
+        }
+
+        $footerText = $typedPayload['footer'] ?? null;
+        if ($footerText !== null && $footerText !== '') {
+            $metadata['footer'] = [
+                'text' => $footerText,
+            ];
+        }
+
+        if (isset($metadata['buttons']) && is_array($metadata['buttons'])) {
+            $metadata['buttons'] = array_values($metadata['buttons']);
+        }
+
+        if (in_array($type, ['image', 'video', 'document'], true)) {
+            $media = [
+                'type' => $type,
+                'url' => $typedPayload['url'] ?? $typedPayload['link'] ?? $typedPayload['path'] ?? null,
+                'id' => $typedPayload['id'] ?? null,
+                'filename' => $typedPayload['filename'] ?? $typedPayload['name'] ?? null,
+                'name' => $typedPayload['name'] ?? $typedPayload['filename'] ?? null,
+                'mime_type' => $typedPayload['mime_type'] ?? null,
+                'size' => $typedPayload['size'] ?? null,
+            ];
+
+            $media = array_filter($media, static fn ($value) => $value !== null && $value !== '');
+
+            if (!empty($media)) {
+                $metadata['media'] = $media;
+                unset($metadata[$type]);
+                $metadata['header']['format'] = strtoupper($type);
+            }
+        }
+
+        return $metadata;
     }
 
     private function extractTemplateHeaderMediaForDisplay(array $templateContent, ?Template $templateModel): ?array

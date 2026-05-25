@@ -107,53 +107,30 @@ class CampaignService
                         $metadata['header']['parameters'] = [];
                 
                         foreach ($request->header['parameters'] as $key => $parameter) {
-                            if ($parameter['selection'] === 'upload' && empty($defaultHeaderMedia['url'])) {
-                                //$path = $parameter['value']->store('public');
-                                //$imageUrl = config('app.url') . '/media/' . $path;
-
-                                $storage = Setting::where('key', 'storage_system')->first()->value;
-                                $fileName = $parameter['value']->getClientOriginalName();
-                                $fileContent = $parameter['value'];
-
-                                if($storage === 'local'){
-                                    $file = Storage::disk('local')->put('public', $fileContent);
-                                    $mediaFilePath = $file;
-                    
-                                    $mediaUrl = rtrim(config('app.url'), '/') . '/media/' . ltrim($mediaFilePath, '/');
-                                } else if($storage === 'aws') {
-                                    $file = $parameter['value'];
-                                    $uploadedFile = $file->store('uploads/media/sent/' . $organizationId, 's3');
-                                    $mediaFilePath = Storage::disk('s3')->url($uploadedFile);
-                    
-                                    $mediaUrl = $mediaFilePath;
-                                }
-
-                                $contentType = $this->getContentTypeFromUrl($mediaUrl);
-                                $mediaSize = $this->getMediaSizeInBytesFromUrl($mediaUrl);
-
-                                //save media
-                                $chatMedia = new ChatMedia;
-                                $chatMedia->name = $fileName;
-                                $chatMedia->path = $mediaUrl;
-                                $chatMedia->type = $contentType;
-                                $chatMedia->size = $mediaSize;
-                                $chatMedia->created_at = now();
-                                $chatMedia->save();
-
-                                $mediaId = $chatMedia->id;
+                            if (($parameter['selection'] ?? null) === 'upload' && !empty($parameter['value'])) {
+                                $upload = $this->storeTemplateHeaderUpload($parameter['value'], $organizationId);
+                                $mediaUrl = $upload['url'];
+                                $mediaName = $upload['name'];
+                                $mediaId = $upload['media_id'];
                             } else {
                                 $mediaUrl = $defaultHeaderMedia['url']
                                     ?? $parameter['value']
                                     ?? $parameter['url']
+                                    ?? null;
+                                $mediaName = $defaultHeaderMedia['name']
+                                    ?? $parameter['filename']
+                                    ?? $parameter['name']
                                     ?? null;
                                 $mediaId = $defaultHeaderMedia['media_id'] ?? $mediaId;
                             }
                 
                             $metadata['header']['parameters'][] = [
                                 'type' => $parameter['type'],
-                                'selection' => $defaultHeaderMedia ? 'default' : $parameter['selection'],
+                                'selection' => ($parameter['selection'] ?? null) === 'upload' ? 'upload' : ($defaultHeaderMedia ? 'default' : ($parameter['selection'] ?? null)),
                                 'value' => $mediaUrl,
                                 'url' => $mediaUrl,
+                                'filename' => $mediaName,
+                                'name' => $mediaName,
                             ];
                         }
                     }
@@ -267,6 +244,37 @@ class CampaignService
             'name' => pathinfo($fullPath, PATHINFO_FILENAME),
             'type' => File::extension($fullPath),
             'size' => Storage::size($path), // Size in bytes
+        ];
+    }
+
+    private function storeTemplateHeaderUpload($file, int $organizationId): array
+    {
+        $storage = Setting::where('key', 'storage_system')->value('value') ?: 'local';
+        $fileName = $file->getClientOriginalName();
+        $contentType = $file->getMimeType();
+        $mediaSize = $file->getSize();
+
+        if ($storage === 'aws') {
+            $uploadedFile = $file->store('uploads/media/sent/' . $organizationId, 's3');
+            $mediaUrl = Storage::disk('s3')->url($uploadedFile);
+        } else {
+            $storedPath = $file->store('public', 'local');
+            $mediaUrl = rtrim(config('app.url'), '/') . '/media/' . ltrim($storedPath, '/');
+        }
+
+        $chatMedia = ChatMedia::create([
+            'name' => $fileName,
+            'location' => $storage === 'aws' ? 'amazon' : 'local',
+            'path' => $mediaUrl,
+            'type' => $contentType,
+            'size' => $mediaSize,
+            'created_at' => now(),
+        ]);
+
+        return [
+            'media_id' => $chatMedia->id,
+            'url' => $mediaUrl,
+            'name' => $fileName,
         ];
     }
 

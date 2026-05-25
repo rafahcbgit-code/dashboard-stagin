@@ -99,6 +99,26 @@
               {{ $t('Only approved templates can be sent. Template variables will be filled with default values.') }}
             </div>
 
+            <div v-if="selectedTemplateHeaderMediaType" class="mt-5 rounded-md border border-slate-200 bg-white px-3 py-3">
+              <label class="mb-2 block text-sm leading-6 text-gray-900">{{ $t('Header media') }}</label>
+              <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <label for="quick-template-header-media"
+                  class="inline-flex cursor-pointer justify-center rounded-md bg-slate-100 px-3 py-2 text-sm text-slate-700 ring-1 ring-inset ring-slate-300 hover:bg-slate-200">
+                  {{ $t('Upload new file') }}
+                </label>
+                <input id="quick-template-header-media" type="file" class="sr-only"
+                  :accept="getFileAcceptAttribute(selectedTemplateHeaderMediaType)"
+                  @change="handleQuickHeaderFileUpload" />
+                <span class="truncate text-sm text-slate-600">
+                  {{ quickSendHeaderFile ? quickSendHeaderFile.name : $t('Using template media') }}
+                </span>
+              </div>
+              <p class="mt-2 text-xs leading-5 text-slate-500">
+                {{ $t('Leave empty to use the media saved with the template.') }}
+              </p>
+              <p v-if="quickSendHeaderFileError" class="mt-1 text-xs text-[#b91c1c]">{{ quickSendHeaderFileError }}</p>
+            </div>
+
             <div class="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
               <button type="button" @click="cancelModal"
                 class="inline-flex justify-center rounded-md border border-transparent bg-slate-50 px-4 py-2 text-sm text-slate-500 hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
@@ -152,6 +172,8 @@ const templateSearch = ref('');
 const quickSendPhone = ref('');
 const quickSendTemplate = ref('');
 const quickSendStatus = ref(null);
+const quickSendHeaderFile = ref(null);
+const quickSendHeaderFileError = ref('');
 const phoneError = ref('');
 const isSending = ref(false);
 const highlightedIndex = ref(0);
@@ -181,6 +203,16 @@ const selectedTemplate = computed(() => {
 
 const selectedTemplateLabel = computed(() => {
   return selectedTemplate.value ? formatTemplateName(selectedTemplate.value) : '';
+});
+
+const selectedTemplateHeaderMediaType = computed(() => {
+  const metadata = parseTemplateMetadata(selectedTemplate.value);
+  const format = metadata?.header?.format
+    || metadata?.components?.find((component) => component.type?.toUpperCase() === 'HEADER')?.format
+    || '';
+  const normalized = String(format).toUpperCase();
+
+  return ['IMAGE', 'DOCUMENT', 'VIDEO'].includes(normalized) ? normalized : '';
 });
 
 const isTemplateSelected = (template) => {
@@ -215,6 +247,8 @@ const cancelModal = () => {
   closeModal();
   quickSendPhone.value = '';
   quickSendTemplate.value = '';
+  quickSendHeaderFile.value = null;
+  quickSendHeaderFileError.value = '';
   templateSearch.value = '';
   quickSendStatus.value = null;
 };
@@ -238,6 +272,8 @@ const closeDropdown = () => {
 
 const selectTemplate = (template) => {
   quickSendTemplate.value = String(template.uuid || template.id);
+  quickSendHeaderFile.value = null;
+  quickSendHeaderFileError.value = '';
   dropdownOpen.value = false;
   templateSearch.value = '';
   highlightedIndex.value = 0;
@@ -287,6 +323,25 @@ const confirmHighlightedTemplate = () => {
   }
 };
 
+const handleQuickHeaderFileUpload = (event) => {
+  const file = event.target.files[0];
+  quickSendHeaderFileError.value = '';
+  quickSendHeaderFile.value = null;
+
+  if (!file) {
+    return;
+  }
+
+  const limit = getFileSizeLimit(selectedTemplateHeaderMediaType.value);
+  if (file.size > limit) {
+    quickSendHeaderFileError.value = t('File size exceeds the allowed limit.');
+    event.target.value = null;
+    return;
+  }
+
+  quickSendHeaderFile.value = file;
+};
+
 const onWindowClick = (event) => {
   if (dropdownOpen.value && dropdownRef.value && !dropdownRef.value.contains(event.target)) {
     closeDropdown();
@@ -305,10 +360,11 @@ const formatTemplateName = (template) => {
     : rawLabel;
 };
 
-const getTemplateType = (template) => {
+const parseTemplateMetadata = (template) => {
   if (!template) {
-    return '';
+    return null;
   }
+
   let metadata = template.metadata;
   if (typeof metadata === 'string') {
     try {
@@ -317,6 +373,41 @@ const getTemplateType = (template) => {
       metadata = null;
     }
   }
+
+  return metadata;
+};
+
+const getFileAcceptAttribute = (fileType) => {
+  switch (fileType) {
+    case 'IMAGE':
+      return '.png,.jpg,.jpeg';
+    case 'DOCUMENT':
+      return '.pdf,.txt,.ppt,.doc,.xls,.docx,.pptx,.xlsx';
+    case 'VIDEO':
+      return '.mp4';
+    default:
+      return '';
+  }
+};
+
+const getFileSizeLimit = (fileType) => {
+  switch (fileType) {
+    case 'IMAGE':
+      return 5 * 1024 * 1024;
+    case 'DOCUMENT':
+      return 100 * 1024 * 1024;
+    case 'VIDEO':
+      return 16 * 1024 * 1024;
+    default:
+      return Infinity;
+  }
+};
+
+const getTemplateType = (template) => {
+  if (!template) {
+    return '';
+  }
+  const metadata = parseTemplateMetadata(template);
 
   const typeValue = metadata?.template_type || metadata?.header?.format || metadata?.type || 'Text';
   const normalized = String(typeValue).toLowerCase();
@@ -333,14 +424,7 @@ const getTemplatePreviewText = (template, short = false) => {
   if (!template) {
     return '';
   }
-  let metadata = template.metadata;
-  if (typeof metadata === 'string') {
-    try {
-      metadata = JSON.parse(metadata);
-    } catch {
-      metadata = null;
-    }
-  }
+  const metadata = parseTemplateMetadata(template);
 
   if (!metadata) {
     return t('No preview available.');
@@ -392,16 +476,30 @@ const sendTemplateToNumber = async () => {
     return;
   }
 
+  if (quickSendHeaderFileError.value) {
+    return;
+  }
+
   isSending.value = true;
   quickSendStatus.value = null;
 
   try {
     // Extract digits and send the full phone number as provided
     const phoneToSend = quickSendPhone.value.replace(/[^0-9+]/g, '');
-    const response = await axios.post('/chats/send-template-to-number', {
-      phone: phoneToSend,
-      template: quickSendTemplate.value,
-    });
+    const payload = quickSendHeaderFile.value ? new FormData() : null;
+    let response;
+
+    if (payload) {
+      payload.append('phone', phoneToSend);
+      payload.append('template', quickSendTemplate.value);
+      payload.append('header_media', quickSendHeaderFile.value);
+      response = await axios.post('/chats/send-template-to-number', payload);
+    } else {
+      response = await axios.post('/chats/send-template-to-number', {
+        phone: phoneToSend,
+        template: quickSendTemplate.value,
+      });
+    }
 
     quickSendStatus.value = {
       type: 'success',
