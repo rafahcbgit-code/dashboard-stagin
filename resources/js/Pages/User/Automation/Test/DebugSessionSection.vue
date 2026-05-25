@@ -25,8 +25,11 @@
       <div class="space-y-1">
         <div class="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Bot Settings</div>
         <div class="space-y-0.5">
-          <div v-for="setting in botSettingsList" :key="setting.label" class="flex items-center justify-between text-xs">
-            <span class="text-gray-600">{{ setting.label }}</span>
+          <div v-for="setting in botSettingsList" :key="setting.label" class="flex items-center justify-between text-xs" :class="{ 'bg-amber-50 border-l-2 border-amber-400 pl-1.5 -ml-1.5 rounded-r': setting.overridden }">
+            <span class="text-gray-600">
+              {{ setting.label }}
+              <span v-if="setting.overridden" class="ml-1 text-[9px] font-semibold px-1 py-0.5 rounded bg-amber-100 text-amber-700">Override</span>
+            </span>
             <span :class="setting.value ? 'text-green-600' : 'text-gray-400'" class="font-medium">
               {{ setting.display || (setting.value ? 'On' : 'Off') }}
             </span>
@@ -90,6 +93,8 @@ const props = defineProps({
   sessionInfo: { type: Object, default: null },
   workingHours: { type: Object, default: null },
   unmatchedMessageCount: { type: Number, default: 0 },
+  settingOverrides: { type: Object, default: () => ({}) },
+  triggerOverrides: { type: Object, default: () => ({}) },
 })
 
 const expanded = ref(true)
@@ -98,14 +103,20 @@ const botSettingsList = computed(() => {
   const settings = props.botSettings
   if (!settings || Object.keys(settings).length === 0) return []
 
+  const overrides = props.settingOverrides || {}
+
   return [
-    { label: 'Automation', value: settings.automation_enabled, display: settings.automation_enabled ? 'Enabled' : 'Disabled' },
-    { label: 'AI', value: settings.ai_enabled, display: settings.ai_enabled ? 'Enabled' : 'Disabled' },
-    { label: 'AI Fallback', value: settings.ai_fallback_enabled, display: settings.ai_fallback_enabled ? 'Enabled' : 'Disabled' },
-    { label: 'AI Only Mode', value: settings.ai_only_mode, display: settings.ai_only_mode ? 'Enabled' : 'Disabled' },
-    { label: 'Fallback Threshold', value: true, display: settings.fallback_threshold ? `${settings.fallback_threshold} messages` : 'Not set' },
-    { label: 'Flow Timeout', value: true, display: settings.flow_timeout_minutes ? `${settings.flow_timeout_minutes} min` : 'Not set' },
-    { label: 'Escalation Transfer', value: settings.escalation_transfer_enabled, display: settings.escalation_transfer_enabled ? 'Enabled' : 'Disabled' },
+    { label: 'Automation', key: 'automation_enabled', value: settings.automation_enabled, display: settings.automation_enabled ? 'Enabled' : 'Disabled', overridden: 'automation_enabled' in overrides },
+    { label: 'AI', key: 'ai_enabled', value: settings.ai_enabled, display: settings.ai_enabled ? 'Enabled' : 'Disabled', overridden: 'ai_enabled' in overrides },
+    { label: 'AI Fallback', key: 'ai_fallback_enabled', value: settings.ai_fallback_enabled, display: settings.ai_fallback_enabled ? 'Enabled' : 'Disabled', overridden: 'ai_fallback_enabled' in overrides },
+    { label: 'AI Only Mode', key: 'ai_only_mode', value: settings.ai_only_mode, display: settings.ai_only_mode ? 'Enabled' : 'Disabled', overridden: 'ai_only_mode' in overrides },
+    { label: 'Fallback Threshold', key: 'fallback_threshold', value: true, display: settings.fallback_threshold ? `${settings.fallback_threshold} messages` : 'Not set', overridden: false },
+    { label: 'Flow Timeout', key: 'flow_timeout_minutes', value: true, display: settings.flow_timeout_minutes ? `${settings.flow_timeout_minutes} min` : 'Not set', overridden: false },
+    { label: 'Escalation Transfer', key: 'escalation_transfer_enabled', value: settings.escalation_transfer_enabled, display: settings.escalation_transfer_enabled ? 'Enabled' : 'Disabled', overridden: 'escalation_transfer_enabled' in overrides },
+    { label: 'Auto-Escalation', key: 'auto_escalation_enabled', value: settings.auto_escalation_enabled, display: settings.auto_escalation_enabled ? 'Enabled' : 'Disabled', overridden: 'auto_escalation_enabled' in overrides },
+    { label: 'AI Escalation', key: 'ai_escalation_enabled', value: settings.ai_escalation_enabled, display: settings.ai_escalation_enabled ? 'Enabled' : 'Disabled', overridden: 'ai_escalation_enabled' in overrides },
+    { label: 'AI Follow-up', key: 'ai_followup_enabled', value: settings.ai_followup_enabled, display: settings.ai_followup_enabled ? 'Enabled' : 'Disabled', overridden: 'ai_followup_enabled' in overrides },
+    { label: 'Flow Rejoin', key: 'flow_rejoin_enabled', value: settings.flow_rejoin_enabled, display: settings.flow_rejoin_enabled ? 'Enabled' : 'Disabled', overridden: 'flow_rejoin_enabled' in overrides },
   ]
 })
 

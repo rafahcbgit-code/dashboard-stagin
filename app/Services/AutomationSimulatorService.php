@@ -38,8 +38,46 @@ class AutomationSimulatorService
      * Uses the real TriggerEvaluationService for accurate matching,
      * then falls back to AI if no trigger matches.
      */
-    public function simulateTriggerEvaluation(int $organizationId, string $message, bool $isNewContact, bool $duringWorkingHours): array
+    public function simulateTriggerEvaluation(int $organizationId, string $message, bool $isNewContact, bool $duringWorkingHours, array $settingOverrides = [], array $triggerOverrides = []): array
     {
+        // Compute effective settings (overrides take precedence over DB)
+        $effectiveAutomationEnabled = $settingOverrides['automation_enabled'] ?? $this->botSettings->isAutomationEnabled($organizationId);
+        $effectiveAiEnabled = $settingOverrides['ai_enabled'] ?? $this->aiSettingsService->isEnabled($organizationId);
+        $effectiveAiOnlyMode = $settingOverrides['ai_only_mode'] ?? (bool) $this->aiSettingsService->isAiOnlyMode($organizationId);
+        $effectiveAiFallbackEnabled = $settingOverrides['ai_fallback_enabled'] ?? (bool) $this->botSettings->getSetting($organizationId, 'ai_fallback_enabled', false);
+        $effectiveAiEscalationEnabled = $settingOverrides['ai_escalation_enabled'] ?? (bool) $this->botSettings->isAiEscalationEnabled($organizationId);
+
+        // Build bot settings context for debug panel (effective values with overrides)
+        $botSettingsData = [
+            'automation_enabled' => $effectiveAutomationEnabled,
+            'ai_enabled' => $effectiveAiEnabled,
+            'ai_fallback_enabled' => $effectiveAiFallbackEnabled,
+            'ai_only_mode' => $effectiveAiOnlyMode,
+            'fallback_threshold' => (int) $this->botSettings->getSetting($organizationId, 'fallback_threshold', 3),
+            'flow_timeout_minutes' => (int) $this->botSettings->getSetting($organizationId, 'flow_timeout_minutes', 30),
+            'escalation_transfer_enabled' => $settingOverrides['escalation_transfer_enabled'] ?? (bool) $this->botSettings->getSetting($organizationId, 'escalation_transfer_message_enabled', false),
+            'auto_escalation_enabled' => $settingOverrides['auto_escalation_enabled'] ?? (bool) $this->botSettings->isAutoEscalationEnabled($organizationId),
+            'ai_escalation_enabled' => $effectiveAiEscalationEnabled,
+            'ai_followup_enabled' => $settingOverrides['ai_followup_enabled'] ?? (bool) $this->botSettings->getSetting($organizationId, 'ai_followup_enabled', false),
+            'flow_rejoin_enabled' => $settingOverrides['flow_rejoin_enabled'] ?? (bool) $this->botSettings->getSetting($organizationId, 'flow_rejoin_enabled', false),
+        ];
+
+        // --- Gatekeeper: automation_enabled = false ---
+        // Matches production: ProcessWebhookJob skips all auto-reply when disabled
+        if (!$effectiveAutomationEnabled) {
+            return [
+                'matched' => false,
+                'trigger' => null,
+                'flow' => null,
+                'trace' => [],
+                'whatsapp' => ['type' => 'text', 'body' => 'Automation is disabled. No triggers or AI will respond.'],
+                'working_hours_overridden' => false,
+                'ai_result' => null,
+                'bot_settings' => $botSettingsData,
+                'overridden_settings' => array_keys(array_filter($settingOverrides, fn($v) => $v !== null)),
+            ];
+        }
+
         // Create a virtual contact — rate limits pass since id=0
         $virtualContact = new Contact();
         $virtualContact->id = 0;
@@ -50,13 +88,108 @@ class AutomationSimulatorService
         $effectiveWorkingHours = $duringWorkingHours;
         $workingHoursOverridden = ($duringWorkingHours !== $actualWorkingHours);
 
+        // --- AI-Only Mode ---
+        // Matches production: AutoReplyService::replySequence() skips normal triggers,
+        // goes straight to AI, then only evaluates fallback trigger as safety net
+        if ($effectiveAiOnlyMode && $effectiveAiEnabled) {
+            $trace = [];
+            $aiResult = null;
+
+            // Try AI first
+            if ($effectiveAiFallbackEnabled) {
+                $aiResult = $this->aiFallbackService->attemptAnswer($organizationId, $message, $virtualContact, $settingOverrides);
+                $trace[] = [
+                    'id' => null,
+                    'name' => 'AI Fallback (AI-Only Mode)',
+                    'type' => 'ai_only',
+                    'matched' => $aiResult !== null,
+                    'reason' => $aiResult ? 'AI answered in AI-only mode' : 'AI could not answer',
+                    'priority' => 0,
+                ];
+            }
+
+            // Safety net: try fallback trigger only (like production's handleFallbackOnlyEvaluation)
+            $fallbackTriggers = TriggerGroup::forOrganization($organizationId)
+                ->orderedByPriority()
+                ->get()
+                ->filter(function ($tg) use ($triggerOverrides) {
+                    if ($tg->type !== 'fallback') return false;
+                    if (array_key_exists($tg->id, $triggerOverrides)) {
+                        return $triggerOverrides[$tg->id] === true;
+                    }
+                    return $tg->is_enabled;
+                });
+
+            foreach ($fallbackTriggers as $tg) {
+                $matched = $tg->hasFlowLinked();
+                $trace[] = [
+                    'id' => $tg->id,
+                    'name' => $tg->name,
+                    'type' => $tg->type,
+                    'matched' => $matched,
+                    'reason' => $matched ? 'Fallback trigger matched (safety net)' : 'No flow linked',
+                    'priority' => $tg->priority ?? 0,
+                ];
+            }
+
+            $whatsapp = null;
+            $trigger = null;
+            $flow = null;
+
+            if ($aiResult !== null) {
+                if ($aiResult['type'] === 'escalation') {
+                    $instruction = $aiResult['instruction'] ?? null;
+                    $whatsapp = ['type' => 'text', 'body' => $instruction ? $instruction->instruction : 'This would be escalated to a human agent.'];
+                } else {
+                    $whatsapp = ['type' => 'text', 'body' => $aiResult['content'] ?? 'No answer found.'];
+                }
+            } else {
+                // Check fallback trigger for a flow
+                $fallbackTrigger = $fallbackTriggers->first(fn($tg) => $tg->hasFlowLinked());
+                if ($fallbackTrigger) {
+                    $trigger = ['name' => $fallbackTrigger->name, 'type' => $fallbackTrigger->type];
+                    $matchedFlow = $fallbackTrigger->flow;
+                    if ($matchedFlow) {
+                        $flow = ['id' => $matchedFlow->id, 'name' => $matchedFlow->name, 'uuid' => $matchedFlow->uuid];
+                    }
+                } else {
+                    $whatsapp = ['type' => 'text', 'body' => 'No AI answer and no fallback trigger configured.'];
+                }
+            }
+
+            return [
+                'matched' => $trigger !== null,
+                'trigger' => $trigger,
+                'flow' => $flow,
+                'trace' => $trace,
+                'whatsapp' => $whatsapp,
+                'working_hours_overridden' => $workingHoursOverridden,
+                'ai_result' => $aiResult ? [
+                    'type' => $aiResult['type'],
+                    'content' => $aiResult['content'] ?? null,
+                    'confidence' => isset($aiResult['confidence']) ? round($aiResult['confidence'] * 100) : null,
+                    'below_threshold' => !empty($aiResult['below_threshold']),
+                ] : null,
+                'bot_settings' => $botSettingsData,
+                'overridden_settings' => array_keys(array_filter($settingOverrides, fn($v) => $v !== null)),
+            ];
+        }
+
         // Build debug trace by checking each trigger manually
         // Uses the same 3-phase evaluation order as TriggerEvaluationService:
         // keyword (intent) → context (circumstance) → fallback (last resort)
-        $triggerGroups = TriggerGroup::forOrganization($organizationId)
-            ->enabled()
+        $allTriggerGroups = TriggerGroup::forOrganization($organizationId)
             ->orderedByPriority()
             ->get();
+
+        // Apply trigger overrides: include trigger if override sets it enabled,
+        // otherwise fall back to the DB is_enabled value
+        $triggerGroups = $allTriggerGroups->filter(function ($tg) use ($triggerOverrides) {
+            if (array_key_exists($tg->id, $triggerOverrides)) {
+                return $triggerOverrides[$tg->id] === true;
+            }
+            return $tg->is_enabled;
+        });
 
         $trace = [];
         $firstMatchedTrigger = null;
@@ -71,6 +204,7 @@ class AutomationSimulatorService
 
         foreach ($orderedGroups as $tg) {
             $entry = [
+                'id' => $tg->id,
                 'name' => $tg->name,
                 'type' => $tg->type,
                 'matched' => false,
@@ -143,11 +277,8 @@ class AutomationSimulatorService
         // If no trigger matched, try AI fallback
         $aiResult = null;
         if ($firstMatchedTrigger === null) {
-            $aiEnabled = $this->aiSettingsService->isEnabled($organizationId);
-            $aiFallbackEnabled = (bool) $this->botSettings->getSetting($organizationId, 'ai_fallback_enabled', false);
-
-            if ($aiEnabled && $aiFallbackEnabled) {
-                $aiResult = $this->aiFallbackService->attemptAnswer($organizationId, $message, $virtualContact);
+            if ($effectiveAiEnabled && $effectiveAiFallbackEnabled) {
+                $aiResult = $this->aiFallbackService->attemptAnswer($organizationId, $message, $virtualContact, $settingOverrides);
 
                 if ($aiResult !== null) {
                     $belowThreshold = !empty($aiResult['below_threshold']);
@@ -185,19 +316,6 @@ class AutomationSimulatorService
             }
         }
 
-        // Build bot settings context for debug panel
-        $botSettingsData = [
-            'automation_enabled' => $this->botSettings->isAutomationEnabled($organizationId),
-            'ai_enabled' => $this->aiSettingsService->isEnabled($organizationId),
-            'ai_fallback_enabled' => (bool) $this->botSettings->getSetting($organizationId, 'ai_fallback_enabled', false),
-            'ai_only_mode' => (bool) $this->aiSettingsService->isAiOnlyMode($organizationId),
-            'fallback_threshold' => (int) $this->botSettings->getSetting($organizationId, 'fallback_threshold', 3),
-            'flow_timeout_minutes' => (int) $this->botSettings->getSetting($organizationId, 'flow_timeout_minutes', 30),
-            'escalation_transfer_enabled' => (bool) $this->botSettings->getSetting($organizationId, 'escalation_transfer_message_enabled', false),
-            'auto_escalation_enabled' => (bool) $this->botSettings->isAutoEscalationEnabled($organizationId),
-            'ai_escalation_enabled' => (bool) $this->botSettings->isAiEscalationEnabled($organizationId),
-        ];
-
         return [
             'matched' => $firstMatchedTrigger !== null,
             'trigger' => $trigger,
@@ -212,6 +330,7 @@ class AutomationSimulatorService
                 'below_threshold' => !empty($aiResult['below_threshold']),
             ] : null,
             'bot_settings' => $botSettingsData,
+            'overridden_settings' => array_keys(array_filter($settingOverrides, fn($v) => $v !== null)),
         ];
     }
 
@@ -655,10 +774,10 @@ class AutomationSimulatorService
     /**
      * Simulate AI response for a message.
      */
-    public function simulateAiResponse(int $organizationId, string $message): array
+    public function simulateAiResponse(int $organizationId, string $message, array $settingOverrides = []): array
     {
-        $aiEnabled = $this->aiSettingsService->isEnabled($organizationId);
-        $aiFallbackEnabled = (bool) $this->botSettings->getSetting($organizationId, 'ai_fallback_enabled', false);
+        $aiEnabled = $settingOverrides['ai_enabled'] ?? $this->aiSettingsService->isEnabled($organizationId);
+        $aiFallbackEnabled = $settingOverrides['ai_fallback_enabled'] ?? (bool) $this->botSettings->getSetting($organizationId, 'ai_fallback_enabled', false);
         $confidenceThreshold = $this->aiSettingsService->getDefaultConfidence($organizationId);
 
         if (!$aiEnabled) {
@@ -685,7 +804,8 @@ class AutomationSimulatorService
         $virtualContact->organization_id = $organizationId;
 
         $escalationMatch = null;
-        if ($this->botSettings->isAiEscalationEnabled($organizationId)) {
+        $aiEscalationEnabled = $settingOverrides['ai_escalation_enabled'] ?? $this->botSettings->isAiEscalationEnabled($organizationId);
+        if ($aiEscalationEnabled) {
             $escalationMatch = $this->escalationService->evaluate($organizationId, $message);
         }
 
@@ -708,7 +828,7 @@ class AutomationSimulatorService
             ];
         }
 
-        $result = $this->aiFallbackService->attemptAnswer($organizationId, $message, $virtualContact);
+        $result = $this->aiFallbackService->attemptAnswer($organizationId, $message, $virtualContact, $settingOverrides);
 
         if ($result === null) {
             return [

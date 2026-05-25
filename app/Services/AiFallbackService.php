@@ -30,15 +30,17 @@ class AiFallbackService
      * Attempt to answer a message using AI and the organization's knowledge base.
      * Returns an array with 'type' => 'answer'|'escalation' and relevant data, or null.
      */
-    public function attemptAnswer(int $organizationId, string $message, $contact): ?array
+    public function attemptAnswer(int $organizationId, string $message, $contact, array $settingOverrides = []): ?array
     {
         // 1. Check if AI is globally enabled for this org
-        if (!$this->aiSettingsService->isEnabled($organizationId)) {
+        $aiEnabled = $settingOverrides['ai_enabled'] ?? $this->aiSettingsService->isEnabled($organizationId);
+        if (!$aiEnabled) {
             return null;
         }
 
         // 2. Check if AI fallback is enabled
-        if (!$this->botSettings->getSetting($organizationId, 'ai_fallback_enabled', false)) {
+        $aiFallbackEnabled = $settingOverrides['ai_fallback_enabled'] ?? (bool) $this->botSettings->getSetting($organizationId, 'ai_fallback_enabled', false);
+        if (!$aiFallbackEnabled) {
             return null;
         }
 
@@ -53,7 +55,8 @@ class AiFallbackService
 
         // 4. Check escalation instructions first (only if AI escalation is enabled)
         $escalationMatch = null;
-        if ($this->botSettings->isAiEscalationEnabled($organizationId)) {
+        $aiEscalationEnabled = $settingOverrides['ai_escalation_enabled'] ?? $this->botSettings->isAiEscalationEnabled($organizationId);
+        if ($aiEscalationEnabled) {
             $escalationMatch = $this->escalationService->evaluate($organizationId, $message);
         }
         if ($escalationMatch !== null) {
