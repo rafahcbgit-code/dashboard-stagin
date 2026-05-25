@@ -58,16 +58,33 @@ const getMimeTypeFromFileName = (name) => {
     return mimeMap[extension] || null;
 };
 
+const isTemporaryWhatsappMediaUrl = (url) => {
+    try {
+        const host = new URL(url).hostname;
+        return host.includes('lookaside.fbsbx.com');
+    } catch {
+        return false;
+    }
+};
+
 const mediaSource = computed(() => {
     const messageType = String(metadata.value?.type || '').toLowerCase();
     const media = props.content?.media || {};
     const metadataMedia = metadata.value?.media || {};
     const typedMetadata = metadata.value?.[messageType] || {};
     const headerParameter = getHeaderMediaParameter(messageType);
-    const path = typedMetadata.path
+    const storedMediaPath = media.path || media.url || null;
+    const typedMetadataPath = typedMetadata.path
         || typedMetadata.url
         || typedMetadata.link
         || typedMetadata.value
+        || null;
+
+    const path = (
+            storedMediaPath && isTemporaryWhatsappMediaUrl(typedMetadataPath)
+                ? storedMediaPath
+                : typedMetadataPath
+        )
         || headerParameter.path
         || headerParameter.url
         || headerParameter.link
@@ -75,7 +92,7 @@ const mediaSource = computed(() => {
         || metadataMedia.path
         || metadataMedia.url
         || metadataMedia.link
-        || media.path
+        || storedMediaPath
         || metadata.value?.media_url
         || metadata.value?.url
         || null;
