@@ -1,1 +1,5 @@
+<<<<<<<< HEAD:public/build/assets/Table-b76ede68.js
 import{P as t}from"./Pagination-0da46558.js";import{o,c as l,a as e,B as n,n as r,j as c,F as m}from"./app-60ffbfaa.js";const i={class:"w-full"},p={__name:"Table",props:{rows:Object,className:String},setup(a){return(s,d)=>(o(),l(m,null,[e("div",{class:r(["bg-slate-100 md:bg-white rounded-[0.5rem]",a.className])},[e("table",i,[n(s.$slots,"default")])],2),c(t,{class:"mt-3",pagination:a.rows.meta},null,8,["pagination"])],64))}};export{p as _};
+========
+import{P as t}from"./Pagination-4032f5ae.js";import{o,c as l,a as e,B as n,n as r,j as c,F as m}from"./app-9e51102a.js";const i={class:"w-full"},p={__name:"Table",props:{rows:Object,className:String},setup(a){return(s,d)=>(o(),l(m,null,[e("div",{class:r(["bg-slate-100 md:bg-white rounded-[0.5rem]",a.className])},[e("table",i,[n(s.$slots,"default")])],2),c(t,{class:"mt-3",pagination:a.rows.meta},null,8,["pagination"])],64))}};export{p as _};
+>>>>>>>> e05b385391a106ccf18bf832560db5a6f855b5db:public/build/assets/Table-1f4fc613.js

@@ -1,4 +1,8 @@
+<<<<<<<< HEAD:public/build/assets/message-circle-00d82d5c.js
 import{c as e}from"./createLucideIcon-19a91e76.js";/**
+========
+import{c as e}from"./createLucideIcon-46adaadc.js";/**
+>>>>>>>> e05b385391a106ccf18bf832560db5a6f855b5db:public/build/assets/message-circle-1c3118ea.js
  * @license lucide-vue-next v0.454.0 - ISC
  *
  * This source code is licensed under the ISC license.
