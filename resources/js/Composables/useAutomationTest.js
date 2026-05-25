@@ -202,6 +202,8 @@ export function useAutomationTest(props) {
         if (whatsappBody.includes('Automation is disabled')) {
           addSystemMessage('Automation is disabled — no triggers or AI will respond to messages.')
           addDebug('warning', 'Automation disabled', 'All auto-reply skipped (automation_enabled = false)')
+          // When automation is off, skip ALL further logic — no fallback counting, no escalation
+          return
         } else if (!isTechnicalMessage) {
           addBotMessage(data.whatsapp)
         }
