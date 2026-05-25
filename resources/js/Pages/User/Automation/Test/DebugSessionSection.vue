@@ -21,21 +21,108 @@
     </button>
 
     <div v-if="expanded" class="px-3 pb-2 space-y-2">
-      <!-- Bot Settings -->
+      <!-- Master Controls -->
       <div class="space-y-1">
-        <div class="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Bot Settings</div>
-        <div class="space-y-0.5">
-          <div v-for="setting in botSettingsList" :key="setting.label" class="flex items-center justify-between text-xs">
-            <span class="text-gray-600">{{ setting.label }}</span>
-            <span :class="setting.value ? 'text-green-600' : 'text-gray-400'" class="font-medium">
-              {{ setting.display || (setting.value ? 'On' : 'Off') }}
+        <div class="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Master Controls</div>
+        <!-- Automation -->
+        <div class="flex items-center justify-between text-xs rounded px-1.5 py-1" :class="automationEnabled ? 'bg-green-50' : 'bg-red-50'">
+          <span class="flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 rounded-full" :class="automationEnabled ? 'bg-green-500' : 'bg-red-500'"></span>
+            <span :class="automationEnabled ? 'text-green-700' : 'text-red-700'" class="font-semibold">Automation</span>
+            <span v-if="isOverridden('automation_enabled')" class="text-[9px] font-semibold px-1 py-0.5 rounded bg-amber-100 text-amber-700">Override</span>
+          </span>
+          <span :class="automationEnabled ? 'text-green-600' : 'text-red-600'" class="font-medium">
+            {{ automationEnabled ? 'Enabled' : 'Disabled' }}
+          </span>
+        </div>
+        <!-- Automation OFF warning -->
+        <div v-if="!automationEnabled" class="flex items-start gap-1.5 rounded bg-red-50 border border-red-100 px-2 py-1.5 text-[10px] text-red-600">
+          <svg class="w-3 h-3 shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+          <span>All automation is paused. Nothing will respond.</span>
+        </div>
+      </div>
+
+      <!-- AI Settings (dimmed if automation off) -->
+      <div class="space-y-1 pt-2 border-t border-gray-100" :class="{ 'opacity-40': !automationEnabled }">
+        <div class="text-[10px] font-medium text-gray-400 uppercase tracking-wider">AI</div>
+        <div class="flex items-center justify-between text-xs px-1.5 py-1 rounded" :class="aiEnabled ? 'bg-violet-50' : 'bg-gray-50'">
+          <span class="flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 rounded-full" :class="aiEnabled ? 'bg-violet-500' : 'bg-gray-400'"></span>
+            <span :class="aiEnabled ? 'text-violet-700' : 'text-gray-500'" class="font-semibold">AI Assistant</span>
+            <span v-if="isOverridden('ai_enabled')" class="text-[9px] font-semibold px-1 py-0.5 rounded bg-amber-100 text-amber-700">Override</span>
+          </span>
+          <span :class="aiEnabled ? 'text-green-600' : 'text-gray-400'" class="font-medium">
+            {{ aiEnabled ? 'Enabled' : 'Disabled' }}
+          </span>
+        </div>
+
+        <!-- AI-Only Mode -->
+        <div class="flex items-center justify-between text-xs px-1.5 py-1" :class="{ 'opacity-40': !aiEnabled }">
+          <span class="flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 rounded-full" :class="aiOnlyMode ? 'bg-indigo-500' : 'bg-gray-400'"></span>
+            <span :class="aiOnlyMode ? 'text-indigo-700' : 'text-gray-500'">AI-Only Mode</span>
+            <span v-if="isOverridden('ai_only_mode')" class="text-[9px] font-semibold px-1 py-0.5 rounded bg-amber-100 text-amber-700">Override</span>
+          </span>
+          <span :class="aiOnlyMode ? 'text-indigo-600' : 'text-gray-400'" class="font-medium">
+            {{ aiOnlyMode ? 'Active' : 'Off' }}
+          </span>
+        </div>
+        <div v-if="aiOnlyMode" class="flex items-start gap-1.5 rounded bg-indigo-50 border border-indigo-100 px-2 py-1 text-[10px] text-indigo-700">
+          <svg class="w-3 h-3 shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
+          <span>Triggers and flows bypassed. Only AI + Fallback trigger.</span>
+        </div>
+
+        <!-- AI Fallback -->
+        <div class="flex items-center justify-between text-xs px-1.5 py-1 rounded" :class="{ 'opacity-40': !aiEnabled }">
+          <span class="flex items-center gap-1.5">
+            <span class="w-1.5 h-1.5 rounded-full" :class="aiFallback ? 'bg-violet-500' : 'bg-gray-400'"></span>
+            <span :class="aiFallback ? 'text-violet-700' : 'text-gray-500'">AI Fallback</span>
+            <span v-if="isOverridden('ai_fallback_enabled')" class="text-[9px] font-semibold px-1 py-0.5 rounded bg-amber-100 text-amber-700">Override</span>
+          </span>
+          <span :class="aiFallback ? 'text-green-600' : 'text-gray-400'" class="font-medium">
+            {{ aiFallback ? 'Enabled' : 'Disabled' }}
+          </span>
+        </div>
+
+        <!-- AI sub-settings (indented, only if AI Fallback ON) -->
+        <div v-if="aiFallback && aiEnabled" class="ml-3 pl-2 border-l-2 border-violet-100 space-y-0.5">
+          <div class="flex items-center justify-between text-[11px] py-0.5">
+            <span class="flex items-center gap-1">
+              <span>AI Escalation</span>
+              <span v-if="isOverridden('ai_escalation_enabled')" class="text-[9px] font-semibold px-1 py-0.5 rounded bg-amber-100 text-amber-700">Override</span>
+            </span>
+            <span :class="settings.ai_escalation_enabled ? 'text-amber-600' : 'text-gray-400'" class="font-medium">
+              {{ settings.ai_escalation_enabled ? 'On' : 'Off' }}
+            </span>
+          </div>
+          <div class="flex items-center justify-between text-[11px] py-0.5">
+            <span class="flex items-center gap-1">
+              <span>AI Follow-up</span>
+              <span v-if="isOverridden('ai_followup_enabled')" class="text-[9px] font-semibold px-1 py-0.5 rounded bg-amber-100 text-amber-700">Override</span>
+            </span>
+            <span :class="settings.ai_followup_enabled ? 'text-blue-600' : 'text-gray-400'" class="font-medium">
+              {{ settings.ai_followup_enabled ? 'On' : 'Off' }}
             </span>
           </div>
         </div>
       </div>
 
+      <!-- Escalation & Other -->
+      <div class="space-y-1 pt-2 border-t border-gray-100" :class="{ 'opacity-40': !automationEnabled }">
+        <div class="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Escalation & Other</div>
+        <div v-for="item in otherSettings" :key="item.key" class="flex items-center justify-between text-xs px-1.5 py-0.5" :class="{ 'bg-amber-50 border-l-2 border-amber-400 pl-2 -ml-0.5 rounded-r': item.overridden }">
+          <span class="flex items-center gap-1.5">
+            <span>{{ item.label }}</span>
+            <span v-if="item.overridden" class="text-[9px] font-semibold px-1 py-0.5 rounded bg-amber-100 text-amber-700">Override</span>
+          </span>
+          <span :class="item.value ? 'text-green-600' : 'text-gray-400'" class="font-medium">
+            {{ item.display || (item.value ? 'On' : 'Off') }}
+          </span>
+        </div>
+      </div>
+
       <!-- Fallback Threshold Indicator -->
-      <div v-if="fallbackThreshold > 0 && unmatchedMessageCount > 0" class="space-y-1 pt-2 border-t border-gray-100">
+      <div v-if="automationEnabled && fallbackThreshold > 0 && unmatchedMessageCount > 0" class="space-y-1 pt-2 border-t border-gray-100">
         <div class="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Fallback Threshold</div>
         <div class="flex items-center gap-2">
           <div class="flex-1 h-2 bg-gray-200 rounded-full overflow-hidden">
@@ -74,7 +161,7 @@
           </span>
         </div>
       </div>
-      <div v-else-if="botSettings.automation_enabled !== undefined" class="space-y-1 pt-2 border-t border-gray-100">
+      <div v-else-if="settings.automation_enabled !== undefined" class="space-y-1 pt-2 border-t border-gray-100">
         <div class="text-[10px] font-medium text-gray-400 uppercase tracking-wider">Working Hours</div>
         <div class="text-xs text-gray-400">No schedule configured</div>
       </div>
@@ -90,22 +177,31 @@ const props = defineProps({
   sessionInfo: { type: Object, default: null },
   workingHours: { type: Object, default: null },
   unmatchedMessageCount: { type: Number, default: 0 },
+  settingOverrides: { type: Object, default: () => ({}) },
+  triggerOverrides: { type: Object, default: () => ({}) },
 })
 
 const expanded = ref(true)
 
-const botSettingsList = computed(() => {
-  const settings = props.botSettings
-  if (!settings || Object.keys(settings).length === 0) return []
+const settings = computed(() => props.botSettings || {})
+const overrides = computed(() => props.settingOverrides || {})
 
+const isOverridden = (key) => key in overrides.value
+
+const automationEnabled = computed(() => settings.value.automation_enabled ?? false)
+const aiEnabled = computed(() => settings.value.ai_enabled ?? false)
+const aiOnlyMode = computed(() => settings.value.ai_only_mode ?? false)
+const aiFallback = computed(() => settings.value.ai_fallback_enabled ?? false)
+
+const otherSettings = computed(() => {
+  const s = settings.value
+  const o = overrides.value
   return [
-    { label: 'Automation', value: settings.automation_enabled, display: settings.automation_enabled ? 'Enabled' : 'Disabled' },
-    { label: 'AI', value: settings.ai_enabled, display: settings.ai_enabled ? 'Enabled' : 'Disabled' },
-    { label: 'AI Fallback', value: settings.ai_fallback_enabled, display: settings.ai_fallback_enabled ? 'Enabled' : 'Disabled' },
-    { label: 'AI Only Mode', value: settings.ai_only_mode, display: settings.ai_only_mode ? 'Enabled' : 'Disabled' },
-    { label: 'Fallback Threshold', value: true, display: settings.fallback_threshold ? `${settings.fallback_threshold} messages` : 'Not set' },
-    { label: 'Flow Timeout', value: true, display: settings.flow_timeout_minutes ? `${settings.flow_timeout_minutes} min` : 'Not set' },
-    { label: 'Escalation Transfer', value: settings.escalation_transfer_enabled, display: settings.escalation_transfer_enabled ? 'Enabled' : 'Disabled' },
+    { key: 'escalation_transfer_enabled', label: 'Escalation Transfer', value: s.escalation_transfer_enabled, display: s.escalation_transfer_enabled ? 'Enabled' : 'Disabled', overridden: 'escalation_transfer_enabled' in o },
+    { key: 'auto_escalation_enabled', label: 'Auto-Escalation', value: s.auto_escalation_enabled, display: s.auto_escalation_enabled ? 'Enabled' : 'Disabled', overridden: 'auto_escalation_enabled' in o },
+    { key: 'fallback_threshold', label: 'Fallback Threshold', value: true, display: s.fallback_threshold ? `${s.fallback_threshold} msgs` : 'Not set', overridden: false },
+    { key: 'flow_timeout_minutes', label: 'Flow Timeout', value: true, display: s.flow_timeout_minutes ? `${s.flow_timeout_minutes} min` : 'Not set', overridden: false },
+    { key: 'flow_rejoin_enabled', label: 'Flow Rejoin', value: s.flow_rejoin_enabled, display: s.flow_rejoin_enabled ? 'Enabled' : 'Disabled', overridden: 'flow_rejoin_enabled' in o },
   ]
 })
 
@@ -125,6 +221,6 @@ const sessionList = computed(() => {
 })
 
 const fallbackThreshold = computed(() => {
-  return props.botSettings?.fallback_threshold || 3
+  return settings.value?.fallback_threshold || 3
 })
 </script>

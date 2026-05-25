@@ -60,6 +60,18 @@ class AutomationTestController extends BaseController
             'message' => 'required|string|max:1000',
             'is_new_contact' => 'boolean',
             'during_working_hours' => 'boolean',
+            'setting_overrides' => 'nullable|array',
+            'setting_overrides.automation_enabled' => 'nullable|boolean',
+            'setting_overrides.ai_enabled' => 'nullable|boolean',
+            'setting_overrides.ai_fallback_enabled' => 'nullable|boolean',
+            'setting_overrides.ai_only_mode' => 'nullable|boolean',
+            'setting_overrides.escalation_transfer_enabled' => 'nullable|boolean',
+            'setting_overrides.auto_escalation_enabled' => 'nullable|boolean',
+            'setting_overrides.ai_escalation_enabled' => 'nullable|boolean',
+            'setting_overrides.ai_followup_enabled' => 'nullable|boolean',
+            'setting_overrides.flow_rejoin_enabled' => 'nullable|boolean',
+            'trigger_overrides' => 'nullable|array',
+            'trigger_overrides.*' => 'boolean',
         ]);
 
         $organizationId = session()->get('current_organization');
@@ -69,6 +81,8 @@ class AutomationTestController extends BaseController
             $request->input('message'),
             $request->input('is_new_contact', false),
             $request->input('during_working_hours', true),
+            $request->input('setting_overrides', []),
+            $request->input('trigger_overrides', []),
         );
 
         return response()->json($result);
@@ -111,6 +125,16 @@ class AutomationTestController extends BaseController
     {
         $request->validate([
             'message' => 'required|string|max:1000',
+            'setting_overrides' => 'nullable|array',
+            'setting_overrides.automation_enabled' => 'nullable|boolean',
+            'setting_overrides.ai_enabled' => 'nullable|boolean',
+            'setting_overrides.ai_fallback_enabled' => 'nullable|boolean',
+            'setting_overrides.ai_only_mode' => 'nullable|boolean',
+            'setting_overrides.escalation_transfer_enabled' => 'nullable|boolean',
+            'setting_overrides.auto_escalation_enabled' => 'nullable|boolean',
+            'setting_overrides.ai_escalation_enabled' => 'nullable|boolean',
+            'setting_overrides.ai_followup_enabled' => 'nullable|boolean',
+            'setting_overrides.flow_rejoin_enabled' => 'nullable|boolean',
         ]);
 
         $organizationId = session()->get('current_organization');
@@ -118,6 +142,7 @@ class AutomationTestController extends BaseController
         $result = $this->simulatorService->simulateAiResponse(
             $organizationId,
             $request->input('message'),
+            $request->input('setting_overrides', []),
         );
 
         return response()->json($result);
@@ -132,7 +157,6 @@ class AutomationTestController extends BaseController
         $workingHours = new WorkingHoursService();
 
         $triggers = TriggerGroup::forOrganization($organizationId)
-            ->enabled()
             ->orderedByPriority()
             ->get()
             ->map(fn($tg) => [
@@ -143,6 +167,8 @@ class AutomationTestController extends BaseController
                 'rate_limit_type' => $tg->rate_limit_type ?? 'none',
                 'match_mode' => $tg->type === 'new_message' ? ($tg->match_mode ?? 'exact') : null,
                 'keywords' => $tg->type === 'new_message' ? ($tg->keywords ?? []) : null,
+                'is_enabled' => $tg->is_enabled,
+                'flow_name' => $tg->flow?->name,
             ]);
 
         $flows = Flow::where('organization_id', $organizationId)
