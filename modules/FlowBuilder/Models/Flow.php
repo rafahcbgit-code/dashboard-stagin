@@ -31,7 +31,9 @@ class Flow extends Model {
                     ->where(function ($query) use ($searchTerm) {
                         $query->where('name', 'like', '%' . $searchTerm . '%');
                     })
-                    ->withCount('flowLogs')
+                    ->withCount(['flowLogs as flow_logs_count' => function ($query) {
+                        $query->where('status', 'started');
+                    }])
                     ->latest()
                     ->paginate(10);
     }
