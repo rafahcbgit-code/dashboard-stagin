@@ -1,5 +1,0 @@
-<<<<<<<< HEAD:public/build/assets/CollapsibleContent-1eeae472.js
-import{Z as t}from"./index-b93cdaf8.js";import{D as s,f as l,g as n,E as r,u as p,o as i,B as c}from"./app-60ffbfaa.js";const u=s({__name:"CollapsibleContent",props:{forceMount:{type:Boolean},asChild:{type:Boolean},as:{}},setup(e){const a=e;return(o,d)=>(i(),l(p(t),r(a,{class:"overflow-hidden transition-all data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down"}),{default:n(()=>[c(o.$slots,"default")]),_:3},16))}});export{u as default};
-========
-import{Z as t}from"./index-33a87857.js";import{D as s,f as l,g as n,E as r,u as p,o as i,B as c}from"./app-9e51102a.js";const u=s({__name:"CollapsibleContent",props:{forceMount:{type:Boolean},asChild:{type:Boolean},as:{}},setup(e){const a=e;return(o,d)=>(i(),l(p(t),r(a,{class:"overflow-hidden transition-all data-[state=closed]:animate-collapsible-up data-[state=open]:animate-collapsible-down"}),{default:n(()=>[c(o.$slots,"default")]),_:3},16))}});export{u as default};
->>>>>>>> e05b385391a106ccf18bf832560db5a6f855b5db:public/build/assets/CollapsibleContent-3abab4e8.js
