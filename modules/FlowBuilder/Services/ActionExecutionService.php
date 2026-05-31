@@ -288,26 +288,29 @@ class ActionExecutionService
         $body = $this->replacePlaceholders($contact, $body, $flowData);
 
         try {
-            // Configure mail settings
+            // Configure the dedicated flow_smtp mailer with flow-specific credentials.
+            // Uses a separate named mailer so the default 'smtp' mailer (platform emails)
+            // is never affected, preventing credential bleed in shared queue workers.
             config([
-                'mail.mailers.smtp.host' => $smtpHost,
-                'mail.mailers.smtp.port' => $smtpPort,
-                'mail.mailers.smtp.username' => $smtpUsername,
-                'mail.mailers.smtp.password' => $smtpPassword,
-                'mail.mailers.smtp.encryption' => $smtpEncryption,
+                'mail.mailers.flow_smtp.host' => $smtpHost,
+                'mail.mailers.flow_smtp.port' => $smtpPort,
+                'mail.mailers.flow_smtp.username' => $smtpUsername,
+                'mail.mailers.flow_smtp.password' => $smtpPassword,
+                'mail.mailers.flow_smtp.encryption' => $smtpEncryption,
             ]);
 
-            // Purge cached SMTP transport so new config takes effect
-            app('mail.manager')->purge('smtp');
+            // Purge any cached flow_smtp transport so the new config takes effect
+            app('mail.manager')->purge('flow_smtp');
 
-            Mail::raw($body, function ($message) use ($contact, $subject, $fromName, $fromEmail) {
+            Mail::mailer('flow_smtp')->raw($body, function ($message) use ($contact, $subject, $fromName, $fromEmail) {
                 $message->to($contact->email)
                         ->subject($subject)
                         ->from($fromEmail, $fromName);
             });
 
-            // Purge again so global config is used for subsequent emails
-            app('mail.manager')->purge('smtp');
+            // Purge flow_smtp transport to close the connection.
+            // No need to restore config — the default 'smtp' mailer was never touched.
+            app('mail.manager')->purge('flow_smtp');
 
             return true;
         } catch (\Exception $e) {

@@ -91,6 +91,34 @@ return [
         'resend' => [
             'transport' => 'resend',
         ],
+
+        // Dedicated mailer for organization-specific SMTP credentials.
+        // Never touches the default 'smtp' mailer used by platform emails.
+        // Config is set dynamically by OrganizationMailConfigService at runtime.
+        'org_smtp' => [
+            'transport' => 'smtp',
+            'host' => env('MAIL_HOST', 'smtp.mailgun.org'),
+            'port' => env('MAIL_PORT', 587),
+            'encryption' => env('MAIL_ENCRYPTION', 'tls'),
+            'username' => env('MAIL_USERNAME'),
+            'password' => env('MAIL_PASSWORD'),
+            'timeout' => null,
+            'local_domain' => env('MAIL_EHLO_DOMAIN'),
+        ],
+
+        // Dedicated mailer for FlowBuilder send_email actions.
+        // Never touches the default 'smtp' mailer used by platform emails.
+        // Config is set dynamically by ActionExecutionService at runtime.
+        'flow_smtp' => [
+            'transport' => 'smtp',
+            'host' => env('MAIL_HOST', 'smtp.mailgun.org'),
+            'port' => env('MAIL_PORT', 587),
+            'encryption' => env('MAIL_ENCRYPTION', 'tls'),
+            'username' => env('MAIL_USERNAME'),
+            'password' => env('MAIL_PASSWORD'),
+            'timeout' => null,
+            'local_domain' => env('MAIL_EHLO_DOMAIN'),
+        ],
     ],
 
     /*
