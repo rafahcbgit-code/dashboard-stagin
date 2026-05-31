@@ -112,31 +112,35 @@ class OrganizationMailConfigService
     }
 
     /**
-     * Send a plain text email using organization SMTP config.
-     * Purges the mailer transport to avoid singleton caching issues.
+     * Send a plain text email using the dedicated 'org_smtp' mailer.
+     *
+     * Uses a separate named mailer ('org_smtp') so that org-specific SMTP
+     * credentials NEVER touch the default 'smtp' mailer used by platform
+     * emails (invites, password resets, subscriptions). This prevents
+     * credential bleed in shared queue-worker processes.
      */
     private function sendWithOrgConfig(array $emailSettings, string $toEmail, string $subject, string $body, string $fromName, string $fromAddress): bool
     {
         try {
-            // Override mail config with org-specific SMTP
+            // Configure the dedicated org_smtp mailer with org-specific credentials
             config([
-                'mail.mailers.smtp.host' => $emailSettings['host'],
-                'mail.mailers.smtp.port' => $emailSettings['port'] ?? 587,
-                'mail.mailers.smtp.username' => $emailSettings['username'],
-                'mail.mailers.smtp.password' => $emailSettings['password'],
-                'mail.mailers.smtp.encryption' => $emailSettings['encryption'] ?? 'tls',
+                'mail.mailers.org_smtp.host' => $emailSettings['host'],
+                'mail.mailers.org_smtp.port' => $emailSettings['port'] ?? 587,
+                'mail.mailers.org_smtp.username' => $emailSettings['username'],
+                'mail.mailers.org_smtp.password' => $emailSettings['password'],
+                'mail.mailers.org_smtp.encryption' => $emailSettings['encryption'] ?? 'tls',
             ]);
 
-            // Purge the cached SMTP transport so the new config takes effect
-            app('mail.manager')->purge('smtp');
+            // Purge any cached org_smtp transport so the new config takes effect
+            app('mail.manager')->purge('org_smtp');
 
-            Mail::raw($body, function ($message) use ($toEmail, $subject, $fromName, $fromAddress) {
+            Mail::mailer('org_smtp')->raw($body, function ($message) use ($toEmail, $subject, $fromName, $fromAddress) {
                 $message->to($toEmail)
                     ->subject($subject)
                     ->from($fromAddress, $fromName);
             });
 
-            Log::info('OrganizationMailConfigService: Email sent', [
+            Log::info('OrganizationMailConfigService: Email sent via org_smtp', [
                 'to' => $toEmail,
                 'subject' => $subject,
             ]);
@@ -149,8 +153,9 @@ class OrganizationMailConfigService
             ]);
             return false;
         } finally {
-            // Purge again to restore global config on next email
-            app('mail.manager')->purge('smtp');
+            // Purge org_smtp transport to close the connection.
+            // No need to restore config — the default 'smtp' mailer was never touched.
+            app('mail.manager')->purge('org_smtp');
         }
     }
 }
