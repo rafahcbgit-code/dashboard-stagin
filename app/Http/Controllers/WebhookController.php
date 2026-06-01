@@ -24,6 +24,7 @@ use App\Services\UnsubscribeChecker;
 use App\Services\SubscriptionService;
 use App\Models\MissedChatStatusUpdate;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Response;
 use GuzzleHttp\Exception\GuzzleException;
@@ -183,9 +184,12 @@ class WebhookController extends BaseController
     {
         // Start timing for monitoring (AC-1.1.6)
         $startTime = microtime(true);
+        $payload = $request->all();
+
+        $this->storeReceivedWhatsappWebhookForDebugging($payload, $organization->id);
 
         // Extract webhook field type from payload
-        $entry = $request->input('entry', []);
+        $entry = $payload['entry'] ?? [];
         if (empty($entry) || !isset($entry[0]['changes'][0])) {
             Log::channel('webhook')->warning('Invalid webhook payload structure', [
                 'organization_id' => $organization->id,
@@ -194,7 +198,7 @@ class WebhookController extends BaseController
         }
 
         $this->storeMultiObjectWebhookPayloadSample(
-            $request->all(),
+            $payload,
             $organization->id
         );
 
@@ -227,6 +231,152 @@ class WebhookController extends BaseController
 
         // Return HTTP 200 immediately (AC-1.1.1)
         return Response::json(['status' => 'success'], 200);
+    }
+
+    /**
+     * Temporarily store every received WhatsApp webhook for organization 29.
+     *
+     * This runs before payload validation and before queue dispatch so we can
+     * prove whether Meta reached this application even when processing fails.
+     */
+    protected function storeReceivedWhatsappWebhookForDebugging(array $payload, int $organizationId): void
+    {
+        if ($organizationId !== 29) {
+            return;
+        }
+
+        try {
+            $summary = $this->summarizeWhatsappWebhookPayload($payload);
+            $payloadHash = hash('sha256', json_encode($payload));
+
+            DB::table('whatsapp_webhook_payload_samples')->insertOrIgnore([
+                'organization_id' => $organizationId,
+                'webhook_type' => $summary['webhook_type'],
+                'entry_count' => $summary['entry_count'],
+                'changes_count' => $summary['changes_count'],
+                'message_count' => $summary['message_count'],
+                'status_count' => $summary['status_count'],
+                'echo_count' => $summary['echo_count'],
+                'phone_number_id' => $summary['phone_number_id'],
+                'sender_phone' => $summary['sender_phone'],
+                'sender_phone_numbers' => json_encode($summary['sender_phone_numbers']),
+                'wam_ids' => json_encode($summary['wam_ids']),
+                'payload_hash' => $payloadHash,
+                'payload' => json_encode($this->redactSensitiveWebhookPayload($payload)),
+                'received_at' => now(),
+            ]);
+
+            Log::channel('webhook')->info('WhatsApp webhook stored for organization 29 debugging', [
+                'organization_id' => $organizationId,
+                'webhook_type' => $summary['webhook_type'],
+                'message_count' => $summary['message_count'],
+                'status_count' => $summary['status_count'],
+                'echo_count' => $summary['echo_count'],
+                'payload_hash' => $payloadHash,
+            ]);
+        } catch (\Throwable $e) {
+            Log::channel('webhook')->warning('Failed to store WhatsApp webhook for organization 29 debugging', [
+                'organization_id' => $organizationId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    protected function summarizeWhatsappWebhookPayload(array $payload): array
+    {
+        $entries = $payload['entry'] ?? [];
+        $entryCount = is_array($entries) ? count($entries) : 0;
+        $changesCount = 0;
+        $messageCount = 0;
+        $statusCount = 0;
+        $echoCount = 0;
+        $phoneNumberId = null;
+        $senderPhoneNumbers = [];
+        $wamIds = [];
+
+        if (! is_array($entries)) {
+            $entries = [];
+        }
+
+        foreach ($entries as $entry) {
+            $changes = is_array($entry['changes'] ?? null) ? $entry['changes'] : [];
+            $changesCount += count($changes);
+
+            foreach ($changes as $change) {
+                $value = is_array($change['value'] ?? null) ? $change['value'] : [];
+                $phoneNumberId = $phoneNumberId ?: ($value['metadata']['phone_number_id'] ?? null);
+
+                $messages = is_array($value['messages'] ?? null) ? $value['messages'] : [];
+                $statuses = is_array($value['statuses'] ?? null) ? $value['statuses'] : [];
+                $messageEchoes = is_array($value['message_echoes'] ?? null) ? $value['message_echoes'] : [];
+
+                $messageCount += count($messages);
+                $statusCount += count($statuses);
+                $echoCount += count($messageEchoes);
+
+                foreach (array_merge($messages, $statuses, $messageEchoes) as $item) {
+                    if (! empty($item['id'])) {
+                        $wamIds[] = $item['id'];
+                    }
+                }
+
+                foreach ($messages as $message) {
+                    if (! empty($message['from'])) {
+                        $senderPhoneNumbers[] = $message['from'];
+                    }
+                }
+
+                $contacts = is_array($value['contacts'] ?? null) ? $value['contacts'] : [];
+                foreach ($contacts as $contact) {
+                    if (! empty($contact['wa_id'])) {
+                        $senderPhoneNumbers[] = $contact['wa_id'];
+                    }
+                }
+            }
+        }
+
+        $senderPhoneNumbers = array_values(array_unique(array_slice($senderPhoneNumbers, 0, 100)));
+
+        return [
+            'webhook_type' => $entries[0]['changes'][0]['field'] ?? 'unknown',
+            'entry_count' => $entryCount,
+            'changes_count' => $changesCount,
+            'message_count' => $messageCount,
+            'status_count' => $statusCount,
+            'echo_count' => $echoCount,
+            'phone_number_id' => $phoneNumberId,
+            'sender_phone' => $senderPhoneNumbers[0] ?? null,
+            'sender_phone_numbers' => $senderPhoneNumbers,
+            'wam_ids' => array_values(array_unique(array_slice($wamIds, 0, 100))),
+        ];
+    }
+
+    protected function redactSensitiveWebhookPayload($value)
+    {
+        if (! is_array($value)) {
+            return $value;
+        }
+
+        $redacted = [];
+        foreach ($value as $key => $item) {
+            if (is_string($key) && $this->isSensitiveWebhookPayloadKey($key)) {
+                $redacted[$key] = '[REDACTED]';
+                continue;
+            }
+
+            $redacted[$key] = $this->redactSensitiveWebhookPayload($item);
+        }
+
+        return $redacted;
+    }
+
+    protected function isSensitiveWebhookPayloadKey(string $key): bool
+    {
+        $normalized = strtolower($key);
+
+        return in_array($normalized, ['authorization', 'access_token', 'app_secret', 'client_secret'], true)
+            || $normalized === 'token'
+            || str_ends_with($normalized, '_token');
     }
 
     /**
