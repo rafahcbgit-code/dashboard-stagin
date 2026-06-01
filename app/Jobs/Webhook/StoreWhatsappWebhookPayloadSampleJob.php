@@ -40,6 +40,8 @@ class StoreWhatsappWebhookPayloadSampleJob implements ShouldQueue
                 'status_count' => $summary['status_count'],
                 'echo_count' => $summary['echo_count'],
                 'phone_number_id' => $summary['phone_number_id'],
+                'sender_phone' => $summary['sender_phone'] ?? null,
+                'sender_phone_numbers' => json_encode($summary['sender_phone_numbers']) ?? null,
                 'wam_ids' => json_encode($summary['wam_ids']),
                 'payload_hash' => $payloadHash,
                 'payload' => json_encode($this->redactSensitiveWebhookPayload($this->payload)),
@@ -77,6 +79,7 @@ class StoreWhatsappWebhookPayloadSampleJob implements ShouldQueue
         $statusCount = 0;
         $echoCount = 0;
         $phoneNumberId = null;
+        $senderPhoneNumbers = [];
         $wamIds = [];
 
         foreach ($entries as $entry) {
@@ -100,8 +103,23 @@ class StoreWhatsappWebhookPayloadSampleJob implements ShouldQueue
                         $wamIds[] = $item['id'];
                     }
                 }
+
+                foreach ($messages as $message) {
+                    if (! empty($message['from'])) {
+                        $senderPhoneNumbers[] = $message['from'];
+                    }
+                }
+
+                $contacts = is_array($value['contacts'] ?? null) ? $value['contacts'] : [];
+                foreach ($contacts as $contact) {
+                    if (! empty($contact['wa_id'])) {
+                        $senderPhoneNumbers[] = $contact['wa_id'];
+                    }
+                }
             }
         }
+
+        $senderPhoneNumbers = array_values(array_unique(array_slice($senderPhoneNumbers, 0, 100)));
 
         return [
             'webhook_type' => $entries[0]['changes'][0]['field'] ?? 'unknown',
@@ -111,6 +129,8 @@ class StoreWhatsappWebhookPayloadSampleJob implements ShouldQueue
             'status_count' => $statusCount,
             'echo_count' => $echoCount,
             'phone_number_id' => $phoneNumberId,
+            'sender_phone' => $senderPhoneNumbers[0] ?? null,
+            'sender_phone_numbers' => $senderPhoneNumbers,
             'wam_ids' => array_values(array_unique(array_slice($wamIds, 0, 100))),
         ];
     }

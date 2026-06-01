@@ -25,6 +25,8 @@ return new class extends Migration
             $table->unsignedInteger('status_count')->default(0);
             $table->unsignedInteger('echo_count')->default(0);
             $table->string('phone_number_id', 100)->nullable()->index();
+            $table->string('sender_phone', 50)->nullable()->index();
+            $table->json('sender_phone_numbers')->nullable();
             $table->json('wam_ids')->nullable();
             $table->char('payload_hash', 64)->unique();
             $table->json('payload');

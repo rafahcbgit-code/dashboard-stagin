@@ -42,6 +42,8 @@ class ProcessWebhookJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
+    private const CHAT_METADATA_SAFE_BYTES = 60000;
+
     /**
      * The webhook payload data.
      */
@@ -281,8 +283,11 @@ class ProcessWebhookJob implements ShouldQueue
             ]);
         }
 
+        $contactsSync = $this->syncSharedContactsFromMessage($message);
+
         // Build metadata for the chat
         $metadata = $this->buildMessageMetadata($message, $messageType);
+        $this->attachContactsSyncMetadata($metadata, $contactsSync);
 
         // AC-1.2.2: Create chat record
         $chat = Chat::create([
@@ -290,7 +295,7 @@ class ProcessWebhookJob implements ShouldQueue
             'contact_id' => $contact->id,
             'wam_id' => $wamId,
             'type' => 'inbound',
-            'metadata' => json_encode($metadata),
+            'metadata' => $this->encodeChatMetadata($metadata),
             'status' => 'received',
             'is_read' => 0,
             'created_at' => now(),
@@ -589,6 +594,176 @@ class ProcessWebhookJob implements ShouldQueue
         return $metadata;
     }
 
+    protected function syncSharedContactsFromMessage(array $message): array
+    {
+        if (($message['type'] ?? null) !== 'contacts') {
+            return [];
+        }
+
+        $sharedContacts = $message['contacts'] ?? [];
+        if (! is_array($sharedContacts) || empty($sharedContacts)) {
+            return [];
+        }
+
+        $contactService = new ContactService($this->organizationId);
+        $stats = [
+            'cards_count' => count($sharedContacts),
+            'phones_count' => 0,
+            'unique_phones_count' => 0,
+            'created_count' => 0,
+            'existing_count' => 0,
+            'failed_count' => 0,
+        ];
+        $seenPhones = [];
+
+        foreach ($sharedContacts as $sharedContact) {
+            $name = $this->sharedContactDisplayName($sharedContact);
+            $phones = $sharedContact['phones'] ?? [];
+
+            if (! is_array($phones)) {
+                continue;
+            }
+
+            foreach ($phones as $phone) {
+                $stats['phones_count']++;
+
+                $phoneValue = $phone['wa_id'] ?? $phone['phone'] ?? null;
+                if (! is_string($phoneValue) || trim($phoneValue) === '') {
+                    $stats['failed_count']++;
+                    continue;
+                }
+
+                $phoneKey = preg_replace('/\D+/', '', $phoneValue) ?: trim($phoneValue);
+                if (isset($seenPhones[$phoneKey])) {
+                    continue;
+                }
+
+                $seenPhones[$phoneKey] = true;
+                $stats['unique_phones_count']++;
+
+                try {
+                    $result = $contactService->findOrCreateFromWebhook($phoneValue, $name);
+                    if ($result['isNew'] ?? false) {
+                        $stats['created_count']++;
+                    } else {
+                        $stats['existing_count']++;
+                    }
+                } catch (\Throwable $exception) {
+                    $stats['failed_count']++;
+
+                    Log::channel('webhook')->warning('Shared contact could not be synced from contacts message', [
+                        'organization_id' => $this->organizationId,
+                        'phone' => $phoneValue,
+                        'error' => $exception->getMessage(),
+                    ]);
+                }
+            }
+        }
+
+        return $stats;
+    }
+
+    protected function sharedContactDisplayName(array $sharedContact): ?string
+    {
+        $name = $sharedContact['name'] ?? [];
+        if (! is_array($name)) {
+            return null;
+        }
+
+        $displayName = $name['formatted_name'] ?? null;
+        if (is_string($displayName) && trim($displayName) !== '') {
+            return trim($displayName);
+        }
+
+        $parts = array_filter([
+            $name['first_name'] ?? null,
+            $name['middle_name'] ?? null,
+            $name['last_name'] ?? null,
+        ], static fn ($part) => is_string($part) && trim($part) !== '');
+
+        return ! empty($parts) ? trim(implode(' ', $parts)) : null;
+    }
+
+    protected function attachContactsSyncMetadata(array &$metadata, array $contactsSync): void
+    {
+        if (($metadata['type'] ?? null) !== 'contacts' || empty($contactsSync)) {
+            return;
+        }
+
+        $metadata['contacts_sync'] = $contactsSync;
+    }
+
+    protected function encodeChatMetadata(array $metadata): string
+    {
+        $encoded = $this->jsonEncodeMetadata($metadata);
+        if (strlen($encoded) <= self::CHAT_METADATA_SAFE_BYTES) {
+            return $encoded;
+        }
+
+        if (($metadata['type'] ?? null) === 'contacts' && is_array($metadata['contacts'] ?? null)) {
+            return $this->encodeContactsMetadataWithinLimit($metadata);
+        }
+
+        return $this->jsonEncodeMetadata([
+            'type' => $metadata['type'] ?? 'unknown',
+            'timestamp' => $metadata['timestamp'] ?? time(),
+            'metadata_truncated' => true,
+            'metadata_original_bytes' => strlen($encoded),
+            'metadata_limit_bytes' => self::CHAT_METADATA_SAFE_BYTES,
+        ]);
+    }
+
+    protected function encodeContactsMetadataWithinLimit(array $metadata): string
+    {
+        $contacts = $metadata['contacts'];
+        $originalBytes = strlen($this->jsonEncodeMetadata($metadata));
+        $originalCount = count($contacts);
+
+        $baseMetadata = $metadata;
+        $baseMetadata['contacts_metadata_truncated'] = true;
+        $baseMetadata['contacts_metadata_original_count'] = $originalCount;
+        $baseMetadata['contacts_metadata_original_bytes'] = $originalBytes;
+        $baseMetadata['contacts_metadata_limit_bytes'] = self::CHAT_METADATA_SAFE_BYTES;
+
+        $low = 0;
+        $high = $originalCount;
+        $bestEncoded = null;
+
+        while ($low <= $high) {
+            $mid = intdiv($low + $high, 2);
+            $candidate = $baseMetadata;
+            $candidate['contacts'] = array_slice($contacts, 0, $mid);
+            $candidate['contacts_metadata_stored_count'] = $mid;
+            $candidate['contacts_metadata_omitted_count'] = max(0, $originalCount - $mid);
+
+            $encoded = $this->jsonEncodeMetadata($candidate);
+            if (strlen($encoded) <= self::CHAT_METADATA_SAFE_BYTES) {
+                $bestEncoded = $encoded;
+                $low = $mid + 1;
+            } else {
+                $high = $mid - 1;
+            }
+        }
+
+        return $bestEncoded ?? $this->jsonEncodeMetadata([
+            'type' => 'contacts',
+            'timestamp' => $metadata['timestamp'] ?? time(),
+            'contacts' => [],
+            'contacts_sync' => $metadata['contacts_sync'] ?? null,
+            'contacts_metadata_truncated' => true,
+            'contacts_metadata_original_count' => $originalCount,
+            'contacts_metadata_stored_count' => 0,
+            'contacts_metadata_omitted_count' => $originalCount,
+            'contacts_metadata_original_bytes' => $originalBytes,
+            'contacts_metadata_limit_bytes' => self::CHAT_METADATA_SAFE_BYTES,
+        ]);
+    }
+
+    protected function jsonEncodeMetadata(array $metadata): string
+    {
+        return json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
     /**
      * Check if the message contains media that needs to be downloaded.
      *
@@ -872,8 +1047,11 @@ class ProcessWebhookJob implements ShouldQueue
             $contact = $result['contact'];
             $isNewContact = $result['isNew'];
 
+            $contactsSync = $this->syncSharedContactsFromMessage($echo);
+
             // Build metadata for the chat (reuse existing method)
             $metadata = $this->buildMessageMetadata($echo, $messageType);
+            $this->attachContactsSyncMetadata($metadata, $contactsSync);
 
             // AC-1.10.2: Create chat record with type='outbound' (different from inbound)
             try {
@@ -882,7 +1060,7 @@ class ProcessWebhookJob implements ShouldQueue
                     'contact_id' => $contact->id,
                     'wam_id' => $wamId,
                     'type' => 'outbound',
-                    'metadata' => json_encode($metadata),
+                    'metadata' => $this->encodeChatMetadata($metadata),
                     'status' => 'sent',
                     'is_read' => 1, // Outbound messages are considered "read"
                     'created_at' => now(),
@@ -1567,8 +1745,11 @@ class ProcessWebhookJob implements ShouldQueue
             return false;
         }
 
+        $contactsSync = $this->syncSharedContactsFromMessage($message);
+
         // Build metadata (reuse existing method)
         $metadata = $this->buildMessageMetadata($message, $messageType);
+        $this->attachContactsSyncMetadata($metadata, $contactsSync);
 
         // AC-1.12.4: Create chat with original timestamp
         $originalTimestamp = Carbon::createFromTimestamp($timestamp);
@@ -1578,7 +1759,7 @@ class ProcessWebhookJob implements ShouldQueue
             'contact_id' => $contact->id,
             'wam_id' => $wamId,
             'type' => $chatType,
-            'metadata' => json_encode($metadata),
+            'metadata' => $this->encodeChatMetadata($metadata),
             'status' => $chatStatus,
             'is_read' => $isRead,
             'created_at' => $originalTimestamp,
