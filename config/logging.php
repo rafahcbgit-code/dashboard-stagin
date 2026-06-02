@@ -134,6 +134,14 @@ return [
             'days' => 14, // keep logs for 14 days, adjust as needed
         ],
 
+        'template_status_webhook' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/template-status-webhook.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'days' => 14,
+            'replace_placeholders' => true,
+        ],
+
         'zid' => [
             'driver' => 'daily',
             'path' => storage_path('logs/zid.log'),

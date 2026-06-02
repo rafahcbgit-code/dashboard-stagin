@@ -10,5 +10,10 @@ class Template extends Model {
     use HasUuid;
 
     protected $guarded = [];
+    protected $casts = [
+        'last_status_change_at' => 'datetime',
+        'disabled_at' => 'datetime',
+    ];
+
     public $timestamps = false;
 }

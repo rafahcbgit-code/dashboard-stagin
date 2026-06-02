@@ -15,6 +15,7 @@ use App\Services\ChatService;
 use App\Services\ContactService;
 use App\Services\SubscriptionService;
 use App\Services\UnsubscribeChecker;
+use App\Services\Meta\WhatsApp\TemplateStatusWebhookProcessor;
 use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -63,6 +64,11 @@ class ProcessWebhookJob implements ShouldQueue
     public string $webhookType;
 
     /**
+     * Extra webhook envelope metadata, such as WABA ID and the full raw payload.
+     */
+    public array $context = [];
+
+    /**
      * The number of times the job may be attempted.
      */
     public int $tries = 3;
@@ -81,11 +87,12 @@ class ProcessWebhookJob implements ShouldQueue
     /**
      * Create a new job instance.
      */
-    public function __construct(array $payload, int $organizationId, string $webhookType)
+    public function __construct(array $payload, int $organizationId, string $webhookType, array $context = [])
     {
         $this->payload = $payload;
         $this->organizationId = $organizationId;
         $this->webhookType = $webhookType;
+        $this->context = $context;
         $this->onQueue('webhook-high');
     }
 
@@ -1837,15 +1844,11 @@ class ProcessWebhookJob implements ShouldQueue
      */
     protected function processTemplateStatusUpdate(): void
     {
-        $value = $this->payload['value'] ?? [];
-
-        Log::channel('webhook')->info('Template status update received', [
-            'organization_id' => $this->organizationId,
-            'value' => $value,
-        ]);
-
-        // Template status updates can be handled by the TemplateService
-        // This is typically handled separately from message processing
+        app(TemplateStatusWebhookProcessor::class)->process(
+            $this->payload,
+            $this->organizationId,
+            $this->context
+        );
     }
 
     /**
