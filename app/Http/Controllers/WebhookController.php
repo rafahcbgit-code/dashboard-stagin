@@ -62,6 +62,10 @@ class WebhookController extends BaseController
             'payload' => $request->all()
         ]); 
 
+        if ($request->isMethod('post')) {
+            return $this->handleWabaPostRequest($request);
+        }
+
         $verifyToken = Setting::where('key', 'whatsapp_callback_token')->first()->value;
 
         $mode = $request->input('hub_mode');
@@ -73,6 +77,57 @@ class WebhookController extends BaseController
         } else {
             return Response::json(['error' => 'Forbidden'], 200);
         }
+    }
+
+    protected function handleWabaPostRequest(Request $request)
+    {
+        $payload = $request->all();
+        $wabaId = data_get($payload, 'entry.0.id');
+
+        if (! $wabaId) {
+            Log::channel('waba_webhook')->warning('WABA webhook payload missing WABA ID', [
+                'payload' => $payload,
+            ]);
+
+            return Response::json(['status' => 'error', 'message' => 'Invalid payload'], 400);
+        }
+
+        $organization = $this->getOrganizationByWabaId((string) $wabaId);
+
+        if (! $organization) {
+            Log::channel('waba_webhook')->warning('WABA webhook organization not found', [
+                'waba_id' => $wabaId,
+                'webhook_type' => data_get($payload, 'entry.0.changes.0.field', 'unknown'),
+            ]);
+
+            return Response::json(['status' => 'ignored', 'message' => 'Organization not found'], 200);
+        }
+
+        $metadata = json_decode($organization->metadata);
+        $appSecret = $metadata->whatsapp->app_secret ?? null;
+
+        if ($appSecret) {
+            $headerSignature = $request->header('X-Hub-Signature-256');
+            $calculatedSignature = 'sha256=' . hash_hmac('sha256', $request->getContent(), $appSecret);
+
+            if (! $headerSignature || ! $this->isValidSignature($calculatedSignature, $headerSignature)) {
+                Log::channel('waba_webhook')->warning('WABA webhook invalid signature', [
+                    'organization_id' => $organization->id,
+                    'waba_id' => $wabaId,
+                    'webhook_type' => data_get($payload, 'entry.0.changes.0.field', 'unknown'),
+                ]);
+
+                return $this->invalidSignatureResponse();
+            }
+        }
+
+        Log::channel('waba_webhook')->info('WABA webhook matched organization and queued for processing', [
+            'organization_id' => $organization->id,
+            'waba_id' => $wabaId,
+            'webhook_type' => data_get($payload, 'entry.0.changes.0.field', 'unknown'),
+        ]);
+
+        return $this->handlePostRequest($request, $organization);
     }
 
     public function handle(Request $request, $identifier = null)
@@ -89,6 +144,14 @@ class WebhookController extends BaseController
     protected function getOrganizationByIdentifier($identifier)
     {
         return Organization::where('identifier', $identifier)->first();
+    }
+
+    protected function getOrganizationByWabaId(string $wabaId)
+    {
+        return Organization::whereRaw(
+            "JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.whatsapp.waba_id')) = ?",
+            [$wabaId]
+        )->first();
     }
 
     protected function handleMethod(Request $request, Organization $organization)
@@ -210,7 +273,11 @@ class WebhookController extends BaseController
         ProcessWebhookJob::dispatch(
             $res,
             $organization->id,
-            $webhookType
+            $webhookType,
+            [
+                'waba_id' => $entry[0]['id'] ?? null,
+                'raw_payload' => $payload,
+            ]
         );
 
         
