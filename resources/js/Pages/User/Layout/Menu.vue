@@ -243,7 +243,7 @@
                         <span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Billing and subscription') }}</span>
                     </Link>
                 </li>
-                <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
+                <!-- <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
                     :class="$page.url.startsWith('/support') ? 'bg-slate-50 text-black' : ''">
                     <Link rel="noopener noreferrer" href="/support" class="flex items-center p-2 space-s-3 rounded-md">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
@@ -253,7 +253,7 @@
                         </svg>
                         <span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Support') }}</span>
                     </Link>
-                </li>
+                </li> -->
                 <li v-if="user.teams[0]['role'] === 'owner'"
                     class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate">
                     <Link rel="noopener noreferrer" href="/developer-tools/access-tokens"
