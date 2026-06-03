@@ -141,7 +141,6 @@ return [
             'days' => 14,
             'replace_placeholders' => true,
         ],
-
         'waba_webhook' => [
             'driver' => 'daily',
             'path' => storage_path('logs/waba-webhook.log'),
@@ -149,7 +148,6 @@ return [
             'days' => 14,
             'replace_placeholders' => true,
         ],
-
         'zid' => [
             'driver' => 'daily',
             'path' => storage_path('logs/zid.log'),
