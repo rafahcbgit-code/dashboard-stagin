@@ -142,6 +142,14 @@ return [
             'replace_placeholders' => true,
         ],
 
+        'waba_webhook' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/waba-webhook.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'days' => 14,
+            'replace_placeholders' => true,
+        ],
+
         'zid' => [
             'driver' => 'daily',
             'path' => storage_path('logs/zid.log'),
