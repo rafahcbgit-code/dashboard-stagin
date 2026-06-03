@@ -58,9 +58,9 @@ class WebhookController extends BaseController
 
     public function whatsappWebhook(Request $request){
         
-        /* Log::channel('webhook')->info('Incoming webhook payload', [
+        Log::channel('waba_webhook')->info('Incoming WABA webhook payload', [
             'payload' => $request->all()
-        ]); */
+        ]); 
 
         $verifyToken = Setting::where('key', 'whatsapp_callback_token')->first()->value;
 
