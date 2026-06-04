@@ -886,5 +886,10 @@
   "Each imported contact will be added to the audience written in its group_name column. If an audience does not exist yet, it will be created automatically.": "Each imported contact will be added to the audience written in its group_name column. If an audience does not exist yet, it will be created automatically.",
   "Import XLSX/CSV": "Import XLSX/CSV",
   "No groups available": "No audiences available",
-  "No labels available": "No labels available"
+  "No labels available": "No labels available",
+  "Deleted message": "Deleted message",
+  "The customer deleted this message": "The customer deleted this message",
+  "This message was deleted": "This message was deleted",
+  "The customer deleted a message": "The customer deleted a message",
+  "A sent message was deleted": "A sent message was deleted"
 }

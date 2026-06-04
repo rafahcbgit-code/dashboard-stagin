@@ -1483,5 +1483,10 @@
     "No preview available.": "لا توجد معاينة متاحة.",
     "This template contains rich media content.": "يحتوي هذا القالب على محتوى وسائط غنية.",
     "This is a carousel template with multiple cards.": "هذا قالب دوار يحتوي على بطاقات متعددة.",
-    "Select a template to preview its content.": "حدد قالباً لمعاينة محتواه."  
+    "Select a template to preview its content.": "حدد قالباً لمعاينة محتواه.",
+    "Deleted message": "تم حذف رسالة",
+    "The customer deleted this message": "حذف العميل هذه الرسالة",
+    "This message was deleted": "تم حذف هذه الرسالة",
+    "The customer deleted a message": "حذف العميل رسالة",
+    "A sent message was deleted": "تم حذف رسالة مرسلة"
 }

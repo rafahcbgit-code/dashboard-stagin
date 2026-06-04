@@ -138,7 +138,21 @@ const mediaCaption = computed(() => {
 });
 
 // Check if it's a contact type
-const isContact = computed(() => metadata.value?.type === 'contacts')
+const isRevokeEvent = computed(() => metadata.value?.type === 'revoke')
+const isRevokedOriginal = computed(() => Boolean(metadata.value?.revoked?.is_revoked))
+const deletedMessageText = computed(() => {
+    if (isRevokedOriginal.value) {
+        return props.type === 'outbound'
+            ? 'This message was deleted'
+            : 'The customer deleted this message';
+    }
+
+    return props.type === 'outbound'
+        ? 'A sent message was deleted'
+        : 'The customer deleted a message';
+})
+
+const isContact = computed(() => metadata.value?.type === 'contacts' && !isRevokedOriginal.value)
 // Extract first contact safely
 const contact = computed(() => metadata.value?.contacts?.[0] || {})
 // Precompute the data you'll send
@@ -319,6 +333,15 @@ const viewContactDetails = async (data) => {
     <div class="rounded-lg my-1 p-2 text-sm flex flex-col relative"
         :class="props.type === 'outbound' ? 'ml-auto rounded-tr-none bg-[#d8fad4] speech-bubble-right' : 'mr-auto rounded-tl-none bg-white speech-bubble-left'">
         <div>
+            <div v-if="isRevokedOriginal || isRevokeEvent" class="max-w-[300px]">
+                <div class="flex items-center gap-2 text-slate-500 italic">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" class="shrink-0">
+                        <path fill="currentColor" d="M12 2a10 10 0 1 0 0 20a10 10 0 0 0 0-20Zm3.53 12.47a.75.75 0 1 1-1.06 1.06L12 13.06l-2.47 2.47a.75.75 0 0 1-1.06-1.06L10.94 12L8.47 9.53a.75.75 0 0 1 1.06-1.06L12 10.94l2.47-2.47a.75.75 0 1 1 1.06 1.06L13.06 12l2.47 2.47Z" />
+                    </svg>
+                    <span>{{ $t(deletedMessageText) }}</span>
+                </div>
+            </div>
+            <template v-else>
             <!--Text message formatting-->
             <div v-if="JSON.parse(content.metadata).type === 'text'" class="max-w-[300px]">
                 <!-- Header -->
@@ -909,6 +932,7 @@ const viewContactDetails = async (data) => {
                     </div>
                 </div>
             </div>
+            </template>
 
             <!--Timestamp-->
             <div v-if="props.type === 'outbound' && content.user" class="mt-2 mb--2">

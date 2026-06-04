@@ -298,7 +298,57 @@ const deleteThread = async () => {
   await axios.delete("/chats/" + contact.value.uuid);
 };
 
+const parseChatMetadata = (metadata) => {
+  try {
+    if (!metadata) return {};
+    return typeof metadata === "string" ? JSON.parse(metadata) : metadata;
+  } catch (e) {
+    return {};
+  }
+};
+
+const markRevokedMessageInThread = (chat) => {
+  const incomingMetadata = parseChatMetadata(chat?.[0]?.value?.metadata);
+  if (incomingMetadata.type !== "revoke") {
+    return;
+  }
+
+  const originalMessageId = incomingMetadata.revoke?.original_message_id
+    || incomingMetadata.raw?.revoke?.original_message_id;
+  if (!originalMessageId) {
+    return;
+  }
+
+  const originalIndex = chatThread.value.findIndex(
+    (existingChat) => existingChat?.[0]?.value?.wam_id === originalMessageId
+  );
+
+  if (originalIndex === -1) {
+    return;
+  }
+
+  const originalChat = chatThread.value[originalIndex];
+  const originalValue = originalChat[0].value;
+  const originalMetadata = parseChatMetadata(originalValue.metadata);
+
+  originalMetadata.revoked = {
+    is_revoked: true,
+    revoked_at: incomingMetadata.timestamp || incomingMetadata.raw?.timestamp || Math.floor(Date.now() / 1000),
+    revoke_wam_id: chat?.[0]?.value?.wam_id || incomingMetadata.revoke?.message_id || incomingMetadata.raw?.id || null,
+  };
+
+  chatThread.value.splice(originalIndex, 1, [{
+    ...originalChat[0],
+    value: {
+      ...originalValue,
+      metadata: JSON.stringify(originalMetadata),
+    },
+  }]);
+};
+
 const updateChatThread = (chat) => {
+  markRevokedMessageInThread(chat);
+
   const wamId = chat[0].value.wam_id;
   const existingIndex = chatThread.value.findIndex(
     (existingChat) => existingChat[0].value.wam_id === wamId
