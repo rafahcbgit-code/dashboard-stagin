@@ -75,13 +75,26 @@ const handleQuickSendSent = () => {
     // Optional: refresh or notify parent if needed.
 };
 
+const parseMetadata = (metadata) => {
+    try {
+        if (!metadata) return {};
+        return typeof metadata === 'string' ? JSON.parse(metadata) : metadata;
+    } catch {
+        return {};
+    }
+}
+
 const contentType = (metadata) => {
-    const chatData = JSON.parse(metadata);
-    return chatData.type;
+    return parseMetadata(metadata).type;
 }
 
 const content = (metadata) => {
-    return JSON.parse(metadata);
+    return parseMetadata(metadata);
+}
+
+const isDeletedMessagePreview = (metadata) => {
+    const chatData = parseMetadata(metadata);
+    return chatData.type === 'revoke' || Boolean(chatData.revoked?.is_revoked);
 }
 
 const getExtension = (fileFormat) => {
@@ -100,12 +113,12 @@ const getExtension = (fileFormat) => {
 };
 
 const getContactDisplayName = (metadata) => {
-    const contacts = JSON.parse(metadata).contacts;
+    const contacts = parseMetadata(metadata).contacts || [];
     if (contacts.length === 1) {
         const contact = contacts[0];
-        return contact.name.formatted_name || `${contact.name.first_name} ${contact.name.last_name}`;
+        return contact.name?.formatted_name || `${contact.name?.first_name || ''} ${contact.name?.last_name || ''}`.trim();
     } else if (contacts.length > 1) {
-        const firstName = contacts[0].name.first_name;
+        const firstName = contacts[0].name?.first_name || contacts[0].name?.formatted_name || '';
         const otherContactsCount = contacts.length - 1;
         return `${firstName} and ${otherContactsCount} other contacts`;
     } else {
@@ -720,6 +733,11 @@ const buildChatUrl = (contactUuid) => {
 
 
                     <div v-if="contact?.last_chat?.deleted_at === null" class="flex justify-between">
+                        <div v-if="isDeletedMessagePreview(contact?.last_chat?.metadata)"
+                            class="text-slate-500 text-xs truncate self-end italic">
+                            {{ $t('Deleted message') }}
+                        </div>
+                        <template v-else>
                         <div v-if="contentType(contact?.last_chat?.metadata) === 'text'"
                             class="text-slate-500 text-xs truncate self-end"> {{
                                 content(contact?.last_chat?.metadata).text.body }}</div>
@@ -822,6 +840,7 @@ const buildChatUrl = (contactUuid) => {
                             class="text-slate-500 text-xs truncate self-end">
                             Carousel message
                         </div>
+                        </template>
 
                         <span v-if="contact.unread_messages > 0"
                             class="bg-green-600 text-white rounded-md py-[1px] px-[8px] min-w-10 text-[10px] flex items-center justify-center">{{

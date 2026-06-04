@@ -1243,9 +1243,123 @@ class ChatService
         }
 
         return [
-            'messages' => array_reverse($chats),
+            'messages' => $this->markRevokedMessagesForDisplay(array_reverse($chats), $contactId),
             'hasMoreMessages' => $chatLogs->hasMorePages(),
             'nextPage' => $chatLogs->currentPage() + 1
         ];
+    }
+
+    private function markRevokedMessagesForDisplay(array $chats, int $contactId): array
+    {
+        $revokeEvents = array_merge(
+            $this->extractRevokeEventsFromChatRows($chats),
+            $this->getStoredRevokeEventsForContact($contactId)
+        );
+
+        if (empty($revokeEvents)) {
+            return $chats;
+        }
+
+        $revokedByOriginalId = [];
+        foreach ($revokeEvents as $event) {
+            $originalMessageId = $event['original_message_id'] ?? null;
+            if (! is_string($originalMessageId) || trim($originalMessageId) === '') {
+                continue;
+            }
+
+            $revokedByOriginalId[$originalMessageId] = $event;
+        }
+
+        if (empty($revokedByOriginalId)) {
+            return $chats;
+        }
+
+        foreach ($chats as $index => $row) {
+            $chat = $row[0]['value'] ?? null;
+            if (! $chat instanceof Chat || empty($chat->wam_id)) {
+                continue;
+            }
+
+            $event = $revokedByOriginalId[$chat->wam_id] ?? null;
+            if (! $event) {
+                continue;
+            }
+
+            $metadata = $this->decodeChatMetadataForDisplay($chat->metadata);
+            $metadata['revoked'] = [
+                'is_revoked' => true,
+                'revoked_at' => $event['timestamp'] ?? time(),
+                'revoke_wam_id' => $event['revoke_wam_id'] ?? null,
+            ];
+
+            $chat->metadata = json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            $chats[$index][0]['value'] = $chat;
+        }
+
+        return $chats;
+    }
+
+    private function getStoredRevokeEventsForContact(int $contactId): array
+    {
+        return Chat::where('organization_id', $this->organizationId)
+            ->where('contact_id', $contactId)
+            ->whereNull('deleted_at')
+            ->where('metadata', 'like', '%"type":"revoke"%')
+            ->get(['wam_id', 'metadata'])
+            ->map(function (Chat $chat) {
+                return $this->extractRevokeEventFromChat($chat);
+            })
+            ->filter()
+            ->values()
+            ->all();
+    }
+
+    private function extractRevokeEventsFromChatRows(array $chats): array
+    {
+        $events = [];
+
+        foreach ($chats as $row) {
+            $chat = $row[0]['value'] ?? null;
+            if (! $chat instanceof Chat) {
+                continue;
+            }
+
+            $event = $this->extractRevokeEventFromChat($chat);
+            if ($event) {
+                $events[] = $event;
+            }
+        }
+
+        return $events;
+    }
+
+    private function extractRevokeEventFromChat(Chat $chat): ?array
+    {
+        $metadata = $this->decodeChatMetadataForDisplay($chat->metadata);
+
+        if (($metadata['type'] ?? null) !== 'revoke') {
+            return null;
+        }
+
+        $originalMessageId = $metadata['revoke']['original_message_id']
+            ?? $metadata['raw']['revoke']['original_message_id']
+            ?? null;
+
+        if (! is_string($originalMessageId) || trim($originalMessageId) === '') {
+            return null;
+        }
+
+        return [
+            'original_message_id' => $originalMessageId,
+            'timestamp' => $metadata['timestamp'] ?? $metadata['raw']['timestamp'] ?? time(),
+            'revoke_wam_id' => $chat->wam_id,
+        ];
+    }
+
+    private function decodeChatMetadataForDisplay($metadata): array
+    {
+        $decoded = is_string($metadata) ? json_decode($metadata, true) : $metadata;
+
+        return is_array($decoded) ? $decoded : [];
     }
 }
