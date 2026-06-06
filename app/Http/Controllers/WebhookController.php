@@ -301,14 +301,14 @@ class WebhookController extends BaseController
     }
 
     /**
-     * Temporarily store every received WhatsApp webhook for organization 29.
+     * Temporarily store every received WhatsApp webhook for selected organizations.
      *
      * This runs before payload validation and before queue dispatch so we can
      * prove whether Meta reached this application even when processing fails.
      */
     protected function storeReceivedWhatsappWebhookForDebugging(array $payload, int $organizationId): void
     {
-        if ($organizationId !== 29) {
+        if (! in_array($organizationId, [29, 542], true)) {
             return;
         }
 
@@ -333,16 +333,9 @@ class WebhookController extends BaseController
                 'received_at' => now(),
             ]);
 
-            Log::channel('webhook')->info('WhatsApp webhook stored for organization 29 debugging', [
-                'organization_id' => $organizationId,
-                'webhook_type' => $summary['webhook_type'],
-                'message_count' => $summary['message_count'],
-                'status_count' => $summary['status_count'],
-                'echo_count' => $summary['echo_count'],
-                'payload_hash' => $payloadHash,
-            ]);
+        
         } catch (\Throwable $e) {
-            Log::channel('webhook')->warning('Failed to store WhatsApp webhook for organization 29 debugging', [
+            Log::channel('webhook')->warning('Failed to store WhatsApp webhook for organization debugging', [
                 'organization_id' => $organizationId,
                 'error' => $e->getMessage(),
             ]);
