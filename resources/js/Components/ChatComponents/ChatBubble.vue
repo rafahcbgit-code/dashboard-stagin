@@ -140,6 +140,9 @@ const mediaCaption = computed(() => {
 // Check if it's a contact type
 const isRevokeEvent = computed(() => metadata.value?.type === 'revoke')
 const isRevokedOriginal = computed(() => Boolean(metadata.value?.revoked?.is_revoked))
+const isEditedMessage = computed(() => {
+    return Boolean(metadata.value?.edited?.is_edited) && !isRevokeEvent.value && !isRevokedOriginal.value;
+})
 const deletedMessageText = computed(() => {
     if (isRevokedOriginal.value) {
         return props.type === 'outbound'
@@ -940,7 +943,9 @@ const viewContactDetails = async (data) => {
             </div>
             <div class="flex items-center justify-between space-x-4"
                 :class="props.type === 'outbound' && content.user ? '' : 'mt-2'">
-                <p class="text-gray-500 text-xs text-right leading-none">{{ content.created_at }}</p>
+                <p class="text-gray-500 text-xs text-right leading-none">
+                    <span v-if="isEditedMessage">{{ $t('Edited') }} · </span>{{ content.created_at }}
+                </p>
                 <span class="relative group cursor-pointer"
                     :class="chatStatus(content.logs) === 'read' ? 'text-blue-500' : 'text-gray-500'">
                     <!-- Tooltip text -->
