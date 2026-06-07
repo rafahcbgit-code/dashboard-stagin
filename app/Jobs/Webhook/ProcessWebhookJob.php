@@ -2,6 +2,7 @@
 
 namespace App\Jobs\Webhook;
 
+use App\Events\NewChatEvent;
 use App\Helpers\WebhookHelper;
 use App\Models\Chat;
 use App\Models\ChatLog;
@@ -1024,6 +1025,12 @@ class ProcessWebhookJob implements ShouldQueue
         $timestamp = $echo['timestamp'] ?? time();
 
         try {
+            if ($messageType === 'edit') {
+                $this->processSmbMessageEdit($echo);
+
+                return;
+            }
+
             // Validate required fields
             if (! $wamId || ! $recipientPhone) {
                 Log::channel('webhook')->warning('Invalid SMB echo data - missing wam_id or recipient phone', [
@@ -1127,6 +1134,151 @@ class ProcessWebhookJob implements ShouldQueue
             $this->logSmbEchoFailure($echo, 'exception', $exception);
 
             throw $exception;
+        }
+    }
+
+    /**
+     * Process an SMB message edit by updating the original chat row.
+     */
+    protected function processSmbMessageEdit(array $echo): void
+    {
+        $editWamId = $echo['id'] ?? null;
+        $recipientPhone = $echo['to'] ?? null;
+        $editedAt = $echo['timestamp'] ?? time();
+        $originalMessageId = $echo['edit']['original_message_id'] ?? null;
+        $editedMessage = $echo['edit']['message'] ?? [];
+        $editedMessageType = $editedMessage['type'] ?? null;
+        $editedTextBody = $editedMessage['text']['body'] ?? null;
+
+        if (! $editWamId || ! $recipientPhone || ! $originalMessageId || $editedMessageType !== 'text' || ! is_string($editedTextBody)) {
+            Log::channel('webhook')->warning('Invalid SMB edit echo data', [
+                'organization_id' => $this->organizationId,
+                'echo' => $echo,
+            ]);
+
+            $this->logSmbEchoFailure($echo, 'invalid_edit_payload');
+
+            return;
+        }
+
+        $chat = Chat::where('organization_id', $this->organizationId)
+            ->where('wam_id', $originalMessageId)
+            ->first();
+
+        if ($chat) {
+            $metadata = $this->decodeChatMetadata($chat->metadata);
+            $metadata['type'] = 'text';
+            $metadata['text'] = $metadata['text'] ?? [];
+            $metadata['text']['body'] = $editedTextBody;
+            $metadata['edited'] = $this->buildSmbEditMetadata($editWamId, $editedAt, $originalMessageId);
+
+            $chat->metadata = $this->encodeChatMetadata($metadata);
+            $chat->save();
+
+            Log::channel('webhook')->info('SMB edit applied to existing chat', [
+                'organization_id' => $this->organizationId,
+                'chat_id' => $chat->id,
+                'wam_id' => $originalMessageId,
+                'edit_wam_id' => $editWamId,
+            ]);
+
+            $this->broadcastUpdatedSmbEchoChat($chat);
+
+            return;
+        }
+
+        $contactService = new ContactService($this->organizationId);
+        $result = $contactService->findOrCreateFromWebhook($recipientPhone, null);
+        $contact = $result['contact'];
+        $isNewContact = $result['isNew'];
+
+        $metadata = $this->buildMessageMetadata([
+            'id' => $originalMessageId,
+            'timestamp' => $editedAt,
+            'type' => 'text',
+            'text' => ['body' => $editedTextBody],
+        ], 'text');
+        $metadata['edited'] = $this->buildSmbEditMetadata($editWamId, $editedAt, $originalMessageId);
+
+        $chat = Chat::create([
+            'organization_id' => $this->organizationId,
+            'contact_id' => $contact->id,
+            'wam_id' => $originalMessageId,
+            'type' => 'outbound',
+            'metadata' => $this->encodeChatMetadata($metadata),
+            'status' => 'sent',
+            'is_read' => 1,
+            'created_at' => now(),
+        ]);
+
+        ChatLog::create([
+            'contact_id' => $contact->id,
+            'entity_type' => 'chat',
+            'entity_id' => $chat->id,
+            'created_at' => now(),
+        ]);
+
+        ProcessWebhookNotificationsJob::dispatch(
+            $chat->id,
+            $contact->id,
+            $this->organizationId,
+            $isNewContact,
+            $this->payload
+        )->onQueue('webhook-high');
+
+        Log::channel('webhook')->info('SMB edit created chat using original wam_id', [
+            'organization_id' => $this->organizationId,
+            'chat_id' => $chat->id,
+            'contact_id' => $contact->id,
+            'wam_id' => $originalMessageId,
+            'edit_wam_id' => $editWamId,
+        ]);
+    }
+
+    protected function buildSmbEditMetadata(string $editWamId, string|int $editedAt, string $originalMessageId): array
+    {
+        return [
+            'is_edited' => true,
+            'edit_wam_id' => $editWamId,
+            'edited_at' => $editedAt,
+            'original_message_id' => $originalMessageId,
+        ];
+    }
+
+    protected function decodeChatMetadata($metadata): array
+    {
+        $decoded = is_string($metadata) ? json_decode($metadata, true) : $metadata;
+
+        return is_array($decoded) ? $decoded : [];
+    }
+
+    protected function broadcastUpdatedSmbEchoChat(Chat $chat): void
+    {
+        try {
+            $chatLog = ChatLog::where('entity_type', 'chat')
+                ->where('entity_id', $chat->id)
+                ->first();
+
+            if (! $chatLog) {
+                Log::channel('webhook')->warning('SMB edit broadcast skipped - ChatLog not found', [
+                    'organization_id' => $this->organizationId,
+                    'chat_id' => $chat->id,
+                ]);
+
+                return;
+            }
+
+            $chat->loadMissing('contact');
+            event(new NewChatEvent([[
+                'type' => 'chat',
+                'value' => $chatLog->relatedEntities,
+            ]], $this->organizationId, $chat->contact?->uuid));
+        } catch (\Throwable $exception) {
+            Log::channel('webhook')->warning('SMB edit broadcast failed (non-blocking)', [
+                'organization_id' => $this->organizationId,
+                'chat_id' => $chat->id,
+                'error' => $exception->getMessage(),
+            ]);
         }
     }
 
