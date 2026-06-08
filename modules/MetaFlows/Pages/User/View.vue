@@ -789,6 +789,7 @@
         acting.value = true;
         clearFeedback();
         try {
+            await axios.put(`/automation/meta-flows/${props.flow.uuid}`, { asset_content: assetContent.value });
             const res = await axios.post(`/automation/meta-flows/${props.flow.uuid}/publish`);
             currentStatus.value = res.data.status ?? 'published';
             showFeedback('Flow published successfully!', false);

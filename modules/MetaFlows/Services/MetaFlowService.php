@@ -226,7 +226,7 @@ class MetaFlowService
         ]);
 
         if (!$response->success) {
-            throw new \RuntimeException($response->message ?? 'Failed to publish flow on Meta.');
+            throw new \RuntimeException($this->formatMetaErrorMessage($response, 'Failed to publish flow on Meta.'));
         }
 
         $flow->update(['status' => 'published']);
@@ -694,6 +694,43 @@ class MetaFlowService
         }
 
         return $responseObject;
+    }
+
+    private function formatMetaErrorMessage(\stdClass $response, string $fallback): string
+    {
+        $error = $response->data->error ?? null;
+        $message = $response->message ?? $fallback;
+
+        $code = $error->code ?? null;
+        $subcode = $error->error_subcode ?? null;
+        $userMessage = $error->error_user_msg ?? null;
+        $traceId = $error->fbtrace_id ?? null;
+
+        $isIntegrityBlock = ((int) $code === 139000)
+            || str_contains(strtolower((string) $message), 'blocked by integrity');
+
+        if (!$isIntegrityBlock) {
+            return $message;
+        }
+
+        $parts = [
+            'Meta rejected publishing this Flow because integrity requirements are not met.',
+            'Check that the Meta Business Portfolio is verified, the WhatsApp display name is approved, the WABA/phone number are not restricted, the app has the required WhatsApp permissions, and Flow setup requirements such as webhooks/public key are complete.',
+        ];
+
+        if ($userMessage) {
+            $parts[] = 'Meta details: ' . $userMessage;
+        }
+
+        if ($code || $subcode) {
+            $parts[] = 'Meta error: ' . trim(($code ? '#' . $code : '') . ($subcode ? ' / subcode ' . $subcode : ''));
+        }
+
+        if ($traceId) {
+            $parts[] = 'fbtrace_id: ' . $traceId;
+        }
+
+        return implode(' ', $parts);
     }
 
     // Fetch the raw content of a flow asset by its download URL (authenticated)
