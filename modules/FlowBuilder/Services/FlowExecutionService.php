@@ -745,11 +745,17 @@ class FlowExecutionService
                 return [
                     'title' => $section['title'] ?? '',
                     'rows' => collect($section['rows'] ?? [])->map(function ($row) {
-                        return [
+                        $preparedRow = [
                             'id' => $row['id'] ?? '',
                             'title' => $row['title'] ?? '',
-                            'description' => $row['description'] ?? '',
                         ];
+
+                        $description = trim((string) ($row['description'] ?? ''));
+                        if ($description !== '') {
+                            $preparedRow['description'] = $description;
+                        }
+
+                        return $preparedRow;
                     })->all(),
                 ];
             })->all();
