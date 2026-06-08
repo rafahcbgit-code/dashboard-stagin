@@ -25,7 +25,9 @@ use App\Models\Subscription;
 use App\Models\SubscriptionPlan;
 use App\Models\WebhookFailure;
 use App\Services\ContactService;
+use App\Services\AutoReplyService;
 use Illuminate\Support\Facades\Queue;
+use Modules\FlowBuilder\Services\FlowExecutionService;
 
 beforeEach(function () {
     Queue::fake([
@@ -92,6 +94,9 @@ function createMessagePayload(
                 'mime_type' => 'image/jpeg',
                 'sha256' => 'abc123',
             ];
+            if (array_key_exists('caption', $additionalData)) {
+                $message['image']['caption'] = $additionalData['caption'];
+            }
             break;
         case 'video':
             $message['video'] = [
@@ -525,6 +530,41 @@ describe('AC-1.2.6: Performance - All Webhook Types Handled', function () {
         $metadata = json_decode($chat->metadata, true);
         expect($metadata['type'])->toBe('interactive');
         expect($metadata['interactive']['type'])->toBe('button_reply');
+    });
+});
+
+describe('Image caption automation text extraction', function () {
+    it('uses image caption as auto-reply message text', function () {
+        $caption = 'متى بيتوفر مقاس سمول؟';
+        $chat = new Chat([
+            'metadata' => json_encode([
+                'type' => 'image',
+                'image' => ['caption' => $caption],
+            ], JSON_UNESCAPED_UNICODE),
+        ]);
+
+        $service = new AutoReplyService();
+        $method = new ReflectionMethod($service, 'extractMessageText');
+        $method->setAccessible(true);
+
+        expect($method->invoke($service, $chat))->toBe($caption);
+    });
+
+    it('uses image caption as flow response text', function () {
+        $caption = 'متى بيتوفر مقاس سمول؟';
+        $chat = new Chat([
+            'metadata' => json_encode([
+                'type' => 'image',
+                'image' => ['caption' => $caption],
+            ], JSON_UNESCAPED_UNICODE),
+        ]);
+
+        $reflection = new ReflectionClass(FlowExecutionService::class);
+        $service = $reflection->newInstanceWithoutConstructor();
+        $method = $reflection->getMethod('extractMessageText');
+        $method->setAccessible(true);
+
+        expect($method->invoke($service, $chat))->toBe($caption);
     });
 });
 
@@ -1245,7 +1285,7 @@ describe('AC-1.8.4, AC-1.8.5: Auto-Reply Limit Check', function () {
         expect((bool) $contact->bot_enable)->toBeTrue();
     });
 
-    it('skips auto-reply for unsupported message types (image, video, document, etc.)', function () {
+    it('stores image caption so auto-reply can use it as message text', function () {
         $organization = Organization::factory()->withoutAppSecret()->create();
 
         // Create active subscription
@@ -1264,18 +1304,20 @@ describe('AC-1.8.4, AC-1.8.5: Auto-Reply Limit Check', function () {
             'start_date' => now(),
         ]);
 
-        // Test with image message (not in auto-reply types)
-        $wamId = 'wamid_image_no_reply_'.uniqid();
-        $payload = createMessagePayload('image', $wamId);
+        $wamId = 'wamid_image_caption_reply_'.uniqid();
+        $caption = 'متى بيتوفر مقاس سمول؟';
+        $payload = createMessagePayload('image', $wamId, '1234567890', 'Caption User', [
+            'caption' => $caption,
+        ]);
 
         $job = new ProcessWebhookJob($payload, $organization->id, 'messages');
         $job->handle();
 
-        // Chat should be created but auto-reply is skipped for image
         $chat = Chat::where('wam_id', $wamId)->first();
         expect($chat)->not->toBeNull();
         $metadata = json_decode($chat->metadata, true);
-        expect($metadata['type'])->toBe('image');
+        expect($metadata['type'])->toBe('image')
+            ->and($metadata['image']['caption'])->toBe($caption);
     });
 });
 

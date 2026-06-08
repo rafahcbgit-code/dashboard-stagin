@@ -703,6 +703,8 @@ class AutoReplyService
         if (isset($metadata['type'])) {
             if ($metadata['type'] == 'text') {
                 $text = $metadata['text']['body'] ?? '';
+            } else if ($metadata['type'] == 'image') {
+                $text = $metadata['image']['caption'] ?? '';
             } else if ($metadata['type'] == 'button') {
                 $text = $metadata['button']['payload'] ?? '';
             } else if ($metadata['type'] == 'interactive') {
