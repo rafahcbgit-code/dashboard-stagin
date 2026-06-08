@@ -1,0 +1,311 @@
+<script setup>
+import { Link, router } from '@inertiajs/vue3';
+import AppLayout from '@/Layouts/AppLayout.vue';
+import PrimaryButton from '@/Components/PrimaryButton.vue';
+import { Head } from '@inertiajs/vue3';
+import { computed, ref, watch } from 'vue';
+
+const props = defineProps({
+    reminders: Object,
+    filters: Object,
+});
+
+const search = ref(props.filters?.search || '');
+const statusFilter = ref(props.filters?.status || '');
+const selectedReminderIds = ref([]);
+
+const pageReminderIds = computed(() => props.reminders.data.map((reminder) => reminder.id));
+const selectedCount = computed(() => selectedReminderIds.value.length);
+const allPageSelected = computed(() => (
+    pageReminderIds.value.length > 0
+    && pageReminderIds.value.every((id) => selectedReminderIds.value.includes(id))
+));
+
+watch([search, statusFilter], ([newSearch, newStatus]) => {
+    selectedReminderIds.value = [];
+    router.get(route('reminders.index'), {
+        search: newSearch,
+        status: newStatus,
+    }, {
+        preserveState: true,
+        replace: true,
+    });
+}, { debounce: 300 });
+
+const formatDateTime = (date) => {
+    if (!date) return '-';
+    if (typeof date === 'string' && !date.includes('T')) return date;
+
+    return new Date(date).toLocaleDateString('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+    });
+};
+
+const statusClass = (status) => {
+    const classes = {
+        pending: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
+        sending: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200',
+        sent: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+        delivered: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+        failed: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-200',
+        cancelled: 'bg-gray-100 text-gray-800 dark:bg-gray-700 dark:text-gray-300',
+    };
+    return classes[status] || 'bg-gray-100 text-gray-800';
+};
+
+const cancelReminder = (id) => {
+    if (confirm('Are you sure you want to cancel this reminder?')) {
+        router.post(route('reminders.cancel', id));
+    }
+};
+
+const deleteReminder = (id) => {
+    if (confirm('Are you sure you want to delete this reminder?')) {
+        router.delete(route('reminders.destroy', id));
+    }
+};
+
+const toggleSelectAllOnPage = () => {
+    if (allPageSelected.value) {
+        selectedReminderIds.value = selectedReminderIds.value.filter((id) => !pageReminderIds.value.includes(id));
+        return;
+    }
+
+    selectedReminderIds.value = [...new Set([...selectedReminderIds.value, ...pageReminderIds.value])];
+};
+
+const deleteSelectedReminders = () => {
+    if (selectedReminderIds.value.length === 0) return;
+
+    if (confirm(`Delete ${selectedReminderIds.value.length} selected reminder(s)?`)) {
+        router.visit(route('reminders.bulk-destroy'), {
+            method: 'delete',
+            data: { ids: selectedReminderIds.value },
+            preserveScroll: true,
+            onSuccess: () => {
+                selectedReminderIds.value = [];
+            },
+        });
+    }
+};
+
+const deleteAllReminders = () => {
+    if (confirm('Delete all reminders for this account? This cannot be undone from the dashboard.')) {
+        router.delete(route('reminders.destroy-all'), {
+            preserveScroll: true,
+            onSuccess: () => {
+                selectedReminderIds.value = [];
+            },
+        });
+    }
+};
+</script>
+
+<template>
+    <Head title="Reminders" />
+
+    <AppLayout>
+        <template #header>
+            <div class="flex justify-between items-center">
+                <h2 class="font-semibold text-xl text-gray-800 dark:text-gray-200 leading-tight">
+                    Reminders
+                </h2>
+                <Link :href="route('reminders.create')">
+                    <PrimaryButton>Create Reminder</PrimaryButton>
+                </Link>
+            </div>
+        </template>
+
+        <div class="py-12">
+            <div class="max-w-7xl mx-auto sm:px-6 lg:px-8">
+                <div class="bg-white dark:bg-gray-800 overflow-hidden shadow-xl sm:rounded-lg">
+                    <div class="flex flex-col gap-3 border-b border-gray-200 p-6 dark:border-gray-700 sm:flex-row sm:items-center sm:justify-between">
+                        <div>
+                            <p class="text-sm font-medium text-gray-900 dark:text-white">
+                                {{ selectedCount }} selected
+                            </p>
+                            <p class="text-xs text-gray-500 dark:text-gray-400">
+                                Select reminders from this page, or delete every reminder in this account.
+                            </p>
+                        </div>
+                        <div class="flex flex-wrap gap-2">
+                            <button
+                                type="button"
+                                :disabled="selectedCount === 0"
+                                @click="deleteSelectedReminders"
+                                class="inline-flex items-center rounded-md border border-red-300 bg-white px-3 py-2 text-sm font-medium text-red-700 shadow-sm hover:bg-red-50 disabled:cursor-not-allowed disabled:opacity-50 dark:border-red-700 dark:bg-gray-900 dark:text-red-300 dark:hover:bg-red-950"
+                            >
+                                Delete Selected
+                            </button>
+                            <button
+                                type="button"
+                                :disabled="reminders.total === 0"
+                                @click="deleteAllReminders"
+                                class="inline-flex items-center rounded-md bg-red-600 px-3 py-2 text-sm font-medium text-white shadow-sm hover:bg-red-700 disabled:cursor-not-allowed disabled:opacity-50"
+                            >
+                                Delete All
+                            </button>
+                        </div>
+                    </div>
+
+                    <!-- Filters -->
+                    <div class="p-6 border-b border-gray-200 dark:border-gray-700">
+                        <div class="flex flex-col sm:flex-row gap-4">
+                            <div class="flex-1">
+                                <input
+                                    type="text"
+                                    v-model="search"
+                                    placeholder="Search by client name, phone, or reservation..."
+                                    class="w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                />
+                            </div>
+                            <div class="w-full sm:w-48">
+                                <select
+                                    v-model="statusFilter"
+                                    class="w-full border-gray-300 dark:border-gray-700 dark:bg-gray-900 dark:text-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                                >
+                                    <option value="">All Statuses</option>
+                                    <option value="pending">Pending</option>
+                                    <option value="sending">Sending</option>
+                                    <option value="sent">Sent</option>
+                                    <option value="delivered">Delivered</option>
+                                    <option value="failed">Failed</option>
+                                    <option value="cancelled">Cancelled</option>
+                                </select>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Reminders Table -->
+                    <div class="overflow-x-auto">
+                        <div v-if="reminders.data.length === 0" class="p-12 text-center">
+                            <p class="text-gray-500 dark:text-gray-400 mb-4">
+                                No reminders found.
+                            </p>
+                            <Link :href="route('reminders.create')">
+                                <PrimaryButton>Create Your First Reminder</PrimaryButton>
+                            </Link>
+                        </div>
+
+                        <table v-else class="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                            <thead class="bg-gray-50 dark:bg-gray-700">
+                                <tr>
+                                    <th class="px-6 py-3 text-left">
+                                        <input
+                                            type="checkbox"
+                                            :checked="allPageSelected"
+                                            @change="toggleSelectAllOnPage"
+                                            class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-900"
+                                            aria-label="Select all reminders on this page"
+                                        />
+                                    </th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                        Client
+                                    </th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                        Phone
+                                    </th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                        Reservation
+                                    </th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                        Send Time
+                                    </th>
+                                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                        Status
+                                    </th>
+                                    <th class="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-300 uppercase tracking-wider">
+                                        Actions
+                                    </th>
+                                </tr>
+                            </thead>
+                            <tbody class="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                                <tr v-for="reminder in reminders.data" :key="reminder.id">
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <input
+                                            type="checkbox"
+                                            :value="reminder.id"
+                                            v-model="selectedReminderIds"
+                                            class="rounded border-gray-300 text-indigo-600 shadow-sm focus:ring-indigo-500 dark:border-gray-600 dark:bg-gray-900"
+                                            :aria-label="`Select reminder ${reminder.reservation_number}`"
+                                        />
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="text-sm font-medium text-gray-900 dark:text-white">
+                                            {{ reminder.client_name }}
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="text-sm text-gray-900 dark:text-white">
+                                            {{ reminder.client_phone }}
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="text-sm text-gray-900 dark:text-white">
+                                            {{ reminder.reservation_number }}
+                                        </div>
+                                        <div class="text-sm text-gray-500 dark:text-gray-400">
+                                            {{ reminder.reservation_date_display || formatDateTime(reminder.reservation_date) }}
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <div class="text-sm text-gray-900 dark:text-white">
+                                            {{ reminder.send_time_display || formatDateTime(reminder.send_time) }}
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <span :class="['px-2 py-1 text-xs rounded-full', statusClass(reminder.status)]">
+                                            {{ reminder.status }}
+                                        </span>
+                                        <div v-if="reminder.error_message" class="text-xs text-red-600 dark:text-red-400 mt-1">
+                                            {{ reminder.error_message }}
+                                        </div>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
+                                        <Link :href="route('reminders.show', reminder.id)" class="text-indigo-600 dark:text-indigo-400 hover:text-indigo-900 dark:hover:text-indigo-300 mr-3">
+                                            View
+                                        </Link>
+                                        <button
+                                            v-if="reminder.status === 'pending'"
+                                            @click="cancelReminder(reminder.id)"
+                                            class="text-yellow-600 dark:text-yellow-400 hover:text-yellow-900 dark:hover:text-yellow-300 mr-3"
+                                        >
+                                            Cancel
+                                        </button>
+                                        <button
+                                            @click="deleteReminder(reminder.id)"
+                                            class="text-red-600 dark:text-red-400 hover:text-red-900 dark:hover:text-red-300"
+                                        >
+                                            Delete
+                                        </button>
+                                    </td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+
+                    <!-- Pagination -->
+                    <div v-if="reminders.links.length > 3" class="p-6 border-t border-gray-200 dark:border-gray-700">
+                        <div class="flex flex-wrap gap-2">
+                            <Link
+                                v-for="(link, index) in reminders.links"
+                                :key="index"
+                                :href="link.url || '#'"
+                                class="px-3 py-1 rounded text-sm"
+                                :class="[
+                                    link.active ? 'bg-indigo-500 text-white' : 'bg-gray-100 dark:bg-gray-700 text-gray-700 dark:text-gray-300',
+                                    !link.url && 'opacity-50 cursor-not-allowed'
+                                ]"
+                                v-html="link.label"
+                            />
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </AppLayout>
+</template>

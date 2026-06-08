@@ -130,7 +130,10 @@
                         </button>
                     </div>
                     <div class="flex gap-x-2">
-                        <input v-model="btn.text" type="text" class="flex-1 rounded-md border-0 py-1 px-3 text-sm text-gray-900 shadow-sm outline-none ring-1 ring-inset ring-gray-300 placeholder:text-gray-400" :placeholder="$t('Button text')" :maxlength="BUTTON_TEXT_LIMIT" />
+                        <div class="flex-1">
+                            <input v-model="btn.text" type="text" class="w-full rounded-md border-0 py-1 px-3 text-sm text-gray-900 shadow-sm outline-none ring-1 ring-inset ring-gray-300 placeholder:text-gray-400" :placeholder="$t('Button text')" :maxlength="BUTTON_TEXT_LIMIT" />
+                            <div class="mt-1 text-right text-[11px] text-slate-400">{{ textLength(btn.text) }}/{{ BUTTON_TEXT_LIMIT }}</div>
+                        </div>
                         <input v-if="btn.type === 'URL'" v-model="btn.url" type="url" class="flex-1 rounded-md border-0 py-1 px-3 text-sm text-gray-900 shadow-sm outline-none ring-1 ring-inset ring-gray-300 placeholder:text-gray-400" :placeholder="$t('https://…')" />
                         <template v-if="btn.type === 'PHONE_NUMBER'">
                             <input v-model="btn.country" type="text" class="w-20 rounded-md border-0 py-1 px-3 text-sm text-gray-900 shadow-sm outline-none ring-1 ring-inset ring-gray-300 placeholder:text-gray-400" :placeholder="$t('+1')" />
@@ -182,6 +185,8 @@ const MAX_HEADER_VIDEO_SIZE = 16 * 1024 * 1024;
 const BUTTON_TEXT_LIMIT = 40;
 const HEADER_IMAGE_SIZE_ERROR = 'Image size must not exceed 5MB.';
 const HEADER_VIDEO_SIZE_ERROR = 'Video size must not exceed 16MB.';
+
+const textLength = (value) => Array.from(String(value ?? '')).length;
 
 /* ── Unique ID counter for stable v-for keys ────────────────────────── */
 let uidCounter = 0;

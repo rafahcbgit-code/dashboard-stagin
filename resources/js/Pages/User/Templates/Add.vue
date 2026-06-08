@@ -237,7 +237,7 @@
                                         </button>
                                     </div>
                                     <div class="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2">
-                                        <FormInput v-if="button.type !== 'COPY_CODE'" v-model="button.text" :name="$t('Button text')" :type="'text'" :class="button.type === 'URL' || button.type === 'QUICK_REPLY' || button.type === 'FLOW' ? 'w-full sm:col-span-2' :'w-full'" :labelClass="'mb-0 text-xs text-slate-600'" :maxLength="BUTTON_TEXT_LIMIT"/>
+                                        <FormInput v-if="button.type !== 'COPY_CODE'" v-model="button.text" :name="$t('Button text')" :type="'text'" :class="button.type === 'URL' || button.type === 'QUICK_REPLY' || button.type === 'FLOW' ? 'w-full sm:col-span-2' :'w-full'" :labelClass="'mb-0 text-xs text-slate-600'" :maxLength="BUTTON_TEXT_LIMIT" :showCharacterCount="true"/>
                                         <FormInput v-model="button.url" v-if="button.type === 'URL'" :name="$t('Website URL')" :type="'text'" :class="'w-full sm:col-span-2'" :labelClass="'mb-0 text-xs text-slate-600'"/>
                                         <FormInput v-model="button.example" v-if="button.type === 'URL' && isDynamicUrl(button.url)" :name="$t('Example full URL')" :type="'text'" :class="'w-full sm:col-span-2'" :labelClass="'mb-0 text-xs text-slate-600'" :placeholder="buildDynamicUrlExample(button.url)"/>
                                         <FormInput v-model="button.country" v-if="button.type === 'PHONE_NUMBER'" :name="$t('Country')" :type="'text'" :class="'sm:col-span-2'" :labelClass="'mb-0'"/>

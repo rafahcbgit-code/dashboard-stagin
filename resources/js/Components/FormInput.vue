@@ -13,13 +13,16 @@
         labelClass: String,
         required: Boolean,
         error: String,
-        disabled: Boolean
+        disabled: Boolean,
+        showCharacterCount: Boolean
     })
 
     const emit = defineEmits(['update:modelValue']);
     const updateValue = (event) => {
         emit('update:modelValue', event.target.value);
     };
+
+    const characterCount = (value) => Array.from(String(value ?? '')).length;
 </script>
 <template>
     <div :class="className">
@@ -38,6 +41,9 @@
             :disabled="disabled"
             :required="required"
             />
+        </div>
+        <div v-if="showCharacterCount && maxLength" class="mt-1 text-right text-[11px] text-slate-400">
+            {{ characterCount(props.modelValue) }}/{{ maxLength }}
         </div>
         <div v-if="error" class="form-error text-[#b91c1c] text-xs">{{ error }}</div>
     </div>

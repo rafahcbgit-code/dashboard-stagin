@@ -117,7 +117,7 @@
                                     </button>
                                 </div>
                                 <div class="flex flex-wrap gap-2 border-t pt-2">
-                                    <FormInput v-if="button.type !== 'COPY_CODE'" v-model="button.text" :name="$t('Button text')" :type="'text'" :class="button.type === 'QUICK_REPLY' ? 'w-full' :'sm:col-span-2'" :labelClass="'mb-0'" :maxLength="BUTTON_TEXT_LIMIT"/>
+                                    <FormInput v-if="button.type !== 'COPY_CODE'" v-model="button.text" :name="$t('Button text')" :type="'text'" :class="button.type === 'QUICK_REPLY' ? 'w-full' :'sm:col-span-2'" :labelClass="'mb-0'" :maxLength="BUTTON_TEXT_LIMIT" :showCharacterCount="true"/>
                                     <FormInput v-model="button.url" v-if="button.type === 'URL'" :name="$t('Website URL')" :type="'text'" :class="'w-full'" :labelClass="'mb-0'"/>
                                     <FormInput v-model="button.example" v-if="button.type === 'URL' && isDynamicUrl(button.url)" :name="$t('Example full URL')" :type="'text'" :class="'w-full'" :labelClass="'mb-0'" :placeholder="buildDynamicUrlExample(button.url)"/>
                                     <FormInput v-model="button.country" v-if="button.type === 'PHONE_NUMBER'" :name="$t('Country')" :type="'text'" :class="'sm:col-span-2'" :labelClass="'mb-0'"/>
