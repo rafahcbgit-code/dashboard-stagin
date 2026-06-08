@@ -1074,6 +1074,9 @@ class FlowExecutionService
         if ($type === 'text') {
             return $metadata['text']['body'] ?? '';
         }
+        if ($type === 'image') {
+            return $metadata['image']['caption'] ?? '';
+        }
         if ($type === 'button') {
             return $metadata['button']['payload'] ?? '';
         }

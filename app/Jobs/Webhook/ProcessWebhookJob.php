@@ -406,8 +406,11 @@ class ProcessWebhookJob implements ShouldQueue
 
         // Auto-reply integration - check triggers after chat creation
         // This is fire-and-forget; failures don't fail the main job
-        // Only process auto-reply for supported message types (text, button, audio, interactive)
+        // Only process auto-reply for supported message types.
+        // Image captions are treated as the user's text when present.
         $autoReplyTypes = ['text', 'button', 'audio', 'interactive'];
+        $hasImageCaption = $messageType === 'image'
+            && trim((string) ($message['image']['caption'] ?? '')) !== '';
 
         $botSettingsService = new BotSettingsService();
         $automationEnabled = $botSettingsService->isAutomationEnabled($this->organizationId);
@@ -465,7 +468,7 @@ class ProcessWebhookJob implements ShouldQueue
                     'contact_id' => $contact->id,
                 ]);
             }
-        } elseif (! in_array($messageType, $autoReplyTypes)) {
+        } elseif (! in_array($messageType, $autoReplyTypes) && ! $hasImageCaption) {
             Log::channel('webhook')->debug('Auto-reply skipped - unsupported message type', [
                 'chat_id' => $chat->id,
                 'message_type' => $messageType,
