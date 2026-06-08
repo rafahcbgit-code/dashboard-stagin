@@ -237,12 +237,12 @@
                                         </button>
                                     </div>
                                     <div class="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2">
-                                        <FormInput v-if="button.type !== 'COPY_CODE'" v-model="button.text" :name="$t('Button text')" :type="'text'" :class="button.type === 'URL' || button.type === 'QUICK_REPLY' || button.type === 'FLOW' ? 'w-full sm:col-span-2' :'w-full'" :labelClass="'mb-0 text-xs text-slate-600'"/>
+                                        <FormInput v-if="button.type !== 'COPY_CODE'" v-model="button.text" :name="$t('Button text')" :type="'text'" :class="button.type === 'URL' || button.type === 'QUICK_REPLY' || button.type === 'FLOW' ? 'w-full sm:col-span-2' :'w-full'" :labelClass="'mb-0 text-xs text-slate-600'" :maxLength="BUTTON_TEXT_LIMIT"/>
                                         <FormInput v-model="button.url" v-if="button.type === 'URL'" :name="$t('Website URL')" :type="'text'" :class="'w-full sm:col-span-2'" :labelClass="'mb-0 text-xs text-slate-600'"/>
                                         <FormInput v-model="button.example" v-if="button.type === 'URL' && isDynamicUrl(button.url)" :name="$t('Example full URL')" :type="'text'" :class="'w-full sm:col-span-2'" :labelClass="'mb-0 text-xs text-slate-600'" :placeholder="buildDynamicUrlExample(button.url)"/>
                                         <FormInput v-model="button.country" v-if="button.type === 'PHONE_NUMBER'" :name="$t('Country')" :type="'text'" :class="'sm:col-span-2'" :labelClass="'mb-0'"/>
                                         <FormInput v-model="button.phone_number" v-if="button.type === 'PHONE_NUMBER'" :name="$t('Phone number')" :type="'text'" :class="'sm:col-span-2'" :labelClass="'mb-0'"/>
-                                        <FormInput v-model="button.example" v-if="button.type === 'COPY_CODE'" :name="$t('Coupon code')" :type="'text'" :class="'w-full sm:col-span-2'" :labelClass="'mb-0 text-xs text-slate-600'" :maxLength="15"/>
+                                        <FormInput v-model="button.example" v-if="button.type === 'COPY_CODE'" :name="$t('Coupon code')" :type="'text'" :class="'w-full sm:col-span-2'" :labelClass="'mb-0 text-xs text-slate-600'" :maxLength="COPY_CODE_LIMIT"/>
                                         <div v-if="button.type === 'FLOW'" class="w-full sm:col-span-2">
                                             <label class="text-xs text-slate-500 block mb-1">{{ $t('Select Flow') }}</label>
                                             <select
@@ -577,6 +577,8 @@
     const error = ref(null);
     const MAX_HEADER_IMAGE_SIZE = 5 * 1024 * 1024;
     const MAX_HEADER_VIDEO_SIZE = 16 * 1024 * 1024;
+    const BUTTON_TEXT_LIMIT = 40;
+    const COPY_CODE_LIMIT = 20;
     const HEADER_IMAGE_SIZE_ERROR = 'Image size must not exceed 5MB.';
     const HEADER_VIDEO_SIZE_ERROR = 'Video size must not exceed 16MB.';
     const bodyExamples = ref([]);
@@ -903,7 +905,11 @@
             return false;
         } 
 
-        if (form.value.buttons.some(btn => btn.type === 'COPY_CODE' && (!btn.example || btn.example.trim() === '' || btn.example.trim().length > 15))) {
+        if (form.value.buttons.some(btn => btn.type !== 'COPY_CODE' && (btn.text || '').trim().length > BUTTON_TEXT_LIMIT)) {
+            return false;
+        }
+
+        if (form.value.buttons.some(btn => btn.type === 'COPY_CODE' && (!btn.example || btn.example.trim() === '' || btn.example.trim().length > COPY_CODE_LIMIT))) {
             return false;
         }
 

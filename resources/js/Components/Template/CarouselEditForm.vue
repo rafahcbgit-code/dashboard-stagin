@@ -102,7 +102,7 @@
                             type="text"
                             class="flex-1 rounded-md border-0 py-1 px-3 text-sm text-gray-900 shadow-sm outline-none ring-1 ring-inset ring-gray-300 placeholder:text-gray-400"
                             :placeholder="$t('Button label…')"
-                            maxlength="25"
+                            :maxlength="BUTTON_TEXT_LIMIT"
                         />
                         <!-- Locked icon per button -->
                         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" class="text-slate-300"><path fill="currentColor" d="M12 1a5 5 0 0 0-5 5v2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2h-2V6a5 5 0 0 0-5-5zm3 7V6a3 3 0 1 0-6 0v2z"/></svg>
@@ -115,6 +115,8 @@
 
 <script setup>
 import { defineProps } from 'vue';
+
+const BUTTON_TEXT_LIMIT = 40;
 
 const props = defineProps({
     /**

@@ -21,6 +21,8 @@ class TemplateService
 {
     private const MAX_HEADER_IMAGE_BYTES = 5 * 1024 * 1024;
     private const MAX_HEADER_VIDEO_BYTES = 16 * 1024 * 1024;
+    private const MAX_BUTTON_TEXT_CHARS = 40;
+    private const MAX_COPY_CODE_CHARS = 20;
 
     private $whatsappService;
     private $organizationId;
@@ -119,6 +121,10 @@ class TemplateService
                 return response()->json(['success' => false,'message'=>'Some required fields have not been filled','errors'=>$validator->messages()->get('*')]);
             }
 
+            if ($response = $this->validateTemplateButtons($request)) {
+                return $response;
+            }
+
             if ($response = $this->validateTemplateMediaUploads($request)) {
                 return $response;
             }
@@ -171,6 +177,10 @@ class TemplateService
 
         if ($validator->fails()) {
             return response()->json(['success' => false,'message'=>'Some required fields have not been filled','errors'=>$validator->messages()->get('*')]);
+        }
+
+        if ($response = $this->validateTemplateButtons($request)) {
+            return $response;
         }
 
         if ($response = $this->validateTemplateMediaUploads($request)) {
@@ -269,6 +279,84 @@ class TemplateService
         }
 
         return null;
+    }
+
+    private function validateTemplateButtons(Request $request)
+    {
+        $buttonGroups = [];
+
+        if (is_array($request->input('buttons'))) {
+            $buttonGroups['buttons'] = $request->input('buttons');
+        }
+
+        if (is_array($request->input('cards'))) {
+            foreach ($request->input('cards') as $cardIndex => $card) {
+                if (isset($card['buttons']) && is_array($card['buttons'])) {
+                    $buttonGroups["cards.$cardIndex.buttons"] = $card['buttons'];
+                }
+            }
+        }
+
+        if (is_array($request->input('carousel_cards'))) {
+            foreach ($request->input('carousel_cards') as $cardIndex => $card) {
+                if (isset($card['buttons']) && is_array($card['buttons'])) {
+                    $buttonGroups["carousel_cards.$cardIndex.buttons"] = $card['buttons'];
+                }
+            }
+        }
+
+        foreach ($buttonGroups as $groupPath => $buttons) {
+            foreach ($buttons as $index => $button) {
+                $type = strtoupper((string) ($button['type'] ?? ''));
+
+                if ($type === 'COPY_CODE') {
+                    $copyCode = $this->buttonValueToString($button['example'] ?? '');
+                    if ($this->characterLength($copyCode) > self::MAX_COPY_CODE_CHARS) {
+                        return $this->templateButtonLimitError(
+                            "$groupPath.$index.example",
+                            'Copy offer code must not exceed ' . self::MAX_COPY_CODE_CHARS . ' characters.'
+                        );
+                    }
+
+                    continue;
+                }
+
+                $text = $this->buttonValueToString($button['text'] ?? '');
+                if ($this->characterLength($text) > self::MAX_BUTTON_TEXT_CHARS) {
+                    return $this->templateButtonLimitError(
+                        "$groupPath.$index.text",
+                        'Button text must not exceed ' . self::MAX_BUTTON_TEXT_CHARS . ' characters.'
+                    );
+                }
+            }
+        }
+
+        return null;
+    }
+
+    private function templateButtonLimitError(string $field, string $message)
+    {
+        return response()->json([
+            'success' => false,
+            'message' => $message,
+            'errors' => [
+                $field => [$message],
+            ],
+        ]);
+    }
+
+    private function characterLength(string $value): int
+    {
+        return function_exists('mb_strlen') ? mb_strlen($value) : strlen($value);
+    }
+
+    private function buttonValueToString($value): string
+    {
+        if (is_array($value)) {
+            $value = reset($value);
+        }
+
+        return trim((string) $value);
     }
 
     private function templateMediaSizeError(string $mediaLabel, string $limit, string $field)
