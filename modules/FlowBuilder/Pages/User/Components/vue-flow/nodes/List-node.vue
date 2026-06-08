@@ -21,6 +21,7 @@ const maxBodyLength = 1024;
 const maxFooterLength = 60;
 const maxSectionTitleLength = 24;
 const maxButtonLabelLength = 20;
+const maxDescriptionLength = 72;
 const isEditTitle = ref(false)
 
 const fields = ref({
@@ -31,7 +32,7 @@ const fields = ref({
   body: props.data.metadata?.fields?.body || '',
   footer: props.data.metadata?.fields?.footer || '',
   buttonLabel: props.data.metadata?.fields?.buttonLabel || '',
-  sections: props.data.metadata?.fields?.sections || [{ rows: [{}] }],
+  sections: props.data.metadata?.fields?.sections || [{ rows: [{ id: '', title: '', description: '' }] }],
 })
 
 const options = ref([
@@ -84,18 +85,20 @@ fields.value.sections.forEach(section => {
     if (!row.id) {
       row.id = getNextRowId()
     }
+    row.title = row.title || ''
+    row.description = row.description || ''
   })
 })
 
 function addSection() {
   if (fields.value.sections.length < 10) {
-    fields.value.sections.push({ rows: [{ id: getNextRowId() }] })
+    fields.value.sections.push({ rows: [{ id: getNextRowId(), title: '', description: '' }] })
   }
 }
 
 function addRow(sectionIndex) {
   if (fields.value.sections[sectionIndex].rows.length < 10) {
-    fields.value.sections[sectionIndex].rows.push({ id: getNextRowId() })
+    fields.value.sections[sectionIndex].rows.push({ id: getNextRowId(), title: '', description: '' })
   }
 }
 
@@ -280,6 +283,12 @@ function getCharsCount(input: string): number {
               <FormInput v-model="row.title" maxLength="24" :name="''" :placeholder="'Enter row title'" :type="'text'" :class="'col-span-4'"/>
               <span class="text-sm">{{ getCharsCount(row?.title ?? '') }}/24</span>
             </div>
+
+          <div class="mb-2">
+            <label class="text-sm mb-2">Description (Optional)</label>
+            <FormInput v-model="row.description" :maxLength="maxDescriptionLength" :name="''" :placeholder="'Enter row description'" :type="'text'" :class="'col-span-4'"/>
+            <span class="text-sm">{{ getCharsCount(row?.description ?? '') }}/{{ maxDescriptionLength }}</span>
+          </div>
 
           <Handle :id="'a' + sectionIndex + rowIndex" type="source" :position="Position.Right" style="right: -25px"/>
         </div>
