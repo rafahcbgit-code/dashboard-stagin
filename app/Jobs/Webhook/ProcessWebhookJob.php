@@ -2102,7 +2102,9 @@ class ProcessWebhookJob implements ShouldQueue
         $newValue = $value['max_daily_conversations_per_business'];
         $dailyConversationLimitChanged = $oldValue !== $newValue;
 
-        $metadata['whatsapp']['max_daily_conversations_per_business'] = $newValue;
+        //$metadata['whatsapp']['max_daily_conversations_per_business'] = $newValue;
+        $metadata['whatsapp']['whatsapp_business_manager_messaging_limit'] = $newValue;
+    
         $metadata['whatsapp']['messaging_limit_tier'] = $newValue;
         $organization->metadata = json_encode($metadata);
         $organization->save();
