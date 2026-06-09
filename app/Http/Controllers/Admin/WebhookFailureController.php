@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller as BaseController;
 use App\Jobs\Webhook\ProcessWebhookJob;
+use App\Models\Chat;
 use App\Models\WebhookFailure;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -83,14 +84,31 @@ class WebhookFailureController extends BaseController
             ], 422);
         }
 
+        $wamId = $failure->wam_id ?? data_get($payload, 'value.messages.0.id') ?? data_get($payload, 'value.message_echoes.0.id');
+
+        if ($wamId && Chat::where('organization_id', $failure->organization_id)->where('wam_id', $wamId)->exists()) {
+            return response()->json([
+                'success' => true,
+                'message' => 'Webhook retry skipped: chat already exists for wam_id',
+                'webhook_failure_id' => $failure->id,
+                'organization_id' => $failure->organization_id,
+                'wam_id' => $wamId,
+            ]);
+        }
+
         // Determine webhook type from payload or use default
-        $webhookType = $payload['field'] ?? 'messages';
+        $webhookType = $failure->webhook_type ?? $payload['field'] ?? 'messages';
 
         // Dispatch a new ProcessWebhookJob with the stored payload
         $job = new ProcessWebhookJob(
             $payload,
             $failure->organization_id,
-            $webhookType
+            $webhookType,
+            [
+                'webhook_failure_id' => $failure->id,
+                'sample_id' => $failure->sample_id ?? null,
+                'replayed_at' => now()->toIso8601String(),
+            ]
         );
 
         dispatch($job);

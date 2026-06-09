@@ -26,6 +26,7 @@ use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Schema;
 use Modules\MetaFlows\Services\MetaFlowService;
 
 /**
@@ -73,12 +74,12 @@ class ProcessWebhookJob implements ShouldQueue
     /**
      * The number of times the job may be attempted.
      */
-    public int $tries = 3;
+    public $tries = 5;
 
     /**
      * The number of seconds the job can run before timing out.
      */
-    public int $timeout = 120;
+    public $timeout = 120;
 
     /**
      * The number of seconds to wait before retrying the job.
@@ -95,6 +96,7 @@ class ProcessWebhookJob implements ShouldQueue
         $this->organizationId = $organizationId;
         $this->webhookType = $webhookType;
         $this->context = $context;
+        $this->context['dispatched_at'] ??= now()->toIso8601String();
         $this->onQueue('webhook-high');
     }
 
@@ -115,8 +117,8 @@ class ProcessWebhookJob implements ShouldQueue
             // Use contact phone as the lock key for FIFO ordering per contact
             return [
                 (new WithoutOverlapping("webhook-contact-{$this->organizationId}-{$contactPhone}"))
-                    ->releaseAfter(60) // Release lock after 60 seconds if job takes too long
-                    ->expireAfter(180), // Lock expires after 3 minutes
+                    ->expireAfter(180)
+                    ->releaseAfter(15),
             ];
         }
 
@@ -131,11 +133,33 @@ class ProcessWebhookJob implements ShouldQueue
     public function handle(): void
     {
         $startTime = microtime(true);
+        $startedAt = now();
+        $dispatchedAt = $this->context['dispatched_at'] ?? null;
+        $dispatchToHandleMs = null;
+        $contactPhone = $this->extractContactPhone();
+
+        if ($dispatchedAt) {
+            try {
+                $dispatchToHandleMs = Carbon::parse($dispatchedAt)->diffInMilliseconds($startedAt, false);
+            } catch (\Throwable) {
+                $dispatchToHandleMs = null;
+            }
+        }
 
         Log::channel('webhook')->info('ProcessWebhookJob started', [
             'organization_id' => $this->organizationId,
             'webhook_type' => $this->webhookType,
             'job_id' => $this->job?->getJobId(),
+            'queue' => $this->queue,
+            'attempt' => $this->attempts(),
+            'dispatched_at' => $dispatchedAt,
+            'started_at' => $startedAt->toIso8601String(),
+            'dispatch_to_handle_ms' => $dispatchToHandleMs,
+            'wam_id' => $this->extractFirstWamId(),
+            'contact_phone' => $contactPhone,
+            'overlap_lock_key' => $contactPhone ? "webhook-contact-{$this->organizationId}-{$contactPhone}" : null,
+            'overlap_release_after_seconds' => 15,
+            'overlap_expire_after_seconds' => 180,
             'payload' => $this->payload, // Full webhook payload for debugging
         ]);
 
@@ -505,6 +529,26 @@ class ProcessWebhookJob implements ShouldQueue
         return Chat::where('organization_id', $this->organizationId)
             ->where('wam_id', $wamId)
             ->exists();
+    }
+
+    protected function extractFirstWamId(): ?string
+    {
+        $value = $this->payload['value'] ?? [];
+
+        foreach (['messages', 'statuses', 'message_echoes'] as $key) {
+            $items = $value[$key] ?? [];
+
+            if (! is_array($items) || empty($items)) {
+                continue;
+            }
+
+            $wamId = $items[0]['id'] ?? null;
+            if (is_string($wamId) && $wamId !== '') {
+                return $wamId;
+            }
+        }
+
+        return null;
     }
 
     /**
@@ -2277,24 +2321,42 @@ class ProcessWebhookJob implements ShouldQueue
      */
     public function failed(\Throwable $exception): void
     {
+        $wamId = $this->extractFirstWamId();
+        $attempts = $this->attempts();
+
         Log::channel('webhook')->error('ProcessWebhookJob failed permanently', [
             'organization_id' => $this->organizationId,
             'webhook_type' => $this->webhookType,
+            'wam_id' => $wamId,
+            'queue' => $this->queue,
             'error' => $exception->getMessage(),
-            'attempts' => $this->attempts(),
+            'attempts' => $attempts,
             'trace' => $exception->getTraceAsString(),
         ]);
 
         // AC-1.5.2: Log to webhook_failures table for monitoring and manual retry
         try {
-            WebhookFailure::create([
+            $failureData = [
                 'organization_id' => $this->organizationId,
                 'job_type' => 'ProcessWebhookJob',
                 'error_message' => substr($exception->getMessage(), 0, 1000),
                 'error_code' => $exception->getCode() ? (string) $exception->getCode() : null,
                 'payload' => $this->payload, // Model will cast to JSON
-                'attempts' => $this->attempts(),
-            ]);
+                'attempts' => $attempts,
+            ];
+
+            foreach ([
+                'wam_id' => $wamId,
+                'webhook_type' => $this->webhookType,
+                'queue' => $this->queue,
+                'sample_id' => $this->context['sample_id'] ?? null,
+            ] as $column => $value) {
+                if (Schema::hasColumn('webhook_failures', $column)) {
+                    $failureData[$column] = $value;
+                }
+            }
+
+            WebhookFailure::create($failureData);
         } catch (\Exception $e) {
             // Fail-safe: don't let logging failure mask original exception
             Log::channel('webhook')->error('Failed to log webhook failure to database', [
