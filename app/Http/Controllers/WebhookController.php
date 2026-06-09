@@ -92,11 +92,13 @@ class WebhookController extends BaseController
             return Response::json(['status' => 'error', 'message' => 'Invalid payload'], 400);
         }
 
-        $organization = $this->getOrganizationByWabaId((string) $wabaId);
+        $phoneNumberId = data_get($payload, 'entry.0.changes.0.value.metadata.phone_number_id');
+        $organization = $this->getOrganizationForWabaWebhook((string) $wabaId, $phoneNumberId ? (string) $phoneNumberId : null);
 
         if (! $organization) {
             Log::channel('waba_webhook')->warning('WABA webhook organization not found', [
                 'waba_id' => $wabaId,
+                'phone_number_id' => $phoneNumberId,
                 'webhook_type' => data_get($payload, 'entry.0.changes.0.field', 'unknown'),
             ]);
 
@@ -124,6 +126,7 @@ class WebhookController extends BaseController
         Log::channel('waba_webhook')->info('WABA webhook matched organization and queued for processing', [
             'organization_id' => $organization->id,
             'waba_id' => $wabaId,
+            'phone_number_id' => $phoneNumberId,
             'webhook_type' => data_get($payload, 'entry.0.changes.0.field', 'unknown'),
         ]);
 
@@ -152,6 +155,25 @@ class WebhookController extends BaseController
             "JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.whatsapp.waba_id')) = ?",
             [$wabaId]
         )->first();
+    }
+
+    protected function getOrganizationByPhoneNumberId(string $phoneNumberId)
+    {
+        return Organization::whereRaw(
+            "JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.whatsapp.phone_number_id')) = ?",
+            [$phoneNumberId]
+        )->first();
+    }
+
+    protected function getOrganizationForWabaWebhook(string $wabaId, ?string $phoneNumberId): ?Organization
+    {
+        $organization = $this->getOrganizationByWabaId($wabaId);
+
+        if ($organization || ! $phoneNumberId) {
+            return $organization;
+        }
+
+        return $this->getOrganizationByPhoneNumberId($phoneNumberId);
     }
 
     protected function handleMethod(Request $request, Organization $organization)
@@ -301,7 +323,7 @@ class WebhookController extends BaseController
     }
 
     /**
-     * Temporarily store every received WhatsApp webhook for selected organizations.
+     * Store every received WhatsApp webhook for diagnostics and safe replay.
      *
      * This runs before payload validation and before queue dispatch so we can
      * prove whether Meta reached this application even when processing fails.
