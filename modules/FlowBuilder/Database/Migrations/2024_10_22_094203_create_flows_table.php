@@ -16,7 +16,7 @@ class CreateFlowsTable extends Migration
             $table->text('description')->nullable();
             $table->enum('trigger', ['new_contact', 'keywords'])->nullable();
             $table->text('keywords')->nullable();
-            $table->text('metadata')->nullable();
+            $table->longText('metadata')->nullable();
             $table->enum('status', ['active', 'inactive'])->default('inactive');
             $table->timestamps();
             $table->softDeletes();
