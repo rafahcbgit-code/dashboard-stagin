@@ -56,7 +56,7 @@ class FlowExecutionService
      * Resume an active flow for a contact, or return false if none active.
      * Called by AutoReplyService when no trigger matched — only resumes existing flows.
      */
-    public function resumeActiveFlow($chat, string $message): bool
+    public function resumeActiveFlow($chat, string $message): bool|string
     {
         if (!CustomHelper::isModuleEnabled('Flow builder', $chat->organization_id)) {
             return false;
@@ -109,6 +109,10 @@ class FlowExecutionService
         }
 
         $result = $this->processFlow($chat, $flowData, strtolower(trim($message)));
+
+        if ($result === 'invalid_interactive_input') {
+            return $result;
+        }
 
         return $result !== false;
     }
@@ -525,7 +529,9 @@ class FlowExecutionService
                     'message' => $message,
                 ]);
                 $this->endFlow($chat->contact_id, 'completed', $chat->id);
-                return false;
+                // Stop AutoReplyService from evaluating greeting/new-contact
+                // triggers for the same free-text message.
+                return 'invalid_interactive_input';
             }
 
             // Send the message (first visit to this node, no user input yet)
