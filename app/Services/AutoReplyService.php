@@ -122,6 +122,14 @@ class AutoReplyService
             if (File::exists(base_path('modules/FlowBuilder/Services/FlowExecutionService.php'))) {
                 $service = new \Modules\FlowBuilder\Services\FlowExecutionService($organizationId, $this->metaPayload);
                 $result = $service->resumeActiveFlow($chat, $text);
+                if ($result === 'invalid_interactive_input') {
+                    Log::info('replySequence: active flow rejected interactive input; skipping trigger evaluation', [
+                        'organization_id' => $organizationId,
+                        'chat_id' => $chat->id ?? null,
+                        'contact_id' => $chat->contact_id ?? null,
+                    ]);
+                    return true;
+                }
                 if ($result) {
                     return true;
                 }
