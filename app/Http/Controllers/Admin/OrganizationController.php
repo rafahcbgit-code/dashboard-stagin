@@ -29,13 +29,31 @@ class OrganizationController extends BaseController
      * @param Request $request
      * @return \Inertia\Response
      */
-    public function index(Request $request)
+    public function CRMOrganizations(Request $request)
     {
-        return Inertia::render('Admin/Organization/Index', [
-            'title' => __('Organizations'),
-            'allowCreate' => true,
-            'rows' => $this->organizationService->get($request), 
-            'filters' => $request->all()
+        $organizations = $this->organizationService->CRMOrganizations($request);
+
+        return response()->json([
+            'success' => true,
+            'data' => $organizations->items(),
+            'meta' => [
+                'filters' => array_filter($request->only([
+                    'search',
+                    'subscription_status',
+                    'created_from',
+                    'created_to',
+                    'per_page',
+                    'cursor',
+                ]), fn ($value) => $value !== null && $value !== ''),
+                'pagination' => [
+                    'per_page' => $organizations->perPage(),
+                    'next_cursor' => $organizations->nextCursor()?->encode(),
+                    'previous_cursor' => $organizations->previousCursor()?->encode(),
+                    'next_page_url' => $organizations->nextPageUrl(),
+                    'previous_page_url' => $organizations->previousPageUrl(),
+                    'has_more_pages' => $organizations->hasMorePages(),
+                ],
+            ],
         ]);
     }
 
@@ -50,9 +68,9 @@ class OrganizationController extends BaseController
         $res = $this->organizationService->getByUuid($request, $uuid);
         return Inertia::render('Admin/Organization/Show', [
             'title' => __('Organization'),
-            'organization' => $res['organization'], 
+            'organization' => $res['organization'],
             'users' => $res['users'],
-            'plans' => $res['plans'], 
+            'plans' => $res['plans'],
             'invoices' => $res['billing'],
             'mode' => $mode,
             'filters' => $request->all()
@@ -69,9 +87,9 @@ class OrganizationController extends BaseController
         $res = $this->organizationService->getByUuid($request);
         return Inertia::render('Admin/Organization/Show', [
             'title' => __('Create Org.'),
-            'organization' => $res['organization'], 
+            'organization' => $res['organization'],
             'users' => $res['users'],
-            'plans' => $res['plans'], 
+            'plans' => $res['plans'],
             'invoices' => $res['billing'],
             'filters' => $request->all()
         ]);
@@ -87,8 +105,9 @@ class OrganizationController extends BaseController
         $this->organizationService->store($request);
 
         return redirect('/admin/organizations')->with(
-            'status', [
-                'type' => 'success', 
+            'status',
+            [
+                'type' => 'success',
                 'message' => __('Organization created successfully!')
             ]
         );
@@ -103,9 +122,10 @@ class OrganizationController extends BaseController
     {
         $this->organizationService->update($request, $uuid);
 
-        return redirect('/admin/organizations/'.$uuid)->with(
-            'status', [
-                'type' => 'success', 
+        return redirect('/admin/organizations/' . $uuid)->with(
+            'status',
+            [
+                'type' => 'success',
                 'message' => __('Organization updated successfully!')
             ]
         );
@@ -121,8 +141,9 @@ class OrganizationController extends BaseController
         $query = $this->organizationService->destroy($uuid);
 
         return back()->with(
-            'status', [
-                'type' => $query ? 'success' : 'error', 
+            'status',
+            [
+                'type' => $query ? 'success' : 'error',
                 'message' => $query ? __('Organization deleted successfully!') : __('This organization does not exist!')
             ]
         );

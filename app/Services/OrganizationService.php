@@ -7,7 +7,6 @@ use App\Http\Resources\BillingResource;
 use App\Http\Resources\UserResource;
 use App\Models\BillingCredit;
 use App\Models\BillingDebit;
-use App\Models\BillingInvoice;
 use App\Models\BillingPayment;
 use App\Models\BillingTransaction;
 use App\Models\Organization;
@@ -15,16 +14,17 @@ use App\Models\Setting;
 use App\Models\Subscription;
 use App\Models\SubscriptionPlan;
 use App\Models\Team;
-use App\Models\Template;
 use App\Models\User;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Str;
-use Propaganistas\LaravelPhone\PhoneNumber;
 use Carbon\Carbon;
 
 class OrganizationService
 {
+    private const CRM_DEFAULT_PAGE_SIZE = 500;
+    private const CRM_MAX_PAGE_SIZE = 1000;
+
     /**
      * Cache key prefix for organization metadata.
      * Story 2.2: AC-2.2.2
@@ -79,6 +79,99 @@ class OrganizationService
         $organizations = (new Organization)->listAll($request->query('search'), $userId, $statusFilter);
 
         return OrganizationsResource::collection($organizations);
+    }
+
+    public function CRMOrganizations(object $request, $userId = null)
+    {
+        $statusFilter = $request->query('subscription_status');
+        $createdAtRange = $this->resolveCrmCreatedAtRange($request);
+        $organizations = (new Organization)
+            ->crmListQuery(
+                $request->query('search'),
+                $userId,
+                $statusFilter,
+                $createdAtRange['from'],
+                $createdAtRange['to']
+            )
+            ->orderByDesc('id')
+            ->cursorPaginate($this->resolveCrmPageSize($request))
+            ->withQueryString();
+        $dateFormats = $this->crmDateFormats();
+
+        return $organizations->through(function (Organization $organization) use ($dateFormats) {
+            $data = $organization->toArray();
+            $teams = $organization->teams;
+            $subscription = $organization->subscription;
+            $owner = $organization->owner;
+
+            $teamData = $teams->map(function (Team $team) {
+                $data = $team->toArray();
+                $data['user'] = $team->user?->toArray();
+
+                return $data;
+            })->values();
+
+            $data['user'] = $owner?->user?->toArray();
+            $data['users'] = $teams
+                ->pluck('user')
+                ->filter()
+                ->values()
+                ->map(fn (User $user) => $user->toArray());
+            $data['updated_at'] = $this->formatCrmDate($organization->updated_at, $dateFormats);
+            $data['created_at'] = $this->formatCrmDate($organization->created_at, $dateFormats);
+            $data['plan'] = $subscription?->plan?->toArray();
+            $data['team'] = $teamData;
+            $data['teams'] = $teamData;
+
+            if ($subscription) {
+                $data['subscription']['next_billing_date'] = $subscription->next_billing_date;
+            }
+
+            return $data;
+        });
+    }
+
+    private function resolveCrmPageSize(object $request): int
+    {
+        $perPage = (int) $request->query('per_page', self::CRM_DEFAULT_PAGE_SIZE);
+
+        if ($perPage < 1) {
+            return self::CRM_DEFAULT_PAGE_SIZE;
+        }
+
+        return min($perPage, self::CRM_MAX_PAGE_SIZE);
+    }
+
+    private function resolveCrmCreatedAtRange(object $request): array
+    {
+        return [
+            'from' => $request->filled('created_from')
+                ? Carbon::parse($request->query('created_from'))->startOfDay()
+                : null,
+            'to' => $request->filled('created_to')
+                ? Carbon::parse($request->query('created_to'))->endOfDay()
+                : null,
+        ];
+    }
+
+    private function crmDateFormats(): array
+    {
+        $formats = Setting::whereIn('key', ['date_format', 'time_format'])
+            ->pluck('value', 'key');
+
+        return [
+            'date' => $formats['date_format'] ?? 'd-M-y',
+            'time' => $formats['time_format'] ?? 'H:i',
+        ];
+    }
+
+    private function formatCrmDate($date, array $formats): ?string
+    {
+        if (!$date) {
+            return null;
+        }
+
+        return Carbon::create($date)->format($formats['date'] . ' ' . $formats['time']);
     }
 
     /**

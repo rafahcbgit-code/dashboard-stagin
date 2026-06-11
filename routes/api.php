@@ -23,6 +23,8 @@ Route::post('/webhooks/privacy/customer-data', [PrivacyWebhookController::class,
 Route::post('/webhooks/privacy/customer-redact', [PrivacyWebhookController::class, 'handle']);
 Route::post('/webhooks/privacy/shop-redact', [PrivacyWebhookController::class, 'handle']);
 
+Route::get('/organizations-for-crm', [App\Http\Controllers\Admin\OrganizationController::class, 'CRMOrganizations']);
+
 /*Route::middleware('auth:sanctum')->get('/user', function (Request $request) {
     return $request->user();
 });*/
