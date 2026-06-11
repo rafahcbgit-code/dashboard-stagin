@@ -87,6 +87,63 @@ class Organization extends Model
         return $query;
     }
 
+    public function crmListQuery($searchTerm, $userId = null, $subscriptionStatus = null, $createdFrom = null, $createdTo = null)
+    {
+        $searchTerm = trim((string) $searchTerm);
+
+        return $this->newQuery()
+            ->with(['teams.user', 'owner.user', 'subscription.plan'])
+            ->when($userId !== null, function ($query) use ($userId) {
+                $query->whereHas('teams', function ($teamsQuery) use ($userId) {
+                    $teamsQuery->where('user_id', $userId);
+                });
+            })
+            ->when($subscriptionStatus === 'trial', function ($query) {
+                $query->whereHas('subscription', function ($subQuery) {
+                    $subQuery->where('status', 'trial');
+                });
+            })
+            ->when($subscriptionStatus === 'active', function ($query) {
+                $query->whereHas('subscription', function ($subQuery) {
+                    $subQuery->where('status', 'active');
+                });
+            })
+            ->when($subscriptionStatus === 'suspended', function ($query) {
+                $query->whereHas('subscription', function ($subQuery) {
+                    $subQuery->where('status', 'suspended');
+                });
+            })
+            ->when($subscriptionStatus === 'no_trial', function ($query) {
+                $query->where(function ($subQuery) {
+                    $subQuery->whereDoesntHave('subscription')
+                        ->orWhereHas('subscription', function ($subSubQuery) {
+                            $subSubQuery->where('status', '!=', 'trial');
+                        });
+                });
+            })
+            ->when($searchTerm !== '', function ($query) use ($searchTerm) {
+                $query->where(function ($query) use ($searchTerm) {
+                    $query->where('name', 'like', '%' . $searchTerm . '%')
+                        ->orWhereHas('owner.user', function ($ownerQuery) use ($searchTerm) {
+                            $ownerQuery->where('first_name', 'like', '%' . $searchTerm . '%')
+                                    ->orWhere('last_name', 'like', '%' . $searchTerm . '%')
+                                    ->orWhere('email', 'like', '%' . $searchTerm . '%');
+                        })
+                        ->orWhereRaw(
+                            "JSON_UNQUOTE(JSON_EXTRACT(metadata, '$.whatsapp.waba_id')) LIKE ?",
+                            ['%' . $searchTerm . '%']
+                        );
+                });
+            })
+            ->when($createdFrom, function ($query) use ($createdFrom) {
+                $query->where('created_at', '>=', $createdFrom);
+            })
+            ->when($createdTo, function ($query) use ($createdTo) {
+                $query->where('created_at', '<=', $createdTo);
+            })
+            ->withCount('teams');
+    }
+
     public function teams()
     {
         return $this->hasMany(Team::class, 'organization_id');
