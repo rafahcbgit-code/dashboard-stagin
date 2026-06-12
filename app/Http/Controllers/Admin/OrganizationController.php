@@ -29,6 +29,22 @@ class OrganizationController extends BaseController
      * @param Request $request
      * @return \Inertia\Response
      */
+    public function index(Request $request)
+    {
+        return Inertia::render('Admin/Organization/Index', [
+            'title' => __('Organizations'),
+            'allowCreate' => true,
+            'rows' => $this->organizationService->get($request),
+            'filters' => $request->all(),
+        ]);
+    }
+
+    /**
+     * Return organizations for CRM integrations.
+     *
+     * @param Request $request
+     * @return \Illuminate\Http\JsonResponse
+     */
     public function CRMOrganizations(Request $request)
     {
         $organizations = $this->organizationService->CRMOrganizations($request);
