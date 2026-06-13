@@ -26,13 +26,20 @@ class OrganizationController extends BaseController
     }
     
     public function index(){
-        $data['organizations'] = Team::with('organization')->where('user_id', auth()->user()->id)->get();
+        $data['organizations'] = Team::with('organization')
+            ->where('user_id', auth()->user()->id)
+            ->whereHas('organization')
+            ->get();
         
         return Inertia::render('User/OrganizationSelect', $data);
     }
 
     public function selectOrganization(Request $request){
-        $organization = Organization::where('uuid', $request->uuid)->first();
+        $organization = Organization::where('uuid', $request->uuid)
+            ->whereHas('teams', function ($query) {
+                $query->where('user_id', auth()->id());
+            })
+            ->first();
 
         if($organization){
             session()->put('current_organization', $organization->id);
