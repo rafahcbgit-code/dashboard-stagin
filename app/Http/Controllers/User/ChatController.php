@@ -129,6 +129,17 @@ class ChatController extends BaseController
         $request->validate([
             'phone' => 'required|string|max:40',
             'template' => 'required|string',
+            'variables' => 'nullable|array',
+            'variables.header' => 'nullable|array',
+            'variables.header.*.selection' => 'required|in:static,dynamic',
+            'variables.header.*.value' => 'required|string|max:4096',
+            'variables.body' => 'nullable|array',
+            'variables.body.*.selection' => 'required|in:static,dynamic',
+            'variables.body.*.value' => 'required|string|max:4096',
+            'variables.buttons' => 'nullable|array',
+            'variables.buttons.*' => 'nullable|array',
+            'variables.buttons.*.*.selection' => 'required|in:static,dynamic',
+            'variables.buttons.*.*.value' => 'required|string|max:4096',
         ]);
 
         if ($request->hasFile('header_media')) {

@@ -96,7 +96,52 @@
             </div>
 
             <div class="mt-5 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-xs leading-5 text-slate-600">
-              {{ $t('Only approved templates can be sent. Template variables will be filled with default values.') }}
+              {{ $t('Only approved templates can be sent. Configure each template variable as a static value or a dynamic contact field.') }}
+            </div>
+
+            <div v-if="quickSendVariables.length" class="mt-5 rounded-md border border-slate-200 bg-white px-3 py-3">
+              <div class="mb-3">
+                <h4 class="text-sm font-semibold text-slate-800">{{ $t('Template variables') }}</h4>
+                <p class="mt-1 text-xs leading-5 text-slate-500">
+                  {{ $t('Static values are sent as entered. Dynamic values are resolved from the contact matching the phone number.') }}
+                </p>
+              </div>
+
+              <div class="space-y-3">
+                <div v-for="variable in quickSendVariables" :key="variable.key"
+                  class="grid gap-3 rounded-md border border-slate-100 bg-slate-50 p-3 md:grid-cols-[minmax(0,1fr)_10rem_minmax(0,1.5fr)] md:items-end">
+                  <div>
+                    <span class="block text-sm font-medium text-slate-700">{{ variable.label }}</span>
+                    <span class="mt-1 block text-xs text-slate-500">{{ variable.placeholder }}</span>
+                  </div>
+
+                  <div>
+                    <label class="mb-1 block text-xs font-medium text-slate-600">{{ $t('Variable type') }}</label>
+                    <select v-model="variable.selection" @change="resetVariableValue(variable)"
+                      class="block w-full rounded-md border-0 px-3 py-2 text-sm text-gray-900 shadow-sm outline-none ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-primary">
+                      <option value="static">{{ $t('Static') }}</option>
+                      <option value="dynamic">{{ $t('Dynamic') }}</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label class="mb-1 block text-xs font-medium text-slate-600">{{ $t('Value') }}</label>
+                    <input v-if="variable.selection === 'static'" v-model="variable.value" type="text"
+                      :placeholder="$t('Enter a static value')"
+                      class="block w-full rounded-md border-0 px-3 py-2 text-sm text-gray-900 shadow-sm outline-none ring-1 ring-inset ring-gray-300 placeholder:text-gray-400 focus:ring-2 focus:ring-primary" />
+                    <select v-else v-model="variable.value"
+                      class="block w-full rounded-md border-0 px-3 py-2 text-sm text-gray-900 shadow-sm outline-none ring-1 ring-inset ring-gray-300 focus:ring-2 focus:ring-primary">
+                      <option value="">{{ $t('-- Choose a contact field --') }}</option>
+                      <option v-for="option in dynamicOptions" :key="option.value" :value="option.value">
+                        {{ option.label }}
+                      </option>
+                    </select>
+                    <p v-if="!String(variable.value || '').trim()" class="mt-1 text-xs text-[#b91c1c]">
+                      {{ $t('A value is required for this variable.') }}
+                    </p>
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div v-if="selectedTemplateHeaderMediaType" class="mt-5 rounded-md border border-slate-200 bg-white px-3 py-3">
@@ -161,6 +206,10 @@ const props = defineProps({
   openOnMount: {
     type: Boolean,
     default: false
+  },
+  contactFields: {
+    type: [Array, Object],
+    default: () => []
   }
 });
 
@@ -178,9 +227,37 @@ const phoneError = ref('');
 const isSending = ref(false);
 const highlightedIndex = ref(0);
 const dropdownRef = ref(null);
+const quickSendVariables = ref([]);
 
 const normalizedPhone = computed(() => quickSendPhone.value.replace(/[^0-9]/g, ''));
-const canSend = computed(() => normalizedPhone.value.length >= 8 && selectedTemplate.value !== null);
+const variablesAreValid = computed(() => quickSendVariables.value.every(
+  (variable) => String(variable.value ?? '').trim() !== ''
+));
+const canSend = computed(() => normalizedPhone.value.length >= 8
+  && selectedTemplate.value !== null
+  && variablesAreValid.value);
+
+const baseDynamicOptions = [
+  { value: 'first name', label: t('Contact first name') },
+  { value: 'last name', label: t('Contact last name') },
+  { value: 'name', label: t('Contact full name') },
+  { value: 'phone', label: t('Contact phone') },
+  { value: 'email', label: t('Contact email') },
+];
+
+const dynamicOptions = computed(() => {
+  let fields = props.contactFields;
+  if (!Array.isArray(fields)) {
+    fields = Array.isArray(fields?.data) ? fields.data : Object.values(fields || {});
+  }
+
+  const customOptions = fields.map((field) => ({
+    value: field?.slug || field?.name || field?.label || field?.key || field?.field_name || field?.id,
+    label: field?.label || field?.name || field?.display_name || field?.slug || field?.field_name || field?.title,
+  })).filter((field) => field.value && field.label);
+
+  return [...new Map([...baseDynamicOptions, ...customOptions].map((option) => [String(option.value), option])).values()];
+});
 
 const formattedTemplates = computed(() => props.templates.map((template) => ({
   ...template,
@@ -249,6 +326,7 @@ const cancelModal = () => {
   quickSendTemplate.value = '';
   quickSendHeaderFile.value = null;
   quickSendHeaderFileError.value = '';
+  quickSendVariables.value = [];
   templateSearch.value = '';
   quickSendStatus.value = null;
 };
@@ -272,6 +350,7 @@ const closeDropdown = () => {
 
 const selectTemplate = (template) => {
   quickSendTemplate.value = String(template.uuid || template.id);
+  quickSendVariables.value = extractTemplateVariables(template);
   quickSendHeaderFile.value = null;
   quickSendHeaderFileError.value = '';
   dropdownOpen.value = false;
@@ -377,6 +456,151 @@ const parseTemplateMetadata = (template) => {
   return metadata;
 };
 
+const normalizeExampleValues = (examples) => {
+  if (!Array.isArray(examples)) {
+    return examples === null || examples === undefined || examples === '' ? [] : [examples];
+  }
+
+  const values = Array.isArray(examples[0]) ? examples[0] : examples;
+  return values.map((value) => Array.isArray(value) ? value[0] : value);
+};
+
+const countPlaceholders = (text) => {
+  return String(text || '').match(/{{\s*\d+\s*}}/g)?.length || 0;
+};
+
+const createTextVariables = ({ component, label, text, examples = [], parameters = [], buttonIndex = null }) => {
+  const count = Math.max(countPlaceholders(text), examples.length, parameters.length);
+
+  return Array.from({ length: count }, (_, index) => {
+    const parameter = parameters[index] || {};
+    const selection = parameter.selection || parameter.type || 'static';
+    const defaultValue = parameter.value ?? examples[index] ?? '';
+
+    return {
+      key: `${component}-${buttonIndex ?? 'main'}-${index}`,
+      component,
+      buttonIndex,
+      parameterIndex: index,
+      label: `${label} ${index + 1}`,
+      placeholder: `{{${index + 1}}}`,
+      selection: selection === 'dynamic' ? 'dynamic' : 'static',
+      value: String(defaultValue ?? ''),
+      defaultValue: String(defaultValue ?? ''),
+    };
+  });
+};
+
+const extractTemplateVariables = (template) => {
+  const metadata = parseTemplateMetadata(template);
+  if (!metadata) {
+    return [];
+  }
+
+  const components = Array.isArray(metadata.components) ? metadata.components : [];
+  const header = components.find((component) => component.type?.toUpperCase() === 'HEADER') || metadata.header || null;
+  const body = components.find((component) => component.type?.toUpperCase() === 'BODY') || metadata.body || null;
+  const buttonComponent = components.find((component) => component.type?.toUpperCase() === 'BUTTONS');
+  const buttons = buttonComponent?.buttons || metadata.buttons || [];
+  const variables = [];
+
+  if (header && String(header.format || '').toUpperCase() === 'TEXT') {
+    variables.push(...createTextVariables({
+      component: 'header',
+      label: t('Header variable'),
+      text: header.text,
+      examples: normalizeExampleValues(header.example?.header_text || header.example),
+      parameters: header.parameters || [],
+    }));
+  }
+
+  if (body) {
+    variables.push(...createTextVariables({
+      component: 'body',
+      label: t('Body variable'),
+      text: body.text,
+      examples: normalizeExampleValues(body.example?.body_text || body.example),
+      parameters: body.parameters || [],
+    }));
+  }
+
+  buttons.forEach((button, buttonIndex) => {
+    const type = String(button.type || '').toUpperCase();
+    if (!['URL', 'COPY_CODE'].includes(type)) {
+      return;
+    }
+
+    let examples = normalizeExampleValues(button.example);
+    if (type === 'URL' && String(button.url || '').includes('{{')) {
+      const baseUrl = String(button.url).split('{{')[0];
+      examples = examples.map((example) => {
+        const value = String(example ?? '');
+        return baseUrl && value.startsWith(baseUrl) ? value.slice(baseUrl.length) : value;
+      });
+    }
+    const parameterCount = Math.max(
+      type === 'URL' ? countPlaceholders(button.url) : 0,
+      examples.length,
+      button.parameters?.length || 0,
+    );
+
+    if (parameterCount === 0) {
+      return;
+    }
+
+    variables.push(...createTextVariables({
+      component: 'button',
+      label: `${t('Button variable')} (${button.text || buttonIndex + 1})`,
+      text: Array.from({ length: parameterCount }, (_, index) => `{{${index + 1}}}`).join(' '),
+      examples,
+      parameters: button.parameters || [],
+      buttonIndex,
+    }));
+  });
+
+  return variables;
+};
+
+const resetVariableValue = (variable) => {
+  variable.value = variable.selection === 'static' ? variable.defaultValue : '';
+};
+
+const buildVariablesPayload = () => {
+  const payload = { header: [], body: [], buttons: {} };
+
+  quickSendVariables.value.forEach((variable) => {
+    const parameter = {
+      selection: variable.selection,
+      value: String(variable.value ?? '').trim(),
+    };
+
+    if (variable.component === 'button') {
+      payload.buttons[variable.buttonIndex] ||= [];
+      payload.buttons[variable.buttonIndex][variable.parameterIndex] = parameter;
+    } else {
+      payload[variable.component][variable.parameterIndex] = parameter;
+    }
+  });
+
+  return payload;
+};
+
+const appendFormDataValue = (formData, key, value) => {
+  if (Array.isArray(value)) {
+    value.forEach((item, index) => appendFormDataValue(formData, `${key}[${index}]`, item));
+    return;
+  }
+
+  if (value && typeof value === 'object') {
+    Object.entries(value).forEach(([childKey, childValue]) => {
+      appendFormDataValue(formData, `${key}[${childKey}]`, childValue);
+    });
+    return;
+  }
+
+  formData.append(key, value ?? '');
+};
+
 const getFileAcceptAttribute = (fileType) => {
   switch (fileType) {
     case 'IMAGE':
@@ -480,6 +704,11 @@ const sendTemplateToNumber = async () => {
     return;
   }
 
+  if (!variablesAreValid.value) {
+    quickSendStatus.value = { type: 'error', message: t('Please provide a value for every template variable.') };
+    return;
+  }
+
   isSending.value = true;
   quickSendStatus.value = null;
 
@@ -487,17 +716,20 @@ const sendTemplateToNumber = async () => {
     // Extract digits and send the full phone number as provided
     const phoneToSend = quickSendPhone.value.replace(/[^0-9+]/g, '');
     const payload = quickSendHeaderFile.value ? new FormData() : null;
+    const variables = buildVariablesPayload();
     let response;
 
     if (payload) {
       payload.append('phone', phoneToSend);
       payload.append('template', quickSendTemplate.value);
       payload.append('header_media', quickSendHeaderFile.value);
+      appendFormDataValue(payload, 'variables', variables);
       response = await axios.post('/chats/send-template-to-number', payload);
     } else {
       response = await axios.post('/chats/send-template-to-number', {
         phone: phoneToSend,
         template: quickSendTemplate.value,
+        variables,
       });
     }
 

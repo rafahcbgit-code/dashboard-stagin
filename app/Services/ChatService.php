@@ -217,8 +217,10 @@ class ChatService
                     ->where('is_read', 0)
                     ->count();
 
-                $contactFieldService = new ContactFieldService(session()->get('current_organization'));
-                $contactFields = $contactFieldService->get($request);
+                $contactFields = ContactField::where('organization_id', $this->organizationId)
+                    ->whereNull('deleted_at')
+                    ->orderBy('position')
+                    ->get();
 
                 $labelColors = DB::table('labels')
                     ->join('contact_label', 'labels.id', '=', 'contact_label.label_id')
@@ -281,6 +283,10 @@ class ChatService
                 'addon' => $aimodule,
                 'ticket' => array(),
                 'chat_sort_direction' => $sortDirection,
+                'contactFields' => ContactField::where('organization_id', $this->organizationId)
+                    ->whereNull('deleted_at')
+                    ->orderBy('position')
+                    ->get(),
                 'isChatLimitReached' => SubscriptionService::isSubscriptionFeatureLimitReached($this->organizationId, 'message_limit'),
                 'teamRole' => $team?->role
             ]);
@@ -834,6 +840,10 @@ class ChatService
                 $templatePayload = $this->buildCarouselTemplateRequest((int) $template->id, $contact, $template);
             } else {
                 $sendMetadata = $this->buildDefaultTemplateSendMetadata($template, $metadata);
+                $sendMetadata = $this->applyTemplateVariableOverrides(
+                    $sendMetadata,
+                    $request->input('variables', [])
+                );
 
                 if ($request->hasFile('header_media') && $this->metadataHasMediaHeader($sendMetadata)) {
                     $upload = $this->storeTemplateHeaderUpload($request->file('header_media'));
@@ -873,6 +883,66 @@ class ChatService
             null,
             $template
         );
+    }
+
+    private function applyTemplateVariableOverrides(array $metadata, array $variables): array
+    {
+        foreach (['header', 'body'] as $component) {
+            foreach (($variables[$component] ?? []) as $index => $override) {
+                $existingParameter = $metadata[$component]['parameters'][$index] ?? null;
+
+                if (!is_array($override) || !is_array($existingParameter)) {
+                    continue;
+                }
+
+                if ($component === 'header' && strtolower((string) ($existingParameter['type'] ?? '')) !== 'text') {
+                    continue;
+                }
+
+                $metadata[$component]['parameters'][$index] = array_merge(
+                    $existingParameter,
+                    [
+                        'type' => 'text',
+                        'selection' => $override['selection'] ?? 'static',
+                        'value' => $override['value'] ?? '',
+                    ]
+                );
+            }
+
+            if (!empty($metadata[$component]['parameters'])) {
+                ksort($metadata[$component]['parameters']);
+                $metadata[$component]['parameters'] = array_values($metadata[$component]['parameters']);
+            }
+        }
+
+        foreach (($variables['buttons'] ?? []) as $buttonIndex => $buttonVariables) {
+            if (!is_array($buttonVariables) || !isset($metadata['buttons'][$buttonIndex])) {
+                continue;
+            }
+
+            foreach ($buttonVariables as $parameterIndex => $override) {
+                if (
+                    !is_array($override)
+                    || !isset($metadata['buttons'][$buttonIndex]['parameters'][$parameterIndex])
+                ) {
+                    continue;
+                }
+
+                $metadata['buttons'][$buttonIndex]['parameters'][$parameterIndex] = [
+                    'type' => $override['selection'] ?? 'static',
+                    'value' => $override['value'] ?? '',
+                ];
+            }
+
+            if (!empty($metadata['buttons'][$buttonIndex]['parameters'])) {
+                ksort($metadata['buttons'][$buttonIndex]['parameters']);
+                $metadata['buttons'][$buttonIndex]['parameters'] = array_values(
+                    $metadata['buttons'][$buttonIndex]['parameters']
+                );
+            }
+        }
+
+        return $metadata;
     }
 
     private function metadataHasMediaHeader(array $metadata): bool

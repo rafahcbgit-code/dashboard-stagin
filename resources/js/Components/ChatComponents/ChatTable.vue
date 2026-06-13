@@ -43,6 +43,10 @@ const props = defineProps({
     templates: {
         type: Array,
         default: () => []
+    },
+    contactFields: {
+        type: [Array, Object],
+        default: () => []
     }
 });
 
@@ -426,7 +430,7 @@ const buildChatUrl = (contactUuid) => {
                 <h2>{{ $t('Chats') }}</h2>
                 <!-- <span class="text-slate-500">{{ rowCount }}</span> -->
             </div>
-            <SendTemplateToPhone :templates="props.templates" @sent="handleQuickSendSent" />
+            <SendTemplateToPhone :templates="props.templates" :contactFields="props.contactFields" @sent="handleQuickSendSent" />
         </div>
         <div class="bg-slate-50 rounded-md mt-3 flex items-center py-[2px]">
             <div class="pl-3 py-2">

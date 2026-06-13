@@ -5,7 +5,7 @@
         <ChatTable :rows="rows" :filters="props.filters" :rowCount="props.rowCount"
           :ticketingIsEnabled="ticketingIsEnabled" :status="props?.status"
           :chatSortDirection="props.chat_sort_direction" :teamRole="props.teamRole"
-                    :selectedContactUuid="contact?.uuid" :templates="templates" />
+                    :selectedContactUuid="contact?.uuid" :templates="templates" :contactFields="contactFields" />
       </div>
       <div class="min-w-0 bg-cover flex flex-col chat-bg"
         :class="contact ? 'h-screen md:w-[70%]' : 'md:h-screen md:w-[70%]'">
@@ -84,7 +84,10 @@ const props = defineProps({
   fields: Array,
   locationSettings: Object,
   simpleForm: Boolean,
-  contactFields: Array,
+  contactFields: {
+    type: [Array, Object],
+    default: () => [],
+  },
   teamRole: String,
   labelColors: Array,
 });

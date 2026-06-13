@@ -83,7 +83,10 @@ class HandleInertiaRequests extends Middleware
                 $query->where('organization_id', $organizationId);
             }]);
 
-            $organizations = Team::with('organization')->where('user_id', $user->id)->get();
+            $organizations = Team::with('organization')
+                ->where('user_id', $user->id)
+                ->whereHas('organization')
+                ->get();
             $organization = Organization::where('id', $organizationId)->first();
             $unreadMessages = \Illuminate\Support\Facades\Cache::remember("org_{$organizationId}_global_unread", 60, function () use ($organizationId) {
                 return Chat::where('organization_id', $organizationId)
