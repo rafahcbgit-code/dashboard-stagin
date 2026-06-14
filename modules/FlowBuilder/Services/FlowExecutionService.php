@@ -505,6 +505,7 @@ class FlowExecutionService
                 // User clicked a button/list item — route to the matching branch
                 $nextNode = $parser->getNextNode($currentNodeId, $message);
                 if ($nextNode) {
+                    $this->captureInteractiveSelection($fields, $message, $flowData);
                     $this->updateStep($chat->contact_id, (string) $nextNode['id']);
                     $previousNodeId = $currentNodeId;
                     $currentNodeId = (string) $nextNode['id'];
@@ -704,6 +705,40 @@ class FlowExecutionService
         }
 
         return $response !== null && $response !== false;
+    }
+
+    /**
+     * Optionally persist a valid interactive selection as a flow variable.
+     * List nodes can append selections to build a simple session-scoped cart.
+     */
+    private function captureInteractiveSelection(array $fields, string $selection, FlowUserData $flowData): void
+    {
+        $variable = trim((string) ($fields['selection_variable'] ?? ''));
+        $selection = trim($selection);
+
+        if ($variable === '' || $selection === '') {
+            return;
+        }
+
+        $mode = ($fields['selection_mode'] ?? 'replace') === 'append' ? 'append' : 'replace';
+        $current = (string) $flowData->getVariable($variable, '');
+
+        $flowData->setVariable(
+            $variable,
+            $this->buildSelectionVariableValue($current, $selection, $mode)
+        );
+    }
+
+    private function buildSelectionVariableValue(string $current, string $selection, string $mode): string
+    {
+        if ($mode !== 'append') {
+            return $selection;
+        }
+
+        $item = '• ' . $selection;
+        $current = trim($current);
+
+        return $current === '' ? $item : $current . "\n" . $item;
     }
 
     private function prepareHeader(array $fields): array

@@ -33,6 +33,9 @@ const fields = ref({
   footer: props.data.metadata?.fields?.footer || '',
   buttonLabel: props.data.metadata?.fields?.buttonLabel || '',
   sections: props.data.metadata?.fields?.sections || [{ rows: [{ id: '', title: '', description: '' }] }],
+  // Optional runtime settings used by flows that collect list choices.
+  selection_variable: props.data.metadata?.fields?.selection_variable || '',
+  selection_mode: props.data.metadata?.fields?.selection_mode || 'replace',
 })
 
 const options = ref([
