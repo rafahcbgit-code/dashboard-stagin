@@ -30,6 +30,10 @@ const fields = ref({
   max_retries: props.data.metadata?.fields?.max_retries ?? 3,
   retry_message: props.data.metadata?.fields?.retry_message || '',
   validation_pattern: props.data.metadata?.fields?.validation_pattern || '',
+  // Optional runtime settings for composing an answer into another flow variable.
+  append_to_variable: props.data.metadata?.fields?.append_to_variable || '',
+  append_value_template: props.data.metadata?.fields?.append_value_template || '',
+  clear_variables_after_append: props.data.metadata?.fields?.clear_variables_after_append || [],
 })
 
 function getCharsCount(input: string): number {

@@ -445,6 +445,9 @@ class FlowExecutionService
                     'max_retries' => (int) ($fields['max_retries'] ?? 3),
                     'retry_message' => $fields['retry_message'] ?? '',
                     'validation_pattern' => $fields['validation_pattern'] ?? '',
+                    'append_to_variable' => $fields['append_to_variable'] ?? '',
+                    'append_value_template' => $fields['append_value_template'] ?? '',
+                    'clear_variables_after_append' => $fields['clear_variables_after_append'] ?? [],
                 ]);
                 $flowData->setVariable('_question_retries', 0);
 
@@ -1249,6 +1252,7 @@ class FlowExecutionService
             // Save answer to flow variables
             $vars = $flowData->variables ?? [];
             $vars[$variableName] = $message;
+            $vars = $this->appendQuestionAnswerToVariable($vars, $config, $message);
             unset($vars['_question_config'], $vars['_question_retries']);
             $flowData->variables = $vars;
             $flowData->save();
@@ -1373,6 +1377,34 @@ class FlowExecutionService
         }
 
         return true;
+    }
+
+    private function appendQuestionAnswerToVariable(array $variables, array $config, string $answer): array
+    {
+        $target = trim((string) ($config['append_to_variable'] ?? ''));
+        $template = (string) ($config['append_value_template'] ?? '');
+
+        if ($target === '' || $template === '') {
+            return $variables;
+        }
+
+        $value = str_replace('{{answer}}', trim($answer), $template);
+        $value = preg_replace_callback('/\{\{flow\.(\w+)\}\}/', function ($matches) use ($variables) {
+            return (string) ($variables[$matches[1]] ?? $matches[0]);
+        }, $value);
+
+        $current = trim((string) ($variables[$target] ?? ''));
+        $value = trim($value);
+
+        if ($value !== '') {
+            $variables[$target] = $current === '' ? $value : $current . "\n" . $value;
+        }
+
+        foreach (($config['clear_variables_after_append'] ?? []) as $variable) {
+            unset($variables[$variable]);
+        }
+
+        return $variables;
     }
 
     private function storeQuestionAttempt($chat, FlowUserData $flowData, array $config, string $message, string $status, int $attempt): void
