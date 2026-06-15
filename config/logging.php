@@ -156,6 +156,13 @@ return [
             'days' => 14,
             'replace_placeholders' => true,
         ],
+        'whatsapp_number_status' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/whatsapp-number-status.log'),
+            'level' => env('LOG_LEVEL', 'debug'),
+            'days' => 14,
+            'replace_placeholders' => true,
+        ],
         'zid' => [
             'driver' => 'daily',
             'path' => storage_path('logs/zid.log'),
