@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller as BaseController;
 use App\Http\Requests\StoreOrganization;
+use App\Jobs\SyncWhatsappNumberStatusJob;
 use App\Services\OrganizationService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -37,6 +38,24 @@ class OrganizationController extends BaseController
             'rows' => $this->organizationService->get($request),
             'filters' => $request->all(),
         ]);
+    }
+
+    /**
+     * Queue a WhatsApp number status sync for all configured organizations.
+     */
+    public function syncWhatsappNumberStatuses()
+    {
+        SyncWhatsappNumberStatusJob::dispatch()
+            //->onConnection('redis')
+            ->onQueue('default');
+
+        return back()->with(
+            'status',
+            [
+                'type' => 'success',
+                'message' => __('WhatsApp number status sync has been queued successfully!'),
+            ]
+        );
     }
 
     /**

@@ -49,7 +49,7 @@ class Kernel extends ConsoleKernel
             ->everyFiveMinutes()
             ->withoutOverlapping();
 
-        $schedule->job(new SyncWhatsappNumberStatusJob())
+        $schedule->job(new SyncWhatsappNumberStatusJob(), 'default', 'redis')
             ->name('sync-whatsapp-number-statuses')
             ->dailyAt('00:00')
             ->timezone('Asia/Damascus')
