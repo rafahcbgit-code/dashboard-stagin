@@ -24,7 +24,7 @@ use Illuminate\Support\Facades\Log;
  * fail the job.
  *
  * Dispatched by: ProcessWebhookJob after chat creation
- * Queue: webhook-high
+ * Queue: webhook-notifications
  *
  * AC-1.4.1: Pusher broadcast sends NewChatEvent
  * AC-1.4.2: FCM push notification to mobile devices
@@ -104,7 +104,7 @@ class ProcessWebhookNotificationsJob implements ShouldQueue
         $this->organizationId = $organizationId;
         $this->isNewContact = $isNewContact;
         $this->rawWhatsAppPayload = $rawWhatsAppPayload;
-        $this->onQueue('webhook-high');
+        $this->onQueue('webhook-notifications');
     }
 
     /**

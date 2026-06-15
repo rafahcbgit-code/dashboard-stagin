@@ -30,7 +30,7 @@ use Illuminate\Support\Facades\Storage;
  * 5. Update Chat record with media_id reference
  *
  * Dispatched by: ProcessWebhookJob when message contains media
- * Queue: webhook-high
+ * Queue: webhook-media
  *
  * @see Story 1.3 - Create DownloadWebhookMediaJob for Async Media Handling
  */
@@ -85,7 +85,7 @@ class DownloadWebhookMediaJob implements ShouldQueue
         $this->contactId = $contactId;
         $this->organizationId = $organizationId;
         $this->mediaData = $mediaData;
-        $this->onQueue('webhook-high');
+        $this->onQueue('webhook-media');
     }
 
     /**
