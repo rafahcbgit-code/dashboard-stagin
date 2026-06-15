@@ -46,7 +46,7 @@ class OrganizationController extends BaseController
     public function syncWhatsappNumberStatuses()
     {
         SyncWhatsappNumberStatusJob::dispatch()
-            //->onConnection('redis')
+            ->onConnection('redis')
             ->onQueue('default');
 
         return back()->with(
