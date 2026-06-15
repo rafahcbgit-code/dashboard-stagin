@@ -6,7 +6,6 @@ use App\Services\WooCommerce\Contracts\WooCommerceIntegrationRepositoryInterface
 use App\Services\WooCommerce\Repositories\Eloquent\WooCommerceIntegrationRepository;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\ServiceProvider;
-use Laravel\Telescope\TelescopeServiceProvider;
 use Inertia\Inertia;
 
 class AppServiceProvider extends ServiceProvider
@@ -21,9 +20,6 @@ class AppServiceProvider extends ServiceProvider
             WooCommerceIntegrationRepository::class
         );
 
-        if ($this->app->environment('local')) {
-            $this->app->register(TelescopeServiceProvider::class);
-        }
     }
 
     /**

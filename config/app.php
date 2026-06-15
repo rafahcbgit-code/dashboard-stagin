@@ -18,12 +18,15 @@ $providers = [
     App\Providers\BroadcastConfigServiceProvider::class,
     App\Providers\MailConfigServiceProvider::class,
     App\Providers\RouteServiceProvider::class,
-    App\Providers\TelescopeServiceProvider::class,
     App\Providers\RecaptchaServiceProvider::class,
     App\Providers\SallaServiceProvider::class,
     App\Providers\ZidServiceProvider::class,
     Mews\Purifier\PurifierServiceProvider::class,
 ];
+
+if (class_exists(\Laravel\Telescope\TelescopeApplicationServiceProvider::class)) {
+    $providers[] = App\Providers\TelescopeServiceProvider::class;
+}
 
 // Conditionally add EmbeddedSignupServiceProvider if it exists
 if (is_dir(base_path('modules/EmbeddedSignup')) && class_exists(\Modules\EmbeddedSignup\Providers\EmbeddedSignupServiceProvider::class)) {
