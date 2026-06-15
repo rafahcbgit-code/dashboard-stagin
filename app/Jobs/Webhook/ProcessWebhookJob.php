@@ -97,7 +97,14 @@ class ProcessWebhookJob implements ShouldQueue
         $this->webhookType = $webhookType;
         $this->context = $context;
         $this->context['dispatched_at'] ??= now()->toIso8601String();
-        $this->onQueue('webhook-high');
+        $this->onQueue(self::queueForType($webhookType));
+    }
+
+    public static function queueForType(string $webhookType): string
+    {
+        return in_array($webhookType, ['history', 'smb_app_state_sync'], true)
+            ? 'webhook-bulk'
+            : 'webhook-high';
     }
 
     /**
@@ -367,7 +374,7 @@ class ProcessWebhookJob implements ShouldQueue
                 $contact->id,
                 $this->organizationId,
                 $mediaData
-            )->onQueue('webhook-high');
+            )->onQueue('webhook-media');
 
             Log::channel('webhook')->info('DownloadWebhookMediaJob dispatched', [
                 'chat_id' => $chat->id,
@@ -393,7 +400,7 @@ class ProcessWebhookJob implements ShouldQueue
                 $contact->id,
                 $this->organizationId,
                 $referralMediaData
-            )->onQueue('webhook-high');
+            )->onQueue('webhook-media');
 
             Log::channel('webhook')->info('DownloadWebhookMediaJob dispatched for referral media', [
                 'chat_id' => $chat->id,
@@ -411,7 +418,7 @@ class ProcessWebhookJob implements ShouldQueue
             $this->organizationId,
             $isNewContact,
             $this->payload
-        )->onQueue('webhook-high');
+        )->onQueue('webhook-notifications');
 
         Log::channel('webhook')->info('ProcessWebhookNotificationsJob dispatched', [
             'chat_id' => $chat->id,
@@ -1156,7 +1163,7 @@ class ProcessWebhookJob implements ShouldQueue
                     $contact->id,
                     $this->organizationId,
                     $mediaData
-                )->onQueue('webhook-high');
+                )->onQueue('webhook-media');
 
                 Log::channel('webhook')->info('DownloadWebhookMediaJob dispatched for SMB echo', [
                     'chat_id' => $chat->id,
@@ -1172,7 +1179,7 @@ class ProcessWebhookJob implements ShouldQueue
                 $this->organizationId,
                 $isNewContact,
                 $this->payload
-            )->onQueue('webhook-high');
+            )->onQueue('webhook-notifications');
 
             Log::channel('webhook')->info('ProcessWebhookNotificationsJob dispatched for SMB echo', [
                 'chat_id' => $chat->id,
@@ -1272,7 +1279,7 @@ class ProcessWebhookJob implements ShouldQueue
             $this->organizationId,
             $isNewContact,
             $this->payload
-        )->onQueue('webhook-high');
+        )->onQueue('webhook-notifications');
 
         Log::channel('webhook')->info('SMB edit created chat using original wam_id', [
             'organization_id' => $this->organizationId,
@@ -1998,7 +2005,7 @@ class ProcessWebhookJob implements ShouldQueue
                 $contact->id,
                 $this->organizationId,
                 $mediaData
-            )->onQueue('webhook-high');
+            )->onQueue('webhook-media');
 
             Log::channel('webhook')->debug('DownloadWebhookMediaJob dispatched for history message', [
                 'chat_id' => $chat->id,
@@ -2014,7 +2021,7 @@ class ProcessWebhookJob implements ShouldQueue
             $this->organizationId,
             $isNewContact,
             $this->payload
-        )->onQueue('webhook-high');
+        )->onQueue('webhook-notifications');
 
         // Trigger external webhook for history message (fire-and-forget)
         try {

@@ -134,6 +134,14 @@ return [
             'days' => 14, // keep logs for 14 days, adjust as needed
         ],
 
+        'webhook_dispatch_failures' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/webhook-dispatch-failures.log'),
+            'level' => 'critical',
+            'days' => 14,
+            'replace_placeholders' => true,
+        ],
+
         'template_status_webhook' => [
             'driver' => 'daily',
             'path' => storage_path('logs/template-status-webhook.log'),

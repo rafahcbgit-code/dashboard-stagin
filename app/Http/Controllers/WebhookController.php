@@ -56,11 +56,12 @@ class WebhookController extends BaseController
         ]);
     }
 
-    public function whatsappWebhook(Request $request){
-        
+    public function whatsappWebhook(Request $request)
+    {
+
         Log::channel('waba_webhook')->info('Incoming WABA webhook payload', [
             'payload' => $request->all()
-        ]); 
+        ]);
 
         if ($request->isMethod('post')) {
             return $this->handleWabaPostRequest($request);
@@ -291,22 +292,30 @@ class WebhookController extends BaseController
         $webhookType = $res['field'] ?? 'unknown';
 
         // Dispatch to background job for async processing (AC-1.1.3, AC-1.1.4, AC-1.1.5)
-        // No database writes or external API calls occur here
-        ProcessWebhookJob::dispatch(
-            $res,
-            $organization->id,
-            $webhookType,
-            [
+        // Only acknowledge the webhook after the queue accepts the job.
+        try {
+            ProcessWebhookJob::dispatch(
+                $res,
+                $organization->id,
+                $webhookType,
+                [
+                    'waba_id' => $entry[0]['id'] ?? null,
+                    'raw_payload' => $payload,
+                ]
+            );
+        } catch (\Throwable $e) {
+            Log::channel('webhook_dispatch_failures')->critical('Failed to dispatch webhook processing job', [
+                'organization_id' => $organization->id,
+                'webhook_type' => $webhookType,
                 'waba_id' => $entry[0]['id'] ?? null,
-                'raw_payload' => $payload,
-            ]
-        );
+                'error' => $e->getMessage(),
+                'exception' => $e,
+            ]);
 
-        
-        // this code to test job sync without queue
-        /*$job = new ProcessWebhookJob($res, $organization->id, $webhookType);
-        $job->handle();*/
-        
+            return Response::json([
+                'status' => 'temporarily_unavailable',
+            ], 503)->header('Retry-After', '10');
+        }
 
         // Calculate response time and log (AC-1.1.6)
         $responseTime = (microtime(true) - $startTime) * 1000; // Convert to milliseconds
@@ -354,8 +363,6 @@ class WebhookController extends BaseController
                 'payload' => json_encode($this->redactSensitiveWebhookPayload($payload)),
                 'received_at' => now(),
             ]);
-
-        
         } catch (\Throwable $e) {
             Log::channel('webhook')->warning('Failed to store WhatsApp webhook for organization debugging', [
                 'organization_id' => $organizationId,
@@ -548,12 +555,12 @@ class WebhookController extends BaseController
 
             $storage = Setting::where('key', 'storage_system')->first()->value;
 
-            if($storage === 'local'){
+            if ($storage === 'local') {
                 $location = 'local';
                 $file = Storage::disk('local')->put('public/' . $fileName, $fileContent);
                 $mediaFilePath = $file;
                 $mediaUrl = rtrim(config('app.url'), '/') . '/media/' . 'public/' . $fileName;
-            } else if($storage === 'aws') {
+            } else if ($storage === 'aws') {
                 $location = 'amazon';
                 $filePath = 'uploads/media/received/'  . $organization->id . '/' . Str::random(40) . time();
                 $file = Storage::disk('s3')->put($filePath, $fileContent, [
@@ -566,7 +573,7 @@ class WebhookController extends BaseController
                 'media_url' => $mediaUrl,
                 'location' => $location,
             ];
-    
+
             return $mediaData;
         } catch (RequestException $e) {
             Log::error("Error processing webhook: " . $e->getMessage());
@@ -591,14 +598,13 @@ class WebhookController extends BaseController
     private function messageIsUnSubscribe($request, $organization, $contact)
     {
         try {
-         $payload = data_get($request, 'entry.0.changes.0.value.messages.0.button.text');
+            $payload = data_get($request, 'entry.0.changes.0.value.messages.0.button.text');
 
-        if ($payload) {
-            $this->checker->check($organization, $payload, $contact->id);
+            if ($payload) {
+                $this->checker->check($organization, $payload, $contact->id);
+            }
+        } catch (\Exception $e) {
         }
-
-    } catch (\Exception $e) {}
-
     }
 
     private function getMedia($mediaId, Organization $organization)
@@ -632,7 +638,7 @@ class WebhookController extends BaseController
     {
         $paymentPlatform = $this->paymentPlatformResolver->resolveService($processor);
         session()->put('paymentPlatform', $processor);
-        
+
         return $paymentPlatform->handleWebhook($request);
     }
 }
