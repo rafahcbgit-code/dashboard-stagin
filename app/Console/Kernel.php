@@ -5,6 +5,7 @@ namespace App\Console;
 use App\Jobs\CreateCampaignLogsJob;
 use App\Jobs\Flow\SendFlowRejoinRemindersJob;
 use App\Jobs\ProcessCampaignMessagesJob;
+use App\Jobs\SyncWhatsappNumberStatusJob;
 use App\Models\Campaign;
 use Illuminate\Console\Scheduling\Schedule;
 use Illuminate\Foundation\Console\Kernel as ConsoleKernel;
@@ -46,6 +47,12 @@ class Kernel extends ConsoleKernel
         // Run ticket creation check every 5 minutes
         $schedule->job(new \App\Jobs\EnsureTicketsExistJob())
             ->everyFiveMinutes()
+            ->withoutOverlapping();
+
+        $schedule->job(new SyncWhatsappNumberStatusJob())
+            ->name('sync-whatsapp-number-statuses')
+            ->dailyAt('00:00')
+            ->timezone('Asia/Damascus')
             ->withoutOverlapping();
 
         // Send flow rejoin reminders every 5 minutes
