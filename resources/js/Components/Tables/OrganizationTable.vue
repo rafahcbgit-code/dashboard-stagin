@@ -38,6 +38,22 @@
     const isLastRow = (index) => {
       return index === props.rows.data.length - 1;
     }
+
+    const isWhatsappConnected = (metadata) => {
+        if (!metadata) {
+            return false;
+        }
+
+        try {
+            const parsedMetadata = typeof metadata === 'string'
+                ? JSON.parse(metadata)
+                : metadata;
+
+            return String(parsedMetadata?.whatsapp?.number_status ?? '').toUpperCase() === 'CONNECTED';
+        } catch {
+            return false;
+        }
+    };
     
     const params = ref({
         search: props.filters.search || null,
@@ -131,7 +147,7 @@
                 </TableBodyRowItem>
                 <TableBodyRowItem class="hidden sm:table-cell">
                     <span class="py-1 rounded-[5px] text-xs px-3 bg-[#ddebf7] text-slate-700">
-                        {{ item.metadata !== null ? $t('True') : $t('False') }}
+                        {{ isWhatsappConnected(item.metadata) ? $t('True') : $t('False') }}
                     </span>
                 </TableBodyRowItem>
 
@@ -178,4 +194,3 @@
         :description = "$t('Are you sure you want to delete this row? This action can not be undone')"
     />
 </template>
-  
