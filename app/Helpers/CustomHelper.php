@@ -45,13 +45,14 @@ class CustomHelper {
             ->first();
 
         if($addon){
-            // Guard against organizations that have no subscription record at all
-            if (!$subscription || !$subscription->plan) {
-                return false;
+            // Allow trial organizations without a selected plan to test enabled addons.
+            if ($subscription && $subscription->status === 'trial' && $subscription->valid_until && Carbon::parse($subscription->valid_until)->isFuture()) {
+                return true;
             }
 
-            if($subscription->status === 'trial' && $subscription->valid_until > now()){
-                return true; //Allow user to test features during trial period
+            // Guard against organizations that have no subscription record or selected plan.
+            if (!$subscription || !$subscription->plan) {
+                return false;
             }
 
             $plan = SubscriptionPlan::where('id', $subscription->plan->id)->first();
