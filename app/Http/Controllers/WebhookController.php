@@ -339,7 +339,7 @@ class WebhookController extends BaseController
      */
     protected function storeReceivedWhatsappWebhookForDebugging(array $payload, int $organizationId): void
     {
-        if (! in_array($organizationId, [29, 542, 397], true)) {
+        if (! in_array($organizationId, [29, 542, 397, 106], true)) {
             return;
         }
 
