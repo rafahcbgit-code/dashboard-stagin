@@ -338,6 +338,7 @@ Route::middleware(['auth:user'])->group(function () {
 
                 Route::match(['get', 'post'], '/templates/create', [App\Http\Controllers\User\TemplateController::class, 'create']);
                 Route::get('/templates/{uuid}/show', [App\Http\Controllers\User\TemplateController::class, 'show'])->name('templates.show');
+                Route::get('/templates/{uuid}/copy', [App\Http\Controllers\User\TemplateController::class, 'copy'])->name('templates.copy');
                 Route::get('/templates/{uuid?}', [App\Http\Controllers\User\TemplateController::class, 'index']);
                 Route::post('/templates', [App\Http\Controllers\User\TemplateController::class, 'store']);
                 Route::post('/templates/{uuid}', [App\Http\Controllers\User\TemplateController::class, 'update']);

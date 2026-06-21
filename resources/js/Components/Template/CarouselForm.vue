@@ -87,6 +87,13 @@
                             </button>
                         </div>
                     </div>
+                    <div v-else-if="existingMediaUrl(card)" class="relative overflow-hidden rounded-lg bg-slate-100">
+                        <img v-if="card.header_type === 'IMAGE'" :src="existingMediaUrl(card)" class="max-h-48 w-full object-contain" alt="">
+                        <video v-else :src="existingMediaUrl(card)" class="max-h-48 w-full" controls></video>
+                        <button type="button" @click="removeCardFile(index)" class="absolute right-2 top-2 rounded-full bg-white p-1 text-slate-600 shadow hover:text-red-500">
+                            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M17.707 7.707a1 1 0 0 0-1.414-1.414L12 10.586L7.707 6.293a1 1 0 0 0-1.414 1.414L10.586 12l-4.293 4.293a1 1 0 1 0 1.414 1.414L12 13.414l4.293 4.293a1 1 0 1 0 1.414-1.414L13.414 12l4.293-4.293Z" clip-rule="evenodd"/></svg>
+                        </button>
+                    </div>
                     <div v-else class="flex justify-center px-4 pt-4 pb-4 border-2 border-gray-300 border-dashed rounded-md">
                         <input
                             type="file"
@@ -235,6 +242,11 @@ function triggerFileInput(index) {
     }
 }
 
+function existingMediaUrl(card) {
+    if (!card?.reuse_media) return null;
+    return card.local_url || card.source_media_url || card.header_handle || null;
+}
+
 /* ── Error boundary — prevents white screen on unexpected errors ───── */
 onErrorCaptured((err) => {
     console.error('CarouselForm: caught render error', err);
@@ -258,7 +270,15 @@ function emitCards(cards) {
  */
 function updateCardField(index, field, value) {
     const updated = props.cards.map((c, i) =>
-        i === index ? { ...c, [field]: value } : c
+        i === index
+            ? {
+                ...c,
+                [field]: value,
+                ...(field === 'header_type' && value !== c.header_type
+                    ? { reuse_media: false, local_url: null, source_media_url: null, header_handle: null }
+                    : {}),
+            }
+            : c
     );
     emitCards(updated);
 }
@@ -325,7 +345,7 @@ function handleCardFileUpload(event, cardIndex) {
     }
 
     const updated = props.cards.map((c, i) =>
-        i === cardIndex ? { ...c, file } : c
+        i === cardIndex ? { ...c, file, reuse_media: false } : c
     );
     emitCards(updated);
 }
@@ -333,7 +353,14 @@ function handleCardFileUpload(event, cardIndex) {
 function removeCardFile(cardIndex) {
     if (cardIndex < 0 || cardIndex >= props.cards.length) return;
     const updated = props.cards.map((c, i) =>
-        i === cardIndex ? { ...c, file: null } : c
+        i === cardIndex ? {
+            ...c,
+            file: null,
+            reuse_media: false,
+            local_url: null,
+            source_media_url: null,
+            header_handle: null,
+        } : c
     );
     emitCards(updated);
 }

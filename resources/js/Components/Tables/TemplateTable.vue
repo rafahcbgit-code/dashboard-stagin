@@ -106,6 +106,7 @@
                         <template #items>
                             <DropdownItemGroup>
                                 <DropdownItem :href="'/templates/' + item.uuid + '/show'">{{ $t('Show') }}</DropdownItem>
+                                <DropdownItem :href="'/templates/' + item.uuid + '/copy'">{{ $t('Copy') }}</DropdownItem>
                                 <DropdownItem v-if="item.status == 'APPROVED' || item.status == 'REJECTED' || item.status == 'PAUSED'" :href="'/templates/' + item.uuid">{{ $t('edit') }}</DropdownItem>
                                 <DropdownItem as="button" @click="openAlert(item.uuid)">{{ $t('Delete') }}</DropdownItem>
                             </DropdownItemGroup>

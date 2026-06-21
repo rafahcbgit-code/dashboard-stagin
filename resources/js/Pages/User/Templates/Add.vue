@@ -3,7 +3,7 @@
         <div class="px-4 md:px-0 flex flex-col bg-white border-l py-4 text-[#000] md:overflow-y-hidden">
             <div class="flex justify-between md:px-8 border-b pb-4">
                 <div>
-                    <h2 class="text-xl mb-1">{{ $t('New template') }}</h2>
+                    <h2 class="text-xl mb-1">{{ copyTemplate ? $t('Copy') + ' ' + $t('Template') : $t('New template') }}</h2>
                     <p class="flex items-center text-sm leading-6 text-gray-600">
                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11v5m0 5a9 9 0 1 1 0-18a9 9 0 0 1 0 18Zm.05-13v.1h-.1V8h.1Z"/></svg>
                         <span class="ml-1 mt-1">{{ $t('Create template for review') }}</span>
@@ -72,13 +72,13 @@
                                         />
                                         <div class="text-center">
                                             <div>
-                                                <div v-if="form.header.format === 'IMAGE' && form.header.example" class="flex justify-center items-center">
+                                                <div v-if="form.header.format === 'IMAGE' && (form.header.example || (form.reuse_header_media && currentHeaderPreviewUrl))" class="flex justify-center items-center">
                                                     <div class="flex justify-center items-center space-s-3 py-1 border bg-slate-100 rounded-lg mb-2 w-fit px-2">
                                                         <div>
                                                             <svg class="mx-auto h-6 w-6 text-gray-400 cursor-pointer" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M14 9a1.5 1.5 0 1 1 3 0a1.5 1.5 0 0 1-3 0Z"/><path fill="currentColor" fill-rule="evenodd" d="M7.268 4.658a54.647 54.647 0 0 1 9.465 0l1.51.132a3.138 3.138 0 0 1 2.831 2.66a30.604 30.604 0 0 1 0 9.1a3.138 3.138 0 0 1-2.831 2.66l-1.51.131c-3.15.274-6.316.274-9.465 0l-1.51-.131a3.138 3.138 0 0 1-2.832-2.66a30.601 30.601 0 0 1 0-9.1a3.138 3.138 0 0 1 2.831-2.66l1.51-.132Zm9.335 1.495a53.147 53.147 0 0 0-9.206 0l-1.51.131A1.638 1.638 0 0 0 4.41 7.672a29.101 29.101 0 0 0-.311 5.17L7.97 8.97a.75.75 0 0 1 1.09.032l3.672 4.13l2.53-.844a.75.75 0 0 1 .796.21l3.519 3.91a29.101 29.101 0 0 0 .014-8.736a1.638 1.638 0 0 0-1.478-1.388l-1.51-.131Zm2.017 11.435l-3.349-3.721l-2.534.844a.75.75 0 0 1-.798-.213l-3.471-3.905l-4.244 4.243c.049.498.11.996.185 1.491a1.638 1.638 0 0 0 1.478 1.389l1.51.131c3.063.266 6.143.266 9.206 0l1.51-.131c.178-.016.35-.06.507-.128Z" clip-rule="evenodd"/></svg>
                                                         </div>
                                                         <div class="flex items-center space-s-2">
-                                                            <span class="text-sm">{{ form.header.example.name }}</span>
+                                                            <span class="text-sm normal-case">{{ form.header.example?.name || $t('Current image') }}</span>
                                                             <button @click="removeFile()">
                                                                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M17.707 7.707a1 1 0 0 0-1.414-1.414L12 10.586L7.707 6.293a1 1 0 0 0-1.414 1.414L10.586 12l-4.293 4.293a1 1 0 1 0 1.414 1.414L12 13.414l4.293 4.293a1 1 0 1 0 1.414-1.414L13.414 12l4.293-4.293Z" clip-rule="evenodd"/></svg>
                                                             </button>
@@ -110,13 +110,13 @@
                                         />
                                         <div class="text-center">
                                             <div>
-                                                <div v-if="form.header.format === 'VIDEO' && form.header.example" class="flex justify-center items-center">
+                                                <div v-if="form.header.format === 'VIDEO' && (form.header.example || (form.reuse_header_media && currentHeaderPreviewUrl))" class="flex justify-center items-center">
                                                     <div class="flex justify-center items-center space-s-3 py-1 border bg-slate-100 rounded-lg mb-2 w-fit px-2">
                                                         <div>
                                                             <svg class="mx-auto h-6 w-6 text-gray-400 cursor-pointer" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-width="1.5" d="M2 11.5c0-3.287 0-4.931.908-6.038a4 4 0 0 1 .554-.554C4.57 4 6.212 4 9.5 4c3.287 0 4.931 0 6.038.908a4 4 0 0 1 .554.554C17 6.57 17 8.212 17 11.5v1c0 3.287 0 4.931-.908 6.038a4.001 4.001 0 0 1-.554.554C14.43 20 12.788 20 9.5 20c-3.287 0-4.931 0-6.038-.908a4 4 0 0 1-.554-.554C2 17.43 2 15.788 2 12.5v-1Zm15-2l.658-.329c1.946-.973 2.92-1.46 3.63-1.02c.712.44.712 1.528.712 3.703v.292c0 2.176 0 3.263-.711 3.703c-.712.44-1.685-.047-3.63-1.02L17 14.5v-5Z"/></svg>
                                                         </div>
                                                         <div class="flex items-center space-s-2">
-                                                            <span class="text-sm">{{ form.header.example.name }}</span>
+                                                            <span class="text-sm normal-case">{{ form.header.example?.name || $t('Current video') }}</span>
                                                             <button @click="removeFile()">
                                                                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M17.707 7.707a1 1 0 0 0-1.414-1.414L12 10.586L7.707 6.293a1 1 0 0 0-1.414 1.414L10.586 12l-4.293 4.293a1 1 0 1 0 1.414 1.414L12 13.414l4.293 4.293a1 1 0 1 0 1.414-1.414L13.414 12l4.293-4.293Z" clip-rule="evenodd"/></svg>
                                                             </button>
@@ -148,13 +148,13 @@
                                         />
                                         <div class="text-center">
                                             <div>
-                                                <div v-if="form.header.format === 'DOCUMENT' && form.header.example" class="flex justify-center items-center">
+                                                <div v-if="form.header.format === 'DOCUMENT' && (form.header.example || (form.reuse_header_media && currentHeaderPreviewUrl))" class="flex justify-center items-center">
                                                     <div class="flex justify-center items-center space-s-3 py-1 border bg-slate-100 rounded-lg mb-2 w-fit px-2">
                                                         <div>
                                                             <svg class="mx-auto h-6 w-6 text-gray-400 cursor-pointer" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M18.53 9L13 3.47a.75.75 0 0 0-.53-.22H8A2.75 2.75 0 0 0 5.25 6v12A2.75 2.75 0 0 0 8 20.75h8A2.75 2.75 0 0 0 18.75 18V9.5a.75.75 0 0 0-.22-.5Zm-5.28-3.19l2.94 2.94h-2.94ZM16 19.25H8A1.25 1.25 0 0 1 6.75 18V6A1.25 1.25 0 0 1 8 4.75h3.75V9.5a.76.76 0 0 0 .75.75h4.75V18A1.25 1.25 0 0 1 16 19.25Z"/><path fill="currentColor" d="M13.49 14.85a3.15 3.15 0 0 1-1.31-1.66a4.44 4.44 0 0 0 .19-2a.8.8 0 0 0-1.52-.19a5 5 0 0 0 .25 2.4A29 29 0 0 1 9.83 16c-.71.4-1.68 1-1.83 1.69c-.12.56.93 2 2.72-1.12a18.58 18.58 0 0 1 2.44-.72a4.72 4.72 0 0 0 2 .61a.82.82 0 0 0 .62-1.38c-.42-.43-1.67-.31-2.29-.23Zm-4.78 3a4.32 4.32 0 0 1 1.09-1.24c-.68 1.08-1.09 1.27-1.09 1.25Zm2.92-6.81c.26 0 .24 1.15.06 1.46a3.07 3.07 0 0 1-.06-1.45Zm-.87 4.88a14.76 14.76 0 0 0 .88-1.92a3.88 3.88 0 0 0 1.08 1.26a12.35 12.35 0 0 0-1.96.67Zm4.7-.18s-.18.22-1.33-.28c1.25-.08 1.46.21 1.33.29Z"/></svg>
                                                         </div>
                                                         <div class="flex items-center space-s-2">
-                                                            <span class="text-sm">{{ form.header.example.name }}</span>
+                                                            <span class="text-sm normal-case">{{ form.header.example?.name || $t('Current document') }}</span>
                                                             <button @click="removeFile()">
                                                                 <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M17.707 7.707a1 1 0 0 0-1.414-1.414L12 10.586L7.707 6.293a1 1 0 0 0-1.414 1.414L10.586 12l-4.293 4.293a1 1 0 1 0 1.414 1.414L12 13.414l4.293 4.293a1 1 0 1 0 1.414-1.414L13.414 12l4.293-4.293Z" clip-rule="evenodd"/></svg>
                                                             </button>
@@ -180,7 +180,7 @@
                             <span class="text-slate-600 text-xs">{{ $t('Enter the text for your message in the language that you\'ve selected') }}</span>
                             <div class="mb-8">
                                 <div>
-                                    <BodyTextArea v-model="form.body.text" @updateExamples="updateBodyExamples"/>
+                                    <BodyTextArea v-model="form.body.text" :customValues="form.body.example" @updateExamples="updateBodyExamples"/>
                                 </div>
                             </div>
 
@@ -551,7 +551,7 @@
         ],
     });
 
-    const props = defineProps(['languages', 'settings']);
+    const props = defineProps(['languages', 'settings', 'copyTemplate']);
 
     // Prevent uncaught child-component errors from crashing the whole page
     onErrorCaptured((err, instance, info) => {
@@ -596,6 +596,8 @@
 
     const form = ref({
         'name' : null,
+        'source_template_uuid': null,
+        'reuse_header_media': false,
         'category' : 'UTILITY',
         'language' : null,
         'message_send_ttl_seconds' : null,
@@ -633,6 +635,107 @@
             },
         ]
     });
+
+    const parseTemplateMetadata = (value) => {
+        if (!value) return {};
+        if (typeof value === 'object') return value;
+
+        try {
+            return JSON.parse(value);
+        } catch {
+            return {};
+        }
+    };
+
+    const cloneValue = (value, fallback) => {
+        if (value === undefined || value === null) return fallback;
+        return JSON.parse(JSON.stringify(value));
+    };
+
+    const normalizeCarouselCards = (metadata) => {
+        const metadataComponents = Array.isArray(metadata.components) ? metadata.components : [];
+        const carousel = metadataComponents.find(component => (component.type || '').toUpperCase() === 'CAROUSEL');
+        const cards = metadata.carousel_cards || carousel?.cards || [];
+
+        return cards.map((card, index) => {
+            if (!Array.isArray(card.components)) {
+                return {
+                    ...cloneValue(card, {}),
+                    _uid: `__copy_${index}`,
+                    file: null,
+                    source_media_url: card.local_url || card.header_handle || null,
+                    reuse_media: Boolean(card.local_url || card.header_handle),
+                };
+            }
+
+            const cardComponent = (type) => card.components.find(component => (component.type || '').toUpperCase() === type) || {};
+
+            const cardHeader = cardComponent('HEADER');
+            const sourceMediaUrl = cardHeader.example?.header_handle?.[0] || null;
+
+            return {
+                _uid: `__copy_${index}`,
+                header_type: (cardHeader.format || 'IMAGE').toUpperCase(),
+                file: null,
+                header_handle: sourceMediaUrl,
+                source_media_url: sourceMediaUrl,
+                reuse_media: Boolean(sourceMediaUrl),
+                body_text: cardComponent('BODY').text || '',
+                buttons: cloneValue(cardComponent('BUTTONS').buttons, []),
+            };
+        });
+    };
+
+    if (props.copyTemplate) {
+        const copiedMetadata = parseTemplateMetadata(props.copyTemplate.metadata);
+        const copiedComponents = Array.isArray(copiedMetadata.components) ? copiedMetadata.components : [];
+        const copiedComponent = (type) => copiedComponents.find(component => (component.type || '').toUpperCase() === type) || {};
+        const copiedHeader = copiedComponent('HEADER');
+        const copiedBody = copiedComponent('BODY');
+        const copiedFooter = copiedComponent('FOOTER');
+        const copiedButtons = copiedComponent('BUTTONS');
+        const copiedCarousel = copiedComponents.find(component => (component.type || '').toUpperCase() === 'CAROUSEL');
+        const copyingCarousel = copiedMetadata.template_type === 'carousel' || Boolean(copiedCarousel);
+        const copiedHeaderFormat = (copiedHeader.format || 'TEXT').toUpperCase();
+        const copiedHeaderMedia = copiedMetadata._default_header_media || copiedMetadata.default_header_media || {};
+        const copiedHeaderMediaUrl = copiedHeaderMedia.url || copiedHeader.example?.header_handle?.[0] || null;
+
+        form.value.source_template_uuid = props.copyTemplate.uuid;
+        form.value.name = null;
+        form.value.category = props.copyTemplate.category || 'UTILITY';
+        form.value.language = props.copyTemplate.language || null;
+        form.value.header.format = copiedHeaderFormat;
+        form.value.header.text = copiedHeader.text || null;
+        form.value.header.example = copiedHeaderFormat === 'TEXT'
+            ? cloneValue(copiedHeader.example?.header_text, [])
+            : null;
+        form.value.reuse_header_media = copiedHeaderFormat !== 'TEXT' && Boolean(copiedHeaderMediaUrl);
+        if (form.value.reuse_header_media) {
+            headerPreviewUrls.value[copiedHeaderFormat] = copiedHeaderMediaUrl;
+        }
+        form.value.body.text = copiedBody.text || null;
+        form.value.body.add_security_recommendation = Boolean(copiedBody.add_security_recommendation);
+        form.value.body.example = cloneValue(copiedBody.example?.body_text?.[0], []);
+        form.value.footer.text = copiedFooter.text || null;
+        form.value.footer.code_expiration_minutes = copiedFooter.code_expiration_minutes || 5;
+        form.value.code_expiration = Boolean(copiedFooter.code_expiration_minutes);
+        form.value.buttons = cloneValue(copiedButtons.buttons, []);
+
+        if (form.value.category === 'AUTHENTICATION' && form.value.buttons[0]) {
+            form.value.authentication_button = {
+                ...createAuthenticationButton(),
+                ...cloneValue(form.value.buttons[0], {}),
+            };
+        }
+
+        if (copyingCarousel) {
+            templateType.value = 'carousel';
+            form.value.category = 'MARKETING';
+            form.value.carousel_message_body = copiedMetadata.carousel_message_body || copiedBody.text || '';
+            form.value.carousel_cards = normalizeCarouselCards(copiedMetadata);
+        }
+    }
+
     const config = ref(props.settings.metadata);
     const settings = ref(config.value ? JSON.parse(config.value) : null);
 
@@ -688,6 +791,10 @@
     const changeHeaderType = (value) => {
         const currentType = form.value.header.format;
 
+        if (value !== currentType && form.value.reuse_header_media) {
+            form.value.reuse_header_media = false;
+        }
+
         if (
             !(currentType in previousExamples.value) || 
             JSON.stringify(previousExamples.value[currentType]) !== JSON.stringify(form.value.header.example)
@@ -717,6 +824,7 @@
         if (!file) return;
 
         const currentFormat = form.value.header?.format;
+        form.value.reuse_header_media = false;
 
         if (currentFormat === 'IMAGE' && file.size > MAX_HEADER_IMAGE_SIZE) {
             event.target.value = '';
@@ -747,6 +855,7 @@
 
     const removeFile = () => {
         form.value.header.example = '';
+        form.value.reuse_header_media = false;
         const currentFormat = form.value.header?.format;
         if (currentFormat && headerPreviewUrls.value[currentFormat] !== undefined) {
             headerPreviewUrls.value[currentFormat] = null;
@@ -927,7 +1036,7 @@
 
             for (const card of form.value.carousel_cards) {
                 // Every card must have a file
-                if (card.file == null) return false;
+                if (card.file == null && !(card.reuse_media && (card.local_url || card.source_media_url || card.header_handle))) return false;
 
                 // Every card must have at least one button (Meta requirement)
                 if (!card.buttons || card.buttons.length === 0) return false;
@@ -1053,10 +1162,14 @@
             formData.append('language', form.value.language);
             formData.append('template_type', 'carousel');
             formData.append('carousel_message_body', form.value.carousel_message_body);
+            if (form.value.source_template_uuid) {
+                formData.append('source_template_uuid', form.value.source_template_uuid);
+            }
 
             form.value.carousel_cards.forEach((card, index) => {
                 formData.append('cards[' + index + '][header_type]', card.header_type);
                 formData.append('cards[' + index + '][body_text]', card.body_text || '');
+                formData.append('cards[' + index + '][reuse_media]', card.reuse_media ? '1' : '0');
 
                 if (card.buttons) {
                     card.buttons.forEach((btn, btnIdx) => {
