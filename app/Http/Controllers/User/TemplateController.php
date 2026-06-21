@@ -28,6 +28,19 @@ class TemplateController extends BaseController
         return $this->templateService()->createTemplate($request);
     }
 
+    public function show($uuid)
+    {
+        $template = Template::where('uuid', $uuid)
+            ->where('organization_id', session()->get('current_organization'))
+            ->whereNull('deleted_at')
+            ->firstOrFail();
+
+        return Inertia::render('User/Templates/Show', [
+            'title' => __('View') . ' ' . __('Template'),
+            'template' => $template,
+        ]);
+    }
+
     public function update(Request $request, $uuid)
     {
         return $this->templateService()->updateTemplate($request, $uuid);
