@@ -468,6 +468,12 @@
                     </div>
                     <!-- Carousel preview -->
                     <div v-else>
+                        <div v-if="form.carousel_message_body" class="mr-auto rounded-lg rounded-tl-none my-1 mb-2 p-1 text-sm bg-white flex flex-col relative speech-bubble-left w-[25em]">
+                            <p class="px-2 normal-case whitespace-pre-wrap">{{ form.carousel_message_body }}</p>
+                            <div class="text-[#8c8c8c] mt-1 px-2 text-right">
+                                <span class="text-xs leading-none">9:15</span>
+                            </div>
+                        </div>
                         <CarouselPreview :cards="form.carousel_cards" />
                     </div>
                 </div>
@@ -598,6 +604,7 @@
         'name' : null,
         'source_template_uuid': null,
         'reuse_header_media': false,
+        'discard_header_media': false,
         'category' : 'UTILITY',
         'language' : null,
         'message_send_ttl_seconds' : null,
@@ -665,6 +672,7 @@
                     file: null,
                     source_media_url: card.local_url || card.header_handle || null,
                     reuse_media: Boolean(card.local_url || card.header_handle),
+                    discard_media: false,
                 };
             }
 
@@ -680,6 +688,7 @@
                 header_handle: sourceMediaUrl,
                 source_media_url: sourceMediaUrl,
                 reuse_media: Boolean(sourceMediaUrl),
+                discard_media: false,
                 body_text: cardComponent('BODY').text || '',
                 buttons: cloneValue(cardComponent('BUTTONS').buttons, []),
             };
@@ -710,6 +719,7 @@
             ? cloneValue(copiedHeader.example?.header_text, [])
             : null;
         form.value.reuse_header_media = copiedHeaderFormat !== 'TEXT' && Boolean(copiedHeaderMediaUrl);
+        form.value.discard_header_media = false;
         if (form.value.reuse_header_media) {
             headerPreviewUrls.value[copiedHeaderFormat] = copiedHeaderMediaUrl;
         }
@@ -770,7 +780,7 @@
 
     watch(() => form.value.body.text, (newValue) => {
         formattedMessage.value = newValue ? formatContent(newValue) : null;
-    });
+    }, { immediate: true });
 
     const headerType = ref('text');
 
@@ -793,6 +803,7 @@
 
         if (value !== currentType && form.value.reuse_header_media) {
             form.value.reuse_header_media = false;
+            form.value.discard_header_media = true;
         }
 
         if (
@@ -825,6 +836,7 @@
 
         const currentFormat = form.value.header?.format;
         form.value.reuse_header_media = false;
+        form.value.discard_header_media = true;
 
         if (currentFormat === 'IMAGE' && file.size > MAX_HEADER_IMAGE_SIZE) {
             event.target.value = '';
@@ -856,6 +868,7 @@
     const removeFile = () => {
         form.value.header.example = '';
         form.value.reuse_header_media = false;
+        form.value.discard_header_media = true;
         const currentFormat = form.value.header?.format;
         if (currentFormat && headerPreviewUrls.value[currentFormat] !== undefined) {
             headerPreviewUrls.value[currentFormat] = null;
@@ -1170,6 +1183,7 @@
                 formData.append('cards[' + index + '][header_type]', card.header_type);
                 formData.append('cards[' + index + '][body_text]', card.body_text || '');
                 formData.append('cards[' + index + '][reuse_media]', card.reuse_media ? '1' : '0');
+                formData.append('cards[' + index + '][discard_media]', card.discard_media ? '1' : '0');
 
                 if (card.buttons) {
                     card.buttons.forEach((btn, btnIdx) => {

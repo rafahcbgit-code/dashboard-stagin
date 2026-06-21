@@ -257,6 +257,10 @@ class TemplateService
                 $headerType = strtoupper((string) ($card['header_type'] ?? ''));
                 $file = $files[$index] ?? null;
 
+                if (in_array($headerType, ['IMAGE', 'VIDEO'], true) && !$file instanceof UploadedFile) {
+                    return $this->templateMediaRequiredError("cards.{$index}.media");
+                }
+
                 if ($headerType === 'IMAGE' && $file instanceof UploadedFile && $file->getSize() > self::MAX_HEADER_IMAGE_BYTES) {
                     return $this->templateMediaSizeError('Image', '5MB', 'header_image');
                 }
@@ -272,6 +276,10 @@ class TemplateService
         $header = $request->input('header', []);
         $format = strtoupper((string) ($header['format'] ?? ''));
         $file = data_get($request->allFiles(), 'header.example');
+
+        if (in_array($format, ['IMAGE', 'VIDEO', 'DOCUMENT'], true) && !$file instanceof UploadedFile) {
+            return $this->templateMediaRequiredError('header.example');
+        }
 
         if ($format === 'IMAGE' && $file instanceof UploadedFile && $file->getSize() > self::MAX_HEADER_IMAGE_BYTES) {
             return $this->templateMediaSizeError('Image', '5MB', 'header_image');
@@ -301,23 +309,34 @@ class TemplateService
         }
 
         $metadata = json_decode($source->metadata ?: '{}', true) ?: [];
-        $files = $request->allFiles();
+        // Read Symfony's file bag directly. Calling allFiles() here would cache
+        // the pre-hydration files in Laravel, causing the injected copies to be
+        // invisible to the later upload code.
+        $files = $request->files->all();
 
         if ($request->input('template_type') === 'carousel') {
             $sourceCards = $metadata['carousel_cards'] ?? [];
             $uploadedCards = $files['card_files'] ?? [];
 
             foreach ($request->input('cards', []) as $index => $card) {
-                if (isset($uploadedCards[$index]) || !filter_var($card['reuse_media'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+                if (isset($uploadedCards[$index]) || filter_var($card['discard_media'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
                     continue;
                 }
 
                 $sourceCard = $sourceCards[$index] ?? [];
                 $uploadedCards[$index] = $this->copiedMediaFile(
                     $sourceCard['local_path'] ?? null,
-                    $sourceCard['local_url'] ?? $sourceCard['header_handle'] ?? null,
+                    $sourceCard['local_url'] ?? null,
                     "carousel_card_{$index}"
                 );
+
+                if (!$uploadedCards[$index] && !empty($sourceCard['header_handle'])) {
+                    $uploadedCards[$index] = $this->copiedMediaFile(
+                        null,
+                        $sourceCard['header_handle'],
+                        "carousel_card_{$index}"
+                    );
+                }
 
                 if (!$uploadedCards[$index]) {
                     throw ValidationException::withMessages([
@@ -327,13 +346,17 @@ class TemplateService
             }
 
             $files['card_files'] = array_filter($uploadedCards);
-        } elseif ($request->boolean('reuse_header_media') && !data_get($files, 'header.example')) {
+        } elseif (!$request->boolean('discard_header_media') && !data_get($files, 'header.example')) {
             $media = $metadata['_default_header_media'] ?? $metadata['default_header_media'] ?? [];
             $header = collect($metadata['components'] ?? [])->first(
                 fn ($component) => strtoupper($component['type'] ?? '') === 'HEADER'
             ) ?? [];
-            $mediaUrl = $media['url'] ?? data_get($header, 'example.header_handle.0');
-            $uploadedFile = $this->copiedMediaFile(null, $mediaUrl, $media['name'] ?? 'template_header');
+            $headerHandle = data_get($header, 'example.header_handle.0');
+            $uploadedFile = $this->copiedMediaFile(null, $media['url'] ?? null, $media['name'] ?? 'template_header');
+
+            if (!$uploadedFile && $headerHandle) {
+                $uploadedFile = $this->copiedMediaFile(null, $headerHandle, $media['name'] ?? 'template_header');
+            }
 
             if (!$uploadedFile) {
                 throw ValidationException::withMessages([
@@ -481,6 +504,24 @@ class TemplateService
     private function templateMediaSizeError(string $mediaLabel, string $limit, string $field)
     {
         $message = __("{$mediaLabel} size must not exceed {$limit}.");
+
+        return response()->json([
+            'success' => false,
+            'message' => $message,
+            'data' => [
+                'error' => [
+                    'message' => $message,
+                ],
+            ],
+            'errors' => [
+                $field => [$message],
+            ],
+        ]);
+    }
+
+    private function templateMediaRequiredError(string $field)
+    {
+        $message = __('A media file is required for the template header.');
 
         return response()->json([
             'success' => false,

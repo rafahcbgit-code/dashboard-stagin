@@ -275,7 +275,7 @@ function updateCardField(index, field, value) {
                 ...c,
                 [field]: value,
                 ...(field === 'header_type' && value !== c.header_type
-                    ? { reuse_media: false, local_url: null, source_media_url: null, header_handle: null }
+                    ? { reuse_media: false, discard_media: true, local_url: null, source_media_url: null, header_handle: null }
                     : {}),
             }
             : c
@@ -345,7 +345,7 @@ function handleCardFileUpload(event, cardIndex) {
     }
 
     const updated = props.cards.map((c, i) =>
-        i === cardIndex ? { ...c, file, reuse_media: false } : c
+        i === cardIndex ? { ...c, file, reuse_media: false, discard_media: true } : c
     );
     emitCards(updated);
 }
@@ -357,6 +357,7 @@ function removeCardFile(cardIndex) {
             ...c,
             file: null,
             reuse_media: false,
+            discard_media: true,
             local_url: null,
             source_media_url: null,
             header_handle: null,
