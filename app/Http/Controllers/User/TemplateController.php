@@ -5,6 +5,7 @@ namespace App\Http\Controllers\User;
 use DB;
 use App\Http\Controllers\Controller as BaseController;
 use App\Http\Resources\TemplateResource;
+use App\Models\Organization;
 use App\Models\Template;
 use App\Services\TemplateService;
 use Illuminate\Http\Request;
@@ -38,6 +39,22 @@ class TemplateController extends BaseController
         return Inertia::render('User/Templates/Show', [
             'title' => __('View') . ' ' . __('Template'),
             'template' => $template,
+        ]);
+    }
+
+    public function copy($uuid)
+    {
+        $organizationId = session()->get('current_organization');
+        $template = Template::where('uuid', $uuid)
+            ->where('organization_id', $organizationId)
+            ->whereNull('deleted_at')
+            ->firstOrFail();
+
+        return Inertia::render('User/Templates/Add', [
+            'title' => __('Copy') . ' ' . __('Template'),
+            'languages' => config('languages'),
+            'settings' => Organization::findOrFail($organizationId),
+            'copyTemplate' => $template,
         ]);
     }
 

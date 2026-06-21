@@ -10,6 +10,7 @@ use App\Services\WhatsappService;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Http;
 
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
@@ -110,6 +111,8 @@ class TemplateService
             if ($response = $this->abortIfDemo('create')) {
                 return $response;
             }
+
+            $this->hydrateCopiedTemplateMedia($request);
 
             $validator = Validator::make($request->all(),[
                 'name' => 'required',
@@ -279,6 +282,122 @@ class TemplateService
         }
 
         return null;
+    }
+
+    private function hydrateCopiedTemplateMedia(Request $request): void
+    {
+        $sourceUuid = $request->input('source_template_uuid');
+        if (!$sourceUuid) {
+            return;
+        }
+
+        $source = Template::where('uuid', $sourceUuid)
+            ->where('organization_id', $this->organizationId)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (!$source) {
+            return;
+        }
+
+        $metadata = json_decode($source->metadata ?: '{}', true) ?: [];
+        $files = $request->allFiles();
+
+        if ($request->input('template_type') === 'carousel') {
+            $sourceCards = $metadata['carousel_cards'] ?? [];
+            $uploadedCards = $files['card_files'] ?? [];
+
+            foreach ($request->input('cards', []) as $index => $card) {
+                if (isset($uploadedCards[$index]) || !filter_var($card['reuse_media'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+                    continue;
+                }
+
+                $sourceCard = $sourceCards[$index] ?? [];
+                $uploadedCards[$index] = $this->copiedMediaFile(
+                    $sourceCard['local_path'] ?? null,
+                    $sourceCard['local_url'] ?? $sourceCard['header_handle'] ?? null,
+                    "carousel_card_{$index}"
+                );
+
+                if (!$uploadedCards[$index]) {
+                    throw ValidationException::withMessages([
+                        "cards.{$index}.media" => __('The original template media could not be copied.'),
+                    ]);
+                }
+            }
+
+            $files['card_files'] = array_filter($uploadedCards);
+        } elseif ($request->boolean('reuse_header_media') && !data_get($files, 'header.example')) {
+            $media = $metadata['_default_header_media'] ?? $metadata['default_header_media'] ?? [];
+            $header = collect($metadata['components'] ?? [])->first(
+                fn ($component) => strtoupper($component['type'] ?? '') === 'HEADER'
+            ) ?? [];
+            $mediaUrl = $media['url'] ?? data_get($header, 'example.header_handle.0');
+            $uploadedFile = $this->copiedMediaFile(null, $mediaUrl, $media['name'] ?? 'template_header');
+
+            if (!$uploadedFile) {
+                throw ValidationException::withMessages([
+                    'header.example' => __('The original template media could not be copied.'),
+                ]);
+            }
+
+            data_set($files, 'header.example', $uploadedFile);
+        }
+
+        $request->files->replace($files);
+    }
+
+    private function copiedMediaFile(?string $localPath, ?string $url, string $fallbackName): ?UploadedFile
+    {
+        $path = null;
+        $name = $fallbackName;
+
+        if ($localPath && Storage::disk('local')->exists($localPath)) {
+            $path = Storage::disk('local')->path($localPath);
+            $name = basename($localPath);
+        } elseif ($url) {
+            $parsed = parse_url($url);
+            $appHost = parse_url(config('app.url'), PHP_URL_HOST);
+            $host = strtolower($parsed['host'] ?? '');
+            $urlPath = rawurldecode($parsed['path'] ?? '');
+
+            if ($host === strtolower((string) $appHost) && str_starts_with($urlPath, '/media/')) {
+                $relativePath = ltrim(substr($urlPath, strlen('/media/')), '/');
+                if (Storage::disk('local')->exists($relativePath)) {
+                    $path = Storage::disk('local')->path($relativePath);
+                    $name = basename($relativePath);
+                }
+            } elseif ($this->isAllowedTemplateMediaHost($host)) {
+                $response = Http::timeout(30)->withOptions(['allow_redirects' => false])->get($url);
+                if ($response->successful() && strlen($response->body()) <= self::MAX_HEADER_VIDEO_BYTES) {
+                    $extension = pathinfo($urlPath, PATHINFO_EXTENSION);
+                    $temporaryPath = tempnam(storage_path('app'), 'template_copy_');
+                    file_put_contents($temporaryPath, $response->body());
+                    $path = $temporaryPath;
+                    $name = $fallbackName . ($extension ? ".{$extension}" : '');
+                    app()->terminating(fn () => @unlink($temporaryPath));
+                }
+            }
+        }
+
+        return $path && is_file($path)
+            ? new UploadedFile($path, $name, mime_content_type($path) ?: null, null, true)
+            : null;
+    }
+
+    private function isAllowedTemplateMediaHost(string $host): bool
+    {
+        if ($host === '') {
+            return false;
+        }
+
+        foreach (['.whatsapp.net', '.facebook.com', '.fbcdn.net', '.amazonaws.com'] as $suffix) {
+            if (str_ends_with($host, $suffix)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private function validateTemplateButtons(Request $request)
