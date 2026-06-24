@@ -104,6 +104,10 @@ class WooCommerceOrderCreatedFieldSchema
                 'path' => 'payment_url',
             ],
             [
+                'label' => 'Invoice PDF URL',
+                'path' => 'invoice_pdf_url',
+            ],
+            [
                 'label' => 'All Items Summary',
                 'path' => 'chatberry_order.products_summary',
             ],

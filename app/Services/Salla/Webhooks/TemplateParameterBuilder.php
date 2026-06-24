@@ -98,31 +98,60 @@ class TemplateParameterBuilder
             return;
         }
 
-        if ($type === 'url') {
-            $value = $this->normalizeUrlButtonValue($value);
-        }
-
         $buttonParamValues[$type][$buttonIndex][$paramIndex] = $value;
     }
 
-    private function normalizeUrlButtonValue(string $value): string
+    private function normalizeUrlButtonValue(string $value, ?string $templateUrl = null, ?int $placeholderIndex = null): string
     {
         $value = trim($value);
+        $templateUrl = is_string($templateUrl) ? trim($templateUrl) : '';
 
-        if (str_starts_with($value, 'http://') || str_starts_with($value, 'https://')) {
-            $path = parse_url($value, PHP_URL_PATH);
-            if (is_string($path)) {
-                $path = trim($path, '/');
-                if ($path !== '') {
-                    $base = basename($path);
-                    if (is_string($base) && $base !== '') {
-                        return $base;
-                    }
-                }
+        if ($templateUrl !== '' && preg_match('/^https?:\/\//i', $value)) {
+            $dynamicValue = $this->extractUrlButtonDynamicValue($templateUrl, $value, $placeholderIndex);
+            if ($dynamicValue !== null) {
+                return $dynamicValue;
             }
         }
 
         return $value;
+    }
+
+    private function extractUrlButtonDynamicValue(string $templateUrl, string $fullUrl, ?int $placeholderIndex): ?string
+    {
+        $placeholder = $placeholderIndex !== null ? '{{' . $placeholderIndex . '}}' : null;
+
+        if (!$placeholder || !str_contains($templateUrl, $placeholder)) {
+            preg_match('/\{\{(\d+)\}\}/', $templateUrl, $matches);
+            $placeholder = $matches[0] ?? null;
+        }
+
+        if (!$placeholder || !str_contains($templateUrl, $placeholder)) {
+            return null;
+        }
+
+        [$prefix, $suffix] = explode($placeholder, $templateUrl, 2);
+
+        if ($prefix !== '' && str_starts_with($fullUrl, $prefix)) {
+            $value = substr($fullUrl, strlen($prefix));
+
+            if ($suffix !== '' && str_ends_with($value, $suffix)) {
+                $value = substr($value, 0, -strlen($suffix));
+            }
+
+            return $value;
+        }
+
+        if ($prefix === '') {
+            $value = $fullUrl;
+
+            if ($suffix !== '' && str_ends_with($value, $suffix)) {
+                $value = substr($value, 0, -strlen($suffix));
+            }
+
+            return $value;
+        }
+
+        return null;
     }
 
     private function buildButtonsMeta(Template $template, array $buttonParamValues): array
@@ -171,10 +200,14 @@ class TemplateParameterBuilder
                     ksort($paramMap);
 
                     $params = [];
-                    foreach ($paramMap as $value) {
+                    foreach ($paramMap as $paramIndex => $value) {
                         $params[] = [
                             'type' => 'static',
-                            'value' => $value,
+                            'value' => $this->normalizeUrlButtonValue(
+                                $value,
+                                is_string($button['url'] ?? null) ? $button['url'] : null,
+                                is_numeric($paramIndex) ? (int) $paramIndex : null
+                            ),
                         ];
                     }
 
