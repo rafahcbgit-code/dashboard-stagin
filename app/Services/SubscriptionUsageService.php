@@ -11,6 +11,7 @@ use App\Models\SubscriptionUsageEvent;
 use App\Models\Team;
 use App\Models\TeamInvite;
 use Carbon\Carbon;
+use Carbon\CarbonInterface;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Auth;
 
@@ -94,7 +95,8 @@ class SubscriptionUsageService
         string $idempotencyKey,
         ?string $sourceType = null,
         ?int $sourceId = null,
-        array $metadata = []
+        array $metadata = [],
+        ?CarbonInterface $occurredAt = null
     ): ?SubscriptionUsageEvent {
         $resource = $this->normalizeResource($resource);
         $subscription = $this->subscription($organizationId);
@@ -109,7 +111,7 @@ class SubscriptionUsageService
                 'source_id' => $sourceId,
                 'idempotency_key' => $idempotencyKey,
                 'metadata' => $metadata,
-                'occurred_at' => now(),
+                'occurred_at' => $occurredAt ?: now(),
             ]);
         } catch (QueryException $exception) {
             if ($exception->getCode() === '23000') {

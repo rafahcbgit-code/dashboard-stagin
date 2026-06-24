@@ -101,6 +101,9 @@
                         <div v-if="item.addonQuantity > 0" class="text-xs text-gray-500">
                             {{ $t('Plan') }}: {{ item.baseLimit }} + {{ $t('Add-ons') }}: {{ item.addonQuantity }}
                         </div>
+                        <div v-if="item.key === 'template_messages'" class="text-xs text-gray-500">
+                            {{ $t('Delivered template messages') }}: {{ item.used }}
+                        </div>
                         <div class="text-xs text-gray-500">{{ $t('Remaining') }}: {{ item.remaining }}</div>
                     </div>
                 </div>
