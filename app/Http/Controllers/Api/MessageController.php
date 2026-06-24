@@ -493,6 +493,7 @@ class MessageController extends Controller
 
             // Build template request - NEW METHOD
             $templateRequest = $this->buildTemplateRequestWithMedia($request, $template, $organizationId);
+            $templateRequest->billing_source = 'api';
 
             // Send via ChatService
             $response = $this->chatService->sendTemplateMessage(

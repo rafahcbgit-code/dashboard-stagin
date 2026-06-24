@@ -161,7 +161,8 @@ class WooCommerceAddToCartHandler implements WooCommerceWebhookEventHandlerInter
                 $template,
                 $headerMeta,
                 $bodyMeta,
-                $buttonsMeta
+                $buttonsMeta,
+                'woocommerce'
             );
         } catch (\Throwable $e) {
             $this->outboundLogger->logFailure($outboundMessage, $attemptNo, $requestPayload, null, $e->getMessage());

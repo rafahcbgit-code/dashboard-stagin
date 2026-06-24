@@ -64,8 +64,11 @@ class SubscriptionPlanService
             'metadata' => json_encode([
                 'campaign_limit' => $request->input('campaign_limit'),
                 'message_limit' => $request->input('message_limit'),
+                'template_messages_limit' => $request->input('template_messages_limit'),
+                'conversations_limit' => $request->input('conversations_limit'),
                 'contacts_limit' => $request->input('contacts_limit'),
                 'team_limit' => $request->input('team_limit'),
+                'organizations_limit' => $request->input('organizations_limit'),
                 'receive_messages_after_expiration' => $request->input('receive_messages_after_expiration') == true ? 1 : 0,
                 'ai_text_response_limit' => $request->input('ai_text_response_limit'),
                 'ai_audio_response_limit' => $request->input('ai_audio_response_limit'),
@@ -103,8 +106,11 @@ class SubscriptionPlanService
         $metadata = json_decode($plan->metadata, true);
         $metadata['campaign_limit'] = $request->input('campaign_limit');
         $metadata['message_limit'] = $request->input('message_limit');
+        $metadata['template_messages_limit'] = $request->input('template_messages_limit');
+        $metadata['conversations_limit'] = $request->input('conversations_limit');
         $metadata['contacts_limit'] = $request->input('contacts_limit');
         $metadata['team_limit'] = $request->input('team_limit');
+        $metadata['organizations_limit'] = $request->input('organizations_limit');
         $metadata['receive_messages_after_expiration'] = $request->input('receive_messages_after_expiration') == true ? 1 : 0;
         $metadata['ai_text_response_limit'] = $request->input('ai_text_response_limit');
         $metadata['ai_audio_response_limit'] = $request->input('ai_audio_response_limit');

@@ -18,6 +18,7 @@ interface SallaWebhookMessageSenderInterface
         Template $template,
         ?array $headerMeta,
         array $bodyMeta,
-        array $buttonsMeta
+        array $buttonsMeta,
+        ?string $billingSource = null
     ): object;
 }

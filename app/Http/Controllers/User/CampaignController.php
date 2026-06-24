@@ -9,6 +9,7 @@ use App\Http\Resources\CampaignLogResource;
 use App\Http\Resources\CampaignResource;
 use App\Models\Campaign;
 use App\Models\CampaignLog;
+use App\Models\Contact;
 use App\Models\ContactGroup;
 use App\Models\Organization;
 use App\Models\Setting;
@@ -17,6 +18,7 @@ use App\Models\Team;
 use App\Models\Template;
 use App\Services\CampaignService;
 use App\Services\ContactFieldService;
+use App\Services\SubscriptionUsageService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redirect;
@@ -189,6 +191,15 @@ class CampaignController extends BaseController
                     $query->where('organization_id', $organizationId);
                 }])
                 ->get();
+
+            $usageService = new SubscriptionUsageService();
+            $data['resourceUsage'] = [
+                'template_messages' => $usageService->summary((int) $organizationId, SubscriptionUsageService::TEMPLATE_MESSAGES),
+                'conversations' => $usageService->summary((int) $organizationId, SubscriptionUsageService::CONVERSATIONS),
+            ];
+            $data['totalContacts'] = Contact::where('organization_id', $organizationId)
+                ->whereNull('deleted_at')
+                ->count();
 
             $data['title'] = __('Create campaign');
 

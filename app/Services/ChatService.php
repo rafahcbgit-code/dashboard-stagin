@@ -641,6 +641,13 @@ class ChatService
             return $result;
         }
 
+        $conversationCheck = (new SubscriptionUsageService())->canUse($this->organizationId, SubscriptionUsageService::CONVERSATIONS);
+        if (! $conversationCheck['allowed']) {
+            $result->success = false;
+            $result->message = $conversationCheck['message'];
+            return $result;
+        }
+
         $flow = \Modules\MetaFlows\Models\MetaFlow::where('uuid', $request->meta_flow_uuid)
             ->where('organization_id', $this->organizationId)
             ->first();
@@ -700,6 +707,12 @@ class ChatService
             'status'          => 'delivered',
             'created_at'      => now(),
         ]);
+
+        (new SubscriptionUsageService())->ensureConversationWindowForInbound(
+            (int) $this->organizationId,
+            (int) $contact->id,
+            (int) $chat->id
+        );
 
         $chatlogId = ChatLog::insertGetId([
             'contact_id'  => $contact->id,
@@ -783,7 +796,18 @@ class ChatService
         //Build Template to send
         $template = $this->buildTemplate($template->name, $template->language, json_decode(json_encode($metadata)), $contact);
 
-        return $this->whatsappService->sendTemplateMessage($contact->uuid, $template, $userId, NULL, $mediaId);
+        return $this->whatsappService->sendTemplateMessage(
+            $contact->uuid,
+            $template,
+            $userId,
+            NULL,
+            $mediaId,
+            null,
+            null,
+            null,
+            $request->billing_source ?? null,
+            is_numeric($request->billing_source_id ?? null) ? (int) $request->billing_source_id : null
+        );
     }
 
     public function sendTemplateToPhone(object $request)

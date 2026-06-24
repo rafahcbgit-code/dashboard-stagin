@@ -66,6 +66,27 @@ class CampaignService
             ]);
         }
 
+        $usageService = new SubscriptionUsageService();
+        $templateCheck = $usageService->canUse($organizationId, SubscriptionUsageService::TEMPLATE_MESSAGES, $selectedCount);
+        if (! $templateCheck['allowed']) {
+            throw ValidationException::withMessages([
+                'contacts' => __('This campaign requires :required template messages, but only :remaining are remaining.', [
+                    'required' => $selectedCount,
+                    'remaining' => $templateCheck['summary']['remaining'],
+                ]),
+            ]);
+        }
+
+        $conversationCheck = $usageService->canUse($organizationId, SubscriptionUsageService::CONVERSATIONS, $selectedCount);
+        if (! $conversationCheck['allowed']) {
+            throw ValidationException::withMessages([
+                'contacts' => __('This campaign requires :required conversations, but only :remaining are remaining.', [
+                    'required' => $selectedCount,
+                    'remaining' => $conversationCheck['summary']['remaining'],
+                ]),
+            ]);
+        }
+
         // Trial accounts can only send up to remaining campaign messages.
         $trialSubscription = Subscription::where('organization_id', $organizationId)
             ->where('status', 'trial')

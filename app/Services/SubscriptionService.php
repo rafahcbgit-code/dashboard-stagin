@@ -350,6 +350,17 @@ class SubscriptionService
 
     public static function isSubscriptionFeatureLimitReached($organizationId, $feature)
     {
+        if (in_array($feature, ['contacts_limit', 'team_limit', 'message_limit', 'conversations_limit', 'template_messages_limit'], true)) {
+            $resource = match ($feature) {
+                'contacts_limit' => SubscriptionUsageService::CONTACTS,
+                'team_limit' => SubscriptionUsageService::TEAM_MEMBERS,
+                'template_messages_limit' => SubscriptionUsageService::TEMPLATE_MESSAGES,
+                default => SubscriptionUsageService::CONVERSATIONS,
+            };
+
+            return ! (new SubscriptionUsageService())->canUse((int) $organizationId, $resource)['allowed'];
+        }
+
         $subscription = Subscription::where('organization_id', $organizationId)->first();
 
         if (!$subscription) {

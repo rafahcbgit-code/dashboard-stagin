@@ -846,7 +846,8 @@ class FlowExecutionService
                 null,
                 $contact,
                 null,
-                $template
+                $template,
+                'flow'
             );
 
             return $response !== null && $response !== false;

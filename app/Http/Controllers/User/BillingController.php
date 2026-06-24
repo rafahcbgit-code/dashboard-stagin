@@ -14,6 +14,7 @@ use App\Models\Subscription;
 use App\Resolvers\PaymentPlatformResolver;
 use App\Services\BillingService;
 use App\Services\SubscriptionService;
+use App\Services\SubscriptionUsageService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 use Redirect;
@@ -40,6 +41,7 @@ class BillingController extends BaseController
         $data['filters'] = $request->all();
         $data['methods'] = $this->paymentMethods();
         $data['subscriptionDetails'] = SubscriptionService::calculateSubscriptionBillingDetails($organizationId, $data['subscription']->plan_id);
+        $data['resourceUsage'] = (new SubscriptionUsageService())->summaries((int) $organizationId, auth()->id());
         $data['title'] = __('Billing');
         $data['isPaymentLoading'] = false;
         $data['pusherSettings'] = Setting::whereIn('key', [

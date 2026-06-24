@@ -20,6 +20,8 @@
                     :contactGroups="contactGroups" 
                     :settings="settings"
                     :contactFields="contactFields"
+                    :resourceUsage="resourceUsage"
+                    :totalContacts="totalContacts"
                 />
             </div>
         </div>
@@ -35,5 +37,5 @@
     import 'vue3-toastify/dist/index.css';
     import { trans } from 'laravel-vue-i18n';
 
-    const props = defineProps(['templates', 'contactGroups', 'settings', 'contactFields']);
+    const props = defineProps(['templates', 'contactGroups', 'settings', 'contactFields', 'resourceUsage', 'totalContacts']);
 </script>

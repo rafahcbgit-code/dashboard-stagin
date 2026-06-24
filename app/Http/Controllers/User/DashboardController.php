@@ -16,6 +16,7 @@ use App\Models\Setting;
 use App\Models\Subscription;
 use App\Models\Template;
 use App\Services\SubscriptionService;
+use App\Services\SubscriptionUsageService;
 use App\Models\OtpConfig;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
@@ -76,6 +77,7 @@ class DashboardController extends BaseController
         $data['period'] = $this->period();
         $data['inbound'] = $this->getChatCounts('inbound');
         $data['outbound'] = $this->getChatCounts('outbound');
+        $data['resourceUsage'] = (new SubscriptionUsageService())->summaries((int) $organizationId, auth()->id());
 
         $data['embeddedSignupActive'] = CustomHelper::isModuleEnabled('Embedded Signup');
         $data['appId'] = $settings->get('whatsapp_client_id', null);

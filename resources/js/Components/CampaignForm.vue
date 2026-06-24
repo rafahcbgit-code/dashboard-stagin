@@ -34,6 +34,14 @@ const props = defineProps({
     default: "Send",
   },
   contactFields: Array,
+  resourceUsage: {
+    type: Object,
+    default: () => ({}),
+  },
+  totalContacts: {
+    type: Number,
+    default: 0,
+  },
 });
 
 const isLoading = ref(false);
@@ -77,6 +85,18 @@ const hasButtonVariables = computed(() => {
     (button) => button.parameters && button.parameters.length > 0,
   );
 });
+
+const requiredCampaignMessages = computed(() => {
+  if (!form.contacts) return 0;
+  if (form.contacts === "all") return props.totalContacts || 0;
+
+  const selectedGroup = props.contactGroups.find((group) => group.uuid === form.contacts);
+  return Number(selectedGroup?.contacts_count || 0);
+});
+
+const limitText = (value) => {
+  return Number(value) === -1 ? trans("Unlimited") : value;
+};
 
 const isHeaderParameterVisible = (parameter) => {
   if (!parameter) return false;
@@ -702,6 +722,23 @@ onMounted(() => {
           :placeholder="$t('Select contacts')"
           :error="form.errors.contacts"
         />
+        <div
+          v-if="isCampaignFlow"
+          class="sm:col-span-6 grid grid-cols-1 gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm md:grid-cols-3"
+        >
+          <div>
+            <div class="text-slate-500">{{ $t("Remaining template messages") }}</div>
+            <div class="font-medium">{{ limitText(props.resourceUsage?.template_messages?.remaining ?? -1) }}</div>
+          </div>
+          <div>
+            <div class="text-slate-500">{{ $t("Remaining conversations") }}</div>
+            <div class="font-medium">{{ limitText(props.resourceUsage?.conversations?.remaining ?? -1) }}</div>
+          </div>
+          <div>
+            <div class="text-slate-500">{{ $t("Required messages") }}</div>
+            <div class="font-medium">{{ requiredCampaignMessages }}</div>
+          </div>
+        </div>
         <FormInput
           v-if="isCampaignFlow && !form.skip_schedule"
           v-model="form.time"

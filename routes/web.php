@@ -492,6 +492,7 @@ Route::prefix('admin')->middleware(['auth:admin'])->group(function () {
     Route::resource('team/roles', App\Http\Controllers\Admin\RoleController::class);
     Route::resource('billing', App\Http\Controllers\Admin\BillingController::class);
     Route::resource('addons', App\Http\Controllers\Admin\AddonController::class);
+    Route::resource('resource-addons', App\Http\Controllers\Admin\ResourceAddonController::class)->only(['index', 'store', 'destroy']);
     Route::resource('otp-config', App\Http\Controllers\Admin\OtpConfigController::class);
     Route::post('addons/install', [App\Http\Controllers\Admin\AddonController::class, 'install']);
     Route::post('addons/update', [App\Http\Controllers\Admin\AddonController::class, 'update']);

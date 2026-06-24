@@ -58,9 +58,12 @@
                         </div>
                         <div class="sm:w-[80%] grid gap-x-6 gap-y-4 sm:grid-cols-6">
                             <FormInput v-model="form.campaign_limit" :name="$t('Campaign limit')" :error="form.errors.campaign_limit" :type="'number'" :class="'sm:col-span-3'"/>
-                            <FormInput v-model="form.message_limit" :name="$t('Message limit')" :error="form.errors.message_limit" :type="'number'" :class="'sm:col-span-3'"/>
+                            <FormInput v-model="form.message_limit" :name="$t('Legacy message limit')" :error="form.errors.message_limit" :type="'number'" :class="'sm:col-span-3'"/>
+                            <FormInput v-model="form.template_messages_limit" :name="$t('Template messages limit')" :error="form.errors.template_messages_limit" :type="'number'" :class="'sm:col-span-3'"/>
+                            <FormInput v-model="form.conversations_limit" :name="$t('Conversations limit')" :error="form.errors.conversations_limit" :type="'number'" :class="'sm:col-span-3'"/>
                             <FormInput v-model="form.contacts_limit" :name="$t('Contacts limit')" :error="form.errors.contacts_limit" :type="'number'" :class="'sm:col-span-3'"/>
                             <FormInput v-model="form.team_limit" :name="$t('User limit')" :error="form.errors.team_limit" :type="'number'" :class="'sm:col-span-3'"/>
+                            <FormInput v-model="form.organizations_limit" :name="$t('Organizations limit')" :error="form.errors.organizations_limit" :type="'number'" :class="'sm:col-span-3'"/>
                         </div>
                     </div>
                 </div>
@@ -201,8 +204,11 @@
         status: props.plan?.status,
         campaign_limit: getDetail(props.plan?.metadata, 'campaign_limit') ?? '-1',
         message_limit: getDetail(props.plan?.metadata, 'message_limit') ?? '-1',
+        template_messages_limit: getDetail(props.plan?.metadata, 'template_messages_limit') ?? getDetail(props.plan?.metadata, 'message_limit') ?? '-1',
+        conversations_limit: getDetail(props.plan?.metadata, 'conversations_limit') ?? getDetail(props.plan?.metadata, 'message_limit') ?? '-1',
         contacts_limit: getDetail(props.plan?.metadata, 'contacts_limit') ?? '-1',
         team_limit: getDetail(props.plan?.metadata, 'team_limit') ?? '-1',
+        organizations_limit: getDetail(props.plan?.metadata, 'organizations_limit') ?? '-1',
         ai_text_response_limit: getDetail(props.plan?.metadata, 'ai_text_response_limit') ?? '-1',
     ai_audio_response_limit: getDetail(props.plan?.metadata, 'ai_audio_response_limit') ?? '-1',
     receive_messages_after_expiration: getDetail(props.plan?.metadata, 'receive_messages_after_expiration') == 1 || getDetail(props.plan?.metadata, 'receive_messages_after_expiration') == null ? true : false,

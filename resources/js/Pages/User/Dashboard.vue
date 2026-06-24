@@ -92,6 +92,19 @@
                     </div>
                 </div>
             </div>
+            <div v-if="props.role !== 'agent'" class="bg-white shadow-sm p-4 rounded-lg mt-4">
+                <h2 class="text-sm text-gray-500 mb-3">{{ $t('Resource usage') }}</h2>
+                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+                    <div v-for="item in usageItems" :key="item.key" class="border rounded-md p-3">
+                        <div class="text-xs text-gray-500">{{ item.label }}</div>
+                        <div class="text-lg">{{ item.used }} / {{ item.limit }}</div>
+                        <div v-if="item.addonQuantity > 0" class="text-xs text-gray-500">
+                            {{ $t('Plan') }}: {{ item.baseLimit }} + {{ $t('Add-ons') }}: {{ item.addonQuantity }}
+                        </div>
+                        <div class="text-xs text-gray-500">{{ $t('Remaining') }}: {{ item.remaining }}</div>
+                    </div>
+                </div>
+            </div>
             <div class="md:grid md:grid-cols-2 gap-x-4 mt-4">
                 <div class="md:block hidden">
                     <div id="chart">
@@ -262,6 +275,7 @@
         appId: String,
         configId: String,
         graphAPIVersion: String,
+        resourceUsage: Object,
         whatsapp_link: {
             type: String,
             default: () => 'https://wa.me/966542922948', 
@@ -271,6 +285,25 @@
             default: () => "https://calendly.com/chatberry-info/chatberry-whatsapp-meeting-clone?month=2025-07", 
         },
         role : String
+    });
+
+    const formatLimit = (value) => Number(value) === -1 ? trans('Unlimited') : value;
+    const usageItems = [
+        { key: 'template_messages', label: trans('Template messages') },
+        { key: 'conversations', label: trans('Conversations') },
+        { key: 'contacts', label: trans('Contacts') },
+        { key: 'team_members', label: trans('Team members') },
+        { key: 'organizations', label: trans('Organizations') },
+    ].map((item) => {
+        const usage = props.resourceUsage?.[item.key] || {};
+        return {
+            ...item,
+            used: usage.used ?? 0,
+            limit: formatLimit(usage.limit ?? -1),
+            baseLimit: formatLimit(usage.base_limit ?? -1),
+            addonQuantity: Number(usage.addon_quantity ?? 0),
+            remaining: formatLimit(usage.remaining ?? -1),
+        };
     });
 
     const chartOptions = {

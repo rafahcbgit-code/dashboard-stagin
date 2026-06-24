@@ -430,6 +430,9 @@ class ContactImportService
         $failed = [];
         $totalValidRows = 0;
         $uniquePhoneCount = 0;
+        $contactsRemaining = (new SubscriptionUsageService())
+            ->summary($organizationId, SubscriptionUsageService::CONTACTS)['remaining'];
+        $remainingNewContacts = $contactsRemaining === -1 ? null : max(0, (int) $contactsRemaining);
         $fileGroupIdsByPhone = $assignmentMode === 'file_group_name'
             ? $this->buildFileGroupIdsByPhone($batch, $organizationId, $userId, $groupCache)
             : [];
@@ -442,7 +445,7 @@ class ContactImportService
             ->where('is_removed', false)
             ->where('status', 'valid')
             ->orderBy('id')
-            ->chunkById(self::PROCESSING_CHUNK_SIZE, function ($rows) use ($batchId, $organizationId, $userId, $selectedGroupIds, $assignmentMode, $fileGroupIdsByPhone, &$splitState, &$splitAssignmentByPhone, &$groupCache, &$created, &$updated, &$failed, &$totalValidRows, &$uniquePhoneCount): void {
+            ->chunkById(self::PROCESSING_CHUNK_SIZE, function ($rows) use ($batchId, $organizationId, $userId, $selectedGroupIds, $assignmentMode, $fileGroupIdsByPhone, &$splitState, &$splitAssignmentByPhone, &$groupCache, &$created, &$updated, &$failed, &$totalValidRows, &$uniquePhoneCount, &$remainingNewContacts): void {
                 $now = now();
                 $rowStatusUpdates = [];
                 $entriesByPhone = [];
@@ -592,6 +595,7 @@ class ContactImportService
 
                 $contactUpdates = [];
                 $contactInserts = [];
+                $limitFailedPhones = [];
 
                 foreach ($entriesByPhone as $phone => $entry) {
                     $existingContact = $existingContacts->get($phone);
@@ -627,6 +631,31 @@ class ContactImportService
 
                         $updated++;
                     } else {
+                        if ($remainingNewContacts !== null && $remainingNewContacts <= 0) {
+                            $limitFailedPhones[$phone] = true;
+                            foreach ((array) $entry['row_numbers'] as $rowNumber) {
+                                $failed[] = [
+                                    'row' => $rowNumber,
+                                    'error' => __('Contact limit reached!'),
+                                ];
+                            }
+
+                            foreach ((array) $entry['row_ids'] as $rowId) {
+                                $rowStatusUpdates[] = [
+                                    'id' => (int) $rowId,
+                                    'contact_import_batch_id' => (int) ($rowMetaById[(int) $rowId]['contact_import_batch_id'] ?? $batchId),
+                                    'row_number' => (int) ($rowMetaById[(int) $rowId]['row_number'] ?? 0),
+                                    'is_removed' => (int) ($rowMetaById[(int) $rowId]['is_removed'] ?? 0),
+                                    'created_at' => $rowMetaById[(int) $rowId]['created_at'] ?? $now,
+                                    'status' => 'failed',
+                                    'errors' => $this->encodeJson([__('Contact limit reached!')]),
+                                    'updated_at' => $now,
+                                ];
+                            }
+
+                            continue;
+                        }
+
                         $contactInserts[] = [
                             'uuid' => (string) Str::uuid(),
                             'organization_id' => $organizationId,
@@ -643,6 +672,9 @@ class ContactImportService
                         ];
 
                         $created++;
+                        if ($remainingNewContacts !== null) {
+                            $remainingNewContacts--;
+                        }
                     }
                 }
 
@@ -667,6 +699,10 @@ class ContactImportService
                 $desiredPairs = [];
                 $failedRowIds = [];
                 foreach ($entriesByPhone as $phone => $entry) {
+                    if (isset($limitFailedPhones[$phone])) {
+                        continue;
+                    }
+
                     $contactId = $contactIdsByPhone[$phone] ?? null;
                     if (! $contactId) {
                         foreach ((array) $entry['row_numbers'] as $rowNumber) {
@@ -819,6 +855,9 @@ class ContactImportService
         $failedRowsPreview = [];
         $seenPhones = [];
         $countedPhones = [];
+        $contactsRemaining = (new SubscriptionUsageService())
+            ->summary($organizationId, SubscriptionUsageService::CONTACTS)['remaining'];
+        $remainingNewContacts = $contactsRemaining === -1 ? null : max(0, (int) $contactsRemaining);
 
         $batch->update([
             'status' => 'processing',
@@ -898,11 +937,13 @@ class ContactImportService
                             'address' => (array) ($normalized['address'] ?? []),
                             'custom_attributes' => (array) ($normalized['custom_attributes'] ?? []),
                             'group_names' => $groupNames,
+                            'row_numbers' => [$rowNumber],
                         ];
                         continue;
                     }
 
                     $existing = &$entriesByPhone[$phone];
+                    $existing['row_numbers'][] = $rowNumber;
                     if (trim((string) ($normalized['first_name'] ?? '')) !== '') {
                         $existing['first_name'] = $normalized['first_name'];
                     }
@@ -935,6 +976,7 @@ class ContactImportService
                         ->whereIn('phone', $phones)
                         ->get(['id', 'phone', 'metadata'])
                         ->keyBy('phone');
+                    $limitFailedPhones = [];
 
                     foreach ($phones as $phone) {
                         if (isset($countedPhones[$phone])) {
@@ -944,7 +986,26 @@ class ContactImportService
                         if ($existingContacts->has($phone)) {
                             $updated++;
                         } else {
+                            if ($remainingNewContacts !== null && $remainingNewContacts <= 0) {
+                                $limitFailedPhones[$phone] = true;
+                                $invalid++;
+
+                                foreach ((array) ($entriesByPhone[$phone]['row_numbers'] ?? []) as $rowNumber) {
+                                    $failedRowsPreview = $this->appendFailurePreview(
+                                        $failedRowsPreview,
+                                        (int) $rowNumber,
+                                        __('Contact limit reached!')
+                                    );
+                                }
+
+                                $countedPhones[$phone] = true;
+                                continue;
+                            }
+
                             $created++;
+                            if ($remainingNewContacts !== null) {
+                                $remainingNewContacts--;
+                            }
                         }
 
                         $countedPhones[$phone] = true;
@@ -962,6 +1023,10 @@ class ContactImportService
 
                     $contactRows = [];
                     foreach ($entriesByPhone as $phone => $entry) {
+                        if (isset($limitFailedPhones[$phone])) {
+                            continue;
+                        }
+
                         $existingContact = $existingContacts->get($phone);
                         $existingMetadata = $existingContact
                             ? $this->decodeJsonArray($existingContact->metadata ?? null)
@@ -985,11 +1050,13 @@ class ContactImportService
                         ];
                     }
 
-                    DB::table('contacts')->upsert(
-                        $contactRows,
-                        ['organization_id', 'phone'],
-                        ['first_name', 'last_name', 'email', 'address', 'metadata', 'contact_source', 'deleted_at', 'updated_at']
-                    );
+                    if (! empty($contactRows)) {
+                        DB::table('contacts')->upsert(
+                            $contactRows,
+                            ['organization_id', 'phone'],
+                            ['first_name', 'last_name', 'email', 'address', 'metadata', 'contact_source', 'deleted_at', 'updated_at']
+                        );
+                    }
 
                     $contactIdsByPhone = DB::table('contacts')
                         ->where('organization_id', $organizationId)
@@ -999,6 +1066,10 @@ class ContactImportService
 
                     $pivotRows = [];
                     foreach ($entriesByPhone as $phone => $entry) {
+                        if (isset($limitFailedPhones[$phone])) {
+                            continue;
+                        }
+
                         $contactId = $contactIdsByPhone[$phone] ?? null;
                         if (! $contactId) {
                             continue;

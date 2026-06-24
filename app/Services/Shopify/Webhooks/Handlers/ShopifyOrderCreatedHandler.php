@@ -116,7 +116,8 @@ class ShopifyOrderCreatedHandler implements ShopifyWebhookEventHandlerInterface
                 $template,
                 $headerMeta,
                 $bodyMeta,
-                $buttonsMeta
+                $buttonsMeta,
+                'shopify'
             );
         } catch (\Throwable $e) {
             $this->outboundLogger->logFailure($outboundMessage, $attemptNo, $requestPayload, null, $e->getMessage());

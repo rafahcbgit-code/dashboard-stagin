@@ -5,10 +5,8 @@ namespace App\Imports;
 use App\Models\Contact;
 use App\Models\ContactField;
 use App\Models\ContactGroup;
-use App\Models\Setting;
-use App\Models\Subscription;
-use App\Models\SubscriptionPlan;
 use App\Services\PhoneService;
+use App\Services\SubscriptionUsageService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
 use Maatwebsite\Excel\Concerns\ToCollection;
@@ -383,26 +381,7 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
 
     private function contactSubscriptionLimit($organizationId)
     {
-        $subscription = Subscription::where('organization_id', $organizationId)->first();
-
-        if (!$subscription) {
-            return 0;
-        }
-
-        $usageLimit = 0;
-
-        if ($subscription->status === 'trial' && $subscription->valid_until > now()) {
-            $limit = optional(Setting::where('key', 'trial_limits')->first())->value;
-            $usageLimit = $limit ? json_decode($limit, true)['contacts'] ?? 0 : 0;
-        } else {
-            $subscriptionPlan = SubscriptionPlan::find($subscription->plan_id);
-
-            if ($subscriptionPlan) {
-                $subscriptionPlanLimits = json_decode($subscriptionPlan->metadata, true);
-                $usageLimit = $subscriptionPlanLimits['contacts_limit'] ?? 0;
-            }
-        }
-
-        return $usageLimit;
+        return (new SubscriptionUsageService())
+            ->summary((int) $organizationId, SubscriptionUsageService::CONTACTS)['limit'];
     }
 }
