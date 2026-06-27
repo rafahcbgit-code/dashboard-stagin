@@ -50,6 +50,19 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Last Used At Update Interval
+    |--------------------------------------------------------------------------
+    |
+    | Sanctum updates personal access tokens on every authenticated bearer
+    | request by default. Mobile polling can turn that into a hot write path,
+    | so the custom mobile auth middleware throttles this update interval.
+    |
+    */
+
+    'last_used_at_update_interval' => env('SANCTUM_LAST_USED_AT_UPDATE_INTERVAL', 10),
+
+    /*
+    |--------------------------------------------------------------------------
     | Sanctum Middleware
     |--------------------------------------------------------------------------
     |
