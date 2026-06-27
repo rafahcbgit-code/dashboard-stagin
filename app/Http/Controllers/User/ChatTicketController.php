@@ -82,7 +82,7 @@ class ChatTicketController extends BaseController
             $ticketBefore = null;
             $ticketAfter = null;
 
-            DB::transaction(function () use ($contact, $organizationId, $request, &$ticket, &$ticketBefore, &$ticketAfter, $requestId) {
+            DB::transaction(function () use ($contact, $organizationId, $request, &$ticket, &$ticketBefore, &$ticketAfter) {
                 $ticketsForContactBefore = ChatTicket::where('contact_id', $contact->id)
                     ->orderBy('id')
                     ->get(['id', 'organization_id', 'contact_id', 'assigned_to', 'status', 'created_at', 'updated_at'])
