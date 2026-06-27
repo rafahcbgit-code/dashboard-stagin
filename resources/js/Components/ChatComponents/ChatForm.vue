@@ -166,6 +166,18 @@ const handleEnterKey = (event) => {
 };
 
 const isInboundChatWithin24Hours = computed(() => {
+    if (typeof props.contact.can_send_session_message === 'boolean') {
+        return props.contact.can_send_session_message;
+    }
+
+    if (props.contact.last_inbound_chat_at) {
+        const lastInboundChatTime = new Date(props.contact.last_inbound_chat_at);
+        const currentTime = new Date();
+        const timeDifference = currentTime - lastInboundChatTime;
+
+        return timeDifference < 24 * 60 * 60 * 1000;
+    }
+
     if (props.contact.last_inbound_chat) {
         const lastInboundChatTime = new Date(props.contact.last_inbound_chat.created_at);
         const currentTime = new Date();
