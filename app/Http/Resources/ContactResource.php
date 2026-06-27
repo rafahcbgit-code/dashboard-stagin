@@ -2,6 +2,7 @@
 
 namespace App\Http\Resources;
 
+use App\Models\Chat;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -30,10 +31,8 @@ class ContactResource extends JsonResource
             $data['formatted_phone_number'] = $maskedPhone;
         }
 
-        $lastInboundChat = $this->whenLoaded('lastInboundChat');
-        if (!$lastInboundChat instanceof \Illuminate\Http\Resources\MissingValue && $lastInboundChat) {
-            $lastInboundAt = Carbon::parse($lastInboundChat->getRawOriginal('created_at'), 'UTC');
-
+        $lastInboundAt = $this->lastInboundChatAt();
+        if ($lastInboundAt) {
             $data['last_inbound_chat_at'] = $lastInboundAt->toIso8601String();
             $data['reply_window_expires_at'] = $lastInboundAt->copy()->addHours(24)->toIso8601String();
             $data['can_send_session_message'] = $lastInboundAt->greaterThan(now('UTC')->subHours(24));
@@ -44,5 +43,22 @@ class ContactResource extends JsonResource
         }
         
         return $data;
+    }
+
+    private function lastInboundChatAt(): ?Carbon
+    {
+        $lastInboundChat = $this->whenLoaded('lastInboundChat');
+
+        if (!$lastInboundChat instanceof \Illuminate\Http\Resources\MissingValue && $lastInboundChat) {
+            return Carbon::parse($lastInboundChat->getRawOriginal('created_at'), 'UTC');
+        }
+
+        $createdAt = Chat::where('contact_id', $this->id)
+            ->where('type', 'inbound')
+            ->whereNull('deleted_at')
+            ->orderByDesc('created_at')
+            ->value('created_at');
+
+        return $createdAt ? Carbon::parse($createdAt, 'UTC') : null;
     }
 }

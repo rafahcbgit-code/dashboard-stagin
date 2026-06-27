@@ -9,7 +9,7 @@ import PreCreatedRepliesModal from './PreCreatedRepliesModal.vue';
 import MetaFlowPickerModal from './MetaFlowPickerModal.vue';
 
 const recorder = ref(null);
-const props = defineProps(['contact', 'chatLimitReached', 'simpleForm']);
+const props = defineProps(['contact', 'chatThread', 'chatLimitReached', 'simpleForm']);
 const isContactBlocked = computed(() => Boolean(props.contact?.is_blocked));
 
 const showMetaFlowModal = ref(false);
@@ -166,28 +166,78 @@ const handleEnterKey = (event) => {
 };
 
 const isInboundChatWithin24Hours = computed(() => {
+    const latestInboundFromThread = latestInboundChatTimeFromThread();
+
+    if (latestInboundFromThread) {
+        return isWithin24Hours(latestInboundFromThread);
+    }
+
     if (typeof props.contact.can_send_session_message === 'boolean') {
         return props.contact.can_send_session_message;
     }
 
     if (props.contact.last_inbound_chat_at) {
-        const lastInboundChatTime = new Date(props.contact.last_inbound_chat_at);
-        const currentTime = new Date();
-        const timeDifference = currentTime - lastInboundChatTime;
-
-        return timeDifference < 24 * 60 * 60 * 1000;
+        return isWithin24Hours(new Date(props.contact.last_inbound_chat_at));
     }
 
     if (props.contact.last_inbound_chat) {
-        const lastInboundChatTime = new Date(props.contact.last_inbound_chat.created_at);
-        const currentTime = new Date();
-        const timeDifference = currentTime - lastInboundChatTime;
-
-        return timeDifference < 24 * 60 * 60 * 1000;
+        return isWithin24Hours(new Date(props.contact.last_inbound_chat.created_at));
     }
 
     return false;
 });
+
+const isWithin24Hours = (date) => {
+    if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
+        return false;
+    }
+
+    return new Date() - date < 24 * 60 * 60 * 1000;
+};
+
+const latestInboundChatTimeFromThread = () => {
+    if (!Array.isArray(props.chatThread)) {
+        return null;
+    }
+
+    let latestTime = null;
+
+    props.chatThread.forEach((item) => {
+        const chat = item?.[0]?.value;
+
+        if (!chat || chat.type !== 'inbound') {
+            return;
+        }
+
+        const metadata = parseMetadata(chat.metadata);
+        const timestamp = Number(metadata?.timestamp || metadata?.raw?.timestamp);
+        const candidate = Number.isFinite(timestamp) && timestamp > 0
+            ? new Date(timestamp * 1000)
+            : new Date(chat.created_at);
+
+        if (!Number.isNaN(candidate.getTime()) && (!latestTime || candidate > latestTime)) {
+            latestTime = candidate;
+        }
+    });
+
+    return latestTime;
+};
+
+const parseMetadata = (metadata) => {
+    if (!metadata) {
+        return {};
+    }
+
+    if (typeof metadata === 'object') {
+        return metadata;
+    }
+
+    try {
+        return JSON.parse(metadata);
+    } catch (error) {
+        return {};
+    }
+};
 
 const handleFileUpload = (event) => {
     if (isContactBlocked.value) {
