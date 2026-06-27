@@ -19,6 +19,7 @@ use App\Helpers\WebhookHelper;
 use App\Services\PhoneService;
 use App\Services\StripeService;
 use App\Services\AutoReplyService;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use App\Services\UnsubscribeChecker;
 use App\Services\SubscriptionService;
@@ -147,7 +148,15 @@ class WebhookController extends BaseController
 
     protected function getOrganizationByIdentifier($identifier)
     {
-        return Organization::where('identifier', $identifier)->first();
+        if (!$identifier) {
+            return null;
+        }
+
+        return Cache::remember(
+            "organization:webhook_identifier:{$identifier}",
+            now()->addMinute(),
+            fn () => Organization::where('identifier', $identifier)->first()
+        );
     }
 
     protected function getOrganizationByWabaId(string $wabaId)

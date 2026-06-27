@@ -31,12 +31,14 @@ class Chat extends Model {
         parent::boot();
 
         static::created(function ($chat) {
-            $contact = $chat->contact;
-            if ($contact) {
-                // ✅ SIMPLEST: Always use raw attribute (already UTC in DB)
-                $contact->latest_chat_created_at = $chat->attributes['created_at'];
-                $contact->save();
-            }
+            $createdAt = $chat->getRawOriginal('created_at') ?? $chat->attributes['created_at'] ?? now();
+
+            Contact::whereKey($chat->contact_id)
+                ->where(function ($query) use ($createdAt) {
+                    $query->whereNull('latest_chat_created_at')
+                        ->orWhere('latest_chat_created_at', '<', $createdAt);
+                })
+                ->update(['latest_chat_created_at' => $createdAt]);
         });
 
         /*static::updated(function ($chat) {
@@ -48,12 +50,12 @@ class Chat extends Model {
             }
         });*/
     }
-    
+
     public function getCreatedAtAttribute($value)
     {
         return DateTimeHelper::convertToOrganizationTimezone($value)->toDateTimeString();
     }
-    
+
     public function contact()
     {
         return $this->belongsTo(Contact::class, 'contact_id', 'id');

@@ -41,7 +41,6 @@ class ChatService
     public function __construct($organizationId)
     {
         $this->organizationId = $organizationId;
-        $this->initializeWhatsappService();
     }
 
     /**
@@ -65,6 +64,10 @@ class ChatService
 
     private function initializeWhatsappService()
     {
+        if ($this->whatsappService) {
+            return;
+        }
+
         $config = Organization::where('id', $this->organizationId)->first()->metadata;
         $config = $config ? json_decode($config, true) : [];
 
@@ -75,6 +78,13 @@ class ChatService
         $wabaId = $config['whatsapp']['waba_id'] ?? null;
 
         $this->whatsappService = new WhatsappService($accessToken, $apiVersion, $appId, $phoneNumberId, $wabaId, $this->organizationId);
+    }
+
+    private function getWhatsappService(): WhatsappService
+    {
+        $this->initializeWhatsappService();
+
+        return $this->whatsappService;
     }
 
     private function shouldThrottle($cacheKey)
@@ -298,10 +308,17 @@ class ChatService
      */
     private function findLeastLoadedAgent($organizationId)
     {
-        return Team::where('organization_id', $organizationId)
-            ->withCount('tickets')
-            ->whereNull('deleted_at')
-            ->orderBy('tickets_count')
+        return DB::table('teams')
+            ->select('teams.user_id')
+            ->leftJoin('chat_tickets', function ($join) use ($organizationId) {
+                $join->on('teams.user_id', '=', 'chat_tickets.assigned_to')
+                    ->where('chat_tickets.organization_id', '=', $organizationId)
+                    ->where('chat_tickets.status', '=', 'open');
+            })
+            ->where('teams.organization_id', $organizationId)
+            ->whereNull('teams.deleted_at')
+            ->groupBy('teams.user_id')
+            ->orderByRaw('COUNT(chat_tickets.id) ASC')
             ->first();
     }
 
@@ -377,9 +394,10 @@ class ChatService
         $ticket->status = 'open';
         $ticket->updated_at = now();
         $ticket->created_at = now();
-        $ticket->save();
 
         $this->assignAgentToTicket($ticket, $organizationId, $autoassignment);
+        $ticket->save();
+
         $this->sendTicketAssignmentNotification(
             $contactId,
             $ticket->assigned_to,
@@ -571,14 +589,14 @@ class ChatService
         $userId = $request->user_id ?? $this->getUserId();
 
         if ($request->type === 'text') {
-            return $this->whatsappService->sendMessage($request->uuid, $request->message, $userId);
+            return $this->getWhatsappService()->sendMessage($request->uuid, $request->message, $userId);
         } elseif (in_array($request->type, ['interactive buttons', 'interactive call to action url', 'interactive list'])) {
             $buttons = $request->buttons ?? [];
             $header = $request->header ?? [];
             $footer = $request->footer ?? null;
             $buttonLabel = $request->button_label ?? null;
 
-            return $this->whatsappService->sendMessage(
+            return $this->getWhatsappService()->sendMessage(
                 $request->uuid,
                 $request->message,
                 $userId,
@@ -607,7 +625,7 @@ class ChatService
                 $mediaUrl = $mediaFilePath;
             }
 
-            $this->whatsappService->sendMedia($request->uuid, $request->type, $fileName, $mediaFilePath, $mediaUrl, $location);
+            $this->getWhatsappService()->sendMedia($request->uuid, $request->type, $fileName, $mediaFilePath, $mediaUrl, $location);
         }
     }
 
@@ -783,7 +801,7 @@ class ChatService
         //Build Template to send
         $template = $this->buildTemplate($template->name, $template->language, json_decode(json_encode($metadata)), $contact);
 
-        return $this->whatsappService->sendTemplateMessage($contact->uuid, $template, $userId, NULL, $mediaId);
+        return $this->getWhatsappService()->sendTemplateMessage($contact->uuid, $template, $userId, NULL, $mediaId);
     }
 
     public function sendTemplateToPhone(object $request)
@@ -873,7 +891,7 @@ class ChatService
             ];
         }
 
-        return $this->whatsappService->sendTemplateMessage(
+        return $this->getWhatsappService()->sendTemplateMessage(
             $contact->uuid,
             $templatePayload,
             $this->getUserId(),
