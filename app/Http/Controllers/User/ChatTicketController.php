@@ -63,10 +63,21 @@ class ChatTicketController extends BaseController
 
     public function assign(Request $request, $uuid)
     {
-        $contact = Contact::where('uuid', $uuid)->first();
-        $team = Team::where('organization_id', session()->get('current_organization'))->where('user_id', $request->id)->first();
-        $user = User::where('id', $request->id)->first();
         $organizationId = session()->get('current_organization');
+        $request->validate([
+            'id' => ['required', 'integer'],
+        ]);
+
+        $contact = Contact::where('uuid', $uuid)
+            ->where('organization_id', $organizationId)
+            ->firstOrFail();
+
+        $team = Team::where('organization_id', $organizationId)
+            ->where('user_id', $request->id)
+            ->whereNull('deleted_at')
+            ->first();
+
+        $user = User::where('id', $request->id)->first();
 
         if($team && $user){
             ChatTicket::where('contact_id', $contact->id)->update([
@@ -115,5 +126,12 @@ class ChatTicketController extends BaseController
                 ]
             );
         }
+
+        return Redirect::back()
+            ->withErrors(['id' => __('Selected agent is not available for this team.')])
+            ->with('status', [
+                'type' => 'error',
+                'message' => __('Selected agent is not available for this team.')
+            ]);
     }
 }
