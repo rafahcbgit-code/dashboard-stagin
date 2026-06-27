@@ -22,7 +22,7 @@
         <div v-if="
           contact && !displayContactInfo && !formLoading && !displayTemplate
         " class="w-full py-4">
-          <ChatForm :contact="contact" :simpleForm="simpleForm" :chatLimitReached="isChatLimitReached"
+          <ChatForm :contact="contact" :chatThread="chatThread" :simpleForm="simpleForm" :chatLimitReached="isChatLimitReached"
             @viewTemplate="displayTemplate = true" />
         </div>
         <div v-if="displayTemplate" class="flex-1 overflow-y-hidden">
