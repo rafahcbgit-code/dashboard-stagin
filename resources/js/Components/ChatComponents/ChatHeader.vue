@@ -96,7 +96,19 @@ const changeTicketStatus = (value) => {
 const changeTicketAgent = (selectedUser = user.value) => {
     const selectedUserId = selectedUser?.value;
 
+    console.info('[TicketAssignment] selection changed', {
+        contactUuid: props.contact?.uuid,
+        currentTicketId: props.ticket?.id,
+        currentAssignedTo: props.ticket?.assigned_to,
+        selectedUser,
+        selectedUserId,
+    });
+
     if (!selectedUserId) {
+        console.warn('[TicketAssignment] assignment skipped because selected user is empty', {
+            contactUuid: props.contact?.uuid,
+            selectedUser,
+        });
         return;
     }
 
@@ -104,7 +116,18 @@ const changeTicketAgent = (selectedUser = user.value) => {
         'id': selectedUserId
     }, {
         preserveScroll: true,
+        onSuccess: () => {
+            console.info('[TicketAssignment] assignment request completed', {
+                contactUuid: props.contact?.uuid,
+                selectedUserId,
+            });
+        },
         onError: () => {
+            console.error('[TicketAssignment] assignment request failed', {
+                contactUuid: props.contact?.uuid,
+                selectedUserId,
+                ticket: props.ticket,
+            });
             user.value = ticketUserOption(props.ticket);
         },
     })
