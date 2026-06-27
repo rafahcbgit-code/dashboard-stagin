@@ -207,6 +207,22 @@ return [
             'days' => 14,
             'replace_placeholders' => true,
         ],
+
+        'slow_queries' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/slow-queries.log'),
+            'level' => 'warning',
+            'days' => 14,
+            'replace_placeholders' => true,
+        ],
+
+        'slow_jobs' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/slow-jobs.log'),
+            'level' => 'warning',
+            'days' => 14,
+            'replace_placeholders' => true,
+        ],
     ],
 
 ];
