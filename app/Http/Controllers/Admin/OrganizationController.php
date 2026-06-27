@@ -107,6 +107,7 @@ class OrganizationController extends BaseController
             'users' => $res['users'],
             'plans' => $res['plans'],
             'invoices' => $res['billing'],
+            'subscriptionEvents' => $res['subscription_events'],
             'mode' => $mode,
             'filters' => $request->all()
         ]);
@@ -126,6 +127,7 @@ class OrganizationController extends BaseController
             'users' => $res['users'],
             'plans' => $res['plans'],
             'invoices' => $res['billing'],
+            'subscriptionEvents' => $res['subscription_events'],
             'filters' => $request->all()
         ]);
     }

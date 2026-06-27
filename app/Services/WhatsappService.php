@@ -267,6 +267,11 @@ class WhatsappService
             return $conversationGuard;
         }
 
+        $templateMessagesGuard = $this->guardTemplateMessagesLimit((int) $contact->organization_id);
+        if ($templateMessagesGuard !== null) {
+            return $templateMessagesGuard;
+        }
+
         $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}/messages";
         
         $headers = $this->setHeaders();
@@ -1837,6 +1842,17 @@ class WhatsappService
         }
 
         return $this->buildErrorResponse($check['message'], 403, 'CONVERSATIONS_LIMIT_REACHED');
+    }
+
+    private function guardTemplateMessagesLimit(int $organizationId): ?\stdClass
+    {
+        $check = (new SubscriptionUsageService())->canUse($organizationId, SubscriptionUsageService::TEMPLATE_MESSAGES);
+
+        if ($check['allowed']) {
+            return null;
+        }
+
+        return $this->buildErrorResponse($check['message'], 403, 'TEMPLATE_MESSAGES_LIMIT_REACHED');
     }
 
     private function recordConversationWindowForOutbound(Chat $chat, Contact $contact): void

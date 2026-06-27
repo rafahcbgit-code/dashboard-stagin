@@ -165,12 +165,15 @@ class SubscriptionService
             //Update subscription
             $plan = SubscriptionPlan::where('id', $planId)->first();
             
-            Subscription::where('organization_id', $organizationId)->update([
-                'plan_id' => $planId,
-                'start_date' => now(),
-                'valid_until' => date('Y-m-d H:i:s', strtotime('+1 ' . ($plan->period === 'monthly' ? 'month' : 'year'))),
-                'status' => 'active',
-            ]);
+            $subscription = Subscription::where('organization_id', $organizationId)->first();
+            if ($subscription) {
+                $subscription->update([
+                    'plan_id' => $planId,
+                    'start_date' => now(),
+                    'valid_until' => date('Y-m-d H:i:s', strtotime('+1 ' . ($plan->period === 'monthly' ? 'month' : 'year'))),
+                    'status' => 'active',
+                ]);
+            }
 
             return $invoice;
         });

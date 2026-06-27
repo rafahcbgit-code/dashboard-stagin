@@ -186,14 +186,17 @@ const form = useForm({
   buttons: [],
 });
 
-const loadTemplate = async () => {
+const loadTemplate = async (selectedTemplate = null) => {
   // Reset carousel state before loading new template
   isCarouselTemplate.value = false;
   carouselCards.value = [];
   carouselMessageBody.value = "";
 
+  const templateUuid = selectedTemplate || form.template;
+  if (!templateUuid) return;
+
   try {
-    const response = await axios.get("/templates/" + form.template);
+    const response = await axios.get("/templates/" + templateUuid);
     if (response) {
       const metadata = JSON.parse(response.data.metadata);
 
@@ -711,6 +714,7 @@ onMounted(() => {
           :name="$t('Template')"
           :class="'sm:col-span-3'"
           :placeholder="$t('Select template')"
+          :native="isCampaignFlow"
         />
         <FormSelect
           v-if="isCampaignFlow"
@@ -721,21 +725,18 @@ onMounted(() => {
           :class="'sm:col-span-3'"
           :placeholder="$t('Select contacts')"
           :error="form.errors.contacts"
+          :native="true"
         />
         <div
           v-if="isCampaignFlow"
-          class="sm:col-span-6 grid grid-cols-1 gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm md:grid-cols-3"
+          class="sm:col-span-6 grid grid-cols-1 gap-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-sm md:grid-cols-2"
         >
           <div>
             <div class="text-slate-500">{{ $t("Remaining template messages") }}</div>
             <div class="font-medium">{{ limitText(props.resourceUsage?.template_messages?.remaining ?? -1) }}</div>
           </div>
           <div>
-            <div class="text-slate-500">{{ $t("Remaining conversations") }}</div>
-            <div class="font-medium">{{ limitText(props.resourceUsage?.conversations?.remaining ?? -1) }}</div>
-          </div>
-          <div>
-            <div class="text-slate-500">{{ $t("Required messages") }}</div>
+            <div class="text-slate-500">{{ $t("Campaign Recipients") }}</div>
             <div class="font-medium">{{ requiredCampaignMessages }}</div>
           </div>
         </div>

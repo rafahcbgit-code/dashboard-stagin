@@ -37,12 +37,48 @@
                 <div @click="changeTab('organization')" class="cursor-pointer px-2 py-2" :class="tab === 'organization' ? 'bg-white' : ''">{{ $t('User details') }}</div>
                 <div @click="changeTab('team')" class="cursor-pointer px-2 py-2" :class="tab === 'team' ? 'bg-white' : ''">{{ $t('Team') }}</div>
                 <div @click="changeTab('billing')" class="cursor-pointer px-2 py-2" :class="tab === 'billing' ? 'bg-white' : ''">{{ $t('Billing history') }}</div>
+                <div @click="changeTab('subscription_history')" class="cursor-pointer px-2 py-2" :class="tab === 'subscription_history' ? 'bg-white' : ''">{{ $t('Subscription history') }}</div>
             </div>
             <div v-if="props.organization && tab === 'team'" class="pt-5">
                 <UserTable :rows="props.users" :filters="props.filters" :type="'user'" :showRole="true" :showDeleteBtn="false"/>
             </div>
             <div v-if="props.organization && tab === 'billing'" class="pt-5">
                 <BillingTable :rows="props.invoices" :filters="props.filters" :uuid="props.organization.uuid"/>
+            </div>
+            <div v-if="props.organization && tab === 'subscription_history'" class="pt-5">
+                <div class="overflow-x-auto rounded-md border bg-white">
+                    <table class="min-w-full divide-y divide-gray-200 text-sm">
+                        <thead class="bg-slate-50 text-left text-xs text-gray-500">
+                            <tr>
+                                <th class="px-4 py-3 font-medium">{{ $t('Event') }}</th>
+                                <th class="px-4 py-3 font-medium">{{ $t('Source') }}</th>
+                                <th class="px-4 py-3 font-medium">{{ $t('Actor') }}</th>
+                                <th class="px-4 py-3 font-medium">{{ $t('Details') }}</th>
+                                <th class="px-4 py-3 font-medium">{{ $t('Date') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100">
+                            <tr v-if="subscriptionEvents.length === 0">
+                                <td class="px-4 py-4 text-gray-500" colspan="5">{{ $t('No subscription events found') }}</td>
+                            </tr>
+                            <tr v-for="event in subscriptionEvents" :key="event.id">
+                                <td class="px-4 py-3">
+                                    <div class="font-medium">{{ $t(event.description || eventLabel(event.event_type)) }}</div>
+                                    <div class="text-xs text-gray-500">{{ event.event_type }}</div>
+                                </td>
+                                <td class="px-4 py-3 capitalize">{{ event.source || '-' }}</td>
+                                <td class="px-4 py-3">
+                                    <div>{{ event.actor_guard || '-' }}</div>
+                                    <div v-if="event.actor_id" class="text-xs text-gray-500">#{{ event.actor_id }}</div>
+                                </td>
+                                <td class="px-4 py-3 text-xs text-gray-600">
+                                    <div v-for="line in eventDetails(event)" :key="line">{{ line }}</div>
+                                </td>
+                                <td class="px-4 py-3 whitespace-nowrap">{{ event.occurred_at }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
             <form v-if="tab === 'organization'" @submit.prevent="submitForm()" class="bg-white py-5 px-5 rounded-bl-[0.5rem] rounded-br-[0.5rem]">
                 <div class="sm:flex border-b py-5">
@@ -151,7 +187,7 @@
 </template>
 <script setup>
     import AppLayout from "./../Layout/App.vue";
-    import{ ref } from 'vue';
+    import{ computed, ref } from 'vue';
     import { Link, useForm } from "@inertiajs/vue3";
     import FormInput from '@/Components/FormInput.vue';
     import FormPhoneInput from '@/Components/FormPhoneInput.vue';
@@ -171,6 +207,10 @@
         users: Object, 
         invoices: Object, 
         plans: Object, 
+        subscriptionEvents: {
+            type: Array,
+            default: () => [],
+        },
         filters: Object, 
         mode: String 
     });
@@ -258,6 +298,64 @@
         { value: 'active', label: trans('Active') },
         { value: 'suspended', label: trans('Suspended') },
     ]);
+
+    const subscriptionEvents = computed(() => props.subscriptionEvents ?? []);
+    const eventLabels = {
+        subscription_created: 'Subscription Created',
+        subscription_activated: 'Subscription Activated',
+        subscription_renewed: 'Subscription Renewed',
+        subscription_expired: 'Subscription Expired',
+        subscription_expiration_changed: 'Subscription Expiration Changed',
+        plan_assigned: 'Plan Assigned',
+        plan_changed: 'Plan Changed',
+        plan_upgraded: 'Plan Upgraded',
+        plan_downgraded: 'Plan Downgraded',
+        add_on_purchased: 'Add-on Purchased',
+        add_on_expired: 'Add-on Expired',
+        add_on_deleted: 'Add-on Deleted',
+        trial_started: 'Trial Started',
+        trial_ended: 'Trial Ended',
+    };
+
+    const eventLabel = (eventType) => eventLabels[eventType] || 'Subscription Event';
+
+    const eventDetails = (event) => {
+        const oldValues = event.old_values || {};
+        const newValues = event.new_values || {};
+        const metadata = event.metadata || {};
+        const lines = [];
+
+        addChangedLine(lines, trans('Plan'), oldValues.plan_name, newValues.plan_name);
+        addChangedLine(lines, trans('Status'), oldValues.status, newValues.status);
+        addChangedLine(lines, trans('Valid until'), oldValues.valid_until, newValues.valid_until);
+
+        if (metadata.resource) {
+            lines.push(`${trans('Resource')}: ${metadata.resource}`);
+        }
+
+        if (metadata.quantity) {
+            lines.push(`${trans('Quantity')}: ${metadata.quantity}`);
+        }
+
+        return lines.length ? lines : ['-'];
+    };
+
+    const addChangedLine = (lines, label, oldValue, newValue) => {
+        if (!oldValue && !newValue) {
+            return;
+        }
+
+        if (String(oldValue || '') === String(newValue || '')) {
+            if (!oldValue || oldValue === '-') {
+                return;
+            }
+
+            lines.push(`${label}: ${oldValue}`);
+            return;
+        }
+
+        lines.push(`${label}: ${oldValue || '-'} -> ${newValue || '-'}`);
+    };
 
     const isOpenFormModal = ref(false);
     

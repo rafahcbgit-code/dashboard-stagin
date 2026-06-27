@@ -12,11 +12,14 @@ use App\Models\BillingTransaction;
 use App\Models\Organization;
 use App\Models\Setting;
 use App\Models\Subscription;
+use App\Models\SubscriptionEvent;
 use App\Models\SubscriptionPlan;
 use App\Models\Team;
 use App\Models\User;
+use App\Services\SubscriptionAuditService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Str;
 use Carbon\Carbon;
 
@@ -190,6 +193,7 @@ class OrganizationService
             $result['organization'] = null;
             $result['billing'] = null;
             $result['users'] = null;
+            $result['subscription_events'] = [];
 
             return $result;
         }
@@ -197,12 +201,85 @@ class OrganizationService
         $organization = Organization::with('subscription.plan')->where('uuid', $uuid)->first();
         $users = (new User)->listAll('user', $request->query('search'), $organization->id);
         $billing = (new BillingTransaction)->listAll($request->query('search'), $organization->id);
+        app(SubscriptionAuditService::class)->recordDueEventsForOrganization((int) $organization->id);
 
         $result['organization'] = $organization;
         $result['billing'] = BillingResource::collection($billing);
         $result['users'] = UserResource::collection($users);
+        $result['subscription_events'] = $this->subscriptionEvents((int) $organization->id);
 
         return $result;
+    }
+
+    private function subscriptionEvents(int $organizationId)
+    {
+        if (! Schema::hasTable('subscription_events')) {
+            return collect();
+        }
+
+        $events = SubscriptionEvent::query()
+            ->where('organization_id', $organizationId)
+            ->latest('occurred_at')
+            ->latest('id')
+            ->limit(100)
+            ->get();
+
+        return $this->visibleSubscriptionEvents($events)
+            ->map(fn (SubscriptionEvent $event) => [
+                'id' => $event->id,
+                'uuid' => $event->uuid,
+                'event_type' => $event->event_type,
+                'description' => $event->description,
+                'source' => $event->source,
+                'actor_guard' => $event->actor_guard,
+                'actor_id' => $event->actor_id,
+                'old_values' => $event->old_values,
+                'new_values' => $event->new_values,
+                'metadata' => $event->metadata,
+                'occurred_at' => optional($event->occurred_at)->toDateTimeString(),
+            ]);
+    }
+
+    private function visibleSubscriptionEvents($events)
+    {
+        return $events
+            ->groupBy(fn (SubscriptionEvent $event) => implode('|', [
+                $event->subscription_id,
+                $event->resource_addon_id,
+                optional($event->occurred_at)->toDateTimeString(),
+                $event->source,
+                $event->actor_guard,
+                $event->actor_id,
+                md5(json_encode($event->old_values ?? [])),
+                md5(json_encode($event->new_values ?? [])),
+            ]))
+            ->map(fn ($group) => $group
+                ->sortByDesc(fn (SubscriptionEvent $event) => $this->subscriptionEventPriority($event->event_type))
+                ->first()
+            )
+            ->sortByDesc(fn (SubscriptionEvent $event) => optional($event->occurred_at)->timestamp ?? 0)
+            ->values();
+    }
+
+    private function subscriptionEventPriority(string $eventType): int
+    {
+        return match ($eventType) {
+            SubscriptionAuditService::PLAN_UPGRADED,
+            SubscriptionAuditService::PLAN_DOWNGRADED => 100,
+            SubscriptionAuditService::PLAN_ASSIGNED => 95,
+            SubscriptionAuditService::PLAN_CHANGED => 90,
+            SubscriptionAuditService::SUBSCRIPTION_RENEWED,
+            SubscriptionAuditService::SUBSCRIPTION_EXPIRATION_CHANGED => 85,
+            SubscriptionAuditService::ADD_ON_PURCHASED,
+            SubscriptionAuditService::ADD_ON_EXPIRED,
+            SubscriptionAuditService::ADD_ON_DELETED => 80,
+            SubscriptionAuditService::TRIAL_STARTED,
+            SubscriptionAuditService::TRIAL_ENDED => 70,
+            SubscriptionAuditService::SUBSCRIPTION_ACTIVATED,
+            SubscriptionAuditService::SUBSCRIPTION_EXPIRED => 60,
+            SubscriptionAuditService::SUBSCRIPTION_CREATED => 50,
+            default => 0,
+        };
     }
 
     /**

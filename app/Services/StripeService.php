@@ -377,9 +377,12 @@ class StripeService
                     if($stripeEvent->data->object->mode == 'subscription'){
                         //Save plan id to database
                         if($metadata->plan_id != NULL){
-                            $subscription = Subscription::where('organization_id', $metadata->organization_id)->update([
-                                'plan_id' => $metadata->plan_id
-                            ]);
+                            $subscription = Subscription::where('organization_id', $metadata->organization_id)->first();
+                            if ($subscription) {
+                                $subscription->update([
+                                    'plan_id' => $metadata->plan_id
+                                ]);
+                            }
                         }
                     } else {
                         $payment = BillingPayment::create([

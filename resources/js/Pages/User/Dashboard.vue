@@ -107,6 +107,15 @@
                         <div class="text-xs text-gray-500">{{ $t('Remaining') }}: {{ item.remaining }}</div>
                     </div>
                 </div>
+                <div class="mt-4 border rounded-md p-3">
+                    <h3 class="text-xs text-gray-500 mb-3">{{ $t('Template messages by source') }}</h3>
+                    <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 lg:grid-cols-4">
+                        <div v-for="source in templateMessageSourceBreakdown" :key="source.source" class="flex items-center justify-between rounded-md bg-slate-50 px-3 py-2 text-sm">
+                            <span>{{ source.label }}</span>
+                            <span class="font-medium">{{ source.quantity }}</span>
+                        </div>
+                    </div>
+                </div>
             </div>
             <div class="md:grid md:grid-cols-2 gap-x-4 mt-4">
                 <div class="md:block hidden">
@@ -291,6 +300,47 @@
     });
 
     const formatLimit = (value) => Number(value) === -1 ? trans('Unlimited') : value;
+    const sourceLabels = {
+        campaign: 'Campaigns',
+        live_chat: 'Live Chat',
+        flow: 'Flows',
+        automation: 'Automations',
+        salla: 'Salla',
+        zid: 'Zid',
+        shopify: 'Shopify',
+        woocommerce: 'WooCommerce',
+        api: 'API',
+        auth: 'Authentication',
+        template: 'Templates',
+        template_metadata: 'Templates',
+        outbound_message: 'Outbound messages',
+        legacy_unmarked_outbound: 'Legacy outbound',
+        unknown: 'Unknown',
+    };
+    const defaultTemplateMessageSources = [
+        'campaign',
+        'live_chat',
+        'flow',
+        'salla',
+        'zid',
+        'shopify',
+        'woocommerce',
+        'api',
+    ];
+    const actualTemplateMessageSources = props.resourceUsage?.template_messages?.source_breakdown || [];
+    const templateMessageSourceTotals = actualTemplateMessageSources.reduce((totals, source) => {
+        const key = source.source || 'unknown';
+        totals[key] = Number(source.quantity || 0);
+        return totals;
+    }, {});
+    const templateMessageSourceBreakdown = Array.from(new Set([
+        ...defaultTemplateMessageSources,
+        ...actualTemplateMessageSources.map((source) => source.source || 'unknown'),
+    ])).map((source) => ({
+        source,
+        label: trans(sourceLabels[source] || source || 'Unknown'),
+        quantity: Number(templateMessageSourceTotals[source] || 0),
+    }));
     const usageItems = [
         { key: 'template_messages', label: trans('Template messages') },
         { key: 'conversations', label: trans('Conversations') },

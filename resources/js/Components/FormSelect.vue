@@ -23,7 +23,8 @@
       multiple: Boolean,
       required: Boolean,
       error: String,
-      disabled: Boolean
+      disabled: Boolean,
+      native: Boolean
     })
 
     const emit = defineEmits(['update:modelValue'])
@@ -51,6 +52,24 @@
             :placeholder="placeholder"
             :disabled="true"
             />
+        </div>
+        <div v-else-if="native == true">
+            <select
+            class="block w-full rounded-lg border-0 bg-white py-2 px-5 text-gray-900 shadow-sm outline-none ring-1 ring-inset focus:ring-2 focus:ring-indigo-600 sm:text-sm"
+            :class="error ? 'ring-[#b91c1c]' : 'ring-gray-300'"
+            :value="props.modelValue ?? ''"
+            :required="required"
+            @change="event => emit('update:modelValue', event.target.value || null)"
+            >
+                <option value="" disabled>{{ props.placeholder }}</option>
+                <option
+                v-for="option in props.options"
+                :key="option.value"
+                :value="option.value"
+                >
+                    {{ option.label }}
+                </option>
+            </select>
         </div>
         <div v-else>
             <Listbox 
@@ -85,7 +104,7 @@
                         <ListboxOption
                         v-slot="{ active, selected }"
                         v-for="option in props.options"
-                        :key="option.label"
+                        :key="option.value"
                         :value="option.value"
                         as="template"
                         >

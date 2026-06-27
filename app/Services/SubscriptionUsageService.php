@@ -63,7 +63,7 @@ class SubscriptionUsageService
         $limit = $baseLimit === -1 ? -1 : $baseLimit + $addonQuantity;
         $used = $this->used($organizationId, $resource, $subscription, $usageUserId);
 
-        return [
+        $summary = [
             'resource' => $resource,
             'limit' => $limit,
             'base_limit' => $baseLimit,
@@ -71,6 +71,12 @@ class SubscriptionUsageService
             'used' => $used,
             'remaining' => $limit === -1 ? -1 : max(0, $limit - $used),
         ];
+
+        if ($resource === self::TEMPLATE_MESSAGES) {
+            $summary['source_breakdown'] = $this->templateMessageSourceBreakdown($organizationId, $subscription);
+        }
+
+        return $summary;
     }
 
     public function summaries(int $organizationId, ?int $userId = null): array
@@ -198,6 +204,25 @@ class SubscriptionUsageService
         $this->scopeToSubscriptionPeriod($query, $subscription, 'occurred_at');
 
         return (int) $query->sum('quantity');
+    }
+
+    private function templateMessageSourceBreakdown(int $organizationId, ?Subscription $subscription): array
+    {
+        $query = SubscriptionUsageEvent::where('organization_id', $organizationId)
+            ->where('resource', self::TEMPLATE_MESSAGES)
+            ->selectRaw("COALESCE(source_type, 'unknown') as source_type, SUM(quantity) as total")
+            ->groupByRaw("COALESCE(source_type, 'unknown')")
+            ->orderByDesc('total');
+
+        $this->scopeToSubscriptionPeriod($query, $subscription, 'occurred_at');
+
+        return $query->get()
+            ->map(fn ($row) => [
+                'source' => (string) $row->source_type,
+                'quantity' => (int) $row->total,
+            ])
+            ->values()
+            ->all();
     }
 
     private function conversationWindowsCount(int $organizationId, ?Subscription $subscription): int

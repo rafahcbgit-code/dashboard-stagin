@@ -2,6 +2,10 @@
 
 namespace App\Providers;
 
+use App\Models\ResourceAddon;
+use App\Models\Subscription;
+use App\Observers\ResourceAddonObserver;
+use App\Observers\SubscriptionObserver;
 use App\Services\WooCommerce\Contracts\WooCommerceIntegrationRepositoryInterface;
 use App\Services\WooCommerce\Repositories\Eloquent\WooCommerceIntegrationRepository;
 use Illuminate\Support\Facades\Schema;
@@ -28,6 +32,9 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Schema::defaultStringLength(191);
+
+        Subscription::observe(SubscriptionObserver::class);
+        ResourceAddon::observe(ResourceAddonObserver::class);
         
         if (!\App::environment('local')) {
             \URL::forceScheme('https');

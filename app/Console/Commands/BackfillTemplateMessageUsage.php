@@ -15,7 +15,12 @@ class BackfillTemplateMessageUsage extends Command
     protected $signature = 'subscription:backfill-template-messages
         {--organization= : Limit backfill to a single organization ID}
         {--chunk=500 : Number of rows to process per chunk}
-        {--dry-run : Show how many events would be created without writing}';
+        {--dry-run : Show how many events would be created without writing}
+        {--diagnose : Print source counts before processing}
+        {--include-unmarked : Also count legacy outbound delivered/read chats that cannot be proven as templates}
+        {--dedupe-in-memory : Track processed chat IDs in PHP memory for more accurate dry-run duplicate counts; avoid on very large datasets}
+        {--use-chat-created-at : Use chats.created_at for occurred_at instead of querying chat_status_logs per message}
+        {--fast-dry-run : In dry-run mode, skip per-row existing checks for speed on very large datasets}';
 
     protected $description = 'Backfill delivered WhatsApp template message usage events from existing chat records.';
 
@@ -24,6 +29,7 @@ class BackfillTemplateMessageUsage extends Command
     private int $created = 0;
     private int $existing = 0;
     private int $skipped = 0;
+    private bool $dedupeInMemory = false;
 
     public function handle(SubscriptionUsageService $usageService): int
     {
@@ -41,22 +47,29 @@ class BackfillTemplateMessageUsage extends Command
 
         $chunkSize = max(1, (int) $this->option('chunk'));
         $dryRun = (bool) $this->option('dry-run');
+        $this->dedupeInMemory = (bool) $this->option('dedupe-in-memory');
         $organizationId = $this->option('organization') !== null
             ? (int) $this->option('organization')
             : null;
+
+        DB::disableQueryLog();
 
         $this->info($dryRun
             ? 'Dry run: no usage events will be written.'
             : 'Backfilling delivered template message usage events...');
 
-        foreach ($this->candidateQueries($organizationId) as $sourceName => $query) {
+        if ((bool) $this->option('diagnose')) {
+            $this->printDiagnostics($organizationId);
+        }
+
+        foreach ($this->candidateQueries($organizationId, (bool) $this->option('include-unmarked')) as $sourceName => $query) {
             $this->line("Processing {$sourceName}...");
 
-            $query->orderBy('chats.id')->chunk($chunkSize, function ($rows) use ($dryRun): void {
+            $query->chunkById($chunkSize, function ($rows) use ($dryRun): void {
                 foreach ($rows as $row) {
                     $this->processCandidate($row, $dryRun);
                 }
-            });
+            }, 'chats.id', 'chat_id');
         }
 
         $this->newLine();
@@ -67,7 +80,7 @@ class BackfillTemplateMessageUsage extends Command
         return self::SUCCESS;
     }
 
-    private function candidateQueries(?int $organizationId): array
+    private function candidateQueries(?int $organizationId, bool $includeUnmarked = false): array
     {
         $queries = [
             'marked-template-metadata' => $this->baseChatQuery($organizationId)
@@ -116,6 +129,11 @@ class BackfillTemplateMessageUsage extends Command
                 ->selectRaw('COALESCE(outbound_messages.source, "outbound_message") as source_type, outbound_messages.id as source_id');
         }
 
+        if ($includeUnmarked) {
+            $queries['legacy-unmarked-outbound'] = $this->baseChatQuery($organizationId)
+                ->selectRaw("'legacy_unmarked_outbound' as source_type, chats.id as source_id");
+        }
+
         return $queries;
     }
 
@@ -124,14 +142,13 @@ class BackfillTemplateMessageUsage extends Command
         $query = DB::table('chats')
             ->where('chats.type', 'outbound')
             ->whereNotNull('chats.wam_id')
-            ->whereIn('chats.status', ['delivered', 'read'])
+            ->where($this->deliveredStatusConstraint())
             ->select([
                 'chats.id as chat_id',
                 'chats.organization_id',
                 'chats.wam_id',
                 'chats.created_at',
-            ])
-            ->distinct();
+            ]);
 
         if ($organizationId) {
             $query->where('chats.organization_id', $organizationId);
@@ -140,36 +157,73 @@ class BackfillTemplateMessageUsage extends Command
         return $query;
     }
 
+    private function deliveredStatusConstraint(): callable
+    {
+        return function (Builder $query): void {
+            $query->whereIn('chats.status', ['delivered', 'read']);
+
+            if (! Schema::hasTable('chat_status_logs')) {
+                return;
+            }
+
+            $query->orWhereExists(function (Builder $statusQuery): void {
+                $statusQuery->selectRaw('1')
+                    ->from('chat_status_logs')
+                    ->whereColumn('chat_status_logs.chat_id', 'chats.id')
+                    ->where($this->statusLogDeliveredConstraint());
+            });
+        };
+    }
+
+    private function statusLogDeliveredConstraint(): callable
+    {
+        return function (Builder $query): void {
+            $query->where('metadata', 'like', '%"status":"delivered"%')
+                ->orWhere('metadata', 'like', '%"status": "delivered"%')
+                ->orWhere('metadata', 'like', '%"status":"read"%')
+                ->orWhere('metadata', 'like', '%"status": "read"%');
+        };
+    }
+
     private function processCandidate(object $row, bool $dryRun): void
     {
         $chatId = (int) $row->chat_id;
-        if (isset($this->seenChatIds[$chatId])) {
-            $this->skipped++;
-            return;
-        }
+        if ($this->dedupeInMemory) {
+            if (isset($this->seenChatIds[$chatId])) {
+                $this->skipped++;
+                return;
+            }
 
-        $this->seenChatIds[$chatId] = true;
+            $this->seenChatIds[$chatId] = true;
+        }
 
         $idempotencyKey = 'template-delivered:' . $row->wam_id;
 
-        $exists = SubscriptionUsageEvent::where('organization_id', (int) $row->organization_id)
-            ->where('resource', SubscriptionUsageService::TEMPLATE_MESSAGES)
-            ->where('idempotency_key', $idempotencyKey)
-            ->exists();
-
-        if ($exists) {
-            $this->existing++;
-            return;
-        }
-
         if ($dryRun) {
+            if ((bool) $this->option('fast-dry-run')) {
+                $this->created++;
+                return;
+            }
+
+            $exists = SubscriptionUsageEvent::where('organization_id', (int) $row->organization_id)
+                ->where('resource', SubscriptionUsageService::TEMPLATE_MESSAGES)
+                ->where('idempotency_key', $idempotencyKey)
+                ->exists();
+
+            if ($exists) {
+                $this->existing++;
+                return;
+            }
+
             $this->created++;
             return;
         }
 
-        $occurredAt = $this->deliveredAt($chatId) ?: Carbon::parse($row->created_at);
+        $occurredAt = (bool) $this->option('use-chat-created-at')
+            ? Carbon::parse($row->created_at)
+            : ($this->deliveredAt($chatId) ?: Carbon::parse($row->created_at));
 
-        $this->usageService->recordUsage(
+        $usageEvent = $this->usageService->recordUsage(
             (int) $row->organization_id,
             SubscriptionUsageService::TEMPLATE_MESSAGES,
             1,
@@ -185,7 +239,12 @@ class BackfillTemplateMessageUsage extends Command
             $occurredAt
         );
 
-        $this->created++;
+        if ($usageEvent?->wasRecentlyCreated) {
+            $this->created++;
+            return;
+        }
+
+        $this->existing++;
     }
 
     private function deliveredAt(int $chatId): ?Carbon
@@ -196,16 +255,75 @@ class BackfillTemplateMessageUsage extends Command
 
         $createdAt = DB::table('chat_status_logs')
             ->where('chat_id', $chatId)
-            ->where(function (Builder $query): void {
-                $query->where('metadata', 'like', '%"status":"delivered"%')
-                    ->orWhere('metadata', 'like', '%"status": "delivered"%')
-                    ->orWhere('metadata', 'like', '%"status":"read"%')
-                    ->orWhere('metadata', 'like', '%"status": "read"%');
-            })
+            ->where($this->statusLogDeliveredConstraint())
             ->orderByRaw("CASE WHEN metadata LIKE '%\"status\":\"delivered\"%' OR metadata LIKE '%\"status\": \"delivered\"%' THEN 0 ELSE 1 END")
             ->orderBy('created_at')
             ->value('created_at');
 
         return $createdAt ? Carbon::parse($createdAt) : null;
+    }
+
+    private function printDiagnostics(?int $organizationId): void
+    {
+        $this->newLine();
+        $this->line('Diagnostics:');
+        $this->line('Outbound chats with wam_id: ' . $this->countOutboundChats($organizationId));
+        $this->line('Outbound chats with delivered/read status: ' . $this->countDeliveredChats($organizationId));
+
+        if (Schema::hasTable('chat_status_logs')) {
+            $this->line('Outbound chats with delivered/read status logs: ' . $this->countDeliveredStatusLogs($organizationId));
+        }
+
+        foreach ($this->candidateQueries($organizationId, (bool) $this->option('include-unmarked')) as $sourceName => $query) {
+            $this->line("Candidate {$sourceName}: " . DB::query()->fromSub($query, 'candidate_rows')->count());
+        }
+
+        $this->newLine();
+    }
+
+    private function countOutboundChats(?int $organizationId): int
+    {
+        $query = DB::table('chats')
+            ->where('type', 'outbound')
+            ->whereNotNull('wam_id');
+
+        if ($organizationId) {
+            $query->where('organization_id', $organizationId);
+        }
+
+        return $query->count();
+    }
+
+    private function countDeliveredChats(?int $organizationId): int
+    {
+        $query = DB::table('chats')
+            ->where('type', 'outbound')
+            ->whereNotNull('wam_id')
+            ->whereIn('status', ['delivered', 'read']);
+
+        if ($organizationId) {
+            $query->where('organization_id', $organizationId);
+        }
+
+        return $query->count();
+    }
+
+    private function countDeliveredStatusLogs(?int $organizationId): int
+    {
+        $query = DB::table('chats')
+            ->where('chats.type', 'outbound')
+            ->whereNotNull('chats.wam_id')
+            ->whereExists(function (Builder $statusQuery): void {
+                $statusQuery->selectRaw('1')
+                    ->from('chat_status_logs')
+                    ->whereColumn('chat_status_logs.chat_id', 'chats.id')
+                    ->where($this->statusLogDeliveredConstraint());
+            });
+
+        if ($organizationId) {
+            $query->where('chats.organization_id', $organizationId);
+        }
+
+        return $query->count();
     }
 }
