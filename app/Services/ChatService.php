@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Http\Resources\ContactResource;
 use App\Helpers\CustomHelper;
 use App\Models\Chat;
+use App\Models\ChatArchive;
 use App\Models\Addon;
 use App\Models\ChatLog;
 use App\Models\Contact;
@@ -1364,7 +1365,11 @@ class ChatService
 
         foreach ($chats as $index => $row) {
             $chat = $row[0]['value'] ?? null;
-            if (! $chat instanceof Chat || empty($chat->wam_id)) {
+            if (! $chat instanceof Chat && ! $chat instanceof ChatArchive) {
+                continue;
+            }
+
+            if (empty($chat->wam_id)) {
                 continue;
             }
 
@@ -1408,7 +1413,7 @@ class ChatService
 
         foreach ($chats as $row) {
             $chat = $row[0]['value'] ?? null;
-            if (! $chat instanceof Chat) {
+            if (! $chat instanceof Chat && ! $chat instanceof ChatArchive) {
                 continue;
             }
 
@@ -1421,7 +1426,7 @@ class ChatService
         return $events;
     }
 
-    private function extractRevokeEventFromChat(Chat $chat): ?array
+    private function extractRevokeEventFromChat($chat): ?array
     {
         $metadata = $this->decodeChatMetadataForDisplay($chat->metadata);
 
