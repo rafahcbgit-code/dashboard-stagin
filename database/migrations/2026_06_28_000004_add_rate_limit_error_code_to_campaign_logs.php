@@ -11,18 +11,29 @@ return new class extends Migration
      */
     public function up(): void
     {
+        if (Schema::hasColumn('campaign_logs', 'rate_limit_error_code')
+            && !$this->indexExists('campaign_logs', 'idx_campaign_logs_rate_limit_lookup')) {
+            DB::statement(<<<'SQL'
+                ALTER TABLE `campaign_logs`
+                DROP COLUMN `rate_limit_error_code`,
+                ALGORITHM=INPLACE,
+                LOCK=NONE
+            SQL);
+        }
+
         if (!Schema::hasColumn('campaign_logs', 'rate_limit_error_code')) {
             DB::statement(<<<'SQL'
                 ALTER TABLE `campaign_logs`
-                ADD COLUMN `rate_limit_error_code` INT
+                ADD COLUMN `rate_limit_error_code` VARCHAR(64)
                 GENERATED ALWAYS AS (
-                    CASE
-                        WHEN JSON_VALID(`metadata`) THEN CAST(COALESCE(
+                    IF(
+                        JSON_VALID(`metadata`),
+                        COALESCE(
                             JSON_UNQUOTE(JSON_EXTRACT(`metadata`, '$.data.error.code')),
                             JSON_UNQUOTE(JSON_EXTRACT(`metadata`, '$.error.code'))
-                        ) AS UNSIGNED)
-                        ELSE NULL
-                    END
+                        ),
+                        NULL
+                    )
                 ) VIRTUAL,
                 ALGORITHM=INPLACE,
                 LOCK=NONE
