@@ -62,21 +62,6 @@ class WooCommerceOrderUpdatedHandler implements WooCommerceWebhookEventHandlerIn
 
         $previousStatus = $state->exists ? (string) ($state->last_status ?? '') : '';
 
-        // Baseline first seen status to avoid sending on non-status updates or first unknown update.
-        if ($previousStatus === '') {
-            $state->integration_id = $delivery->integration_id;
-            $state->last_status = $currentStatus;
-            $state->last_seen_at = now();
-            $state->save();
-
-            $delivery->update([
-                'status' => 'skipped',
-                'processed_at' => now(),
-                'error' => 'status_baseline_initialized',
-            ]);
-            return;
-        }
-
         if ($previousStatus === $currentStatus) {
             $state->last_seen_at = now();
             $state->save();
