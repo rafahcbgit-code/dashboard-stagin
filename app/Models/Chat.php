@@ -6,6 +6,7 @@ use App\Helpers\DateTimeHelper;
 use App\Http\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Support\Facades\Cache;
 
 class Chat extends Model {
     use HasFactory;
@@ -47,6 +48,8 @@ class Chat extends Model {
                         ->orWhere('latest_chat_created_at', '<', $createdAt);
                 })
                 ->update(['latest_chat_created_at' => $createdAt]);
+
+            static::rememberStatusRank((int) $chat->id, (string) $chat->status);
         });
 
         /*static::updated(function ($chat) {
@@ -88,6 +91,10 @@ class Chat extends Model {
     {
         $rank = self::STATUS_ORDER[$status] ?? null;
 
+        if ($rank !== null && static::cachedStatusRank($chatId) >= $rank) {
+            return 0;
+        }
+
         $query = static::whereKey($chatId);
 
         if ($rank === null) {
@@ -104,7 +111,13 @@ class Chat extends Model {
             });
         }
 
-        return $query->update(['status' => $status]);
+        $updated = $query->update(['status' => $status]);
+
+        if ($updated > 0) {
+            static::rememberStatusRank($chatId, $status);
+        }
+
+        return $updated;
     }
 
     public static function markInboundAsReadForContact(int $contactId, ?int $organizationId = null, int $chunkSize = 100): int
@@ -139,5 +152,35 @@ class Chat extends Model {
         } while ($ids->count() === $chunkSize);
 
         return $updated;
+    }
+
+    private static function cachedStatusRank(int $chatId): int
+    {
+        if (!static::usesFastStatusCache()) {
+            return 0;
+        }
+
+        return (int) Cache::get(static::statusCacheKey($chatId), 0);
+    }
+
+    private static function rememberStatusRank(int $chatId, string $status): void
+    {
+        $rank = self::STATUS_ORDER[$status] ?? null;
+
+        if ($rank === null || !static::usesFastStatusCache()) {
+            return;
+        }
+
+        Cache::put(static::statusCacheKey($chatId), $rank, now()->addDays(2));
+    }
+
+    private static function statusCacheKey(int $chatId): string
+    {
+        return "chat_status_rank:{$chatId}";
+    }
+
+    private static function usesFastStatusCache(): bool
+    {
+        return in_array(config('cache.default'), ['redis', 'memcached', 'apc'], true);
     }
 }
