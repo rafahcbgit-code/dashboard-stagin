@@ -1694,12 +1694,21 @@ class WhatsappService
             $mediaData = $this->formatMediaResponse($wamId, $mediaUrl, $mediaType, $contentType, $transcription);
             $mediaSize = $this->getMediaSizeInBytesFromUrl($mediaUrl);
 
+            $media = ChatMedia::create([
+                'name' => $mediaFileName,
+                'path' => $mediaUrl,
+                'location' => $location,
+                'type' => $contentType,
+                'size' => $mediaSize,
+            ]);
+
             $chat = Chat::create([
                 'organization_id' => $contact->organization_id,
                 'wam_id' => $wamId,
                 'contact_id' => $contact->id,
                 'type' => 'outbound',
                 'metadata' => json_encode($mediaData),
+                'media_id' => $media->id,
                 'status' => 'sent',
                 'created_at' => now()
             ]);
@@ -1709,18 +1718,6 @@ class WhatsappService
                 'entity_type' => 'chat',
                 'entity_id' => $chat->id,
                 'created_at' => now()
-            ]);
-
-            $media = ChatMedia::create([
-                'name' => $mediaFileName,
-                'path' => $mediaUrl,
-                'location' => $location,
-                'type' => $contentType,
-                'size' => $mediaSize,
-            ]);
-
-            Chat::where('id', $chat->id)->update([
-                'media_id' => $media->id
             ]);
 
             $chat = Chat::with('contact','media')->where('id', $chat->id)->first();

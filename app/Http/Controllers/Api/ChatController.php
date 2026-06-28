@@ -448,12 +448,8 @@ class ChatController extends Controller
                 }
             }
 
-            // Auto mark messages as read
-            Chat::where('contact_id', $contact->id)
-                ->where('type', 'inbound')
-                ->where('is_read', 0)
-                ->whereNull('deleted_at')
-                ->update(['is_read' => 1]);
+            // Auto mark messages as read in small batches to avoid long write locks.
+            Chat::markInboundAsReadForContact($contact->id, $organizationId);
 
             return response()->json([
                 'success' => true,
@@ -801,11 +797,7 @@ class ChatController extends Controller
                 ], 404);
             }
 
-            $updated = Chat::where('contact_id', $contact->id)
-                ->where('type', 'inbound')
-                ->where('is_read', 0)
-                ->whereNull('deleted_at')
-                ->update(['is_read' => 1]);
+            $updated = Chat::markInboundAsReadForContact($contact->id, $organizationId);
 
             return response()->json([
                 'success' => true,
