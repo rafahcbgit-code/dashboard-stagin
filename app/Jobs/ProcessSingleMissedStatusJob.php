@@ -89,9 +89,7 @@ class ProcessSingleMissedStatusJob implements ShouldQueue
         try {
             // Check if status update is meaningful
             if ($this->shouldUpdateStatus($chat->status, $missedUpdate->status)) {
-                $oldStatus = $chat->status;
-                $chat->status = $missedUpdate->status;
-                $chat->save();
+                Chat::updateStatusIfProgressed($chat->id, $missedUpdate->status);
             }
 
             // Create status log

@@ -965,8 +965,8 @@ class ProcessWebhookJob implements ShouldQueue
             return;
         }
 
-        // Update chat status
-        $chat->update(['status' => $statusType]);
+        // Update chat status only when the incoming status progresses the current state.
+        Chat::updateStatusIfProgressed($chat->id, $statusType);
 
         // Create status log entry
         // Note: chat_status_logs table only has: id, chat_id, metadata, created_at
@@ -2296,7 +2296,7 @@ class ProcessWebhookJob implements ShouldQueue
 
         // Update chat status to the latest received status
         if ($latestStatus) {
-            $chat->update(['status' => $latestStatus]);
+            Chat::updateStatusIfProgressed($chat->id, $latestStatus);
 
             // AC-1.7.6: Trigger external webhook for the status update
             try {
