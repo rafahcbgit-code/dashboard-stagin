@@ -11,6 +11,14 @@ class Chat extends Model {
     use HasFactory;
     use HasUuid;
 
+    private const STATUS_ORDER = [
+        'accepted' => 1,
+        'sent' => 1,
+        'delivered' => 2,
+        'read' => 3,
+        'failed' => 4,
+    ];
+
     protected $fillable = [
         'contact_id',
         'user_id',
@@ -74,5 +82,28 @@ class Chat extends Model {
     public function user()
     {
         return $this->belongsTo(User::class, 'user_id', 'id');
+    }
+
+    public static function updateStatusIfProgressed(int $chatId, string $status): int
+    {
+        $rank = self::STATUS_ORDER[$status] ?? null;
+
+        $query = static::whereKey($chatId);
+
+        if ($rank === null) {
+            $query->where('status', '<>', $status);
+        } else {
+            $blockedStatuses = array_keys(array_filter(
+                self::STATUS_ORDER,
+                static fn (int $currentRank): bool => $currentRank >= $rank
+            ));
+
+            $query->where(function ($query) use ($blockedStatuses) {
+                $query->whereNull('status')
+                    ->orWhereNotIn('status', $blockedStatuses);
+            });
+        }
+
+        return $query->update(['status' => $status]);
     }
 }

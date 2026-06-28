@@ -52,7 +52,7 @@ class UpdateChatStatusJob implements ShouldQueue
 
         if (!in_array($this->status, ['delivered', 'read'])) {
             // Update chat
-            $chat->update(['status' => $this->status]);
+            Chat::updateStatusIfProgressed($chat->id, $this->status);
 
             // Log status
             ChatStatusLog::create([
