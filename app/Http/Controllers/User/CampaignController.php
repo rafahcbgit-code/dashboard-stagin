@@ -21,6 +21,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Carbon\Carbon;
 use Inertia\Inertia;
@@ -87,6 +88,38 @@ class CampaignController extends BaseController
             'processing' => (int) ($stats->processing ?? 0),
             'queued' => (int) ($stats->queued ?? 0),
         ];
+    }
+
+    private function rateLimitedCampaignLogsQuery(int $campaignId)
+    {
+        $query = CampaignLog::where('campaign_id', $campaignId)
+            ->where(function ($query) {
+                $query->whereIn('status', ['failed', 'permanently_failed'])
+                    ->orWhere(function ($query) {
+                        $query->where('status', 'success')
+                            ->whereNull('chat_id');
+                    });
+            });
+
+        if ($this->campaignLogsRateLimitErrorColumnExists()) {
+            return $query->where('rate_limit_error_code', 130429);
+        }
+
+        return $query->where(function ($query) {
+            $query->whereRaw("JSON_EXTRACT(metadata, '$.data.error.code') = 130429")
+                ->orWhereRaw("JSON_EXTRACT(metadata, '$.error.code') = 130429");
+        });
+    }
+
+    private function campaignLogsRateLimitErrorColumnExists(): bool
+    {
+        static $exists = null;
+
+        if ($exists === null) {
+            $exists = Schema::hasColumn('campaign_logs', 'rate_limit_error_code');
+        }
+
+        return $exists;
     }
 
     private function mapCampaignDeliveryStatus(string $campaignLogStatus, ?string $chatStatus): string
@@ -216,23 +249,7 @@ class CampaignController extends BaseController
             $campaign['total_delivered_count'] = $counts->total_delivered_count ?? 0;
             $campaign['total_failed_count'] = $counts->total_failed_count ?? 0;
             $campaign['total_read_count'] = $counts->total_read_count ?? 0;
-            $campaign['rate_limited_failed_count'] = CampaignLog::where('campaign_id', $campaign->id)
-                ->where(function ($query) {
-                    $query->whereIn('status', ['failed', 'permanently_failed'])
-                        ->where(function ($q) {
-                            $q->whereRaw("JSON_EXTRACT(metadata, '$.data.error.code') = 130429")
-                              ->orWhereRaw("JSON_EXTRACT(metadata, '$.error.code') = 130429");
-                        });
-                })
-                ->orWhere(function ($query) {
-                    $query->where('status', 'success')
-                        ->whereNull('chat_id')
-                        ->where(function ($q) {
-                            $q->whereRaw("JSON_EXTRACT(metadata, '$.data.error.code') = 130429")
-                              ->orWhereRaw("JSON_EXTRACT(metadata, '$.error.code') = 130429");
-                        });
-                })
-                ->count();
+            $campaign['rate_limited_failed_count'] = $this->rateLimitedCampaignLogsQuery($campaign->id)->count();
             $data['campaign'] = $campaign;
 
             $data['filters'] = request()->all(['search']);
@@ -504,24 +521,7 @@ class CampaignController extends BaseController
             ], 400);
         }
 
-        $rateLimitedQuery = CampaignLog::where('campaign_id', $campaign->id)
-            ->where(function ($query) {
-                // Failed or permanently_failed logs with rate limit error
-                $query->whereIn('status', ['failed', 'permanently_failed'])
-                    ->where(function ($q) {
-                        $q->whereRaw("JSON_EXTRACT(metadata, '$.data.error.code') = 130429")
-                          ->orWhereRaw("JSON_EXTRACT(metadata, '$.error.code') = 130429");
-                    });
-            })
-            ->orWhere(function ($query) {
-                // Success logs with rate limit error in metadata (bug: marked success incorrectly)
-                $query->where('status', 'success')
-                    ->whereNull('chat_id')
-                    ->where(function ($q) {
-                        $q->whereRaw("JSON_EXTRACT(metadata, '$.data.error.code') = 130429")
-                          ->orWhereRaw("JSON_EXTRACT(metadata, '$.error.code') = 130429");
-                    });
-            });
+        $rateLimitedQuery = $this->rateLimitedCampaignLogsQuery($campaign->id);
 
         $failedCount = $rateLimitedQuery->count();
 

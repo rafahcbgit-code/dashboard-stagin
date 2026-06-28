@@ -106,4 +106,38 @@ class Chat extends Model {
 
         return $query->update(['status' => $status]);
     }
+
+    public static function markInboundAsReadForContact(int $contactId, ?int $organizationId = null, int $chunkSize = 100): int
+    {
+        $updated = 0;
+
+        do {
+            $query = static::query()
+                ->where('contact_id', $contactId)
+                ->where('type', 'inbound')
+                ->where('is_read', 0)
+                ->whereNull('deleted_at');
+
+            if ($organizationId !== null) {
+                $query->where('organization_id', $organizationId);
+            }
+
+            $ids = $query->orderBy('id')
+                ->limit($chunkSize)
+                ->pluck('id');
+
+            if ($ids->isEmpty()) {
+                break;
+            }
+
+            $affected = static::whereKey($ids->all())->update(['is_read' => 1]);
+            $updated += $affected;
+
+            if ($affected === 0) {
+                break;
+            }
+        } while ($ids->count() === $chunkSize);
+
+        return $updated;
+    }
 }
