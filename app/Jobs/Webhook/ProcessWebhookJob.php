@@ -270,7 +270,7 @@ class ProcessWebhookJob implements ShouldQueue
         }
 
         // AC-1.2.5: Idempotency check - prevent duplicate chat creation
-        // Uses idx_wam_org index for efficient lookup
+        // Uses idx_chats_wam_org index for efficient lookup
         if ($this->isDuplicateMessage($wamId)) {
             Log::channel('webhook')->info('Duplicate webhook skipped', [
                 'organization_id' => $this->organizationId,
@@ -526,7 +526,7 @@ class ProcessWebhookJob implements ShouldQueue
     /**
      * Check if a message with this wam_id already exists (idempotency).
      *
-     * AC-1.2.5: Utilizes idx_wam_org index for efficient lookup.
+     * AC-1.2.5: Utilizes idx_chats_wam_org index for efficient lookup.
      *
      * @param  string  $wamId The WhatsApp message ID
      * @return bool True if duplicate exists
