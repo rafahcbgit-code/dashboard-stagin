@@ -102,7 +102,7 @@ class CampaignController extends BaseController
             });
 
         if ($this->campaignLogsRateLimitErrorColumnExists()) {
-            return $query->where('rate_limit_error_code', 130429);
+            return $query->where('rate_limit_error_code', '130429');
         }
 
         return $query->where(function ($query) {
