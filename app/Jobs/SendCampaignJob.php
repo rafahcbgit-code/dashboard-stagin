@@ -11,6 +11,7 @@ use App\Models\Organization;
 use App\Models\Setting;
 use App\Services\WhatsappService;
 use App\Services\ContactGroupCountService;
+use App\Services\CampaignStatsService;
 use App\Traits\HasUuid;
 use App\Traits\TemplateTrait;
 use Illuminate\Bus\Queueable;
@@ -133,7 +134,12 @@ class SendCampaignJob implements ShouldQueue
 
         // Insert new logs if any
         if (!empty($campaignLogs)) {
-            return CampaignLog::insert($campaignLogs);
+            $inserted = CampaignLog::insert($campaignLogs);
+            if ($inserted) {
+                CampaignStatsService::recordInsertedPending((int) $campaign->id, count($campaignLogs));
+            }
+
+            return $inserted;
         }
 
         return false;

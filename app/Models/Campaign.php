@@ -120,9 +120,7 @@ class Campaign extends Model
             return $this->precomputedCounts;
         }
 
-        return Cache::remember("campaign:{$this->id}:counts", 30, function () {
-            return self::aggregateCountsForCampaignIds([$this->id])->get($this->id) ?? self::emptyCounts();
-        });
+        return self::aggregateCountsForCampaignIds([$this->id])->get($this->id) ?? self::emptyCounts();
     }
 
     public function setPrecomputedCounts(?object $counts): void
@@ -142,19 +140,18 @@ class Campaign extends Model
             return collect();
         }
 
-        return DB::table('campaign_logs')
-            ->leftJoin('chats as chat', 'chat.id', '=', 'campaign_logs.chat_id')
-            ->whereIn('campaign_logs.campaign_id', $ids->all())
-            ->selectRaw('
-                campaign_logs.campaign_id,
-                COUNT(*) as total_message_count,
-                SUM(CASE WHEN campaign_logs.status = "success" AND chat.status IN ("accepted", "sent", "delivered", "read") THEN 1 ELSE 0 END) as total_sent_count,
-                SUM(CASE WHEN campaign_logs.status = "success" AND chat.status IN ("delivered", "read") THEN 1 ELSE 0 END) as total_delivered_count,
-                SUM(CASE WHEN campaign_logs.status = "failed" THEN 1 ELSE 0 END) + 
-                    SUM(CASE WHEN campaign_logs.status = "success" AND chat.status = "failed" THEN 1 ELSE 0 END) as total_failed_count,
-                SUM(CASE WHEN campaign_logs.status = "success" AND chat.status = "read" THEN 1 ELSE 0 END) as total_read_count
-            ')
-            ->groupBy('campaign_logs.campaign_id')
+        return DB::table('campaign_stats')
+            ->whereIn('campaign_id', $ids->all())
+            ->select([
+                'campaign_id',
+                'total_message_count',
+                'total_sent_count',
+                'total_delivered_count',
+                'total_failed_count',
+                'total_read_count',
+                'processing_count',
+                'queued_count',
+            ])
             ->get()
             ->keyBy('campaign_id');
     }
@@ -179,12 +176,9 @@ class Campaign extends Model
     public static function overallDeliveryCountForOrg(int $organizationId): int
     {
         return Cache::remember("campaigns:{$organizationId}:overall_delivery_count", 30, function () use ($organizationId) {
-            return CampaignLog::join('campaigns', 'campaign_logs.campaign_id', '=', 'campaigns.id')
-                ->join('chats', 'campaign_logs.chat_id', '=', 'chats.id')
-                ->where('campaigns.organization_id', $organizationId)
-                ->where('campaign_logs.status', 'success')
-                ->whereIn('chats.status', ['delivered', 'read'])
-                ->count();
+            return (int) DB::table('campaign_stats')
+                ->where('organization_id', $organizationId)
+                ->sum('total_delivered_count');
         });
     }
 

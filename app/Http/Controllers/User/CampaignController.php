@@ -16,6 +16,7 @@ use App\Models\Subscription;
 use App\Models\Team;
 use App\Models\Template;
 use App\Services\CampaignService;
+use App\Services\CampaignStatsService;
 use App\Services\ContactFieldService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -72,20 +73,18 @@ class CampaignController extends BaseController
         );
 
         $stats = Cache::remember($cacheKey, 30, function () use ($organizationId, $start, $end) {
-            return DB::table('campaign_logs')
-                ->join('campaigns', 'campaign_logs.campaign_id', '=', 'campaigns.id')
-                ->leftJoin('chats as chat', 'chat.id', '=', 'campaign_logs.chat_id')
+            return DB::table('campaign_stats')
+                ->join('campaigns', 'campaign_stats.campaign_id', '=', 'campaigns.id')
                 ->where('campaigns.organization_id', $organizationId)
                 ->whereNull('campaigns.deleted_at')
-                ->whereBetween('campaign_logs.created_at', [$start->toDateTimeString(), $end->toDateTimeString()])
+                ->whereBetween('campaigns.created_at', [$start->toDateTimeString(), $end->toDateTimeString()])
                 ->selectRaw('
-                    SUM(CASE WHEN campaign_logs.status = "success" AND chat.status IN ("accepted", "sent", "delivered", "read") THEN 1 ELSE 0 END) as sent,
-                    SUM(CASE WHEN campaign_logs.status = "success" AND chat.status IN ("delivered", "read") THEN 1 ELSE 0 END) as delivered,
-                    SUM(CASE WHEN campaign_logs.status = "success" AND chat.status = "read" THEN 1 ELSE 0 END) as read_count,
-                    SUM(CASE WHEN campaign_logs.status IN ("failed", "permanently_failed") THEN 1 ELSE 0 END) +
-                        SUM(CASE WHEN campaign_logs.status = "success" AND chat.status = "failed" THEN 1 ELSE 0 END) as failed,
-                    SUM(CASE WHEN campaign_logs.status = "ongoing" THEN 1 ELSE 0 END) as processing,
-                    SUM(CASE WHEN campaign_logs.status = "pending" THEN 1 ELSE 0 END) as queued
+                    SUM(campaign_stats.total_sent_count) as sent,
+                    SUM(campaign_stats.total_delivered_count) as delivered,
+                    SUM(campaign_stats.total_read_count) as read_count,
+                    SUM(campaign_stats.total_failed_count) as failed,
+                    SUM(campaign_stats.processing_count) as processing,
+                    SUM(campaign_stats.queued_count) as queued
                 ')
                 ->first();
         });
@@ -493,26 +492,32 @@ class CampaignController extends BaseController
         $campaign->update(['status' => 'cancelled']);
 
         // AC-2.6.3: Bulk update all pending CampaignLog records to cancelled
+        $oldSnapshots = CampaignLog::where('campaign_id', $campaign->id)
+            ->where('status', 'pending')
+            ->get(['id', 'campaign_id', 'status', 'chat_id'])
+            ->map(fn (CampaignLog $log): array => CampaignStatsService::snapshot($log))
+            ->all();
+
         $cancelledCount = CampaignLog::where('campaign_id', $campaign->id)
             ->where('status', 'pending')
             ->update(['status' => 'cancelled']);
 
+        $newSnapshots = collect($oldSnapshots)
+            ->map(fn (array $row): array => array_merge($row, ['status' => 'cancelled']))
+            ->all();
+
+        CampaignStatsService::recordSnapshotsChanged($oldSnapshots, $newSnapshots);
+
         // AC-2.6.5: Calculate final stats
-        $stats = CampaignLog::where('campaign_id', $campaign->id)
-            ->selectRaw("
-                SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as sent,
-                SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled,
-                SUM(CASE WHEN status IN ('failed', 'permanently_failed') THEN 1 ELSE 0 END) as failed
-            ")
-            ->first();
+        $stats = Campaign::aggregateCountsForCampaignIds([$campaign->id])->get($campaign->id);
 
         return response()->json([
             'status' => 'cancelled',
             'message' => 'Campaign cancellation initiated',
             'stats' => [
-                'sent' => (int) $stats->sent,
-                'cancelled' => (int) $stats->cancelled,
-                'failed' => (int) $stats->failed,
+                'sent' => (int) ($stats->total_sent_count ?? 0),
+                'cancelled' => (int) $cancelledCount,
+                'failed' => (int) ($stats->total_failed_count ?? 0),
             ],
         ]);
     }

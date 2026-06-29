@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Cache;
 use App\Models\OrganizationChatStat;
+use App\Services\CampaignStatsService;
 
 class Chat extends Model {
     use HasFactory;
@@ -107,6 +108,8 @@ class Chat extends Model {
             return 0;
         }
 
+        $oldStatus = static::whereKey($chatId)->value('status');
+
         $query = static::whereKey($chatId);
 
         if ($rank === null) {
@@ -127,6 +130,7 @@ class Chat extends Model {
 
         if ($updated > 0) {
             static::rememberStatusRank($chatId, $status);
+            CampaignStatsService::recordChatStatusChanged($chatId, $oldStatus, $status);
         }
 
         return $updated;
