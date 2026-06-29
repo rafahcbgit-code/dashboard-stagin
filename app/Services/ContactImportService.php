@@ -722,6 +722,8 @@ class ContactImportService
                     }
                 }
 
+                ContactGroupCountService::rebuildForContacts(array_values($contactIdsByPhone));
+
                 if (! empty($failedRowIds)) {
                     foreach ($failedRowIds as $rowId) {
                         $rowStatusUpdates[] = [
@@ -1027,6 +1029,8 @@ class ContactImportService
                                 ->all()
                         );
                     }
+
+                    ContactGroupCountService::rebuildForContacts(array_values($contactIdsByPhone));
                 }
 
                 $batch->update([

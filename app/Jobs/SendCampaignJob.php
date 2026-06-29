@@ -10,6 +10,7 @@ use App\Models\Contact;
 use App\Models\Organization;
 use App\Models\Setting;
 use App\Services\WhatsappService;
+use App\Services\ContactGroupCountService;
 use App\Traits\HasUuid;
 use App\Traits\TemplateTrait;
 use Illuminate\Bus\Queueable;
@@ -437,7 +438,13 @@ class SendCampaignJob implements ShouldQueue
             // Check if the group exists in the contact_groups table by UUID
             if (!$failedGroupId) {
                 Log::warning('Failed to move contact: Group with UUID ' . $groupUuid . ' does not exist.');
+                return;
             }
+
+            $affectedGroupIds = DB::table('contact_contact_group')
+                ->where('contact_id', $campaignLog->contact_id)
+                ->pluck('contact_group_id')
+                ->all();
 
             // Remove all groups for the contact
             DB::table('contact_contact_group')
@@ -449,6 +456,9 @@ class SendCampaignJob implements ShouldQueue
                 'contact_id' => $campaignLog->contact_id,
                 'contact_group_id' => $failedGroupId, // Use the group ID here
             ]);
+
+            $affectedGroupIds[] = (int) $failedGroupId;
+            ContactGroupCountService::rebuildGroups($affectedGroupIds);
         }
     }
 }
