@@ -21,6 +21,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schema;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Carbon\Carbon;
@@ -63,22 +64,31 @@ class CampaignController extends BaseController
 
     private function getCampaignAnalyticsForOrganization(int $organizationId, Carbon $start, Carbon $end): array
     {
-        $stats = DB::table('campaign_logs')
-            ->join('campaigns', 'campaign_logs.campaign_id', '=', 'campaigns.id')
-            ->leftJoin('chats as chat', 'chat.id', '=', 'campaign_logs.chat_id')
-            ->where('campaigns.organization_id', $organizationId)
-            ->whereNull('campaigns.deleted_at')
-            ->whereBetween('campaign_logs.created_at', [$start->toDateTimeString(), $end->toDateTimeString()])
-            ->selectRaw('
-                SUM(CASE WHEN campaign_logs.status = "success" AND chat.status IN ("accepted", "sent", "delivered", "read") THEN 1 ELSE 0 END) as sent,
-                SUM(CASE WHEN campaign_logs.status = "success" AND chat.status IN ("delivered", "read") THEN 1 ELSE 0 END) as delivered,
-                SUM(CASE WHEN campaign_logs.status = "success" AND chat.status = "read" THEN 1 ELSE 0 END) as read_count,
-                SUM(CASE WHEN campaign_logs.status IN ("failed", "permanently_failed") THEN 1 ELSE 0 END) +
-                    SUM(CASE WHEN campaign_logs.status = "success" AND chat.status = "failed" THEN 1 ELSE 0 END) as failed,
-                SUM(CASE WHEN campaign_logs.status = "ongoing" THEN 1 ELSE 0 END) as processing,
-                SUM(CASE WHEN campaign_logs.status = "pending" THEN 1 ELSE 0 END) as queued
-            ')
-            ->first();
+        $cacheKey = sprintf(
+            'campaign_analytics:%d:%s:%s',
+            $organizationId,
+            $start->format('YmdHis'),
+            $end->format('YmdHis')
+        );
+
+        $stats = Cache::remember($cacheKey, 30, function () use ($organizationId, $start, $end) {
+            return DB::table('campaign_logs')
+                ->join('campaigns', 'campaign_logs.campaign_id', '=', 'campaigns.id')
+                ->leftJoin('chats as chat', 'chat.id', '=', 'campaign_logs.chat_id')
+                ->where('campaigns.organization_id', $organizationId)
+                ->whereNull('campaigns.deleted_at')
+                ->whereBetween('campaign_logs.created_at', [$start->toDateTimeString(), $end->toDateTimeString()])
+                ->selectRaw('
+                    SUM(CASE WHEN campaign_logs.status = "success" AND chat.status IN ("accepted", "sent", "delivered", "read") THEN 1 ELSE 0 END) as sent,
+                    SUM(CASE WHEN campaign_logs.status = "success" AND chat.status IN ("delivered", "read") THEN 1 ELSE 0 END) as delivered,
+                    SUM(CASE WHEN campaign_logs.status = "success" AND chat.status = "read" THEN 1 ELSE 0 END) as read_count,
+                    SUM(CASE WHEN campaign_logs.status IN ("failed", "permanently_failed") THEN 1 ELSE 0 END) +
+                        SUM(CASE WHEN campaign_logs.status = "success" AND chat.status = "failed" THEN 1 ELSE 0 END) as failed,
+                    SUM(CASE WHEN campaign_logs.status = "ongoing" THEN 1 ELSE 0 END) as processing,
+                    SUM(CASE WHEN campaign_logs.status = "pending" THEN 1 ELSE 0 END) as queued
+                ')
+                ->first();
+        });
 
         return [
             'sent' => (int) ($stats->sent ?? 0),
@@ -176,19 +186,27 @@ class CampaignController extends BaseController
             $campaignLimit = $showStats ? Campaign::campaignMessagesLimit() : null;
             $campaignAnalytics = $this->getCampaignAnalyticsForOrganization((int) $organizationId, $start, $end);
 
-            $rows = CampaignResource::collection(
-                Campaign::with(['template'])
-                    ->where('organization_id', $organizationId)
-                    ->where('deleted_at', null)
-                    ->where(function ($query) use ($searchTerm) {
-                        $query->where('name', 'like', '%' . $searchTerm . '%')
-                            ->orWhereHas('template', function ($templateQuery) use ($searchTerm) {
-                                $templateQuery->where('name', 'like', '%' . $searchTerm . '%');
-                            });
-                    })
-                    ->latest()
-                    ->paginate(10)
+            $campaigns = Campaign::with(['template', 'contactGroup'])
+                ->where('organization_id', $organizationId)
+                ->where('deleted_at', null)
+                ->where(function ($query) use ($searchTerm) {
+                    $query->where('name', 'like', '%' . $searchTerm . '%')
+                        ->orWhereHas('template', function ($templateQuery) use ($searchTerm) {
+                            $templateQuery->where('name', 'like', '%' . $searchTerm . '%');
+                        });
+                })
+                ->latest()
+                ->paginate(10);
+
+            $countsByCampaignId = Campaign::aggregateCountsForCampaignIds(
+                $campaigns->getCollection()->pluck('id')
             );
+
+            $campaigns->getCollection()->each(function (Campaign $campaign) use ($countsByCampaignId): void {
+                $campaign->setPrecomputedCounts($countsByCampaignId->get($campaign->id));
+            });
+
+            $rows = CampaignResource::collection($campaigns);
         
             return Inertia::render('User/Campaign/Index', [
                 'title' => __('Campaigns'),
