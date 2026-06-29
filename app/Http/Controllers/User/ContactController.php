@@ -13,6 +13,7 @@ use App\Exports\ContactsExport;
 use App\Http\Requests\StoreContact;
 use App\Http\Resources\ContactResource;
 use App\Imports\ContactsImport;
+use App\Services\ContactGroupCountService;
 use App\Services\ContactService;
 use App\Support\Filters\ContactFilter;
 use Illuminate\Database\Eloquent\Builder;
@@ -547,6 +548,10 @@ class ContactController extends BaseController
                     }
                 }
             }, 'contacts.id', 'id');
+
+            if (in_array($action, ['add_group', 'remove_group'], true)) {
+                ContactGroupCountService::rebuildGroups($groupIds);
+            }
         }
 
         return back()->with('status', [

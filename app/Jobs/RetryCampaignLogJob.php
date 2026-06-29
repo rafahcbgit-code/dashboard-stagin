@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\CampaignLog;
 use App\Models\CampaignLogRetry;
+use App\Services\ContactGroupCountService;
 use App\Services\OrganizationService;
 use App\Services\WhatsappService;
 use App\Traits\TemplateTrait;
@@ -238,6 +239,11 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
             return;
         }
 
+        $affectedGroupIds = DB::table('contact_contact_group')
+            ->where('contact_id', $contactId)
+            ->pluck('contact_group_id')
+            ->all();
+
         // Remove all groups for the contact
         DB::table('contact_contact_group')
             ->where('contact_id', $contactId)
@@ -250,6 +256,9 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
             'created_at' => now(),
             'updated_at' => now(),
         ]);
+
+        $affectedGroupIds[] = (int) $failedGroupId;
+        ContactGroupCountService::rebuildGroups($affectedGroupIds);
     }
 
     /**

@@ -5,6 +5,7 @@ namespace App\Jobs\Salla;
 use App\Models\Contact;
 use App\Models\ContactGroup;
 use App\Models\Organization;
+use App\Services\ContactGroupCountService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -153,11 +154,11 @@ class ProcessSallaCustomerChunk implements ShouldQueue
                 $q->where('name', $this->groupName)
                   ->orWhere('name', 'like', $this->groupName . ' %');
             })
-            ->withCount('contacts')
             ->orderBy('id')
             ->get();
 
         $remaining = $contactIds;
+        $affectedGroupIds = [];
 
         foreach ($existingGroups as $group) {
             if (empty($remaining)) break;
@@ -167,6 +168,7 @@ class ProcessSallaCustomerChunk implements ShouldQueue
 
             $toAttach = array_splice($remaining, 0, $available);
             $group->contacts()->syncWithoutDetaching($toAttach);
+            $affectedGroupIds[] = (int) $group->id;
         }
 
         // If there are still contacts remaining, create new groups
@@ -190,9 +192,12 @@ class ProcessSallaCustomerChunk implements ShouldQueue
             );
 
             $newGroup->contacts()->syncWithoutDetaching($chunk);
+            $affectedGroupIds[] = (int) $newGroup->id;
 
             $groupIndex++;
         }
+
+        ContactGroupCountService::rebuildGroups($affectedGroupIds);
     }
 
     public function failed(\Throwable $e): void

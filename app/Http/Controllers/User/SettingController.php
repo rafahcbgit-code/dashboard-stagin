@@ -15,6 +15,7 @@ use App\Models\Organization;
 use Illuminate\Http\Request;
 use App\Helpers\CustomHelper;
 use App\Services\WhatsappService;
+use App\Services\ContactGroupCountService;
 use App\Models\ContactContactGroup;
 use Illuminate\Support\Facades\Log;
 use App\Services\ContactFieldService;
@@ -656,6 +657,8 @@ public function campaign(Request $request)
                 'contact_group_id' => $contactGroup->id,
             ]);
         }
+
+        ContactGroupCountService::rebuildGroups([$contactGroup->id]);
 
         return back()->with(
             'status', [

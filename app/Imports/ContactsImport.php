@@ -8,6 +8,7 @@ use App\Models\ContactGroup;
 use App\Models\Setting;
 use App\Models\Subscription;
 use App\Models\SubscriptionPlan;
+use App\Services\ContactGroupCountService;
 use App\Services\PhoneService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
@@ -270,6 +271,7 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
             // Remove duplicates
             $pivotData = array_map('unserialize', array_unique(array_map('serialize', $pivotData)));
             DB::table('contact_contact_group')->insert($pivotData);
+            ContactGroupCountService::rebuildGroups(array_column($pivotData, 'contact_group_id'));
         }
 
         // Clear buffer and pending map
@@ -284,6 +286,7 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
 
         if ($existingContact && $existingContact->trashed()) {
             $existingContact->restore();
+            ContactGroupCountService::rebuildForContacts([$contactId]);
         }
 
         $existingMetadata = $existingContact && $existingContact->metadata
@@ -341,6 +344,7 @@ class ContactsImport extends \PhpOffice\PhpSpreadsheet\Cell\StringValueBinder im
                         ];
                     }
                     DB::table('contact_contact_group')->insert($pivotData);
+                    ContactGroupCountService::rebuildGroups(array_column($pivotData, 'contact_group_id'));
                 }
             }
         }

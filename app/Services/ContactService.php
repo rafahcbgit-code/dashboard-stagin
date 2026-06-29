@@ -9,6 +9,7 @@ use App\Models\ContactGroup;
 use App\Models\Setting;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
@@ -247,10 +248,13 @@ class ContactService
 
         $groups = $request->input('group', []);
         if (empty($groups)) {
+            $currentGroupIds = $contact->contactGroups()->pluck('contact_groups.id')->all();
             $contact->contactGroups()->detach();
+            ContactGroupCountService::rebuildGroups($currentGroupIds);
         }
 
         if ($request->group) {
+            $currentGroupIds = $contact->contactGroups()->pluck('contact_groups.id')->all();
             $normalizedGroups = collect($request->group)
                 ->map(function ($item) {
                     if (is_string($item) || is_numeric($item)) {
@@ -280,6 +284,7 @@ class ContactService
             $groupIdsById = ContactGroup::whereIn('id', $normalizedGroups->filter(fn ($value) => ctype_digit($value))->all())->pluck('id')->toArray();
             $groupIds = array_values(array_unique(array_merge($groupIdsByUuid, $groupIdsById)));
             $contact->contactGroups()->sync($groupIds);
+            ContactGroupCountService::rebuildGroups(array_merge($currentGroupIds, $groupIds));
         }
 
         // Prepare a clean contact object for webhook
@@ -348,6 +353,11 @@ class ContactService
                     return;
                 }
 
+                $affectedGroupIds = DB::table('contact_contact_group')
+                    ->whereIn('contact_id', $contactIds)
+                    ->pluck('contact_group_id')
+                    ->all();
+
                 Chat::whereIn('contact_id', $contactIds)
                     ->where('type', 'inbound')
                     ->whereNull('deleted_at')
@@ -365,6 +375,8 @@ class ContactService
                         'deleted_at' => $deletedAtIso,
                     ];
                 }
+
+                ContactGroupCountService::rebuildGroups($affectedGroupIds);
 
                 if (count($webhookContacts) >= 1000) {
                     $this->triggerDeletedContactsWebhook($webhookContacts);
