@@ -69,6 +69,7 @@ class DashboardController extends BaseController
 
         $data['organization'] = $organization;
         $data['campaigns'] = Campaign::where('organization_id', $organizationId)
+            ->whereNull('deleted_at')
             ->whereIn('status', ['pending', 'scheduled'])
             ->limit(5)
             ->get();

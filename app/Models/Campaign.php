@@ -29,6 +29,10 @@ class Campaign extends Model
 
     public function getScheduledAtAttribute($value)
     {
+        if (empty($value)) {
+            return null;
+        }
+
         return DateTimeHelper::convertToOrganizationTimezone($value)->toDateTimeString();
     }
 
