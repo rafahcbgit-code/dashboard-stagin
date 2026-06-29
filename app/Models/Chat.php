@@ -7,6 +7,7 @@ use App\Http\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Cache;
+use App\Models\OrganizationChatStat;
 
 class Chat extends Model {
     use HasFactory;
@@ -42,12 +43,23 @@ class Chat extends Model {
         static::created(function ($chat) {
             $createdAt = $chat->getRawOriginal('created_at') ?? $chat->attributes['created_at'] ?? now();
 
-            Contact::whereKey($chat->contact_id)
+            $newConversation = Contact::whereKey($chat->contact_id)
+                ->whereNull('latest_chat_created_at')
+                ->update(['latest_chat_created_at' => $createdAt]) > 0;
+
+            if (!$newConversation) {
+                Contact::whereKey($chat->contact_id)
                 ->where(function ($query) use ($createdAt) {
-                    $query->whereNull('latest_chat_created_at')
-                        ->orWhere('latest_chat_created_at', '<', $createdAt);
+                    $query->where('latest_chat_created_at', '<', $createdAt);
                 })
                 ->update(['latest_chat_created_at' => $createdAt]);
+            }
+
+            try {
+                OrganizationChatStat::incrementForNewChat((int) $chat->organization_id, $newConversation);
+            } catch (\Throwable $e) {
+                report($e);
+            }
 
             static::rememberStatusRank((int) $chat->id, (string) $chat->status);
         });
@@ -145,6 +157,10 @@ class Chat extends Model {
 
             $affected = static::whereKey($ids->all())->update(['is_read' => 1]);
             $updated += $affected;
+
+            if ($affected > 0 && $organizationId !== null) {
+                Cache::forget("org_{$organizationId}_global_unread");
+            }
 
             if ($affected === 0) {
                 break;

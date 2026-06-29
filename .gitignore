@@ -7,3 +7,5 @@
 lang/php_en.json
 public/hot
 public/media/
+storage/logs/*.logstorage/logs/*.log
+/storage/logs/*.log
