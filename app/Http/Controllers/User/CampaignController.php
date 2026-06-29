@@ -138,11 +138,16 @@ class CampaignController extends BaseController
         $page = LengthAwarePaginator::resolveCurrentPage();
         $searchTerm = trim((string) $searchTerm);
 
-        $query = CampaignLog::with(['contact', 'chat.logs'])
-            ->where('campaign_id', $campaign->id)
-            ->orderBy('id');
-
         if ($searchTerm !== '') {
+            $query = CampaignLog::with([
+                'contact:id,first_name,last_name,phone',
+                'chat:id,status,created_at',
+                'chat.logs:id,chat_id,metadata,created_at',
+            ])
+                ->select(['id', 'campaign_id', 'contact_id', 'chat_id', 'status', 'created_at', 'updated_at', 'retry_count'])
+                ->where('campaign_id', $campaign->id)
+                ->orderBy('id');
+
             $query->whereHas('contact', function ($contactQuery) use ($searchTerm) {
                 $like = '%' . $searchTerm . '%';
 
@@ -157,7 +162,15 @@ class CampaignController extends BaseController
         }
 
         $total = (int) ($campaign->getCounts()->total_message_count ?? 0);
-        $items = $query
+        $items = CampaignLog::with([
+                'contact:id,first_name,last_name,phone',
+                'chat:id,status,created_at',
+                'chat.logs:id,chat_id,metadata,created_at',
+            ])
+            ->select(['id', 'campaign_id', 'contact_id', 'chat_id', 'status', 'created_at', 'updated_at', 'retry_count'])
+            ->forceIndex('idx_campaign_logs_campaign_id_id')
+            ->where('campaign_id', $campaign->id)
+            ->orderBy('id')
             ->forPage($page, $perPage)
             ->get();
 
