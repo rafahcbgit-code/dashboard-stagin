@@ -217,10 +217,7 @@ class CampaignController extends BaseController
 
             $data['contactGroups'] = ContactGroup::where('organization_id', $organizationId)
                 ->whereNull('deleted_at')
-                ->whereHas('contacts')
-                ->withCount(['contacts as contacts_count' => function ($query) use ($organizationId) {
-                    $query->where('organization_id', $organizationId);
-                }])
+                ->where('contacts_count', '>', 0)
                 ->get();
 
             $data['title'] = __('Create campaign');
