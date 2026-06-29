@@ -9,6 +9,7 @@ use App\Models\Chat;
 use App\Models\ChatLog;
 use App\Models\Contact;
 use App\Models\Template;
+use App\Services\CampaignStatsService;
 use App\Services\OrganizationService;
 use App\Services\WhatsappService;
 use App\Traits\TemplateTrait;
@@ -66,9 +67,20 @@ class ProcessCampaignChunkJob implements ShouldQueue
         // 2. Check campaign not cancelled (static-cached)
         $campaign = $this->getCampaignCached();
         if (!$campaign || $campaign->status === 'cancelled') {
+            $oldSnapshots = $logs
+                ->where('status', 'pending')
+                ->map(fn (CampaignLog $log): array => CampaignStatsService::snapshot($log))
+                ->all();
+
             CampaignLog::whereIn('id', $logs->pluck('id'))
                 ->where('status', 'pending')
                 ->update(['status' => 'cancelled']);
+
+            $newSnapshots = collect($oldSnapshots)
+                ->map(fn (array $row): array => array_merge($row, ['status' => 'cancelled']))
+                ->all();
+
+            CampaignStatsService::recordSnapshotsChanged($oldSnapshots, $newSnapshots);
             return;
         }
 
@@ -108,9 +120,26 @@ class ProcessCampaignChunkJob implements ShouldQueue
         $maxRetries = count($retryIntervals);
 
         // 6. Mark all logs as 'ongoing' in one bulk update
+        $startingSnapshots = $logs
+            ->whereIn('status', ['pending', 'failed'])
+            ->map(fn (CampaignLog $log): array => CampaignStatsService::snapshot($log))
+            ->all();
+
         CampaignLog::whereIn('id', $logs->pluck('id'))
             ->whereIn('status', ['pending', 'failed'])
             ->update(['status' => 'ongoing']);
+
+        $ongoingSnapshots = collect($startingSnapshots)
+            ->map(fn (array $row): array => array_merge($row, ['status' => 'ongoing']))
+            ->all();
+
+        CampaignStatsService::recordSnapshotsChanged($startingSnapshots, $ongoingSnapshots);
+
+        $logs->each(function (CampaignLog $log): void {
+            if (in_array($log->status, ['pending', 'failed'], true)) {
+                $log->status = 'ongoing';
+            }
+        });
 
         // 7. Build template payloads
         $payloads = [];
@@ -360,11 +389,25 @@ class ProcessCampaignChunkJob implements ShouldQueue
             }
         }
 
+        $logsById = $logs->keyBy('id');
+        $oldSnapshots = [];
+        $newSnapshots = [];
+
         // Batch update successes
         foreach ($successIds as $update) {
             $id = $update['id'];
             unset($update['id']);
             CampaignLog::where('id', $id)->update($update);
+
+            $oldLog = $logsById->get($id);
+            if ($oldLog) {
+                $old = CampaignStatsService::snapshot($oldLog);
+                $oldSnapshots[] = $old;
+                $newSnapshots[] = array_merge($old, [
+                    'status' => $update['status'] ?? $old['status'],
+                    'chat_id' => array_key_exists('chat_id', $update) ? $update['chat_id'] : $old['chat_id'],
+                ]);
+            }
         }
 
         // Batch update failures
@@ -372,7 +415,19 @@ class ProcessCampaignChunkJob implements ShouldQueue
             $id = $update['id'];
             unset($update['id']);
             CampaignLog::where('id', $id)->update($update);
+
+            $oldLog = $logsById->get($id);
+            if ($oldLog) {
+                $old = CampaignStatsService::snapshot($oldLog);
+                $oldSnapshots[] = $old;
+                $newSnapshots[] = array_merge($old, [
+                    'status' => $update['status'] ?? $old['status'],
+                    'chat_id' => array_key_exists('chat_id', $update) ? $update['chat_id'] : $old['chat_id'],
+                ]);
+            }
         }
+
+        CampaignStatsService::recordSnapshotsChanged($oldSnapshots, $newSnapshots);
 
         // 10. Broadcast progress once per chunk
         $this->broadcastProgressIfNeeded();
@@ -662,6 +717,12 @@ class ProcessCampaignChunkJob implements ShouldQueue
             'error' => $exception->getMessage(),
         ]);
 
+        $oldSnapshots = CampaignLog::whereIn('id', $this->logIds)
+            ->where('status', 'ongoing')
+            ->get(['id', 'campaign_id', 'status', 'chat_id'])
+            ->map(fn (CampaignLog $log): array => CampaignStatsService::snapshot($log))
+            ->all();
+
         CampaignLog::whereIn('id', $this->logIds)
             ->where('status', 'ongoing')
             ->update([
@@ -673,6 +734,12 @@ class ProcessCampaignChunkJob implements ShouldQueue
                 ),
                 'updated_at' => now(),
             ]);
+
+        $newSnapshots = collect($oldSnapshots)
+            ->map(fn (array $row): array => array_merge($row, ['status' => 'failed']))
+            ->all();
+
+        CampaignStatsService::recordSnapshotsChanged($oldSnapshots, $newSnapshots);
 
         $this->checkAndUpdateCampaignStatus();
     }
@@ -692,11 +759,22 @@ class ProcessCampaignChunkJob implements ShouldQueue
             return;
         }
 
+        $oldSnapshots = CampaignLog::whereIn('id', $logIds)
+            ->get(['id', 'campaign_id', 'status', 'chat_id'])
+            ->map(fn (CampaignLog $log): array => CampaignStatsService::snapshot($log))
+            ->all();
+
         CampaignLog::whereIn('id', $logIds)->update([
             'status' => 'failed',
             'metadata' => $this->failureMetadata($message, $code, $context),
             'updated_at' => now(),
         ]);
+
+        $newSnapshots = collect($oldSnapshots)
+            ->map(fn (array $row): array => array_merge($row, ['status' => 'failed']))
+            ->all();
+
+        CampaignStatsService::recordSnapshotsChanged($oldSnapshots, $newSnapshots);
     }
 
     private function failureMetadata(string $message, string $code, array $context = []): string

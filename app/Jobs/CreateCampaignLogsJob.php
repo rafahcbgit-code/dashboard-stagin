@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\Campaign;
 use App\Models\CampaignLog;
 use App\Models\Contact;
+use App\Services\CampaignStatsService;
 use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -143,6 +144,7 @@ class CreateCampaignLogsJob implements ShouldQueue
         // Insert new logs in chunks
         foreach (array_chunk($campaignLogs, 1000) as $chunk) {
             CampaignLog::insert($chunk);
+            CampaignStatsService::recordInsertedPending((int) $campaign->id, count($chunk));
         }
 
         return true;

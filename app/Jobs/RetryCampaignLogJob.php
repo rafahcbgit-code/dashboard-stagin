@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\CampaignLog;
 use App\Models\CampaignLogRetry;
 use App\Services\ContactGroupCountService;
+use App\Services\CampaignStatsService;
 use App\Services\OrganizationService;
 use App\Services\WhatsappService;
 use App\Traits\TemplateTrait;
@@ -144,6 +145,11 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
             DB::rollBack();
             Log::error("Retry failed for campaign_log {$this->campaignLogId}: ".$e->getMessage());
 
+            $oldSnapshot = CampaignLog::where('id', $this->campaignLogId)
+                ->get(['id', 'campaign_id', 'status', 'chat_id'])
+                ->map(fn (CampaignLog $log): array => CampaignStatsService::snapshot($log))
+                ->all();
+
             CampaignLog::where('id', $this->campaignLogId)->update([
                 'status' => 'failed',
                 'metadata' => $this->failureMetadata($e->getMessage(), 'CAMPAIGN_RETRY_JOB_FAILED', [
@@ -152,6 +158,12 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
                 ]),
                 'updated_at' => now(),
             ]);
+
+            $newSnapshot = collect($oldSnapshot)
+                ->map(fn (array $row): array => array_merge($row, ['status' => 'failed']))
+                ->all();
+
+            CampaignStatsService::recordSnapshotsChanged($oldSnapshot, $newSnapshot);
         }
     }
 
