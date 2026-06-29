@@ -28,6 +28,7 @@ use App\Services\SocialLoginService;
 use App\Services\TeamService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cookie;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redirect;
@@ -66,7 +67,7 @@ class AuthController extends BaseController
     public function login(LoginRequest $request){
         $user = User::where('email', $request->email)->where('deleted_at', null)->first();
         $addon = Addon::where('name', 'Google Authenticator')->first()->is_active; 
-        $remember = $request->remember;
+        $remember = $request->boolean('remember', true);
 
         if ($user->tfa && $addon == 1) {
             $request->session()->put('tfa', $user->id);
@@ -116,9 +117,13 @@ class AuthController extends BaseController
         //Check number of organizations
         if($guard == 'user'){
             $teams = Team::where('user_id', auth()->user()->id)
+                ->where('status', 'active')
                 ->whereHas('organization');
             if($teams->count() == 1){
-                session()->put('current_organization', $teams->first()->organization_id);
+                $organizationId = $teams->first()->organization_id;
+
+                session()->put('current_organization', $organizationId);
+                Cookie::queue('last_organization_id', (string) $organizationId, 60 * 24 * 365);
             }
         }
 
@@ -166,11 +171,12 @@ class AuthController extends BaseController
                         $organization = $this->createOrganization($user);
 
                         session()->put('current_organization', $organization->id);
+                        Cookie::queue('last_organization_id', (string) $organization->id, 60 * 24 * 365);
                     }
                 }
 
                 $guard = $user->role == 'admin' ? 'admin' : 'user';
-                Auth::guard($guard)->login($user);
+                Auth::guard($guard)->login($user, true);
 
                 return redirect($user->role == 'admin' ? 'admin/dashboard' : '/dashboard');
             } else {
@@ -191,6 +197,7 @@ class AuthController extends BaseController
                             $organization = $this->createOrganization($user);
 
                             session()->put('current_organization', $organization->id);
+                            Cookie::queue('last_organization_id', (string) $organization->id, 60 * 24 * 365);
                         }
                     } else {
                         // Extract first name and last name
@@ -220,6 +227,7 @@ class AuthController extends BaseController
                         }
 
                         session()->put('current_organization', $organization->id);
+                        Cookie::queue('last_organization_id', (string) $organization->id, 60 * 24 * 365);
                     }
                     
                     // Log the user in
@@ -253,7 +261,7 @@ class AuthController extends BaseController
 
             if ($user) {
                 $guard = $user->role == 'admin' ? 'admin' : 'user';
-                Auth::guard($guard)->login($user);
+                Auth::guard($guard)->login($user, true);
 
                 return redirect($user->role == 'admin' ? 'admin/dashboard' : '/dashboard');
             } else {
@@ -307,6 +315,8 @@ class AuthController extends BaseController
                 }
 
                 Auth::guard('user')->login($user, true);
+                session()->put('current_organization', $organization->id);
+                Cookie::queue('last_organization_id', (string) $organization->id, 60 * 24 * 365);
                 
                 return redirect('dashboard');
             }
@@ -696,6 +706,7 @@ public function resendVerificationCode()
     public function logout()
     {
         Auth::guard('user')->logout();
+        Cookie::queue(Cookie::forget('last_organization_id'));
         Session::flush();
 
         return redirect('login');
