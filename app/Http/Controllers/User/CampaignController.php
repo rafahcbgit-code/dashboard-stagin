@@ -20,6 +20,7 @@ use App\Services\CampaignStatsService;
 use App\Services\ContactFieldService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
@@ -129,6 +130,47 @@ class CampaignController extends BaseController
         }
 
         return $exists;
+    }
+
+    private function paginateCampaignLogs(Campaign $campaign, ?string $searchTerm): LengthAwarePaginator
+    {
+        $perPage = 10;
+        $page = LengthAwarePaginator::resolveCurrentPage();
+        $searchTerm = trim((string) $searchTerm);
+
+        $query = CampaignLog::with(['contact', 'chat.logs'])
+            ->where('campaign_id', $campaign->id)
+            ->orderBy('id');
+
+        if ($searchTerm !== '') {
+            $query->whereHas('contact', function ($contactQuery) use ($searchTerm) {
+                $like = '%' . $searchTerm . '%';
+
+                $contactQuery->where(function ($query) use ($like) {
+                    $query->where('first_name', 'like', $like)
+                        ->orWhere('last_name', 'like', $like)
+                        ->orWhere('phone', 'like', $like);
+                });
+            });
+
+            return $query->paginate($perPage)->withQueryString();
+        }
+
+        $total = (int) ($campaign->getCounts()->total_message_count ?? 0);
+        $items = $query
+            ->forPage($page, $perPage)
+            ->get();
+
+        return new LengthAwarePaginator(
+            $items,
+            $total,
+            $perPage,
+            $page,
+            [
+                'path' => LengthAwarePaginator::resolveCurrentPath(),
+                'query' => request()->query(),
+            ]
+        );
     }
 
     private function mapCampaignDeliveryStatus(string $campaignLogStatus, ?string $chatStatus): string
@@ -270,17 +312,7 @@ class CampaignController extends BaseController
 
             $searchTerm = $request->query('search');
             $data['rows'] = CampaignLogResource::collection(
-                CampaignLog::with('contact', 'chat.logs')
-                    ->where('campaign_id', $campaign->id)
-                    ->where(function ($query) use ($searchTerm) {
-                        $query->whereHas('contact', function ($contactQuery) use ($searchTerm) {
-                            $contactQuery->where('first_name', 'like', '%' . $searchTerm . '%')
-                                ->orWhere('last_name', 'like', '%' . $searchTerm . '%')
-                                ->orWhere('phone', 'like', '%' . $searchTerm . '%');
-                        });
-                    })
-                    ->orderBy('id')
-                    ->paginate(10)
+                $this->paginateCampaignLogs($campaign, $searchTerm)
             );
             $data['title'] = __('View campaign');
 
