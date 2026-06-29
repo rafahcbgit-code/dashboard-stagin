@@ -217,8 +217,13 @@
                     </div>
                 </div>
                             <div v-else class="space-y-1">
-                                <div v-for="(item, index) in props.campaigns" :key="index" class="mt-4 border-l-4 bg-gray-50 flex justify-between p-2 text-sm">
-                                    <div class="capitalize">{{ item.name }}</div>
+                                <div v-for="(item, index) in props.campaigns" :key="index" class="mt-4 border-l-4 bg-gray-50 flex justify-between gap-3 p-2 text-sm">
+                                    <div class="min-w-0">
+                                        <div class="capitalize break-words">{{ item.name }}</div>
+                                        <div v-if="item.scheduled_at" class="mt-1 text-xs text-slate-500">
+                                            {{ $t('Scheduled time') }}: {{ item.scheduled_at }}
+                                        </div>
+                                    </div>
                                     <div class="self-end">
                                         <span class="bg-[#ffe5b4] p-1 rounded-md text-xs px-2 capitalize">{{ item.status }}</span>
                                     </div>

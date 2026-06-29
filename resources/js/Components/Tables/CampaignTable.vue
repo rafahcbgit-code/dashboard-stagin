@@ -109,7 +109,10 @@
             <TableBodyRow v-for="(item, index) in rows.data" :key="index" :class="!isLastRow(index) ? 'border-b' : ''">
                 <TableBodyRowItem :position="'first'">
                     <Link :href="'/campaigns/' + item.uuid" class="block w-full">
-                        {{ item.name }}
+                        <span class="block">{{ item.name }}</span>
+                        <span v-if="item.scheduled_at" class="mt-1 block text-xs text-slate-500">
+                            {{ $t('Scheduled time') }}: {{ item.scheduled_at }}
+                        </span>
                     </Link>
                 </TableBodyRowItem>
                 <TableBodyRowItem class="hidden md:table-cell">

@@ -14,6 +14,7 @@ use App\Models\ChatTicket;
 use App\Events\NewChatEvent;
 use App\Models\ContactField;
 use App\Models\Organization;
+use App\Models\OrganizationChatStat;
 use App\Models\Setting;
 use App\Models\Team;
 use App\Models\Template;
@@ -61,6 +62,94 @@ class ChatService
 
         // Default to 0 (system/API)
         return 0;
+    }
+
+    private function chatListRowCount(
+        Contact $contact,
+        $searchTerm,
+        bool $ticketingActive,
+        $ticketState,
+        string $sortDirection,
+        string $role,
+        bool $allowAgentsToViewAllChats,
+        array $labelFilters,
+        bool $assignedToMe,
+        ?int $assignedToFilter,
+        bool $unreadOnly
+    ): int {
+        $hasFilters = filled($searchTerm)
+            || $ticketState !== 'all'
+            || $assignedToMe
+            || $assignedToFilter !== null
+            || $unreadOnly
+            || !empty($labelFilters)
+            || ($role === 'agent' && !$allowAgentsToViewAllChats);
+
+        if (!$hasFilters) {
+            $stats = OrganizationChatStat::where('organization_id', $this->organizationId)->first();
+
+            if ($stats) {
+                return (int) $stats->conversations_count;
+            }
+
+            return (int) Cache::remember("chat_list_count:org:{$this->organizationId}", 600, function () use ($contact) {
+                return $contact->contactsWithChatsCount($this->organizationId, null, false, 'all');
+            });
+        }
+
+        $cacheKey = 'chat_list_count:'.sha1(json_encode([
+            $this->organizationId,
+            $searchTerm,
+            $ticketingActive,
+            $ticketState,
+            $sortDirection,
+            $role,
+            $allowAgentsToViewAllChats,
+            $labelFilters,
+            $assignedToMe,
+            $assignedToFilter,
+            $unreadOnly,
+            auth()->id(),
+        ]));
+
+        return (int) Cache::remember($cacheKey, 60, function () use (
+            $contact,
+            $searchTerm,
+            $ticketingActive,
+            $ticketState,
+            $sortDirection,
+            $role,
+            $allowAgentsToViewAllChats,
+            $labelFilters,
+            $assignedToMe,
+            $assignedToFilter,
+            $unreadOnly
+        ) {
+            return $contact->contactsWithChatsCount(
+                $this->organizationId,
+                $searchTerm,
+                $ticketingActive,
+                $ticketState,
+                $sortDirection,
+                $role,
+                $allowAgentsToViewAllChats,
+                $labelFilters,
+                $assignedToMe,
+                $assignedToFilter,
+                $unreadOnly
+            );
+        });
+    }
+
+    private function globalUnreadCount(): int
+    {
+        return (int) Cache::remember("org_{$this->organizationId}_global_unread", 60, function () {
+            return Chat::where('organization_id', $this->organizationId)
+                ->where('type', 'inbound')
+                ->whereNull('deleted_at')
+                ->where('is_read', 0)
+                ->count();
+        });
     }
 
     private function initializeWhatsappService()
@@ -151,9 +240,8 @@ class ChatService
             }
         }
 
-        // Direct query - NO CACHE
-        $contacts = $contact->contactsWithChats(
-            $this->organizationId,
+        $rowCount = $this->chatListRowCount(
+            $contact,
             $searchTerm,
             $ticketingActive,
             $ticketState,
@@ -166,7 +254,8 @@ class ChatService
             $unreadOnly
         );
 
-        $rowCount = $contact->contactsWithChatsCount(
+        // Direct query without an expensive COUNT(*) in the paginator.
+        $contacts = $contact->contactsWithChats(
             $this->organizationId,
             $searchTerm,
             $ticketingActive,
@@ -177,7 +266,8 @@ class ChatService
             $labelFilters,
             $assignedToMe,
             $assignedToFilter,
-            $unreadOnly
+            $unreadOnly,
+            $rowCount
         );
 
         $pusherSettings = Setting::whereIn('key', [
@@ -222,11 +312,7 @@ class ChatService
                 $settings = json_decode($config->metadata);
 
                 // To ensure the unread message counter is updated
-                $unreadMessages = Chat::where('organization_id', $this->organizationId)
-                    ->where('type', 'inbound')
-                    ->where('deleted_at', NULL)
-                    ->where('is_read', 0)
-                    ->count();
+                $unreadMessages = $this->globalUnreadCount();
 
                 $contactFields = ContactField::where('organization_id', $this->organizationId)
                     ->whereNull('deleted_at')

@@ -11,6 +11,7 @@ use App\Models\BillingTransaction;
 use App\Models\Campaign;
 use App\Models\Chat;
 use App\Models\Contact;
+use App\Models\OrganizationChatStat;
 use App\Models\Setting;
 use App\Models\Subscription;
 use App\Models\SubscriptionPlan;
@@ -19,6 +20,7 @@ use App\Models\Team;
 use App\Models\User;
 use App\Resolvers\PaymentPlatformResolver;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 use DB;
@@ -403,7 +405,14 @@ class SubscriptionService
         }
 
         if ($feature == 'message_limit') {
-            $count = Chat::where('organization_id', $organizationId)->whereNull('deleted_at')->count();
+            $chatStats = OrganizationChatStat::where('organization_id', $organizationId)->first();
+            $count = $chatStats ? (int) $chatStats->active_chats_count : null;
+
+            if ($count === null) {
+                $count = (int) Cache::remember("org_{$organizationId}_active_chats_count", 600, function () use ($organizationId) {
+                    return Chat::where('organization_id', $organizationId)->whereNull('deleted_at')->count();
+                });
+            }
 
             if($subscription->status === 'trial' && $subscription->valid_until > now()){
                 $limit = optional(Setting::where('key', 'trial_limits')->first())->value;

@@ -6,6 +6,7 @@ use App\Helpers\DateTimeHelper;
 use App\Http\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Propaganistas\LaravelPhone\PhoneNumber;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Auth;
@@ -114,7 +115,7 @@ class Contact extends Model
         return $this->hasMany(ChatLog::class);
     }
 
-    public function contactsWithChats($organizationId, $searchTerm = null, $ticketingActive = false, $ticketState = null, $sortDirection = 'asc', $role = 'owner', $allowAgentsViewAllChats = true, $labelFilters = [], $assignedToMe = false, $assignedToFilter = null, $unreadOnly = false)
+    public function contactsWithChats($organizationId, $searchTerm = null, $ticketingActive = false, $ticketState = null, $sortDirection = 'asc', $role = 'owner', $allowAgentsViewAllChats = true, $labelFilters = [], $assignedToMe = false, $assignedToFilter = null, $unreadOnly = false, ?int $total = null)
     {
         $needsTicketJoin = $ticketingActive && (
             $assignedToFilter !== null
@@ -185,8 +186,25 @@ class Contact extends Model
 
         $query->orderBy('contacts.latest_chat_created_at', $sortDirection);
 
-        // Paginate
-        return $query->paginate(10);
+        $perPage = 10;
+        $page = LengthAwarePaginator::resolveCurrentPage();
+
+        if ($total === null) {
+            $total = (clone $query)->count();
+        }
+
+        $items = $query->forPage($page, $perPage)->get();
+
+        return new LengthAwarePaginator(
+            $items,
+            $total,
+            $perPage,
+            $page,
+            [
+                'path' => LengthAwarePaginator::resolveCurrentPath(),
+                'pageName' => 'page',
+            ]
+        );
     }
 
     public function contactsWithChatsCount($organizationId, $searchTerm = null, $ticketingActive = false, $ticketState = null, $sortDirection = 'asc', $role = 'owner', $allowAgentsViewAllChats = true, $labelFilters = [], $assignedToMe = false, $assignedToFilter = null, $unreadOnly = false)

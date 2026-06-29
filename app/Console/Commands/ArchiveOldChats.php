@@ -3,6 +3,7 @@
 namespace App\Console\Commands;
 
 use Carbon\Carbon;
+use App\Models\OrganizationChatStat;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
@@ -165,6 +166,12 @@ class ArchiveOldChats extends Command
     private function archiveBatch(array $ids): void
     {
         DB::transaction(function () use ($ids) {
+            $countsByOrganization = DB::table('chats')
+                ->whereIn('id', $ids)
+                ->select('organization_id', DB::raw('COUNT(*) as aggregate'))
+                ->groupBy('organization_id')
+                ->pluck('aggregate', 'organization_id');
+
             $placeholders = implode(',', array_fill(0, count($ids), '?'));
             $columns = '`'.implode('`, `', self::CHAT_COLUMNS).'`';
 
@@ -186,6 +193,10 @@ class ArchiveOldChats extends Command
             }
 
             DB::table('chats')->whereIn('id', $ids)->delete();
+
+            foreach ($countsByOrganization as $organizationId => $count) {
+                OrganizationChatStat::decrementActiveChats((int) $organizationId, (int) $count);
+            }
         }, 3);
     }
 }
