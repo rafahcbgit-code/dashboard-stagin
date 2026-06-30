@@ -44,6 +44,7 @@ class WebhookFailure extends Model
         'payload',
         'context',
         'attempts',
+        'resolved_at',
     ];
 
     protected $casts = [
@@ -55,6 +56,7 @@ class WebhookFailure extends Model
         'created_at' => 'datetime',
         'payload' => 'array',
         'context' => 'array',
+        'resolved_at' => 'datetime',
     ];
 
     /**
