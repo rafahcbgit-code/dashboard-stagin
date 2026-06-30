@@ -98,17 +98,19 @@ class WebhookFailureController extends BaseController
 
         // Determine webhook type from payload or use default
         $webhookType = $failure->webhook_type ?? $payload['field'] ?? 'messages';
+        $context = is_string($failure->context) ? json_decode($failure->context, true) : ($failure->context ?? []);
+        $context = is_array($context) ? $context : [];
 
         // Dispatch a new ProcessWebhookJob with the stored payload
         $job = new ProcessWebhookJob(
             $payload,
             $failure->organization_id,
             $webhookType,
-            [
+            array_merge($context, [
                 'webhook_failure_id' => $failure->id,
                 'sample_id' => $failure->sample_id ?? null,
                 'replayed_at' => now()->toIso8601String(),
-            ]
+            ])
         );
 
         dispatch($job);
