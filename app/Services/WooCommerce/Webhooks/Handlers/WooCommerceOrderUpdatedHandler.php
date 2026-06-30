@@ -14,6 +14,8 @@ use App\Services\Salla\Webhooks\TemplateParameterBuilder;
 use App\Services\Salla\Webhooks\SallaWebhookMessageSenderInterface;
 use App\Services\WooCommerce\Webhooks\WooCommerceWebhookEventHandlerInterface;
 use App\Services\WooCommerce\Webhooks\WooCommerceOrderItemsSummaryFormatter;
+use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class WooCommerceOrderUpdatedHandler implements WooCommerceWebhookEventHandlerInterface
@@ -55,166 +57,195 @@ class WooCommerceOrderUpdatedHandler implements WooCommerceWebhookEventHandlerIn
             return;
         }
 
-        $state = WooCommerceOrderState::firstOrNew([
-            'organization_id' => (int) $delivery->organization_id,
-            'order_id' => (int) $orderId,
-        ]);
+        $this->ensureOrderStateRowExists((int) $delivery->organization_id, (int) $orderId, $delivery->integration_id);
 
-        $previousStatus = $state->exists ? (string) ($state->last_status ?? '') : '';
+        DB::transaction(function () use ($delivery, $payload, $orderId, $currentStatus): void {
+            $state = WooCommerceOrderState::where('organization_id', (int) $delivery->organization_id)
+                ->where('order_id', (int) $orderId)
+                ->lockForUpdate()
+                ->firstOrFail();
 
-        if ($previousStatus === $currentStatus) {
-            $state->last_seen_at = now();
-            $state->save();
+            $previousStatus = (string) ($state->last_status ?? '');
 
-            $delivery->update([
-                'status' => 'skipped',
-                'processed_at' => now(),
-                'error' => 'status_not_changed',
-            ]);
-            return;
-        }
+            if ($previousStatus === $currentStatus) {
+                $state->last_seen_at = now();
+                $state->save();
 
-        $setting = WooCommerceWebhookEventSetting::with('mappings')
-            ->where('organization_id', $delivery->organization_id)
-            ->where('event', $this->eventKeyForStatus($currentStatus))
-            ->first();
+                $delivery->update([
+                    'status' => 'skipped',
+                    'processed_at' => now(),
+                    'error' => 'status_not_changed',
+                ]);
+                return;
+            }
 
-        if (!$setting || !$setting->enabled) {
-            $state->integration_id = $delivery->integration_id;
-            $state->last_status = $currentStatus;
-            $state->last_seen_at = now();
-            $state->save();
+            $setting = WooCommerceWebhookEventSetting::with('mappings')
+                ->where('organization_id', $delivery->organization_id)
+                ->where('event', $this->eventKeyForStatus($currentStatus))
+                ->first();
 
-            $delivery->update([
-                'status' => 'skipped',
-                'processed_at' => now(),
-                'error' => 'status_template_not_configured',
-            ]);
-            return;
-        }
+            if (!$setting || !$setting->enabled) {
+                $state->integration_id = $delivery->integration_id;
+                $state->last_status = $currentStatus;
+                $state->last_seen_at = now();
+                $state->save();
 
-        if (!$setting->template_id) {
-            $state->integration_id = $delivery->integration_id;
-            $state->last_status = $currentStatus;
-            $state->last_seen_at = now();
-            $state->save();
+                $delivery->update([
+                    'status' => 'skipped',
+                    'processed_at' => now(),
+                    'error' => 'status_template_not_configured',
+                ]);
+                return;
+            }
 
-            $delivery->update([
-                'status' => 'skipped',
-                'processed_at' => now(),
-                'error' => 'template_not_selected',
-            ]);
-            return;
-        }
+            if (!$setting->template_id) {
+                $state->integration_id = $delivery->integration_id;
+                $state->last_status = $currentStatus;
+                $state->last_seen_at = now();
+                $state->save();
 
-        $recipientExpr = $setting->recipient_phone_payload_path ?? 'billing.phone';
-        $rawPhone = $this->resolvePhoneExpression($payload, $recipientExpr)
-            ?? $this->resolvePhoneExpression($payload, 'billing.phone')
-            ?? $this->resolvePhoneExpression($payload, 'shipping.phone');
+                $delivery->update([
+                    'status' => 'skipped',
+                    'processed_at' => now(),
+                    'error' => 'template_not_selected',
+                ]);
+                return;
+            }
 
-        if (!is_scalar($rawPhone) || trim((string) $rawPhone) === '') {
-            throw new SallaWebhookNonRetryableException('recipient_phone_missing');
-        }
+            $recipientExpr = $setting->recipient_phone_payload_path ?? 'billing.phone';
+            $rawPhone = $this->resolvePhoneExpression($payload, $recipientExpr)
+                ?? $this->resolvePhoneExpression($payload, 'billing.phone')
+                ?? $this->resolvePhoneExpression($payload, 'shipping.phone');
 
-        $e164 = PhoneService::getE164Format((string) $rawPhone);
-        if (!$e164) {
-            throw new SallaWebhookNonRetryableException('recipient_phone_invalid');
-        }
+            if (!is_scalar($rawPhone) || trim((string) $rawPhone) === '') {
+                throw new SallaWebhookNonRetryableException('recipient_phone_missing');
+            }
 
-        $contact = $this->findOrCreateContact((int) $delivery->organization_id, $e164, $payload);
+            $e164 = PhoneService::getE164Format((string) $rawPhone);
+            if (!$e164) {
+                throw new SallaWebhookNonRetryableException('recipient_phone_invalid');
+            }
 
-        if (isset($contact->is_subscribed) && !$contact->is_subscribed) {
-            $delivery->update([
-                'status' => 'skipped',
-                'processed_at' => now(),
-                'error' => 'contact_unsubscribed',
-            ]);
-            return;
-        }
+            $contact = $this->findOrCreateContact((int) $delivery->organization_id, $e164, $payload);
 
-        $template = Template::where('id', $setting->template_id)
-            ->where('organization_id', $delivery->organization_id)
-            ->whereNull('deleted_at')
-            ->first();
+            if (isset($contact->is_subscribed) && !$contact->is_subscribed) {
+                $delivery->update([
+                    'status' => 'skipped',
+                    'processed_at' => now(),
+                    'error' => 'contact_unsubscribed',
+                ]);
+                return;
+            }
 
-        if (!$template) {
-            throw new SallaWebhookNonRetryableException('template_not_found');
-        }
+            $template = Template::where('id', $setting->template_id)
+                ->where('organization_id', $delivery->organization_id)
+                ->whereNull('deleted_at')
+                ->first();
 
-        [$headerMeta, $bodyMeta, $buttonsMeta] = $this->parameterBuilder->build($template, $setting->mappings, $payload);
+            if (!$template) {
+                throw new SallaWebhookNonRetryableException('template_not_found');
+            }
 
-        $requestPayload = [
-            'to' => $contact->phone ?? null,
-            'template' => $template->uuid ?? null,
-            'header' => $headerMeta,
-            'body' => $bodyMeta,
-            'buttons' => $buttonsMeta,
-        ];
+            [$headerMeta, $bodyMeta, $buttonsMeta] = $this->parameterBuilder->build($template, $setting->mappings, $payload);
 
-        [$outboundMessage, $attemptNo] = $this->outboundLogger->beginWooCommerceTemplateSend(
-            $delivery,
-            'order.updated.' . $currentStatus,
-            $contact,
-            $template
-        );
+            $requestPayload = [
+                'to' => $contact->phone ?? null,
+                'template' => $template->uuid ?? null,
+                'header' => $headerMeta,
+                'body' => $bodyMeta,
+                'buttons' => $buttonsMeta,
+            ];
 
-        try {
-            $response = $this->messageSender->sendTemplateMessage(
-                (int) $delivery->organization_id,
+            [$outboundMessage, $attemptNo] = $this->outboundLogger->beginWooCommerceTemplateSend(
+                $delivery,
+                'order.updated.' . $currentStatus,
                 $contact,
-                $template,
-                $headerMeta,
-                $bodyMeta,
-                $buttonsMeta
+                $template
             );
-        } catch (\Throwable $e) {
-            $this->outboundLogger->logFailure($outboundMessage, $attemptNo, $requestPayload, null, $e->getMessage());
-            throw $e;
-        }
 
-        if (!data_get($response, 'success')) {
-            $message = (string) (data_get($response, 'message')
-                ?? data_get($response, 'data.error.message')
-                ?? 'send_failed');
+            try {
+                $response = $this->messageSender->sendTemplateMessage(
+                    (int) $delivery->organization_id,
+                    $contact,
+                    $template,
+                    $headerMeta,
+                    $bodyMeta,
+                    $buttonsMeta
+                );
+            } catch (\Throwable $e) {
+                $this->outboundLogger->logFailure($outboundMessage, $attemptNo, $requestPayload, null, $e->getMessage());
+                throw $e;
+            }
 
-            $this->outboundLogger->logFailure($outboundMessage, $attemptNo, $requestPayload, $response, $message);
-            throw new \RuntimeException($message);
-        }
+            if (!data_get($response, 'success')) {
+                $message = (string) (data_get($response, 'message')
+                    ?? data_get($response, 'data.error.message')
+                    ?? 'send_failed');
 
-        $sentChatId = data_get($response, 'data.chat.id');
-        $this->outboundLogger->logSuccess(
-            $outboundMessage,
-            $attemptNo,
-            $requestPayload,
-            $response,
-            is_numeric($sentChatId) ? (int) $sentChatId : null
-        );
+                $this->outboundLogger->logFailure($outboundMessage, $attemptNo, $requestPayload, $response, $message);
+                throw new \RuntimeException($message);
+            }
 
-        $delivery->update([
-            'status' => 'processed',
-            'processed_at' => now(),
-            'sent_chat_id' => is_numeric($sentChatId) ? (int) $sentChatId : null,
-            'error' => null,
-        ]);
+            $sentChatId = data_get($response, 'data.chat.id');
+            $this->outboundLogger->logSuccess(
+                $outboundMessage,
+                $attemptNo,
+                $requestPayload,
+                $response,
+                is_numeric($sentChatId) ? (int) $sentChatId : null
+            );
 
-        $state->integration_id = $delivery->integration_id;
-        $state->last_status = $currentStatus;
-        $state->last_seen_at = now();
-        $state->save();
+            $delivery->update([
+                'status' => 'processed',
+                'processed_at' => now(),
+                'sent_chat_id' => is_numeric($sentChatId) ? (int) $sentChatId : null,
+                'error' => null,
+            ]);
 
-        Log::channel('woocommerce')->info('WooCommerce order.updated automation: message sent', [
-            'delivery_id' => $delivery->id,
-            'organization_id' => $delivery->organization_id,
-            'contact_id' => $contact->id,
-            'template_id' => $template->id,
-            'current_status' => $currentStatus,
-            'previous_status' => $previousStatus,
-        ]);
+            $state->integration_id = $delivery->integration_id;
+            $state->last_status = $currentStatus;
+            $state->last_seen_at = now();
+            $state->save();
+
+            Log::channel('woocommerce')->info('WooCommerce order.updated automation: message sent', [
+                'delivery_id' => $delivery->id,
+                'organization_id' => $delivery->organization_id,
+                'contact_id' => $contact->id,
+                'template_id' => $template->id,
+                'current_status' => $currentStatus,
+                'previous_status' => $previousStatus,
+            ]);
+        }, 3);
     }
 
     private function eventKeyForStatus(string $status): string
     {
         return 'order.updated.status.' . $status;
+    }
+
+    private function ensureOrderStateRowExists(int $organizationId, int $orderId, ?int $integrationId): void
+    {
+        try {
+            WooCommerceOrderState::firstOrCreate(
+                [
+                    'organization_id' => $organizationId,
+                    'order_id' => $orderId,
+                ],
+                [
+                    'integration_id' => $integrationId,
+                    'last_status' => null,
+                    'last_seen_at' => null,
+                ]
+            );
+        } catch (QueryException $e) {
+            $exists = WooCommerceOrderState::where('organization_id', $organizationId)
+                ->where('order_id', $orderId)
+                ->exists();
+
+            if (!$exists) {
+                throw $e;
+            }
+        }
     }
 
     private function findOrCreateContact(int $organizationId, string $phoneE164, array $payload): Contact
