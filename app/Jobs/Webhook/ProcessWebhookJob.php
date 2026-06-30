@@ -187,6 +187,8 @@ class ProcessWebhookJob implements ShouldQueue
 
             $processingTime = (microtime(true) - $startTime) * 1000;
 
+            $this->markWebhookFailureResolved();
+
             Log::channel('webhook')->info('ProcessWebhookJob completed', [
                 'organization_id' => $this->organizationId,
                 'webhook_type' => $this->webhookType,
@@ -201,6 +203,28 @@ class ProcessWebhookJob implements ShouldQueue
             ]);
 
             throw $e; // Re-throw to trigger retry mechanism
+        }
+    }
+
+    protected function markWebhookFailureResolved(): void
+    {
+        $failureId = $this->context['webhook_failure_id'] ?? null;
+
+        if (! $failureId || ! Schema::hasColumn('webhook_failures', 'resolved_at')) {
+            return;
+        }
+
+        try {
+            WebhookFailure::whereKey($failureId)
+                ->whereNull('resolved_at')
+                ->update(['resolved_at' => now()]);
+        } catch (\Throwable $e) {
+            Log::channel('webhook')->warning('Failed to mark webhook failure as resolved', [
+                'webhook_failure_id' => $failureId,
+                'organization_id' => $this->organizationId,
+                'webhook_type' => $this->webhookType,
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 
