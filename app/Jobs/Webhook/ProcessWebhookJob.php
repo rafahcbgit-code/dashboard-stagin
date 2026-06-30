@@ -2359,6 +2359,7 @@ class ProcessWebhookJob implements ShouldQueue
                 'webhook_type' => $this->webhookType,
                 'queue' => $this->queue,
                 'sample_id' => $this->context['sample_id'] ?? null,
+                'context' => $this->context,
             ] as $column => $value) {
                 if (Schema::hasColumn('webhook_failures', $column)) {
                     $failureData[$column] = $value;

@@ -42,6 +42,7 @@ class WebhookFailure extends Model
         'error_message',
         'error_code',
         'payload',
+        'context',
         'attempts',
     ];
 
@@ -53,6 +54,7 @@ class WebhookFailure extends Model
         'attempts' => 'integer',
         'created_at' => 'datetime',
         'payload' => 'array',
+        'context' => 'array',
     ];
 
     /**
