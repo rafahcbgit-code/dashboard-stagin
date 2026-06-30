@@ -12,8 +12,10 @@ use Illuminate\Support\Facades\Schema;
 class RetryWebhookDispatchFailures extends Command
 {
     protected $signature = 'webhooks:retry-dispatch-failures
+        {--id=* : Retry one or more specific webhook_failure ids}
         {--limit=100 : Maximum number of failure records to retry}
         {--organization= : Retry failures for one organization id}
+        {--all : Retry all ProcessWebhookJob failure records, not only dispatch-stage failures}
         {--include-retried : Include records that already have attempts greater than zero}
         {--dry-run : Show matching records without dispatching jobs}';
 
@@ -22,7 +24,9 @@ class RetryWebhookDispatchFailures extends Command
     public function handle(): int
     {
         $limit = max(1, (int) $this->option('limit'));
+        $ids = array_values(array_filter(array_map('intval', (array) $this->option('id'))));
         $organizationId = $this->option('organization') ? (int) $this->option('organization') : null;
+        $allFailures = (bool) $this->option('all');
         $includeRetried = (bool) $this->option('include-retried');
         $dryRun = (bool) $this->option('dry-run');
 
@@ -34,8 +38,9 @@ class RetryWebhookDispatchFailures extends Command
         $query = WebhookFailure::query()
             ->where('job_type', 'ProcessWebhookJob')
             ->whereNotNull('payload')
-            ->where('context', 'like', '%"failure_stage":"dispatch"%')
-            ->when(! $includeRetried, fn ($query) => $query->where('attempts', 0))
+            ->when(empty($ids) && ! $allFailures, fn ($query) => $query->where('context', 'like', '%"failure_stage":"dispatch"%'))
+            ->when(! empty($ids), fn ($query) => $query->whereIn('id', $ids))
+            ->when(empty($ids) && ! $includeRetried, fn ($query) => $query->where('attempts', 0))
             ->when($organizationId, fn ($query) => $query->where('organization_id', $organizationId))
             ->orderBy('id')
             ->limit($limit);
