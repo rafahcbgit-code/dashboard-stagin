@@ -2,36 +2,37 @@
 
 namespace App\Http\Controllers\User;
 
-use Illuminate\Support\Facades\DB;
-use Validator;
-use Inertia\Inertia;
-use App\Models\Addon;
-use App\Models\Label;
-use App\Models\Contact;
-use App\Models\Setting;
-use App\Models\Template;
-use App\Models\ContactGroup;
-use App\Models\Organization;
-use Illuminate\Http\Request;
 use App\Helpers\CustomHelper;
-use App\Services\WhatsappService;
-use App\Services\ContactGroupCountService;
-use App\Models\ContactContactGroup;
-use Illuminate\Support\Facades\Log;
-use App\Services\ContactFieldService;
+use App\Http\Controllers\Controller as BaseController;
 use App\Http\Requests\StoreWhatsappProfile;
 use App\Http\Requests\StoreWhatsappSettings;
-use App\Http\Controllers\Controller as BaseController;
+use App\Models\Addon;
+use App\Models\Contact;
+use App\Models\ContactContactGroup;
+use App\Models\ContactGroup;
+use App\Models\Label;
+use App\Models\Organization;
+use App\Models\Setting;
+use App\Models\Template;
+use App\Services\ContactFieldService;
+use App\Services\ContactGroupCountService;
+use App\Services\WhatsappService;
+use App\Support\ContactPageCache;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+use Inertia\Inertia;
 
 class SettingController extends BaseController
 {
     protected $contactFieldService;
+
     public function __construct(ContactFieldService $contactFieldService)
     {
         $this->contactFieldService = $contactFieldService;
     }
 
-    public function index(Request $request, $display = null){
+    public function index(Request $request, $display = null)
+    {
         if ($request->isMethod('get')) {
             $organizationId = session()->get('current_organization');
             $data['title'] = __('Settings');
@@ -43,15 +44,15 @@ class SettingController extends BaseController
             $contactModel = new Contact;
             $data['contactGroups'] = $contactModel->getAllContactGroups($organizationId);
 
-           /*  $metadata = $data['settings']->metadata 
-            ? json_decode($data['settings']->metadata, true) 
-            : [];
+            /*  $metadata = $data['settings']->metadata
+             ? json_decode($data['settings']->metadata, true)
+             : [];
         if (!isset($metadata['campaign_settings'])) {
-            $metadata['campaign_settings'] = [];
+             $metadata['campaign_settings'] = [];
         }
 
         if (!isset($metadata['campaign_settings']['unsubscribe_trigger'])) {
-            $metadata['campaign_settings']['unsubscribe_trigger'] = 'stop';
+             $metadata['campaign_settings']['unsubscribe_trigger'] = 'stop';
         }
         $data['settings']->metadata = json_encode($metadata, JSON_UNESCAPED_UNICODE);
         $data['settings']->save();*/
@@ -60,24 +61,28 @@ class SettingController extends BaseController
         }
     }
 
-    public function mobileView(Request $request){
+    public function mobileView(Request $request)
+    {
         $data['title'] = __('Settings');
         $data['settings'] = Organization::where('id', session()->get('current_organization'))->first();
+
         return Inertia::render('User/Settings/Main', $data);
     }
 
-    public function viewGeneralSettings(Request $request){
+    public function viewGeneralSettings(Request $request)
+    {
         $contactModel = new Contact;
         $organizationId = session()->get('current_organization');
         $data['title'] = __('Settings');
         $data['settings'] = Organization::where('id', session()->get('current_organization'))->first();
         $data['modules'] = Addon::get();
         $data['contactGroups'] = $contactModel->getAllContactGroups($organizationId);
-        
+
         return Inertia::render('User/Settings/General', $data);
     }
 
-    public function viewWhatsappSettings(Request $request){
+    public function viewWhatsappSettings(Request $request)
+    {
         $settings = Setting::whereIn('key', ['is_embedded_signup_active', 'whatsapp_client_id', 'whatsapp_config_id'])
             ->pluck('value', 'key');
 
@@ -94,7 +99,8 @@ class SettingController extends BaseController
         return Inertia::render('User/Settings/Whatsapp', $data);
     }
 
-    public function storeWhatsappSettings(StoreWhatsappSettings $request) {
+    public function storeWhatsappSettings(StoreWhatsappSettings $request)
+    {
         $embeddedSignupActive = Setting::where('key', 'is_embedded_signup_active')->value('value');
         $setWebhookUrl = $embeddedSignupActive == 1 ? true : false;
 
@@ -107,11 +113,12 @@ class SettingController extends BaseController
         );
     }
 
-    public function updateToken(Request $request) {
+    public function updateToken(Request $request)
+    {
         if ($response = $this->abortIfDemo()) {
             return $response;
         }
-        
+
         $organizationId = session()->get('current_organization');
         $config = Organization::findOrFail($organizationId)->metadata;
         $config = $config ? json_decode($config, true) : [];
@@ -123,19 +130,20 @@ class SettingController extends BaseController
             $config['whatsapp']['waba_id'] ?? null
         );
     }
-    
-    public function refreshWhatsappData() {
+
+    public function refreshWhatsappData()
+    {
         $organizationId = session()->get('current_organization');
         $config = Organization::findOrFail($organizationId)->metadata;
         $config = $config ? json_decode($config, true) : [];
 
-        if($config['whatsapp']['is_embedded_signup'] && $config['whatsapp']['is_embedded_signup'] == 1){
+        if ($config['whatsapp']['is_embedded_signup'] && $config['whatsapp']['is_embedded_signup'] == 1) {
             if (class_exists(\Modules\EmbeddedSignup\Services\MetaService::class)) {
                 $embeddedSetup = new \Modules\EmbeddedSignup\Services\MetaService();
                 $embeddedSetup->overrideWabaCallbackUrl($organizationId);
             }
         }
-    
+
         return $this->saveWhatsappSettings(
             $config['whatsapp']['access_token'] ?? null,
             $config['whatsapp']['app_id'] ?? null,
@@ -143,59 +151,61 @@ class SettingController extends BaseController
             $config['whatsapp']['waba_id'] ?? null
         );
     }
-  
-public function campaign(Request $request)
-{
-    $currentOrganizationId = session()->get('current_organization');
-    $organizationConfig = Organization::findOrFail($currentOrganizationId);
 
-    // Decode metadata or set as empty array
-    $metadataArray = $organizationConfig->metadata
-        ? json_decode($organizationConfig->metadata, true)
-        : [];
+    public function campaign(Request $request)
+    {
+        $currentOrganizationId = session()->get('current_organization');
+        $organizationConfig = Organization::findOrFail($currentOrganizationId);
 
-    // Ensure campaign_settings key exists
-    if (!isset($metadataArray['campaign_settings'])) {
-        $metadataArray['campaign_settings'] = [];
-    }
+        // Decode metadata or set as empty array
+        $metadataArray = $organizationConfig->metadata
+            ? json_decode($organizationConfig->metadata, true)
+            : [];
 
-    // Handle POST request (save settings)
-    if ($request->isMethod('post')) {
-        $input = $request->input('unsubscribe_trigger', 'stop');
+        // Ensure campaign_settings key exists
+        if (! isset($metadataArray['campaign_settings'])) {
+            $metadataArray['campaign_settings'] = [];
+        }
 
-        // Normalize words (remove spaces around commas)
-        $words = preg_replace('/\s*,\s*/', ',', trim($input));
-        $metadataArray['campaign_settings']['unsubscribe_trigger'] = $words;
+        // Handle POST request (save settings)
+        if ($request->isMethod('post')) {
+            $input = $request->input('unsubscribe_trigger', 'stop');
+
+            // Normalize words (remove spaces around commas)
+            $words = preg_replace('/\s*,\s*/', ',', trim($input));
+            $metadataArray['campaign_settings']['unsubscribe_trigger'] = $words;
+
+            $organizationConfig->metadata = json_encode($metadataArray);
+            $organizationConfig->save();
+
+            return back()->with(
+                'status', [
+                    'type' => 'success',
+                    'message' => __('Campaign settings updated successfully'),
+                ]
+            );
+        }
+
+        // Ensure unsubscribe_trigger has a default value
+        if (! isset($metadataArray['campaign_settings']['unsubscribe_trigger'])) {
+            $metadataArray['campaign_settings']['unsubscribe_trigger'] = 'stop';
+        }
 
         $organizationConfig->metadata = json_encode($metadataArray);
-        $organizationConfig->save();
 
-        return back()->with(
-            'status', [
-                'type' => 'success',
-                'message' => __('Campaign settings updated successfully'),
-            ]
-        );
+        return Inertia::render('User/Settings/Campaign', [
+            'settings' => $organizationConfig,
+            'modules' => Addon::get(),
+        ]);
     }
 
-    // Ensure unsubscribe_trigger has a default value
-    if (!isset($metadataArray['campaign_settings']['unsubscribe_trigger'])) {
-        $metadataArray['campaign_settings']['unsubscribe_trigger'] = 'stop';
-    }
-
-    $organizationConfig->metadata = json_encode($metadataArray);
-
-    return Inertia::render('User/Settings/Campaign', [
-        'settings' => $organizationConfig,
-        'modules'  => Addon::get(), 
-    ]);
-}
-    public function tickets(Request $request){
+    public function tickets(Request $request)
+    {
         //dd($request);
         if ($request->isMethod('get')) {
             $contactFieldService = new ContactFieldService(session()->get('current_organization'));
             $settings = Organization::where('id', session()->get('current_organization'))->first();
-            
+
             $agents = DB::table('users')
                 ->join('teams', 'users.id', '=', 'teams.user_id')
                 ->where('teams.organization_id', '=', session()->get('current_organization'))
@@ -216,9 +226,9 @@ public function campaign(Request $request)
                 'settings' => $settings,
                 'modules' => Addon::get(),
                 'agents' => $agents,
-                'oldSelectedAgents' => $oldSelectedAgents
+                'oldSelectedAgents' => $oldSelectedAgents,
             ]);
-        } else if($request->isMethod('post')) {
+        } elseif ($request->isMethod('post')) {
             $currentOrganizationId = session()->get('current_organization');
             $organizationConfig = Organization::where('id', $currentOrganizationId)->first();
             $metadataArray = $organizationConfig->metadata ? json_decode($organizationConfig->metadata, true) : [];
@@ -242,14 +252,15 @@ public function campaign(Request $request)
 
             return back()->with(
                 'status', [
-                    'type' => 'success', 
-                    'message' => __('Settings updated successfully')
+                    'type' => 'success',
+                    'message' => __('Settings updated successfully'),
                 ]
             );
         }
     }
 
-    public function whatsappBusinessProfileUpdate(StoreWhatsappProfile $request){
+    public function whatsappBusinessProfileUpdate(StoreWhatsappProfile $request)
+    {
         if ($response = $this->abortIfDemo()) {
             return $response;
         }
@@ -258,7 +269,7 @@ public function campaign(Request $request)
         $config = Organization::where('id', $organizationId)->first()->metadata;
         $config = $config ? json_decode($config, true) : [];
 
-        if(isset($config['whatsapp'])){
+        if (isset($config['whatsapp'])) {
             $accessToken = $config['whatsapp']['access_token'] ?? null;
             $apiVersion = config('graph.api_version');
             $appId = $config['whatsapp']['app_id'] ?? null;
@@ -266,21 +277,21 @@ public function campaign(Request $request)
             $wabaId = $config['whatsapp']['waba_id'] ?? null;
 
             $whatsappService = new WhatsappService($accessToken, $apiVersion, $appId, $phoneNumberId, $wabaId, $organizationId);
-            
+
             $response = $whatsappService->updateBusinessProfile($request);
 
-            if($response->success === true){
+            if ($response->success === true) {
                 return back()->with(
                     'status', [
-                        'type' => 'success', 
-                        'message' => __('Your whatsapp business profile has been changed successfully!')
+                        'type' => 'success',
+                        'message' => __('Your whatsapp business profile has been changed successfully!'),
                     ]
                 );
             } else {
                 return back()->with(
                     'status', [
-                        'type' => 'error', 
-                        'message' => __('Something went wrong! Your business profile could not be updated!')
+                        'type' => 'error',
+                        'message' => __('Something went wrong! Your business profile could not be updated!'),
                     ]
                 );
             }
@@ -288,13 +299,14 @@ public function campaign(Request $request)
 
         return back()->with(
             'status', [
-                'type' => 'error', 
-                'message' => __('Setup your whatsapp integration first!')
+                'type' => 'error',
+                'message' => __('Setup your whatsapp integration first!'),
             ]
         );
     }
 
-    public function deleteWhatsappIntegration(Request $request){
+    public function deleteWhatsappIntegration(Request $request)
+    {
         if ($response = $this->abortIfDemo()) {
             return $response;
         }
@@ -304,8 +316,8 @@ public function campaign(Request $request)
         $organizationConfig = Organization::where('id', $organizationId)->first();
         $config = $organizationConfig->metadata ? json_decode($organizationConfig->metadata, true) : [];
 
-        if(isset($config['whatsapp'])){
-            if($embeddedSignupActive == 1){
+        if (isset($config['whatsapp'])) {
+            if ($embeddedSignupActive == 1) {
                 //Unsubscribe webhook
                 $organizationId = session()->get('current_organization');
                 $apiVersion = config('graph.api_version');
@@ -314,11 +326,11 @@ public function campaign(Request $request)
                 $appId = $config['whatsapp']['app_id'] ?? null;
                 $phoneNumberId = $config['whatsapp']['phone_number_id'] ?? null;
                 $wabaId = $config['whatsapp']['waba_id'] ?? null;
-            
+
                 $whatsappService = new WhatsappService($accessToken, $apiVersion, $appId, $phoneNumberId, $wabaId, $organizationId);
                 $unsubscribe = $whatsappService->unSubscribeToWaba();
             }
-            
+
             //Delete whatsapp settings
             if (isset($config['whatsapp'])) {
                 unset($config['whatsapp']);
@@ -337,77 +349,78 @@ public function campaign(Request $request)
 
             return back()->with(
                 'status', [
-                    'type' => 'success', 
-                    'message' => __('Your integration has been removed successfully!')
+                    'type' => 'success',
+                    'message' => __('Your integration has been removed successfully!'),
                 ]
             );
         }
 
         return back()->with(
             'status', [
-                'type' => 'error', 
-                'message' => __('Setup your whatsapp integration first!')
+                'type' => 'error',
+                'message' => __('Setup your whatsapp integration first!'),
             ]
         );
     }
 
-    private function saveWhatsappSettings($accessToken, $appId, $phoneNumberId, $wabaId, $subscribeToWebhook = false) {
+    private function saveWhatsappSettings($accessToken, $appId, $phoneNumberId, $wabaId, $subscribeToWebhook = false)
+    {
         $organizationId = session()->get('current_organization');
         $apiVersion = config('graph.api_version');
-    
+
         $whatsappService = new WhatsappService($accessToken, $apiVersion, $appId, $phoneNumberId, $wabaId, $organizationId);
 
         $phoneNumberResponse = $whatsappService->getPhoneNumberId($accessToken, $wabaId);
-     
-        if(!$phoneNumberResponse->success){
+
+        if (! $phoneNumberResponse->success) {
             return back()->with(
                 'status', [
-                    'type' => 'error', 
-                    'message' => $phoneNumberResponse->data->error->message
+                    'type' => 'error',
+                    'message' => $phoneNumberResponse->data->error->message,
                 ]
             );
         }
 
         //Get Phone Number Status
-        $phoneNumberStatusResponse = $whatsappService->getPhoneNumberStatus($accessToken, $phoneNumberResponse->data->id); 
-        
-        if(!$phoneNumberStatusResponse->success){
+        $phoneNumberStatusResponse = $whatsappService->getPhoneNumberStatus($accessToken, $phoneNumberResponse->data->id);
+
+        if (! $phoneNumberStatusResponse->success) {
             return back()->with(
                 'status', [
-                    'type' => 'error', 
-                    'message' => $phoneNumberStatusResponse->data->error->message
+                    'type' => 'error',
+                    'message' => $phoneNumberStatusResponse->data->error->message,
                 ]
             );
         }
 
         //Get Account Review Status
         $accountReviewStatusResponse = $whatsappService->getAccountReviewStatus($accessToken, $wabaId);
-        
-        if(!$accountReviewStatusResponse->success){
+
+        if (! $accountReviewStatusResponse->success) {
             return back()->with(
                 'status', [
-                    'type' => 'error', 
-                    'message' => $accountReviewStatusResponse->data->error->message
+                    'type' => 'error',
+                    'message' => $accountReviewStatusResponse->data->error->message,
                 ]
             );
         }
 
         //Get business profile
-        $businessProfileResponse = $whatsappService->getBusinessProfile($accessToken, $phoneNumberResponse->data->id);  
-        
-        if(!$businessProfileResponse->success){
+        $businessProfileResponse = $whatsappService->getBusinessProfile($accessToken, $phoneNumberResponse->data->id);
+
+        if (! $businessProfileResponse->success) {
             return back()->with(
                 'status', [
-                    'type' => 'error', 
-                    'message' => $businessProfileResponse->data->error->message
+                    'type' => 'error',
+                    'message' => $businessProfileResponse->data->error->message,
                 ]
             );
         }
         $organizationConfig = Organization::where('id', $organizationId)->first();
-        
+
         $metadataArray = $organizationConfig->metadata ? json_decode($organizationConfig->metadata, true) : [];
-        
-        if (!isset($metadataArray['whatsapp']) || !is_array($metadataArray['whatsapp'])) {
+
+        if (! isset($metadataArray['whatsapp']) || ! is_array($metadataArray['whatsapp'])) {
             $metadataArray['whatsapp'] = [];
         }
 
@@ -420,55 +433,56 @@ public function campaign(Request $request)
         $metadataArray['whatsapp']['verified_name'] = $phoneNumberResponse->data->verified_name ?? null;
         $metadataArray['whatsapp']['quality_rating'] = $phoneNumberResponse->data->quality_rating ?? null;
         $metadataArray['whatsapp']['name_status'] = $phoneNumberResponse->data->name_status ?? null;
-        $metadataArray['whatsapp']['messaging_limit_tier'] = $phoneNumberStatusResponse->data->whatsapp_business_manager_messaging_limit ?? NULL;
-        $metadataArray['whatsapp']['max_daily_conversation_per_phone'] = NULL;
-        $metadataArray['whatsapp']['max_phone_numbers_per_business'] = NULL;
-        $metadataArray['whatsapp']['whatsapp_business_manager_messaging_limit'] = $phoneNumberStatusResponse->data->whatsapp_business_manager_messaging_limit ?? NULL;
+        $metadataArray['whatsapp']['messaging_limit_tier'] = $phoneNumberStatusResponse->data->whatsapp_business_manager_messaging_limit ?? null;
+        $metadataArray['whatsapp']['max_daily_conversation_per_phone'] = null;
+        $metadataArray['whatsapp']['max_phone_numbers_per_business'] = null;
+        $metadataArray['whatsapp']['whatsapp_business_manager_messaging_limit'] = $phoneNumberStatusResponse->data->whatsapp_business_manager_messaging_limit ?? null;
         $metadataArray['whatsapp']['number_status'] = $phoneNumberStatusResponse->data->status;
         $metadataArray['whatsapp']['code_verification_status'] = $phoneNumberStatusResponse->data->code_verification_status;
         $metadataArray['whatsapp']['business_verification'] = '';
         $metadataArray['whatsapp']['account_review_status'] = $accountReviewStatusResponse->data->account_review_status;
 
-        if (!isset($metadataArray['whatsapp']['business_profile']) || !is_array($metadataArray['whatsapp']['business_profile'])) {
+        if (! isset($metadataArray['whatsapp']['business_profile']) || ! is_array($metadataArray['whatsapp']['business_profile'])) {
             $metadataArray['whatsapp']['business_profile'] = [];
         }
 
-        $metadataArray['whatsapp']['business_profile']['about'] = $businessProfileResponse->data->about ?? NULL;
-        $metadataArray['whatsapp']['business_profile']['address'] = $businessProfileResponse->data->address ?? NULL;
-        $metadataArray['whatsapp']['business_profile']['description'] = $businessProfileResponse->data->description ?? NULL;
-        $metadataArray['whatsapp']['business_profile']['industry'] = $businessProfileResponse->data->vertical ?? NULL;
-        $metadataArray['whatsapp']['business_profile']['email'] = $businessProfileResponse->data->email ?? NULL;
+        $metadataArray['whatsapp']['business_profile']['about'] = $businessProfileResponse->data->about ?? null;
+        $metadataArray['whatsapp']['business_profile']['address'] = $businessProfileResponse->data->address ?? null;
+        $metadataArray['whatsapp']['business_profile']['description'] = $businessProfileResponse->data->description ?? null;
+        $metadataArray['whatsapp']['business_profile']['industry'] = $businessProfileResponse->data->vertical ?? null;
+        $metadataArray['whatsapp']['business_profile']['email'] = $businessProfileResponse->data->email ?? null;
 
         $updatedMetadataJson = json_encode($metadataArray);
         $organizationConfig->metadata = $updatedMetadataJson;
 
-        if($organizationConfig->save()){
+        if ($organizationConfig->save()) {
             $whatsappService->syncTemplates($accessToken, $wabaId);
 
             return back()->with(
                 'status', [
-                    'type' => 'success', 
-                    'message' => __('Whatsapp settings updated successfully')
+                    'type' => 'success',
+                    'message' => __('Whatsapp settings updated successfully'),
                 ]
             );
         } else {
             return back()->with(
                 'status', [
-                    'type' => 'error', 
-                    'message' => __('Something went wrong. Refresh the page and try again')
+                    'type' => 'error',
+                    'message' => __('Something went wrong. Refresh the page and try again'),
                 ]
             );
         }
     }
 
-    protected function abortIfDemo(){
+    protected function abortIfDemo()
+    {
         $organizationId = session()->get('current_organization');
 
         if (app()->environment('demo') && $organizationId == 1) {
             return back()->with(
                 'status', [
-                    'type' => 'error', 
-                    'message' => __('You cannot perform this action using the demo account. To test this feature, please create your own account.')
+                    'type' => 'error',
+                    'message' => __('You cannot perform this action using the demo account. To test this feature, please create your own account.'),
                 ]
             );
         }
@@ -476,7 +490,8 @@ public function campaign(Request $request)
         return null;
     }
 
-   public function contacts(Request $request){
+    public function contacts(Request $request)
+    {
         if ($request->isMethod('get')) {
             $contactFieldService = new ContactFieldService(session()->get('current_organization'));
             $settings = Organization::where('id', session()->get('current_organization'))->first();
@@ -488,10 +503,10 @@ public function campaign(Request $request)
                 'settings' => $settings,
                 'modules' => Addon::get(),
             ]);
-        } else if($request->isMethod('post')) {
+        } elseif ($request->isMethod('post')) {
             $currentOrganizationId = session()->get('current_organization');
             $organizationConfig = Organization::where('id', $currentOrganizationId)->first();
-    
+
             $metadataArray = $organizationConfig->metadata ? json_decode($organizationConfig->metadata, true) : [];
 
             $metadataArray['contacts']['location'] = $request->location;
@@ -499,32 +514,32 @@ public function campaign(Request $request)
             $updatedMetadataJson = json_encode($metadataArray);
 
             $organizationConfig->metadata = $updatedMetadataJson;
-           
+
             $organizationConfig->save();
 
             return back()->with(
                 'status', [
-                    'type' => 'success', 
-                    'message' => __('Settings updated successfully')
+                    'type' => 'success',
+                    'message' => __('Settings updated successfully'),
                 ]
             );
         }
     }
 
-    public function updateWhatsappForCoExistence(Request $request){
-        
+    public function updateWhatsappForCoExistence(Request $request)
+    {
+
         $request->validate([
-            'sync_history'  => 'nullable|in:0,1',
+            'sync_history' => 'nullable|in:0,1',
             'sync_contacts' => 'nullable|in:0,1',
         ]);
 
         // Ensure at least one field exists
-        if (!$request->has('sync_history') && !$request->has('sync_contacts')) {
+        if (! $request->has('sync_history') && ! $request->has('sync_contacts')) {
             return back()->withErrors([
-                'sync_settings' => 'At least one of sync_history or sync_contacts is required.'
+                'sync_settings' => 'At least one of sync_history or sync_contacts is required.',
             ])->withInput();
         }
-
 
         $organizationId = session()->get('current_organization');
         $organizationConfig = Organization::findOrFail($organizationId);
@@ -548,33 +563,34 @@ public function campaign(Request $request)
         $organizationConfig->save();
 
         return back()->with([
-            'type'    => 'success',
+            'type' => 'success',
             'message' => 'Sync settings updated successfully.',
         ]);
-        
+
     }
 
-    public function labels(Request $request){
+    public function labels(Request $request)
+    {
         $organizationId = session()->get('current_organization');
         $organization = Organization::findOrFail($organizationId);
 
         if ($request->isMethod('get')) {
             $labels = $organization->labels()->latest()->get();
-            
+
             // Add contact count for each label
-            $labels->each(function($label) use ($organizationId) {
+            $labels->each(function ($label) use ($organizationId) {
                 $label->contact_count = Contact::where('organization_id', $organizationId)
-                    ->whereHas('labels', function($query) use ($label) {
+                    ->whereHas('labels', function ($query) use ($label) {
                         $query->where('labels.id', $label->id);
                     })
                     ->count();
             });
 
             return Inertia::render('User/Settings/Label', [
-                'title'        => __('Settings'),
-                'settings'     => $organization,
-                'labels'       => $labels,
-                'modules'      => Addon::get(),
+                'title' => __('Settings'),
+                'settings' => $organization,
+                'labels' => $labels,
+                'modules' => Addon::get(),
             ]);
         }
 
@@ -588,44 +604,51 @@ public function campaign(Request $request)
                 'title' => $request->title,
                 'color' => $request->color,
             ]);
+            ContactPageCache::forgetLabels($organizationId);
 
             return back()->with(
                 'status', [
-                    'type'    => 'success',
+                    'type' => 'success',
                     'message' => __('Label created successfully'),
                 ]
             );
         }
     }
 
-    public function updateLabel(Request $request, Label $label){
+    public function updateLabel(Request $request, Label $label)
+    {
         $request->validate([
             'title' => 'required|string|max:255',
             'color' => 'required|string|max:7',
         ]);
 
         $label->update($request->only('title', 'color'));
+        ContactPageCache::forgetLabels((int) $label->organization_id);
 
         return back()->with(
             'status', [
-                'type'    => 'success',
+                'type' => 'success',
                 'message' => __('Label updated successfully'),
             ]
         );
     }
 
-    public function deleteLabel(Label $label){
+    public function deleteLabel(Label $label)
+    {
+        $organizationId = (int) $label->organization_id;
         $label->delete();
+        ContactPageCache::forgetLabels($organizationId);
 
         return back()->with(
             'status', [
-                'type'    => 'success',
+                'type' => 'success',
                 'message' => __('Label deleted successfully'),
             ]
         );
     }
 
-    public function createGroupFromLabel(Request $request){
+    public function createGroupFromLabel(Request $request)
+    {
         $request->validate([
             'name' => 'required|string|max:255',
             'label_id' => 'required|exists:labels,id',
@@ -634,8 +657,8 @@ public function campaign(Request $request)
         $organizationId = session()->get('current_organization');
 
         $label = Label::where('id', $request->label_id)
-        ->where('organization_id', $organizationId)
-        ->firstOrFail();
+            ->where('organization_id', $organizationId)
+            ->firstOrFail();
 
         $contactGroup = ContactGroup::create([
             'name' => $request->name,
@@ -645,10 +668,10 @@ public function campaign(Request $request)
 
         // Get all contacts that have this label
         $contactsWithLabel = Contact::where('organization_id', $organizationId)
-        ->whereHas('labels', function($query) use ($request) {
-            $query->where('labels.id', $request->label_id);
-        })
-        ->get();
+            ->whereHas('labels', function ($query) use ($request) {
+                $query->where('labels.id', $request->label_id);
+            })
+            ->get();
 
         // Add these contacts to the new group
         foreach ($contactsWithLabel as $contact) {
@@ -663,7 +686,7 @@ public function campaign(Request $request)
         return back()->with(
             'status', [
                 'type' => 'success',
-                'message' => __('Contact group created successfully with :count contacts', ['count' => $contactsWithLabel->count()])
+                'message' => __('Contact group created successfully with :count contacts', ['count' => $contactsWithLabel->count()]),
             ]);
     }
 
@@ -679,13 +702,13 @@ public function campaign(Request $request)
         foreach ($selectedAgents as $userId) {
             $data[] = [
                 'organization_id' => $organizationId,
-                'user_id'        => $userId,
-                'created_at'     => $now,
-                'updated_at'     => $now,
+                'user_id' => $userId,
+                'created_at' => $now,
+                'updated_at' => $now,
             ];
         }
 
-        if (!empty($data)) {
+        if (! empty($data)) {
             DB::table('assigned_agents')->insert($data);
         }
     }
@@ -719,9 +742,9 @@ public function campaign(Request $request)
         ];
 
         // Keep existing password if new one is empty
-        if (empty($metadataArray['email_settings']['password']) && !empty($organizationConfig->metadata)) {
+        if (empty($metadataArray['email_settings']['password']) && ! empty($organizationConfig->metadata)) {
             $existing = json_decode($organizationConfig->metadata, true);
-            if (!empty($existing['email_settings']['password'])) {
+            if (! empty($existing['email_settings']['password'])) {
                 $metadataArray['email_settings']['password'] = $existing['email_settings']['password'];
             }
         }

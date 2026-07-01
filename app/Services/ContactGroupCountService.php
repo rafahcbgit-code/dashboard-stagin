@@ -2,6 +2,7 @@
 
 namespace App\Services;
 
+use App\Support\ContactPageCache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
@@ -25,6 +26,14 @@ class ContactGroupCountService
             return;
         }
 
+        $organizationIds = DB::table('contact_groups')
+            ->whereIn('id', $ids->all())
+            ->pluck('organization_id')
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->unique()
+            ->values();
+
         foreach ($ids->chunk(500) as $chunk) {
             DB::table('contact_groups')
                 ->whereIn('id', $chunk->all())
@@ -39,6 +48,8 @@ class ContactGroupCountService
                     )'),
                 ]);
         }
+
+        $organizationIds->each(fn (int $organizationId) => ContactPageCache::forgetContactGroups($organizationId));
     }
 
     public static function rebuildForContacts(iterable $contactIds): void
