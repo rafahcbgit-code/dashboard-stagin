@@ -37,19 +37,34 @@ class ProcessLargeContactImportJob implements ShouldQueue
 
     public function failed(\Throwable $exception): void
     {
+        $message = $this->summarizeExceptionMessage($exception);
+
         ContactImportBatch::query()
             ->where('id', $this->batchId)
             ->update([
                 'status' => 'failed',
                 'finished_at' => now(),
-                'error_message' => $exception->getMessage(),
+                'error_message' => $message,
                 'updated_at' => now(),
             ]);
 
         Log::error('Large contact import job failed', [
             'batch_id' => $this->batchId,
-            'exception_message' => $exception->getMessage(),
+            'exception_message' => $message,
             'exception_class' => $exception::class,
         ]);
+    }
+
+    private function summarizeExceptionMessage(\Throwable $exception): string
+    {
+        $message = $exception->getMessage();
+
+        if (str_contains($message, 'Got a packet bigger than')) {
+            return 'MySQL max_allowed_packet was exceeded while writing an import chunk.';
+        }
+
+        $message = preg_replace('/\s+/', ' ', $message) ?: $exception::class;
+
+        return mb_substr($message, 0, 1000);
     }
 }

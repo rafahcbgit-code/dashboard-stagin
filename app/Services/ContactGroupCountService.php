@@ -29,14 +29,14 @@ class ContactGroupCountService
             DB::table('contact_groups')
                 ->whereIn('id', $chunk->all())
                 ->update([
-                    'contacts_count' => DB::raw("(
-                        SELECT COUNT(*)
+                    'contacts_count' => DB::raw('(
+                        SELECT COUNT(DISTINCT contact_contact_group.contact_id)
                         FROM contact_contact_group
                         INNER JOIN contacts
                             ON contacts.id = contact_contact_group.contact_id
                         WHERE contact_contact_group.contact_group_id = contact_groups.id
                             AND contacts.deleted_at IS NULL
-                    )"),
+                    )'),
                 ]);
         }
     }
@@ -57,9 +57,15 @@ class ContactGroupCountService
             return;
         }
 
-        $groupIds = DB::table('contact_contact_group')
-            ->whereIn('contact_id', $ids->all())
-            ->pluck('contact_group_id');
+        $groupIds = collect();
+
+        foreach ($ids->chunk(5000) as $chunk) {
+            $groupIds = $groupIds->merge(
+                DB::table('contact_contact_group')
+                    ->whereIn('contact_id', $chunk->all())
+                    ->pluck('contact_group_id')
+            );
+        }
 
         self::rebuildGroups($groupIds);
     }
