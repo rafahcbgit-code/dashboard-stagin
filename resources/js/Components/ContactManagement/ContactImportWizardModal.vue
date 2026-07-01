@@ -297,7 +297,7 @@ const uploadAndPreview = async (event) => {
 const startStatusPolling = () => {
     stopStatusPolling();
     pollImportStatus();
-    statusPoller.value = window.setInterval(pollImportStatus, 3000);
+    statusPoller.value = window.setInterval(pollImportStatus, 1000);
 };
 
 const stopStatusPolling = () => {

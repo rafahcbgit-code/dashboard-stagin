@@ -858,6 +858,25 @@ class ContactImportService
         $this->clearPreviousBackgroundRows($batch);
 
         try {
+            $maybeUpdateProgress = function () use ($batch, &$processed, &$valid, &$invalid, &$created, &$updated, &$duplicates, &$failedRowsPreview, &$lastProgressUpdateRows): void {
+                if ($processed - $lastProgressUpdateRows < $this->backgroundProgressUpdateInterval()) {
+                    return;
+                }
+
+                $this->updateBackgroundImportProgress(
+                    $batch,
+                    $processed,
+                    $valid,
+                    $invalid,
+                    $created,
+                    $updated,
+                    $duplicates,
+                    $failedRowsPreview
+                );
+
+                $lastProgressUpdateRows = $processed;
+            };
+
             foreach ($this->iterateStoredFileRows(Storage::path($sourceFilePath), $headers) as $rows) {
                 if (empty($rows)) {
                     continue;
@@ -901,6 +920,8 @@ class ContactImportService
                             'updated_at' => $now,
                         ];
 
+                        $maybeUpdateProgress();
+
                         continue;
                     }
 
@@ -909,6 +930,8 @@ class ContactImportService
                     if ($phone === '') {
                         $invalid++;
                         $failedRowsPreview = $this->appendFailurePreview($failedRowsPreview, $rowNumber, 'Missing normalized phone.');
+
+                        $maybeUpdateProgress();
 
                         continue;
                     }
@@ -931,6 +954,8 @@ class ContactImportService
                             'group_names' => $groupNames,
                         ];
 
+                        $maybeUpdateProgress();
+
                         continue;
                     }
 
@@ -952,6 +977,8 @@ class ContactImportService
                         ->values()
                         ->all();
                     unset($existing);
+
+                    $maybeUpdateProgress();
                 }
 
                 if (! empty($invalidRows)) {
@@ -1070,19 +1097,7 @@ class ContactImportService
 
                 }
 
-                if ($processed - $lastProgressUpdateRows >= $this->backgroundProgressUpdateInterval()) {
-                    $batch->update([
-                        'processed_rows' => $processed,
-                        'valid_rows' => $valid,
-                        'invalid_rows' => $invalid,
-                        'created_count' => $created,
-                        'updated_count' => $updated,
-                        'failed_count' => $invalid,
-                        'report' => $this->buildBackgroundReport($batch, $created, $updated, $valid, $invalid, $duplicates, $failedRowsPreview, false),
-                    ]);
-
-                    $lastProgressUpdateRows = $processed;
-                }
+                $maybeUpdateProgress();
             }
 
             ContactGroupCountService::rebuildForContacts(array_keys($touchedContactIds));
@@ -1533,6 +1548,27 @@ class ContactImportService
     private function backgroundProgressUpdateInterval(): int
     {
         return $this->boundedImportConfigInt('progress_update_interval', self::DEFAULT_BACKGROUND_PROGRESS_UPDATE_INTERVAL, 1000, 100000);
+    }
+
+    private function updateBackgroundImportProgress(
+        ContactImportBatch $batch,
+        int $processed,
+        int $valid,
+        int $invalid,
+        int $created,
+        int $updated,
+        int $duplicates,
+        array $failedRowsPreview = []
+    ): void {
+        $batch->update([
+            'processed_rows' => $processed,
+            'valid_rows' => $valid,
+            'invalid_rows' => $invalid,
+            'created_count' => $created,
+            'updated_count' => $updated,
+            'failed_count' => $invalid,
+            'report' => $this->buildBackgroundReport($batch, $created, $updated, $valid, $invalid, $duplicates, $failedRowsPreview, false),
+        ]);
     }
 
     private function boundedImportConfigInt(string $key, int $default, int $min, int $max): int
