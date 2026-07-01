@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\ContactGroup;
 use App\Models\ContactImportBatch;
 use App\Models\ContactImportRow;
+use App\Support\ContactPageCache;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Arr;
@@ -817,6 +818,8 @@ class ContactImportService
             'report' => $report,
         ]);
 
+        ContactPageCache::forgetContactsCount($organizationId);
+
         return $report;
     }
 
@@ -848,6 +851,7 @@ class ContactImportService
         $countedPhones = [];
         $touchedContactIds = [];
         $lastProgressUpdateRows = 0;
+        $progressPhase = 'reading_file';
 
         $batch->update([
             'status' => 'processing',
@@ -858,8 +862,12 @@ class ContactImportService
         $this->clearPreviousBackgroundRows($batch);
 
         try {
-            $maybeUpdateProgress = function () use ($batch, &$processed, &$valid, &$invalid, &$created, &$updated, &$duplicates, &$failedRowsPreview, &$lastProgressUpdateRows): void {
-                if ($processed - $lastProgressUpdateRows < $this->backgroundProgressUpdateInterval()) {
+            $maybeUpdateProgress = function (string $phase = null, bool $force = false) use ($batch, &$processed, &$valid, &$invalid, &$created, &$updated, &$duplicates, &$failedRowsPreview, &$lastProgressUpdateRows, &$progressPhase): void {
+                if ($phase !== null) {
+                    $progressPhase = $phase;
+                }
+
+                if (! $force && $processed - $lastProgressUpdateRows < $this->backgroundProgressUpdateInterval()) {
                     return;
                 }
 
@@ -871,11 +879,14 @@ class ContactImportService
                     $created,
                     $updated,
                     $duplicates,
-                    $failedRowsPreview
+                    $failedRowsPreview,
+                    $progressPhase
                 );
 
                 $lastProgressUpdateRows = $processed;
             };
+
+            $maybeUpdateProgress('reading_file', true);
 
             foreach ($this->iterateStoredFileRows(Storage::path($sourceFilePath), $headers) as $rows) {
                 if (empty($rows)) {
@@ -982,12 +993,16 @@ class ContactImportService
                 }
 
                 if (! empty($invalidRows)) {
+                    $maybeUpdateProgress('saving_invalid_rows', true);
+
                     foreach (array_chunk($invalidRows, self::INSERT_CHUNK_SIZE) as $chunk) {
                         DB::table('contact_import_rows')->insert($chunk);
                     }
                 }
 
                 if (! empty($entriesByPhone)) {
+                    $maybeUpdateProgress('saving_contacts', true);
+
                     $phones = array_keys($entriesByPhone);
                     $existingContacts = DB::table('contacts')
                         ->where('organization_id', $organizationId)
@@ -1052,6 +1067,8 @@ class ContactImportService
                         );
                     }
 
+                    $maybeUpdateProgress('linking_audiences', true);
+
                     $contactIdsByPhone = DB::table('contacts')
                         ->where('organization_id', $organizationId)
                         ->whereIn('phone', $phones)
@@ -1097,12 +1114,14 @@ class ContactImportService
 
                 }
 
-                $maybeUpdateProgress();
+                $maybeUpdateProgress('reading_file', true);
             }
+
+            $maybeUpdateProgress('refreshing_audience_counts', true);
 
             ContactGroupCountService::rebuildForContacts(array_keys($touchedContactIds));
 
-            $report = $this->buildBackgroundReport($batch, $created, $updated, $valid, $invalid, $duplicates, $failedRowsPreview, true);
+            $report = $this->buildBackgroundReport($batch, $created, $updated, $valid, $invalid, $duplicates, $failedRowsPreview, true, 'completed');
 
             $batch->update([
                 'status' => 'committed',
@@ -1115,6 +1134,8 @@ class ContactImportService
                 'finished_at' => now(),
                 'report' => $report,
             ]);
+
+            ContactPageCache::forgetContactsCount($organizationId);
 
             return $report;
         } catch (\Throwable $exception) {
@@ -1558,7 +1579,8 @@ class ContactImportService
         int $created,
         int $updated,
         int $duplicates,
-        array $failedRowsPreview = []
+        array $failedRowsPreview = [],
+        string $phase = 'processing'
     ): void {
         $batch->update([
             'processed_rows' => $processed,
@@ -1567,7 +1589,7 @@ class ContactImportService
             'created_count' => $created,
             'updated_count' => $updated,
             'failed_count' => $invalid,
-            'report' => $this->buildBackgroundReport($batch, $created, $updated, $valid, $invalid, $duplicates, $failedRowsPreview, false),
+            'report' => $this->buildBackgroundReport($batch, $created, $updated, $valid, $invalid, $duplicates, $failedRowsPreview, false, $phase),
         ]);
     }
 
@@ -1586,10 +1608,12 @@ class ContactImportService
         int $invalid,
         int $duplicates,
         array $failedRowsPreview,
-        bool $finished
+        bool $finished,
+        string $phase = 'processing'
     ): array {
         return [
             'background' => true,
+            'phase' => $phase,
             'total_rows' => (int) $batch->total_rows,
             'created_count' => $created,
             'updated_count' => $updated,

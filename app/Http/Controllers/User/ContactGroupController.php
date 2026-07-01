@@ -4,16 +4,16 @@ namespace App\Http\Controllers\User;
 
 use App\Exports\ContactGroupsExport;
 use App\Helpers\WebhookHelper;
-use App\Imports\ContactGroupsImport;
 use App\Http\Controllers\Controller as BaseController;
-use App\Models\Contact;
-use App\Models\ContactGroup;
 use App\Http\Requests\StoreContactGroup;
 use App\Http\Resources\ContactGroupResource;
-use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
-use Inertia\Inertia;
+use App\Imports\ContactGroupsImport;
+use App\Models\Contact;
+use App\Models\ContactGroup;
+use App\Support\ContactPageCache;
 use Excel;
+use Illuminate\Http\Request;
+use Inertia\Inertia;
 use Validator;
 
 class ContactGroupController extends BaseController
@@ -25,8 +25,9 @@ class ContactGroupController extends BaseController
 
     public function index(Request $request, $uuid = null)
     {
-        if($uuid === 'export') {
+        if ($uuid === 'export') {
             $format = $request->query('format', 'xlsx');
+
             return $this->exportContactGroups($format);
         } else {
             $organizationId = $this->getCurrentOrganizationId();
@@ -44,7 +45,7 @@ class ContactGroupController extends BaseController
                 'rows' => ContactGroupResource::collection($rows),
                 'rowCount' => $rowCount,
                 'group' => $group,
-                'filters' => request()->all()
+                'filters' => request()->all(),
             ]);
         }
     }
@@ -67,68 +68,69 @@ class ContactGroupController extends BaseController
 
         // Define headers - only Name
         $headers = [
-            'Name'
+            'Name',
         ];
 
         // Create a temporary file
         $tempFile = tempnam(sys_get_temp_dir(), 'contact_groups_export_');
-        
+
         // Open file for writing
         $handle = fopen($tempFile, 'w');
-        
+
         // Write headers
         fputcsv($handle, $headers);
-        
+
         // Write data
         foreach ($contactGroups as $group) {
             $row = [
-                $group->name
+                $group->name,
             ];
 
             fputcsv($handle, $row);
         }
-        
+
         fclose($handle);
 
         // Return the file as download
         return response()->download($tempFile, 'contact-groups.csv')->deleteFileAfterSend(true);
     }
 
-    public function import(Request $request) 
+    public function import(Request $request)
     {
         $import = new ContactGroupsImport();
         Excel::import($import, $request->file);
+        ContactPageCache::forgetContactGroups($this->getCurrentOrganizationId());
 
-       // Get the count of successful imports
-       $successfulImports = $import->getsuccessfulImports();
-       $totalImports = $import->getTotalImportsCount();
-       $failedImports = $totalImports - $successfulImports;
+        // Get the count of successful imports
+        $successfulImports = $import->getsuccessfulImports();
+        $totalImports = $import->getTotalImportsCount();
+        $failedImports = $totalImports - $successfulImports;
 
-       // Prepare status message based on the import outcome
-       if ($successfulImports === 0) {
-           $statusType = 'error';
-           $statusMessage = __('All rows failed to import. Please check the data format or duplicates.');
-       } elseif ($failedImports === 0) {
-           $statusType = 'success';
-           $statusMessage = __('All rows have been imported successfully!');
-       } elseif ($successfulImports > 0 && $failedImports > 0) {
-           $statusType = 'warning';
-           $statusMessage = __('Some rows have been imported successfully, while others failed. Please check the error logs for details.');
-       }
+        // Prepare status message based on the import outcome
+        if ($successfulImports === 0) {
+            $statusType = 'error';
+            $statusMessage = __('All rows failed to import. Please check the data format or duplicates.');
+        } elseif ($failedImports === 0) {
+            $statusType = 'success';
+            $statusMessage = __('All rows have been imported successfully!');
+        } elseif ($successfulImports > 0 && $failedImports > 0) {
+            $statusType = 'warning';
+            $statusMessage = __('Some rows have been imported successfully, while others failed. Please check the error logs for details.');
+        }
 
         return redirect('/contact-groups')->with(
             'status', [
-                'type' => $statusType, 
+                'type' => $statusType,
                 'message' => $statusMessage,
-                'import_summary' => array(
+                'import_summary' => [
                     'total_imports' => $totalImports,
                     'successful_imports' => $successfulImports,
                     'failed_imports' => $failedImports,
-                    'duplicate_entries'  => $import->getFailedImportsDueToDuplicatesCount(),
+                    'duplicate_entries' => $import->getFailedImportsDueToDuplicatesCount(),
                     'invalid_format_entries' => $import->getFailedImportsDueToFormat(),
                     'failed_rows_details' => $import->getFailedImports(),
-                    'failed_limit_entries'  => 0,
-                ),
+                    'failed_limit_entries' => 0,
+                ],
             ]
         );
     }
@@ -142,6 +144,7 @@ class ContactGroupController extends BaseController
         $contactGroup->created_at = now();
         $contactGroup->updated_at = now();
         $contactGroup->save();
+        ContactPageCache::forgetContactGroups($this->getCurrentOrganizationId());
 
         // Prepare a clean contact object for webhook
         $cleanContactGroup = $contactGroup->makeHidden(['id', 'organization_id', 'created_by']);
@@ -149,7 +152,7 @@ class ContactGroupController extends BaseController
         // Trigger webhook
         WebhookHelper::triggerWebhookEvent('group.created', $cleanContactGroup);
 
-        return response()->json(['success' => true, 'message'=> __('Contact group added successfully'), 'data' => $contactGroup]);
+        return response()->json(['success' => true, 'message' => __('Contact group added successfully'), 'data' => $contactGroup]);
     }
 
     public function update(StoreContactGroup $request, $uuid)
@@ -159,13 +162,14 @@ class ContactGroupController extends BaseController
         ]);
 
         if ($validator->fails()) {
-            return response()->json(['success' => false, 'errors'=>$validator->messages()->get('*')]);
+            return response()->json(['success' => false, 'errors' => $validator->messages()->get('*')]);
         }
 
         $contactGroup = ContactGroup::where('uuid', $uuid)->firstOrFail();
         $contactGroup->name = $request->name;
         $contactGroup->updated_at = now();
         $contactGroup->save();
+        ContactPageCache::forgetContactGroups((int) $contactGroup->organization_id);
 
         // Prepare a clean contact object for webhook
         $cleanContactGroup = $contactGroup->makeHidden(['id', 'organization_id', 'created_by']);
@@ -173,7 +177,7 @@ class ContactGroupController extends BaseController
         // Trigger webhook
         WebhookHelper::triggerWebhookEvent('group.created', $cleanContactGroup);
 
-        return response()->json(['success' => true, 'message'=> __('Contact group updated successfully'), 'data' => $contactGroup]);
+        return response()->json(['success' => true, 'message' => __('Contact group updated successfully'), 'data' => $contactGroup]);
     }
 
     public function delete(Request $request)
@@ -210,9 +214,11 @@ class ContactGroupController extends BaseController
             ContactGroup::whereIn('uuid', $uuids)->where('organization_id', $organizationId)->delete();
         }
 
+        ContactPageCache::forgetContactGroups((int) $organizationId);
+
         // Trigger webhook with deleted contacts
         WebhookHelper::triggerWebhookEvent('group.deleted', [
-            'list' => $deletedGroups
+            'list' => $deletedGroups,
         ]);
 
         if ($request->expectsJson()) {
@@ -226,7 +232,7 @@ class ContactGroupController extends BaseController
         return redirect('/contact-groups')->with(
             'status', [
                 'type' => 'success',
-                'message' => __('Group(s) deleted successfully')
+                'message' => __('Group(s) deleted successfully'),
             ]
         );
     }
@@ -249,6 +255,7 @@ class ContactGroupController extends BaseController
 
         $group->contacts()->detach();
         $group->delete();
+        ContactPageCache::forgetContactGroups($organizationId);
 
         WebhookHelper::triggerWebhookEvent('group.deleted', [
             'list' => [
