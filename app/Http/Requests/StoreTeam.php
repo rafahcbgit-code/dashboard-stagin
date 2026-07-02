@@ -2,9 +2,9 @@
 
 namespace App\Http\Requests;
 
+use App\Models\Team;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
-use Illuminate\Support\Facades\DB;
 use App\Rules\TeamLimit;
 
 class StoreTeam extends FormRequest
@@ -14,7 +14,17 @@ class StoreTeam extends FormRequest
      */
     public function authorize(): bool
     {
-        return true;
+        $organizationId = session()->get('current_organization');
+
+        if (!$organizationId || !$this->user()) {
+            return false;
+        }
+
+        return Team::where('organization_id', $organizationId)
+            ->where('user_id', $this->user()->id)
+            ->whereIn('role', ['owner', 'manager'])
+            ->whereNull('deleted_at')
+            ->exists();
     }
 
     /**
