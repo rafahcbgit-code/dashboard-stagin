@@ -667,6 +667,14 @@ class ContactController extends BaseController
     public function export(Request $request): StreamedResponse
     {
         $organizationId = $this->getCurrentOrganizationId();
+        $team = Team::where('organization_id', $organizationId)
+            ->where('user_id', auth()->user()->id)
+            ->first();
+
+        if (($team->role ?? 'owner') === 'agent') {
+            abort(403);
+        }
+
         $ids = collect($request->query('ids', []))->map(fn ($id) => (int) $id)->filter()->values();
         $scope = (string) $request->query('scope', 'filtered');
         $selectAllFiltered = (bool) $request->boolean('select_all_filtered');

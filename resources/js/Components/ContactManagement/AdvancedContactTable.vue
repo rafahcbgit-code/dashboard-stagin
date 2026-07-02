@@ -46,6 +46,7 @@ const { t, locale } = useI18n();
 const isRtl = computed(() => Boolean(page.props.isRtl) || locale.value === 'ar');
 const uiDirection = computed(() => (isRtl.value ? 'rtl' : 'ltr'));
 const uiTextAlignmentClass = computed(() => (isRtl.value ? 'text-right' : 'text-left'));
+const canExportContacts = computed(() => props.role !== 'agent');
 const contactConstants = computed(() => page.props.contactConstants || { countries: [], staticCustomAttributes: [], countryDialCodes: [] });
 const NO_GROUP_OPTION = '__no_group__';
 const NO_LABEL_OPTION = '__no_label__';
@@ -1248,7 +1249,7 @@ const onImportCompleted = () => {
                             <span>{{ $t('Import') }}</span>
                             <span class="text-[10px] font-extrabold uppercase tracking-normal text-slate-400">XLSX/CSV</span>
                         </button>
-                        <button type="button" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md" :data-help-text="helpText.exportAll" data-help-icon @click="runExportAll">
+                        <button v-if="canExportContacts" type="button" class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2.5 text-sm font-bold text-slate-700 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-slate-300 hover:shadow-md" :data-help-text="helpText.exportAll" data-help-icon @click="runExportAll">
                             <Upload class="h-4 w-4" />
                             {{ $t('Export All') }}
                         </button>
@@ -1732,7 +1733,7 @@ const onImportCompleted = () => {
                         <Trash2 class="h-4 w-4" />
                         {{ $t('Delete') }}
                     </button>
-                    <button type="button" class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-bold text-slate-200 transition-all duration-300 hover:bg-white/10" :data-help-text="$t('Export only the selected customers to an external file.')" data-help-icon @click="runExport">
+                    <button v-if="canExportContacts" type="button" class="inline-flex items-center gap-2 rounded-full px-3 py-2 text-sm font-bold text-slate-200 transition-all duration-300 hover:bg-white/10" :data-help-text="$t('Export only the selected customers to an external file.')" data-help-icon @click="runExport">
                         <Upload class="h-4 w-4" />
                         {{ $t('Export Selected') }}
                     </button>
