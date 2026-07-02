@@ -479,7 +479,18 @@ const parseFromJson = (jsonStr) => {
     }
 };
 
-const compToJson = (comp) => {
+const buildCompletePayload = (components) => {
+    const inputTypes = new Set(['TextInput', 'TextArea', 'Dropdown', 'CheckboxGroup', 'RadioButtonsGroup']);
+    return components.reduce((payload, item) => {
+        if (inputTypes.has(item.type) && item.name) {
+            payload[item.name] = `\${form.${item.name}}`;
+        }
+
+        return payload;
+    }, {});
+};
+
+const compToJson = (comp, components = []) => {
     switch (comp.type) {
         case 'TextHeading':
         case 'TextSubheading':
@@ -496,7 +507,7 @@ const compToJson = (comp) => {
         case 'Footer': {
             const action = comp.action === 'navigate'
                 ? { name: 'navigate', next: { type: 'screen', name: comp.nextScreen }, payload: {} }
-                : { name: 'complete', payload: {} };
+                : { name: 'complete', payload: buildCompletePayload(components) };
             return { type: 'Footer', label: comp.label, 'on-click-action': action };
         }
         default:
@@ -510,7 +521,7 @@ const FORM_TYPES = new Set(['TextInput', 'TextArea', 'Dropdown', 'CheckboxGroup'
 const toFlowJson = (screensArr) => JSON.stringify({
     version: '6.3',
     screens: screensArr.map(screen => {
-        const jsonComps = screen.components.map(compToJson).filter(Boolean);
+        const jsonComps = screen.components.map(comp => compToJson(comp, screen.components)).filter(Boolean);
 
         // Split at the first form-capable component:
         //   • text before it → direct layout children

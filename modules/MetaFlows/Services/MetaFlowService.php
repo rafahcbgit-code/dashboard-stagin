@@ -120,6 +120,8 @@ class MetaFlowService
             return ['success' => false, 'message' => 'This flow has no Meta flow ID. Create it on Meta first.'];
         }
 
+        $jsonContent = $this->ensureCompleteActionPayload($jsonContent);
+
         $url = "{$this->baseUrl}/{$this->apiVersion}/{$flow->meta_flow_id}/assets";
 
         Log::info('MetaFlows: uploading flow asset — request', [
@@ -155,6 +157,70 @@ class MetaFlowService
         Log::info('MetaFlows: flow asset updated', ['meta_flow_id' => $flow->meta_flow_id]);
 
         return ['success' => true];
+    }
+
+    private function ensureCompleteActionPayload(string $jsonContent): string
+    {
+        $flowJson = json_decode($jsonContent, true);
+
+        if (!is_array($flowJson)) {
+            return $jsonContent;
+        }
+
+        $inputTypes = ['TextInput', 'TextArea', 'Dropdown', 'CheckboxGroup', 'RadioButtonsGroup', 'DatePicker'];
+        $changed = false;
+
+        foreach ($flowJson['screens'] ?? [] as &$screen) {
+            foreach ($screen['layout']['children'] ?? [] as &$child) {
+                if (($child['type'] ?? null) !== 'Form' || !is_array($child['children'] ?? null)) {
+                    continue;
+                }
+
+                $formFields = [];
+
+                foreach ($child['children'] as $item) {
+                    if (in_array($item['type'] ?? '', $inputTypes, true) && !empty($item['name'])) {
+                        $formFields[] = $item['name'];
+                    }
+                }
+
+                if (empty($formFields)) {
+                    continue;
+                }
+
+                foreach ($child['children'] as &$item) {
+                    if (
+                        ($item['type'] ?? null) !== 'Footer'
+                        || (($item['on-click-action']['name'] ?? null) !== 'complete')
+                    ) {
+                        continue;
+                    }
+
+                    $payload = $item['on-click-action']['payload'] ?? [];
+                    $payload = is_array($payload) ? $payload : [];
+
+                    foreach ($formFields as $fieldName) {
+                        if (!array_key_exists($fieldName, $payload)) {
+                            $payload[$fieldName] = '${form.' . $fieldName . '}';
+                            $changed = true;
+                        }
+                    }
+
+                    $item['on-click-action']['payload'] = $payload;
+                }
+                unset($item);
+            }
+            unset($child);
+        }
+        unset($screen);
+
+        if (!$changed) {
+            return $jsonContent;
+        }
+
+        Log::info('MetaFlows: complete action payload auto-filled from form fields');
+
+        return json_encode($flowJson, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 
     // Fetch fresh data from Meta and update the local record (status, preview_url, asset)
