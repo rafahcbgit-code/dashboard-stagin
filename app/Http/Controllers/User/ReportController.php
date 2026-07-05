@@ -5,7 +5,6 @@ namespace App\Http\Controllers\User;
 use App\Http\Controllers\Controller as BaseController;
 use App\Services\ReportService;
 use Inertia\Inertia;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Http\Request;
 use Carbon\Carbon;
@@ -38,11 +37,12 @@ class ReportController extends BaseController
 
         // Total contacts should be reported as all-time (no date filter)
         $total = $service->totalContacts(null, null);
-        $new = $service->newContactsCount($start, $end);
-        $subs = $service->subscribedUnsubscribedCounts($start, $end);
+        $contactsOverview = $service->contactsOverview($start, $end);
+        $subs = $contactsOverview['subscription_counts'];
         // labels should represent distribution across all contacts (all time)
         $labels = $service->labelsStats(null, null);
-        $areaSeries = $service->dailyNewContactsSeries($start, $end);
+        $areaSeries = $contactsOverview['area_series'];
+        $new = $contactsOverview['new_contacts'];
         $conversations = $service->conversationsCounts($start, $end);
         $conversations_series = $service->dailyConversationsSeries($start, $end);
         $chats_series = $service->dailyChatsSeries($start, $end);
@@ -53,70 +53,6 @@ class ReportController extends BaseController
             $conversations['unassigned_all_time'] = 0;
         }
         $messages = $service->messagesCount($start, $end);
-
-        // Debug messages count
-        Log::info('[Reports] messages_count', [
-            'sent' => $messages['sent'] ?? 'missing',
-            'received' => $messages['received'] ?? 'missing',
-            'start' => $start->toDateTimeString(),
-            'end' => $end->toDateTimeString(),
-            'org_id' => $organizationId
-        ]);
-
-        // Debug closed tickets
-        $closedTicketsSample = DB::table('chat_tickets')
-            ->join('contacts', 'chat_tickets.contact_id', '=', 'contacts.id')
-            ->where('contacts.organization_id', $organizationId)
-            ->whereNull('contacts.deleted_at')
-            ->where('chat_tickets.status', 'closed')
-            ->whereBetween('chat_tickets.created_at', [$start->toDateTimeString(), $end->toDateTimeString()])
-            ->select('chat_tickets.id', 'chat_tickets.status', 'chat_tickets.created_at')
-            ->limit(10)
-            ->get();
-        Log::info('[Reports] closed_tickets_debug', [
-            'count_in_range' => $closedTicketsSample->count(),
-            'expected_count' => $conversations['closed'] ?? 0,
-            'samples' => $closedTicketsSample->toArray()
-        ]);
-
-        try {
-            Log::info('[Reports] conversations_debug', $conversations);
-            $samples = DB::table('chat_tickets')
-                ->join('contacts', 'chat_tickets.contact_id', '=', 'contacts.id')
-                ->where('contacts.organization_id', $organizationId)
-                ->whereNull('contacts.deleted_at')
-                ->where(function ($q) {
-                    $q->whereNull('chat_tickets.assigned_to')->orWhere('chat_tickets.assigned_to', 0);
-                })
-                ->limit(10)
-                ->get();
-            Log::info('[Reports] unassigned_samples', ['rows' => $samples->toArray()]);
-        } catch (\Exception $e) {
-            Log::warning('[Reports] debug_failed', ['error' => $e->getMessage()]);
-        }
-        /*dd([
-    'title' => __('General Reports'),
-    'total_contacts' => $total,
-    'new_contacts' => $new,
-    'subscribed' => $subs['subscribed'],
-    'unsubscribed' => $subs['unsubscribed'],
-    'initial_start_date' => $start->toDateString(),
-    'initial_end_date' => $end->toDateString(),
-    'labels' => $labels,
-             'conversations' => $conversations,
-            'conversations_series' => $conversations_series,
-       
-]);*/
-
-
-
-        // Debug logging: series sizes (remove in production)
-        try {
-            Log::info('[Reports] area_series_count', ['count' => is_array($areaSeries) ? count($areaSeries) : 0]);
-            Log::info('[Reports] conversations_series', ['categories' => count($conversations_series['categories'] ?? []), 'data_count' => count($conversations_series['data'] ?? [])]);
-        } catch (\Exception $e) {
-            // ignore logging errors
-        }
 
         return Inertia::render('User/Reports/General', [
             'title' => __('General Reports'),
@@ -143,7 +79,19 @@ class ReportController extends BaseController
         $labelId = $request->query('label_id') ?? $request->input('label_id');
         $period = $request->query('period') ?? $request->input('period');
 
-        if (!$labelId) {
+        if (!$labelId || !is_numeric($labelId)) {
+            return response()->json(['count' => 0]);
+        }
+
+        $labelId = (int) $labelId;
+
+        $labelExists = DB::table('labels')
+            ->where('id', $labelId)
+            ->where('organization_id', $organizationId)
+            ->whereNull('deleted_at')
+            ->exists();
+
+        if (!$labelExists) {
             return response()->json(['count' => 0]);
         }
 
@@ -164,37 +112,17 @@ class ReportController extends BaseController
             $end = Carbon::now()->endOfDay();
         }
 
-        $q = \Illuminate\Support\Facades\DB::table('contact_label')
-            ->join('contacts', 'contact_label.contact_id', '=', 'contacts.id')
-            ->where('contact_label.label_id', $labelId)
-            ->where('contacts.organization_id', $organizationId)
-            ->whereNull('contacts.deleted_at')
-            // filter by when the label was attached (pivot created_at)
-            ->whereBetween('contact_label.created_at', [$start->toDateTimeString(), $end->toDateTimeString()]);
+        $q = DB::table('contact_label')
+            ->where('label_id', $labelId)
+            ->whereBetween('created_at', [$start->toDateTimeString(), $end->toDateTimeString()])
+            ->whereExists(function ($exists) {
+                $exists->selectRaw('1')
+                    ->from('contacts')
+                    ->whereColumn('contacts.id', 'contact_label.contact_id')
+                    ->whereNull('contacts.deleted_at');
+            });
 
-        // log SQL and bindings for debugging
-        try {
-            \Illuminate\Support\Facades\Log::info('[Reports] countContactsByLabel - query', [
-                'sql' => $q->toSql(),
-                'bindings' => $q->getBindings(),
-                'label_id' => $labelId,
-                'org_id' => $organizationId,
-                'start' => $start->toDateTimeString(),
-                'end' => $end->toDateTimeString(),
-                'period' => $period,
-            ]);
-        } catch (\Exception $e) {
-            // ignore logging failures
-        }
-
-        $count = (int) $q->distinct()->count('contact_label.contact_id');
-
-        \Illuminate\Support\Facades\Log::info('[Reports] countContactsByLabel - result', [
-            'label_id' => $labelId,
-            'org_id' => $organizationId,
-            'period' => $period,
-            'count' => $count,
-        ]);
+        $count = (int) $q->count();
 
         return response()->json(['count' => $count]);
     }
