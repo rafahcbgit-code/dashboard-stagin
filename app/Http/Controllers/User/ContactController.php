@@ -2,25 +2,28 @@
 
 namespace App\Http\Controllers\User;
 
+use App\Exports\ContactsExport;
 use App\Http\Controllers\Controller as BaseController;
+use App\Http\Requests\StoreContact;
+use App\Http\Resources\ContactResource;
+use App\Imports\ContactsImport;
 use App\Models\Contact;
 use App\Models\ContactField;
 use App\Models\ContactGroup;
 use App\Models\Label;
-use App\Models\Team;
 use App\Models\Organization;
-use App\Exports\ContactsExport;
-use App\Http\Requests\StoreContact;
-use App\Http\Resources\ContactResource;
-use App\Imports\ContactsImport;
+use App\Models\Team;
+use App\Services\ContactGroupCountService;
 use App\Services\ContactService;
+use App\Support\ContactPageCache;
 use App\Support\Filters\ContactFilter;
+use Excel;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
-use Excel;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ContactController extends BaseController
@@ -35,12 +38,99 @@ class ContactController extends BaseController
         return session()->get('current_organization');
     }
 
+    private function cachedContactCount(int $organizationId): int
+    {
+        return (int) Cache::remember(
+            ContactPageCache::contactsCountKey($organizationId),
+            now()->addMinute(),
+            fn (): int => Contact::query()
+                ->where('organization_id', $organizationId)
+                ->whereNull('deleted_at')
+                ->count()
+        );
+    }
+
+    private function cachedContactGroups(int $organizationId)
+    {
+        return Cache::remember(
+            ContactPageCache::contactGroupsKey($organizationId),
+            now()->addMinutes(5),
+            fn () => ContactGroup::query()
+                ->where('organization_id', $organizationId)
+                ->whereNull('deleted_at')
+                ->orderBy('name')
+                ->get(['id', 'uuid', 'name', 'contacts_count'])
+        );
+    }
+
+    private function cachedLabels(int $organizationId)
+    {
+        return Cache::remember(
+            ContactPageCache::labelsKey($organizationId),
+            now()->addMinutes(5),
+            fn () => Label::query()
+                ->where('organization_id', $organizationId)
+                ->whereNull('deleted_at')
+                ->orderBy('title')
+                ->get(['id', 'title', 'color'])
+        );
+    }
+
+    private function contactListRelations(): array
+    {
+        return [
+            'contactGroups:id,name',
+            'labels:id,title,color',
+            'lastInboundChat' => function ($query): void {
+                $query->select('chats.id', 'chats.contact_id', 'chats.created_at');
+            },
+        ];
+    }
+
+    private function hasActiveContactFilters(Request $request): bool
+    {
+        $filterKeys = [
+            'search',
+            'group_id',
+            'group_ids',
+            'label_id',
+            'labels',
+            'country',
+            'country_dial_code',
+            'contact_source',
+            'subscription_status',
+            'blocked_status',
+            'no_group',
+            'no_label',
+            'created_from',
+            'created_to',
+            'custom_attributes',
+            'custom_attribute_key',
+            'custom_attribute_value',
+        ];
+
+        foreach ($filterKeys as $key) {
+            $value = $request->query($key);
+
+            if (is_array($value) && ! empty(array_filter($value, fn ($item): bool => trim((string) $item) !== ''))) {
+                return true;
+            }
+
+            if (! is_array($value) && trim((string) $value) !== '') {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     public function index(Request $request, $uuid = null)
     {
         $organizationId = $this->getCurrentOrganizationId();
 
         if ($uuid === 'export') {
             $format = $request->query('format', 'xlsx');
+
             return $this->exportContacts($format);
         }
 
@@ -51,18 +141,13 @@ class ContactController extends BaseController
         $selectedUuid = $request->query('id') ?: $uuid;
         $editContact = $request->query('edit') === 'true';
         $perPage = max(10, min((int) $request->query('per_page', 20), 100));
+        $hasActiveFilters = $this->hasActiveContactFilters($request);
+        $rowCount = $this->cachedContactCount($organizationId);
 
         $contactsQuery = Contact::query()
             ->where('contacts.organization_id', $organizationId)
             ->whereNull('contacts.deleted_at')
-            ->with(['contactGroups:id,name', 'labels:id,title,color'])
-            ->withCount([
-                'chats as unread_messages_count' => function (Builder $query): void {
-                    $query->where('type', 'inbound')
-                        ->whereNull('deleted_at')
-                        ->where('is_read', 0);
-                },
-            ])
+            ->with($this->contactListRelations())
             ->select('contacts.*');
 
         $contactsQuery = (new ContactFilter())->apply($contactsQuery, $request);
@@ -70,35 +155,50 @@ class ContactController extends BaseController
         $contacts = $contactsQuery
             ->orderByDesc('contacts.is_favorite')
             ->orderByDesc('contacts.created_at')
-            ->paginate($perPage)
+            ->paginate(
+                $perPage,
+                ['*'],
+                'page',
+                null,
+                $hasActiveFilters ? null : $rowCount
+            )
             ->withQueryString();
 
-        $rowCount = Contact::query()
-            ->where('organization_id', $organizationId)
-            ->whereNull('deleted_at')
-            ->count();
+        $contactIds = $contacts->getCollection()->pluck('id')->all();
+        $unreadCounts = empty($contactIds)
+            ? collect()
+            : DB::table('chats')
+                ->whereIn('contact_id', $contactIds)
+                ->where('type', 'inbound')
+                ->whereNull('deleted_at')
+                ->where('is_read', 0)
+                ->selectRaw('contact_id, COUNT(*) as unread_count')
+                ->groupBy('contact_id')
+                ->pluck('unread_count', 'contact_id');
 
-        $contactGroups = ContactGroup::query()
-            ->where('organization_id', $organizationId)
-            ->whereNull('deleted_at')
-            ->withCount(['contacts as contacts_count' => function (Builder $query) use ($organizationId): void {
-                $query->where('contacts.organization_id', $organizationId)
-                    ->whereNull('contacts.deleted_at');
-            }])
-            ->orderBy('name')
-            ->get(['id', 'uuid', 'name']);
+        $contacts->getCollection()->each(function (Contact $contact) use ($unreadCounts): void {
+            $contact->setAttribute('unread_messages_count', (int) ($unreadCounts[$contact->id] ?? 0));
+        });
 
-        $labels = Label::query()
-            ->where('organization_id', $organizationId)
-            ->whereNull('deleted_at')
-            ->orderBy('title')
-            ->get(['id', 'title', 'color']);
+        $contactGroups = $this->cachedContactGroups($organizationId);
 
-        $contact = Contact::with(['contactGroups:id,name', 'labels:id,title,color'])
-            ->where('uuid', $selectedUuid)
-            ->where('organization_id', $organizationId)
-            ->whereNull('deleted_at')
-            ->first();
+        $labels = $this->cachedLabels($organizationId);
+
+        $contact = null;
+        if ($selectedUuid) {
+            $contact = Contact::with($this->contactListRelations())
+                ->withCount([
+                    'chats as unread_messages_count' => function (Builder $query): void {
+                        $query->where('type', 'inbound')
+                            ->whereNull('deleted_at')
+                            ->where('is_read', 0);
+                    },
+                ])
+                ->where('uuid', $selectedUuid)
+                ->where('organization_id', $organizationId)
+                ->whereNull('deleted_at')
+                ->first();
+        }
 
         $contactFields = ContactField::where('organization_id', $organizationId)
             ->whereNull('deleted_at')
@@ -129,7 +229,7 @@ class ContactController extends BaseController
     {
         try {
             Log::error('Export', [
-                'message' => "start exporting"
+                'message' => 'start exporting',
             ]);
 
             if ($format === 'csv') {
@@ -143,6 +243,7 @@ class ContactController extends BaseController
                 'file' => $e->getFile(),
                 'line' => $e->getLine(),
             ]);
+
             return response()->json([
                 'status' => 'error',
                 'message' => 'Export failed',
@@ -172,7 +273,7 @@ class ContactController extends BaseController
                 'City',
                 'State',
                 'Zip',
-                'Country'
+                'Country',
             ];
 
             // Add dynamic field names to headers
@@ -196,7 +297,7 @@ class ContactController extends BaseController
                         'email',
                         'address',
                         'metadata',
-                        'is_subscribed'
+                        'is_subscribed',
                     ])
                     ->orderBy('id')
                     ->chunkById(1000, function ($contacts) use ($handle, $fieldNames) {
@@ -207,7 +308,7 @@ class ContactController extends BaseController
                                 $contact->first_name,
                                 $contact->last_name,
                                 $contact->formatted_phone_number,
-                                 ((int) $contact->is_subscribed === 1) ? 'Subscribed' : 'Not subscribed',
+                                ((int) $contact->is_subscribed === 1) ? 'Subscribed' : 'Not subscribed',
                                 $contact->email,
                                 $contact->contactGroups->pluck('name')->implode('|'),
                                 $address['street'] ?? null,
@@ -265,7 +366,7 @@ class ContactController extends BaseController
             'city',
             'state',
             'zip',
-            'country'
+            'country',
         ];
 
         // Add custom fields after the standard columns
@@ -283,13 +384,13 @@ class ContactController extends BaseController
                 'city' => 'New York',
                 'state' => 'NY',
                 'zip' => '10001',
-                'country' => 'United States'
-            ]
+                'country' => 'United States',
+            ],
         ];
 
         // Add custom field values to sample data
         foreach ($customFields as $field) {
-            $sampleData[0][strtolower(str_replace(' ', '_', $field))] = 'Sample ' . $field;
+            $sampleData[0][strtolower(str_replace(' ', '_', $field))] = 'Sample '.$field;
         }
 
         // Create a temporary file
@@ -315,6 +416,7 @@ class ContactController extends BaseController
         // Return the file as download
         return response()->download($tempFile, 'contacts_template.csv')->deleteFileAfterSend(true);
     }
+
     public function import(Request $request)
     {
 
@@ -335,6 +437,7 @@ class ContactController extends BaseController
             $successfulImports = $import->getsuccessfulImports();
             $totalImports = $import->getTotalImportsCount();
             $failedImports = $totalImports - $successfulImports;
+            ContactPageCache::forgetContactsCount($this->getCurrentOrganizationId());
 
             // Prepare status message based on the import outcome
             if ($successfulImports === 0) {
@@ -353,31 +456,32 @@ class ContactController extends BaseController
                 [
                     'type' => $statusType,
                     'message' => $statusMessage,
-                    'import_summary' => array(
+                    'import_summary' => [
                         'total_imports' => $totalImports,
                         'successful_imports' => $successfulImports,
                         'failed_imports' => $failedImports,
-                        'duplicate_entries'  => $import->getFailedImportsDueToDuplicatesCount(),
+                        'duplicate_entries' => $import->getFailedImportsDueToDuplicatesCount(),
                         'invalid_format_entries' => $import->getFailedImportsDueToFormat(),
                         'failed_rows_details' => $import->getFailedImports(),
-                        'failed_limit_entries'  => $import->getFailedImportsDueToLimit(),
-                    ),
+                        'failed_limit_entries' => $import->getFailedImportsDueToLimit(),
+                    ],
                 ]
             );
         } catch (\Exception $e) {
-            Log::error('Import Error: ' . $e->getMessage());
+            Log::error('Import Error: '.$e->getMessage());
         }
     }
 
     public function store(StoreContact $request)
     {
         $contact = $this->contactService()->store($request);
+        ContactPageCache::forgetContactsCount($this->getCurrentOrganizationId());
 
-        return redirect('/contacts?id=' . $contact->uuid)->with(
+        return redirect('/contacts?id='.$contact->uuid)->with(
             'status',
             [
                 'type' => 'success',
-                'message' => __('Contact added successfully!')
+                'message' => __('Contact added successfully!'),
             ]
         );
     }
@@ -385,12 +489,13 @@ class ContactController extends BaseController
     public function update(StoreContact $request, $uuid)
     {
         $contact = $this->contactService()->store($request, $uuid);
+        ContactPageCache::forgetContactsCount($this->getCurrentOrganizationId());
 
-        return redirect('/contacts/' . $contact->uuid)->with(
+        return redirect('/contacts/'.$contact->uuid)->with(
             'status',
             [
                 'type' => 'success',
-                'message' => __('Contact updated successfully!')
+                'message' => __('Contact updated successfully!'),
             ]
         );
     }
@@ -399,11 +504,11 @@ class ContactController extends BaseController
     {
         $this->contactService()->favorite($request, $uuid);
 
-        return redirect('/contacts/' . $uuid)->with(
+        return redirect('/contacts/'.$uuid)->with(
             'status',
             [
                 'type' => 'success',
-                'message' => __('Contact updated successfully!')
+                'message' => __('Contact updated successfully!'),
             ]
         );
     }
@@ -417,7 +522,7 @@ class ContactController extends BaseController
             'status',
             [
                 'type' => 'success',
-                'message' => __('Contact(s) deleted successfully')
+                'message' => __('Contact(s) deleted successfully'),
             ]
         );
     }
@@ -494,7 +599,7 @@ class ContactController extends BaseController
             $contactsQuery->whereIn('contacts.id', $validated['ids'] ?? []);
         }
 
-        if (!(clone $contactsQuery)->exists()) {
+        if (! (clone $contactsQuery)->exists()) {
             return back()->with('status', [
                 'type' => 'warning',
                 'message' => __('No contacts matched the selected rows.'),
@@ -547,6 +652,10 @@ class ContactController extends BaseController
                     }
                 }
             }, 'contacts.id', 'id');
+
+            if (in_array($action, ['add_group', 'remove_group'], true)) {
+                ContactGroupCountService::rebuildGroups($groupIds);
+            }
         }
 
         return back()->with('status', [
@@ -558,6 +667,14 @@ class ContactController extends BaseController
     public function export(Request $request): StreamedResponse
     {
         $organizationId = $this->getCurrentOrganizationId();
+        $team = Team::where('organization_id', $organizationId)
+            ->where('user_id', auth()->user()->id)
+            ->first();
+
+        if (($team->role ?? 'owner') === 'agent') {
+            abort(403);
+        }
+
         $ids = collect($request->query('ids', []))->map(fn ($id) => (int) $id)->filter()->values();
         $scope = (string) $request->query('scope', 'filtered');
         $selectAllFiltered = (bool) $request->boolean('select_all_filtered');
@@ -671,7 +788,6 @@ class ContactController extends BaseController
         }
     }
 
-
     public function updateLabels(Request $request, $uuid)
     {
 
@@ -713,7 +829,7 @@ class ContactController extends BaseController
 
         return response()->json([
             'availableLabels' => $availableLabels,
-            'contactLabels' => $contact->labels
+            'contactLabels' => $contact->labels,
         ]);
     }
 
@@ -723,7 +839,7 @@ class ContactController extends BaseController
 
         // Validate the request
         $validated = $request->validate([
-            'bot_enable' => 'required|boolean'
+            'bot_enable' => 'required|boolean',
         ]);
 
         // Find the contact
@@ -742,7 +858,7 @@ class ContactController extends BaseController
 
         return back()->with('status', [
             'type' => 'success',
-            'message' => __('Bot status updated successfully!')
+            'message' => __('Bot status updated successfully!'),
         ]);
     }
 
@@ -807,7 +923,7 @@ class ContactController extends BaseController
 
         $validated = $request->validate([
             'phone' => 'required|string',
-            'name'  => 'nullable|string',
+            'name' => 'nullable|string',
         ]);
 
         $phone = preg_replace('/\s+/', '', $validated['phone']); // remove all whitespace
@@ -825,8 +941,8 @@ class ContactController extends BaseController
         } else {
             $contact = Contact::create([
                 'organization_id' => $organizationId,
-                'phone'           => $phone,
-                'first_name'            => $validated['name'] ?? 'Unknown Contact',
+                'phone' => $phone,
+                'first_name' => $validated['name'] ?? 'Unknown Contact',
                 'contact_source' => 'platform',
                 'is_subscribed' => 1,
                 'last_name' => null,
@@ -834,13 +950,12 @@ class ContactController extends BaseController
                 'created_by' => 0,
                 'created_at' => now(),
                 'updated_at' => now(),
-                'bot_enable' => 1
+                'bot_enable' => 1,
             ]);
         }
 
-
         return response()->json([
-            'redirect' => '/contacts?id=' . $contact->uuid,
+            'redirect' => '/contacts?id='.$contact->uuid,
         ]);
     }
 }

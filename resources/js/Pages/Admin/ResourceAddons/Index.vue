@@ -182,8 +182,11 @@ const props = defineProps({
 const organizationOptions = computed(() =>
     props.organizations.map((organization) => ({
         value: organization.id,
-        label: organization.name,
+        label: organization.billing_organization_name
+            ? `${organization.name} (${organization.billing_organization_name})`
+            : organization.name,
         subscription_valid_until: organization.subscription_valid_until,
+        billing_organization_name: organization.billing_organization_name,
     })),
 );
 

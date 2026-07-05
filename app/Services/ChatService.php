@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Http\Resources\ContactResource;
 use App\Helpers\CustomHelper;
 use App\Models\Chat;
+use App\Models\ChatArchive;
 use App\Models\Addon;
 use App\Models\ChatLog;
 use App\Models\Contact;
@@ -13,6 +14,7 @@ use App\Models\ChatTicket;
 use App\Events\NewChatEvent;
 use App\Models\ContactField;
 use App\Models\Organization;
+use App\Models\OrganizationChatStat;
 use App\Models\Setting;
 use App\Models\Team;
 use App\Models\Template;
@@ -41,7 +43,6 @@ class ChatService
     public function __construct($organizationId)
     {
         $this->organizationId = $organizationId;
-        $this->initializeWhatsappService();
     }
 
     /**
@@ -63,8 +64,100 @@ class ChatService
         return 0;
     }
 
+    private function chatListRowCount(
+        Contact $contact,
+        $searchTerm,
+        bool $ticketingActive,
+        $ticketState,
+        string $sortDirection,
+        string $role,
+        bool $allowAgentsToViewAllChats,
+        array $labelFilters,
+        bool $assignedToMe,
+        ?int $assignedToFilter,
+        bool $unreadOnly
+    ): int {
+        $hasFilters = filled($searchTerm)
+            || $ticketState !== 'all'
+            || $assignedToMe
+            || $assignedToFilter !== null
+            || $unreadOnly
+            || !empty($labelFilters)
+            || ($role === 'agent' && !$allowAgentsToViewAllChats);
+
+        if (!$hasFilters) {
+            $stats = OrganizationChatStat::where('organization_id', $this->organizationId)->first();
+
+            if ($stats) {
+                return (int) $stats->conversations_count;
+            }
+
+            return (int) Cache::remember("chat_list_count:org:{$this->organizationId}", 600, function () use ($contact) {
+                return $contact->contactsWithChatsCount($this->organizationId, null, false, 'all');
+            });
+        }
+
+        $cacheKey = 'chat_list_count:'.sha1(json_encode([
+            $this->organizationId,
+            $searchTerm,
+            $ticketingActive,
+            $ticketState,
+            $sortDirection,
+            $role,
+            $allowAgentsToViewAllChats,
+            $labelFilters,
+            $assignedToMe,
+            $assignedToFilter,
+            $unreadOnly,
+            auth()->id(),
+        ]));
+
+        return (int) Cache::remember($cacheKey, 60, function () use (
+            $contact,
+            $searchTerm,
+            $ticketingActive,
+            $ticketState,
+            $sortDirection,
+            $role,
+            $allowAgentsToViewAllChats,
+            $labelFilters,
+            $assignedToMe,
+            $assignedToFilter,
+            $unreadOnly
+        ) {
+            return $contact->contactsWithChatsCount(
+                $this->organizationId,
+                $searchTerm,
+                $ticketingActive,
+                $ticketState,
+                $sortDirection,
+                $role,
+                $allowAgentsToViewAllChats,
+                $labelFilters,
+                $assignedToMe,
+                $assignedToFilter,
+                $unreadOnly
+            );
+        });
+    }
+
+    private function globalUnreadCount(): int
+    {
+        return (int) Cache::remember("org_{$this->organizationId}_global_unread", 60, function () {
+            return Chat::where('organization_id', $this->organizationId)
+                ->where('type', 'inbound')
+                ->whereNull('deleted_at')
+                ->where('is_read', 0)
+                ->count();
+        });
+    }
+
     private function initializeWhatsappService()
     {
+        if ($this->whatsappService) {
+            return;
+        }
+
         $config = Organization::where('id', $this->organizationId)->first()->metadata;
         $config = $config ? json_decode($config, true) : [];
 
@@ -75,6 +168,13 @@ class ChatService
         $wabaId = $config['whatsapp']['waba_id'] ?? null;
 
         $this->whatsappService = new WhatsappService($accessToken, $apiVersion, $appId, $phoneNumberId, $wabaId, $this->organizationId);
+    }
+
+    private function getWhatsappService(): WhatsappService
+    {
+        $this->initializeWhatsappService();
+
+        return $this->whatsappService;
     }
 
     private function shouldThrottle($cacheKey)
@@ -140,9 +240,8 @@ class ChatService
             }
         }
 
-        // Direct query - NO CACHE
-        $contacts = $contact->contactsWithChats(
-            $this->organizationId,
+        $rowCount = $this->chatListRowCount(
+            $contact,
             $searchTerm,
             $ticketingActive,
             $ticketState,
@@ -155,7 +254,8 @@ class ChatService
             $unreadOnly
         );
 
-        $rowCount = $contact->contactsWithChatsCount(
+        // Direct query without an expensive COUNT(*) in the paginator.
+        $contacts = $contact->contactsWithChats(
             $this->organizationId,
             $searchTerm,
             $ticketingActive,
@@ -166,7 +266,8 @@ class ChatService
             $labelFilters,
             $assignedToMe,
             $assignedToFilter,
-            $unreadOnly
+            $unreadOnly,
+            $rowCount
         );
 
         $pusherSettings = Setting::whereIn('key', [
@@ -211,11 +312,7 @@ class ChatService
                 $settings = json_decode($config->metadata);
 
                 // To ensure the unread message counter is updated
-                $unreadMessages = Chat::where('organization_id', $this->organizationId)
-                    ->where('type', 'inbound')
-                    ->where('deleted_at', NULL)
-                    ->where('is_read', 0)
-                    ->count();
+                $unreadMessages = $this->globalUnreadCount();
 
                 $contactFields = ContactField::where('organization_id', $this->organizationId)
                     ->whereNull('deleted_at')
@@ -298,10 +395,17 @@ class ChatService
      */
     private function findLeastLoadedAgent($organizationId)
     {
-        return Team::where('organization_id', $organizationId)
-            ->withCount('tickets')
-            ->whereNull('deleted_at')
-            ->orderBy('tickets_count')
+        return DB::table('teams')
+            ->select('teams.user_id')
+            ->leftJoin('chat_tickets', function ($join) use ($organizationId) {
+                $join->on('teams.user_id', '=', 'chat_tickets.assigned_to')
+                    ->where('chat_tickets.organization_id', '=', $organizationId)
+                    ->where('chat_tickets.status', '=', 'open');
+            })
+            ->where('teams.organization_id', $organizationId)
+            ->whereNull('teams.deleted_at')
+            ->groupBy('teams.user_id')
+            ->orderByRaw('COUNT(chat_tickets.id) ASC')
             ->first();
     }
 
@@ -377,9 +481,10 @@ class ChatService
         $ticket->status = 'open';
         $ticket->updated_at = now();
         $ticket->created_at = now();
-        $ticket->save();
 
         $this->assignAgentToTicket($ticket, $organizationId, $autoassignment);
+        $ticket->save();
+
         $this->sendTicketAssignmentNotification(
             $contactId,
             $ticket->assigned_to,
@@ -571,14 +676,14 @@ class ChatService
         $userId = $request->user_id ?? $this->getUserId();
 
         if ($request->type === 'text') {
-            return $this->whatsappService->sendMessage($request->uuid, $request->message, $userId);
+            return $this->getWhatsappService()->sendMessage($request->uuid, $request->message, $userId);
         } elseif (in_array($request->type, ['interactive buttons', 'interactive call to action url', 'interactive list'])) {
             $buttons = $request->buttons ?? [];
             $header = $request->header ?? [];
             $footer = $request->footer ?? null;
             $buttonLabel = $request->button_label ?? null;
 
-            return $this->whatsappService->sendMessage(
+            return $this->getWhatsappService()->sendMessage(
                 $request->uuid,
                 $request->message,
                 $userId,
@@ -607,7 +712,7 @@ class ChatService
                 $mediaUrl = $mediaFilePath;
             }
 
-            $this->whatsappService->sendMedia($request->uuid, $request->type, $fileName, $mediaFilePath, $mediaUrl, $location);
+            $this->getWhatsappService()->sendMedia($request->uuid, $request->type, $fileName, $mediaFilePath, $mediaUrl, $location);
         }
     }
 
@@ -796,7 +901,7 @@ class ChatService
         //Build Template to send
         $template = $this->buildTemplate($template->name, $template->language, json_decode(json_encode($metadata)), $contact);
 
-        return $this->whatsappService->sendTemplateMessage(
+        return $this->getWhatsappService()->sendTemplateMessage(
             $contact->uuid,
             $template,
             $userId,
@@ -897,7 +1002,7 @@ class ChatService
             ];
         }
 
-        return $this->whatsappService->sendTemplateMessage(
+        return $this->getWhatsappService()->sendTemplateMessage(
             $contact->uuid,
             $templatePayload,
             $this->getUserId(),
@@ -1370,7 +1475,11 @@ class ChatService
 
         foreach ($chats as $index => $row) {
             $chat = $row[0]['value'] ?? null;
-            if (! $chat instanceof Chat || empty($chat->wam_id)) {
+            if (! $chat instanceof Chat && ! $chat instanceof ChatArchive) {
+                continue;
+            }
+
+            if (empty($chat->wam_id)) {
                 continue;
             }
 
@@ -1414,7 +1523,7 @@ class ChatService
 
         foreach ($chats as $row) {
             $chat = $row[0]['value'] ?? null;
-            if (! $chat instanceof Chat) {
+            if (! $chat instanceof Chat && ! $chat instanceof ChatArchive) {
                 continue;
             }
 
@@ -1427,7 +1536,7 @@ class ChatService
         return $events;
     }
 
-    private function extractRevokeEventFromChat(Chat $chat): ?array
+    private function extractRevokeEventFromChat($chat): ?array
     {
         $metadata = $this->decodeChatMetadataForDisplay($chat->metadata);
 

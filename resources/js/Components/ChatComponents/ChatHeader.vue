@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watchEffect, computed, onMounted, onUnmounted } from 'vue';
+import { ref, watch, watchEffect, computed, onMounted, onUnmounted } from 'vue';
 import axios from 'axios';
 import { router, useForm, usePage } from '@inertiajs/vue3'
 import AlertModal from '@/Components/AlertModal.vue';
@@ -26,16 +26,25 @@ const availableLabels = ref([]);
 const selectedLabels = ref([]);
 const loadingLabels = ref(false);
 const isSavingLabels = ref(false);
-const user = ref({
-    'label': props.ticket?.user ? props.ticket?.user?.full_name : t('Unassigned'),
-    'value': props.ticket?.user ? props.ticket?.user?.id : 0,
+const ticketUserOption = (ticket) => ({
+    label: ticket?.user ? ticket.user.full_name : t('Unassigned'),
+    value: ticket?.user ? ticket.user.id : 0,
 });
+const user = ref(ticketUserOption(props.ticket));
 
 watchEffect(() => {
     displayContact.value = props.displayContactInfo;
-    ticketState.value = props.ticket?.status;
     form4.bot_enable = props.contact?.bot_enable;
 });
+
+watch(
+    () => props.ticket,
+    (ticket) => {
+        ticketState.value = ticket?.status;
+        user.value = ticketUserOption(ticket);
+    },
+    { immediate: true, deep: true }
+);
 
 const emit = defineEmits(['toggleView', 'deleteThread', 'closeThread', 'labelsUpdated']);
 
@@ -84,10 +93,44 @@ const changeTicketStatus = (value) => {
     }, {})
 }
 
-const changeTicketAgent = () => {
+const changeTicketAgent = (selectedUser = user.value) => {
+    const selectedUserId = selectedUser?.value;
+
+    console.info('[TicketAssignment] selection changed', {
+        contactUuid: props.contact?.uuid,
+        currentTicketId: props.ticket?.id,
+        currentAssignedTo: props.ticket?.assigned_to,
+        selectedUser,
+        selectedUserId,
+    });
+
+    if (!selectedUserId) {
+        console.warn('[TicketAssignment] assignment skipped because selected user is empty', {
+            contactUuid: props.contact?.uuid,
+            selectedUser,
+        });
+        return;
+    }
+
     router.put('/tickets/' + props.contact.uuid + '/assign', {
-        'id': user.value.value
-    }, {})
+        'id': selectedUserId
+    }, {
+        preserveScroll: true,
+        onSuccess: () => {
+            console.info('[TicketAssignment] assignment request completed', {
+                contactUuid: props.contact?.uuid,
+                selectedUserId,
+            });
+        },
+        onError: () => {
+            console.error('[TicketAssignment] assignment request failed', {
+                contactUuid: props.contact?.uuid,
+                selectedUserId,
+                ticket: props.ticket,
+            });
+            user.value = ticketUserOption(props.ticket);
+        },
+    })
 }
 
 function loadUsers(query, setOptions) {
@@ -254,7 +297,7 @@ onUnmounted(() => {
                 </div>
                 <FormSelectCombo v-if="ticketingIsEnabled" v-model="user"
                     :name="''" :loadOptions="loadUsers" :class="'col-span-1 md:block hidden'"
-                    :placeholder="'Select Agent'" @update:modelValue="changeTicketAgent()" />
+                    :placeholder="'Select Agent'" @update:modelValue="changeTicketAgent" />
             </div>
 
         </div>

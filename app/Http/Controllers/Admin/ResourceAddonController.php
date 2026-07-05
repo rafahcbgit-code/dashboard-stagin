@@ -35,20 +35,23 @@ class ResourceAddonController extends BaseController
             'rows' => $addons,
             'filters' => $request->all(['search']),
             'organizations' => Organization::query()
+                ->leftJoin('organizations as billing_organizations', 'organizations.billing_organization_id', '=', 'billing_organizations.id')
                 ->leftJoinSub(
                     Subscription::query()
                         ->select('organization_id', DB::raw('MAX(id) as latest_subscription_id'))
                         ->groupBy('organization_id'),
                     'latest_subscriptions',
-                    'organizations.id',
-                    '=',
-                    'latest_subscriptions.organization_id'
+                    function ($join): void {
+                        $join->on(DB::raw('COALESCE(organizations.billing_organization_id, organizations.id)'), '=', 'latest_subscriptions.organization_id');
+                    }
                 )
                 ->leftJoin('subscriptions', 'subscriptions.id', '=', 'latest_subscriptions.latest_subscription_id')
-                ->orderBy('name')
+                ->orderBy('organizations.name')
                 ->get([
                     'organizations.id',
                     'organizations.name',
+                    'organizations.billing_organization_id',
+                    'billing_organizations.name as billing_organization_name',
                     'subscriptions.valid_until as subscription_valid_until',
                 ]),
             'resources' => [
@@ -71,10 +74,8 @@ class ResourceAddonController extends BaseController
             'notes' => ['nullable', 'string', 'max:2000'],
         ]);
 
-        if ($validated['resource'] === SubscriptionUsageService::ORGANIZATIONS) {
-            $validated['organization_id'] = $this->primaryOwnerOrganizationId((int) $validated['organization_id'])
-                ?: $validated['organization_id'];
-        }
+        $validated['organization_id'] = (new SubscriptionUsageService())
+            ->resourceAccountId((int) $validated['organization_id']);
 
         $cycleEndsAt = Subscription::where('organization_id', $validated['organization_id'])
             ->latest('id')
@@ -107,29 +108,5 @@ class ResourceAddonController extends BaseController
             'type' => 'success',
             'message' => __('Resource add-on deleted successfully.'),
         ]);
-    }
-
-    private function primaryOwnerOrganizationId(int $organizationId): ?int
-    {
-        $ownerUserId = DB::table('teams')
-            ->where('organization_id', $organizationId)
-            ->where('role', 'owner')
-            ->whereNull('deleted_at')
-            ->orderBy('id')
-            ->value('user_id');
-
-        if (! $ownerUserId) {
-            return null;
-        }
-
-        return DB::table('teams')
-            ->join('organizations', 'teams.organization_id', '=', 'organizations.id')
-            ->where('teams.user_id', $ownerUserId)
-            ->where('teams.role', 'owner')
-            ->whereNull('teams.deleted_at')
-            ->whereNull('organizations.deleted_at')
-            ->orderBy('organizations.created_at')
-            ->orderBy('organizations.id')
-            ->value('teams.organization_id');
     }
 }

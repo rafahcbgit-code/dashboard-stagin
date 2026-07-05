@@ -9,7 +9,7 @@
                         <span class="ml-1 mt-1">{{ $t('Add edit and delete accounts in your team') }}</span>
                     </p>
                 </div>
-                <div>
+                <div v-if="canInviteUsers">
                     <button @click="openModal()" class="rounded-md bg-indigo-600 px-3 py-2 text-sm text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">{{ $t('Invite user') }}</button>
                 </div>
             </div>
@@ -36,8 +36,8 @@
 </template>
 <script setup>
     import AppLayout from "./../Layout/App.vue";
-    import { ref } from 'vue';
-    import { Link, useForm } from "@inertiajs/vue3";
+    import { computed, ref } from 'vue';
+    import { useForm, usePage } from "@inertiajs/vue3";
     import TeamTable from '@/Components/Tables/TeamTable.vue';
     import Modal from '@/Components/Modal.vue';
     import FormInput from '@/Components/FormInput.vue';
@@ -45,6 +45,8 @@
     import { trans } from 'laravel-vue-i18n';
 
     const props = defineProps({ rows: Object, filters: Object });
+    const user = computed(() => usePage().props.auth.user);
+    const canInviteUsers = computed(() => ['owner', 'manager'].includes(user.value?.teams?.[0]?.role));
     const isOpenFormModal = ref(false);
     const formUrl = ref('/team/invite');
     const formMethod = ref('post');

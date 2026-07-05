@@ -92,6 +92,8 @@ const editErrorMessage = ref('');
 const isSavingEdit = ref(false);
 const showAdvancedMapping = ref(false);
 const statusPoller = ref(null);
+const progressAnimator = ref(null);
+const displayedProcessedRows = ref(0);
 
 const hasBatch = computed(() => !!batch.value?.uuid);
 const batchHeaders = computed(() => batch.value?.headers || []);
@@ -107,15 +109,45 @@ const backgroundImportedContactsCount = computed(() => Number(
     ?? batchStats.value?.imported
     ?? ((Number(batch.value?.created_count || 0) + Number(batch.value?.updated_count || 0)))
 ));
-const backgroundProgressPercent = computed(() => {
-    const total = Number(batch.value?.total_rows || batchStats.value?.total || 0);
-    const processed = Number(batch.value?.processed_rows || 0);
+const backgroundTotalRows = computed(() => Number(batch.value?.total_rows || batchStats.value?.total || 0));
+const backgroundTargetProcessedRows = computed(() => {
+    const processedRows = Number(batch.value?.processed_rows || 0);
 
-    if (!total) {
+    if (backgroundInProgress.value && backgroundTotalRows.value && processedRows >= backgroundTotalRows.value) {
+        return Math.max(0, backgroundTotalRows.value - 1);
+    }
+
+    return processedRows;
+});
+const backgroundDisplayedRows = computed(() => Math.min(
+    backgroundTotalRows.value,
+    Math.round(displayedProcessedRows.value)
+));
+const backgroundProgressPercent = computed(() => {
+    if (!backgroundTotalRows.value) {
         return 0;
     }
 
-    return Math.min(100, Math.round((processed / total) * 100));
+    const percent = Math.min(100, Math.round((backgroundDisplayedRows.value / backgroundTotalRows.value) * 100));
+
+    return backgroundInProgress.value ? Math.min(99, percent) : percent;
+});
+const backgroundPhaseLabel = computed(() => {
+    const phase = batch.value?.progress_phase || batch.value?.report?.phase || batch.value?.status || 'queued';
+    const labels = {
+        queued: 'Queued',
+        processing: 'Processing',
+        reading_file: 'Reading file',
+        saving_invalid_rows: 'Saving invalid rows',
+        saving_contacts: 'Saving contacts',
+        linking_audiences: 'Linking audiences',
+        refreshing_audience_counts: 'Refreshing audience counts',
+        completed: 'Completed',
+        committed: 'Completed',
+        failed: 'Failed',
+    };
+
+    return t(labels[phase] || phase);
 });
 const invalidRowsReportUrl = computed(() => (batch.value?.uuid ? `/contacts/import/${batch.value.uuid}/invalid-report.csv` : '#'));
 const requiresDefaultCountryCode = computed(() => (
@@ -140,6 +172,7 @@ const countryCodeOptions = computed(() => {
 
 onUnmounted(() => {
     stopStatusPolling();
+    stopProgressAnimation();
 });
 
 watch(
@@ -169,6 +202,7 @@ const closeModal = () => {
 
 const resetWizard = () => {
     stopStatusPolling();
+    stopProgressAnimation();
     wizardStep.value = 1;
     busy.value = false;
     uploadBusy.value = false;
@@ -196,6 +230,7 @@ const resetWizard = () => {
     groupForm.split_group_prefix = 'audience';
     groupSearch.value = '';
     showAdvancedMapping.value = false;
+    displayedProcessedRows.value = 0;
 
     Object.assign(mapping, {
         first_name: '',
@@ -211,6 +246,73 @@ const resetWizard = () => {
         custom_attributes: Object.fromEntries(props.fields.map((field) => [field.name, ''])),
     });
 };
+
+const stopProgressAnimation = () => {
+    if (progressAnimator.value) {
+        window.cancelAnimationFrame(progressAnimator.value);
+        progressAnimator.value = null;
+    }
+};
+
+const animateDisplayedProgress = (targetRows, totalRows) => {
+    stopProgressAnimation();
+
+    targetRows = Math.max(0, Math.min(Number(targetRows || 0), Number(totalRows || targetRows || 0)));
+
+    if (!totalRows || targetRows < displayedProcessedRows.value) {
+        displayedProcessedRows.value = targetRows;
+        return;
+    }
+
+    const startRows = displayedProcessedRows.value;
+    const deltaRows = targetRows - startRows;
+
+    if (deltaRows <= 0) {
+        displayedProcessedRows.value = targetRows;
+        return;
+    }
+
+    const ratio = totalRows > 0 ? deltaRows / totalRows : 1;
+    const duration = 700 + Math.min(2600, ratio * 2600);
+    const startedAt = window.performance.now();
+
+    const tick = (now) => {
+        const progress = Math.min(1, (now - startedAt) / duration);
+        const eased = 1 - Math.pow(1 - progress, 3);
+
+        displayedProcessedRows.value = startRows + (deltaRows * eased);
+
+        if (progress < 1) {
+            progressAnimator.value = window.requestAnimationFrame(tick);
+            return;
+        }
+
+        displayedProcessedRows.value = targetRows;
+        progressAnimator.value = null;
+    };
+
+    progressAnimator.value = window.requestAnimationFrame(tick);
+};
+
+watch(
+    () => [
+        batch.value?.uuid,
+        backgroundTargetProcessedRows.value,
+        Number(batch.value?.total_rows || batchStats.value?.total || 0),
+    ],
+    ([uuid, processedRows, totalRows], [previousUuid] = []) => {
+        if (!uuid) {
+            displayedProcessedRows.value = 0;
+            return;
+        }
+
+        if (uuid !== previousUuid) {
+            displayedProcessedRows.value = 0;
+        }
+
+        animateDisplayedProgress(processedRows, totalRows);
+    }
+);
 
 const pickHeader = (preferredKeys) => {
     const headers = batchHeaders.value;
@@ -297,7 +399,7 @@ const uploadAndPreview = async (event) => {
 const startStatusPolling = () => {
     stopStatusPolling();
     pollImportStatus();
-    statusPoller.value = window.setInterval(pollImportStatus, 3000);
+    statusPoller.value = window.setInterval(pollImportStatus, 1000);
 };
 
 const stopStatusPolling = () => {
@@ -1070,7 +1172,7 @@ const goToPreviousStep = () => {
                             <div class="h-full rounded-full bg-primary transition-all" :style="{ width: `${backgroundProgressPercent}%` }"></div>
                         </div>
                         <p class="mt-2 text-xs text-slate-600">
-                            {{ batch.processed_rows || 0 }} / {{ batch.total_rows || 0 }} ({{ backgroundProgressPercent }}%)
+                            {{ backgroundDisplayedRows }} / {{ backgroundTotalRows }} ({{ backgroundProgressPercent }}%) - {{ backgroundPhaseLabel }}
                         </p>
                         <p v-if="backgroundInProgress" class="mt-2 text-xs text-slate-600">
                             {{ $t('You can keep this window open to watch progress. The import is running in the background.') }}

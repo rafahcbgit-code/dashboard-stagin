@@ -120,6 +120,8 @@ class MetaFlowService
             return ['success' => false, 'message' => 'This flow has no Meta flow ID. Create it on Meta first.'];
         }
 
+        $jsonContent = $this->ensureCompleteActionPayload($jsonContent);
+
         $url = "{$this->baseUrl}/{$this->apiVersion}/{$flow->meta_flow_id}/assets";
 
         Log::info('MetaFlows: uploading flow asset — request', [
@@ -155,6 +157,186 @@ class MetaFlowService
         Log::info('MetaFlows: flow asset updated', ['meta_flow_id' => $flow->meta_flow_id]);
 
         return ['success' => true];
+    }
+
+    private function ensureCompleteActionPayload(string $jsonContent): string
+    {
+        $flowJson = json_decode($jsonContent, true);
+
+        if (!is_array($flowJson)) {
+            return $jsonContent;
+        }
+
+        $inputTypes = ['TextInput', 'TextArea', 'Dropdown', 'CheckboxGroup', 'RadioButtonsGroup', 'DatePicker'];
+        $flowDataFields = $this->extractNavigatePayloadFields($flowJson);
+        $changed = $this->ensureNavigateTargetDataModels($flowJson);
+
+        foreach ($flowJson['screens'] ?? [] as $screenIndex => $screen) {
+            foreach ($screen['layout']['children'] ?? [] as $childIndex => $child) {
+                $formPath = "screens.{$screenIndex}.layout.children.{$childIndex}";
+                $changed = $this->ensureCompleteActionPayloadForForm($flowJson, $formPath, $inputTypes, $flowDataFields) || $changed;
+            }
+        }
+
+        if (!$changed) {
+            return $jsonContent;
+        }
+
+        Log::info('MetaFlows: complete action payload auto-filled from form fields');
+
+        return json_encode($flowJson, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
+    private function ensureCompleteActionPayloadForForm(array &$flowJson, string $formPath, array $inputTypes, array $flowDataFields): bool
+    {
+        $form = data_get($flowJson, $formPath);
+
+        if (($form['type'] ?? null) !== 'Form' || !is_array($form['children'] ?? null)) {
+            return false;
+        }
+
+        $formFields = [];
+
+        foreach ($form['children'] as $child) {
+            if (in_array($child['type'] ?? '', $inputTypes, true) && !empty($child['name'])) {
+                $formFields[] = $child['name'];
+            }
+        }
+
+        if (empty($formFields)) {
+            return false;
+        }
+
+        $changed = false;
+
+        foreach ($form['children'] as $index => $child) {
+            if (
+                ($child['type'] ?? null) !== 'Footer'
+                || (($child['on-click-action']['name'] ?? null) !== 'complete')
+            ) {
+                continue;
+            }
+
+            $payload = $child['on-click-action']['payload'] ?? [];
+            $payload = $this->normalizePayloadObject($payload);
+
+            foreach ($formFields as $fieldName) {
+                if (!array_key_exists($fieldName, $payload)) {
+                    $payload[$fieldName] = '${form.' . $fieldName . '}';
+                    $changed = true;
+                }
+            }
+
+            foreach ($flowDataFields as $fieldName) {
+                if (!array_key_exists($fieldName, $payload)) {
+                    $payload[$fieldName] = '${data.' . $fieldName . '}';
+                    $changed = true;
+                }
+            }
+
+            if ($payload !== ($child['on-click-action']['payload'] ?? [])) {
+                data_set($flowJson, "{$formPath}.children.{$index}.on-click-action.payload", $payload);
+                $changed = true;
+            }
+        }
+
+        return $changed;
+    }
+
+    private function extractNavigatePayloadFields(array $flowJson): array
+    {
+        $fields = [];
+
+        foreach ($flowJson['screens'] ?? [] as $screen) {
+            foreach ($screen['layout']['children'] ?? [] as $child) {
+                if (($child['type'] ?? null) !== 'Form' || !is_array($child['children'] ?? null)) {
+                    continue;
+                }
+
+                foreach ($child['children'] as $item) {
+                    if (($item['type'] ?? null) !== 'Footer') {
+                        continue;
+                    }
+
+                    if (($item['on-click-action']['name'] ?? null) !== 'navigate') {
+                        continue;
+                    }
+
+                    $payload = $this->normalizePayloadObject($item['on-click-action']['payload'] ?? []);
+
+                    foreach (array_keys($payload) as $fieldName) {
+                        $fields[$fieldName] = true;
+                    }
+                }
+            }
+        }
+
+        return array_keys($fields);
+    }
+
+    private function ensureNavigateTargetDataModels(array &$flowJson): bool
+    {
+        $changed = false;
+        $screenIndexesById = [];
+
+        foreach ($flowJson['screens'] ?? [] as $index => $screen) {
+            if (!empty($screen['id'])) {
+                $screenIndexesById[$screen['id']] = $index;
+            }
+        }
+
+        foreach ($flowJson['screens'] ?? [] as $screen) {
+            foreach ($screen['layout']['children'] ?? [] as $child) {
+                if (($child['type'] ?? null) !== 'Form' || !is_array($child['children'] ?? null)) {
+                    continue;
+                }
+
+                foreach ($child['children'] as $item) {
+                    if (
+                        ($item['type'] ?? null) !== 'Footer'
+                        || (($item['on-click-action']['name'] ?? null) !== 'navigate')
+                    ) {
+                        continue;
+                    }
+
+                    $targetScreen = $item['on-click-action']['next']['name'] ?? null;
+                    $targetIndex = $targetScreen !== null ? ($screenIndexesById[$targetScreen] ?? null) : null;
+
+                    if ($targetIndex === null) {
+                        continue;
+                    }
+
+                    $payload = $this->normalizePayloadObject($item['on-click-action']['payload'] ?? []);
+
+                    foreach (array_keys($payload) as $fieldName) {
+                        $dataPath = "screens.{$targetIndex}.data.{$fieldName}";
+
+                        if (data_get($flowJson, $dataPath) === null) {
+                            data_set($flowJson, $dataPath, [
+                                'type'        => 'string',
+                                '__example__' => 'example',
+                            ]);
+                            $changed = true;
+                        }
+                    }
+                }
+            }
+        }
+
+        return $changed;
+    }
+
+    private function normalizePayloadObject(mixed $payload): array
+    {
+        if (!is_array($payload)) {
+            return [];
+        }
+
+        return array_filter(
+            $payload,
+            fn($key) => is_string($key),
+            ARRAY_FILTER_USE_KEY
+        );
     }
 
     // Fetch fresh data from Meta and update the local record (status, preview_url, asset)

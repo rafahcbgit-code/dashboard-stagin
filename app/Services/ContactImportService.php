@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Models\ContactGroup;
 use App\Models\ContactImportBatch;
 use App\Models\ContactImportRow;
+use App\Support\ContactPageCache;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Arr;
@@ -13,18 +14,27 @@ use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use PhpOffice\PhpSpreadsheet\Cell\Coordinate;
-use PhpOffice\PhpSpreadsheet\Reader\IReadFilter;
 use PhpOffice\PhpSpreadsheet\IOFactory;
-use App\Services\PhoneService;
+use PhpOffice\PhpSpreadsheet\Reader\IReadFilter;
 
 class ContactImportService
 {
     public const BACKGROUND_IMPORT_THRESHOLD = 10000;
 
     private const MAX_PREVIEW_ROWS = 100000;
+
     private const INSERT_CHUNK_SIZE = 2000;
-    private const PROCESSING_CHUNK_SIZE = 1000;
-    private const LARGE_IMPORT_CHUNK_SIZE = 1000;
+
+    private const DEFAULT_PROCESSING_CHUNK_SIZE = 2000;
+
+    private const DEFAULT_LARGE_IMPORT_CHUNK_SIZE = 5000;
+
+    private const DEFAULT_CONTACT_WRITE_CHUNK_SIZE = 500;
+
+    private const DEFAULT_PIVOT_WRITE_CHUNK_SIZE = 1000;
+
+    private const DEFAULT_BACKGROUND_PROGRESS_UPDATE_INTERVAL = 10000;
+
     private const LARGE_IMPORT_FAILURE_PREVIEW_LIMIT = 1000;
 
     private const STANDARD_TARGET_FIELDS = [
@@ -124,7 +134,7 @@ class ContactImportService
         $mapping = $this->buildLargeImportMapping($headers);
         $storedPath = $file->storeAs(
             'contact-imports',
-            (string) Str::uuid() . '.' . Str::lower((string) $file->getClientOriginalExtension())
+            (string) Str::uuid().'.'.Str::lower((string) $file->getClientOriginalExtension())
         );
 
         return ContactImportBatch::query()->create([
@@ -204,7 +214,7 @@ class ContactImportService
                 ->where('contact_import_batch_id', $batch->id)
                 ->where('is_removed', false)
                 ->orderBy('id')
-                ->chunkById(self::PROCESSING_CHUNK_SIZE, function ($rows) use ($defaultCountryCode, $batchMapping, $batch, &$invalidRowsPreview, &$invalidRowsCount, $invalidPreviewLimit): void {
+                ->chunkById($this->processingChunkSize(), function ($rows) use ($defaultCountryCode, $batchMapping, &$invalidRowsPreview, &$invalidRowsCount, $invalidPreviewLimit): void {
                     $updates = [];
                     $now = now();
 
@@ -244,6 +254,7 @@ class ContactImportService
                                 'status' => 'invalid',
                                 'updated_at' => $now,
                             ];
+
                             continue;
                         }
 
@@ -356,8 +367,7 @@ class ContactImportService
         ?string $splitGroupPrefix,
         int $organizationId,
         int $userId
-    ): ContactImportBatch
-    {
+    ): ContactImportBatch {
         $assignedGroupIds = collect($groupIds)->map(fn ($id) => (int) $id)->filter()->values();
 
         $normalizedMode = in_array($assignmentMode, ['all_selected', 'split', 'file_group_name'], true) ? $assignmentMode : 'all_selected';
@@ -430,9 +440,12 @@ class ContactImportService
         $failed = [];
         $totalValidRows = 0;
         $uniquePhoneCount = 0;
+
         $contactsRemaining = (new SubscriptionUsageService())
             ->summary($organizationId, SubscriptionUsageService::CONTACTS)['remaining'];
         $remainingNewContacts = $contactsRemaining === -1 ? null : max(0, (int) $contactsRemaining);
+
+        $touchedContactIds = [];
         $fileGroupIdsByPhone = $assignmentMode === 'file_group_name'
             ? $this->buildFileGroupIdsByPhone($batch, $organizationId, $userId, $groupCache)
             : [];
@@ -445,7 +458,7 @@ class ContactImportService
             ->where('is_removed', false)
             ->where('status', 'valid')
             ->orderBy('id')
-            ->chunkById(self::PROCESSING_CHUNK_SIZE, function ($rows) use ($batchId, $organizationId, $userId, $selectedGroupIds, $assignmentMode, $fileGroupIdsByPhone, &$splitState, &$splitAssignmentByPhone, &$groupCache, &$created, &$updated, &$failed, &$totalValidRows, &$uniquePhoneCount, &$remainingNewContacts): void {
+            ->chunkById($this->processingChunkSize(), function ($rows) use ($batchId, $organizationId, $userId, $selectedGroupIds, $assignmentMode, $fileGroupIdsByPhone, &$splitState, &$splitAssignmentByPhone, &$groupCache, &$created, &$updated, &$failed, &$totalValidRows, &$uniquePhoneCount, &$remainingNewContacts, &$touchedContactIds): void {
                 $now = now();
                 $rowStatusUpdates = [];
                 $entriesByPhone = [];
@@ -479,6 +492,7 @@ class ContactImportService
                             'errors' => $this->encodeJson([$error]),
                             'updated_at' => $now,
                         ];
+
                         continue;
                     }
 
@@ -500,6 +514,7 @@ class ContactImportService
                             'row_ids' => [(int) $row->id],
                             'row_numbers' => [(int) $row->row_number],
                         ];
+
                         continue;
                     }
 
@@ -534,9 +549,10 @@ class ContactImportService
                         );
                     }
                     $totalValidRows += $chunkValidRows;
+
                     return;
                 }
-                
+
                 $totalValidRows += $chunkValidRows;
 
                 $allGroupNames = $assignmentMode === 'file_group_name'
@@ -679,15 +695,19 @@ class ContactImportService
                 }
 
                 if (! empty($contactUpdates)) {
-                    DB::table('contacts')->upsert(
-                        $contactUpdates,
-                        ['id'],
-                        ['first_name', 'last_name', 'email', 'address', 'metadata', 'deleted_at', 'updated_at']
-                    );
+                    foreach (array_chunk($contactUpdates, $this->contactWriteChunkSize()) as $chunk) {
+                        DB::table('contacts')->upsert(
+                            $chunk,
+                            ['id'],
+                            ['first_name', 'last_name', 'email', 'address', 'metadata', 'deleted_at', 'updated_at']
+                        );
+                    }
                 }
 
                 if (! empty($contactInserts)) {
-                    DB::table('contacts')->insert($contactInserts);
+                    foreach (array_chunk($contactInserts, $this->contactWriteChunkSize()) as $chunk) {
+                        DB::table('contacts')->insert($chunk);
+                    }
                 }
 
                 $contactIdsByPhone = DB::table('contacts')
@@ -695,6 +715,10 @@ class ContactImportService
                     ->whereIn('phone', $phones)
                     ->pluck('id', 'phone')
                     ->toArray();
+
+                foreach ($contactIdsByPhone as $contactId) {
+                    $touchedContactIds[(int) $contactId] = true;
+                }
 
                 $desiredPairs = [];
                 $failedRowIds = [];
@@ -715,6 +739,7 @@ class ContactImportService
                         foreach ((array) $entry['row_ids'] as $rowId) {
                             $failedRowIds[] = (int) $rowId;
                         }
+
                         continue;
                     }
 
@@ -749,12 +774,14 @@ class ContactImportService
                                 'updated_at' => $now,
                             ];
                         })
-                        ->unique(fn ($pair) => $pair['contact_id'] . ':' . $pair['contact_group_id'])
+                        ->unique(fn ($pair) => $pair['contact_id'].':'.$pair['contact_group_id'])
                         ->values()
                         ->all();
 
                     if (! empty($pivotInserts)) {
-                        DB::table('contact_contact_group')->insertOrIgnore($pivotInserts);
+                        foreach (array_chunk($pivotInserts, $this->pivotWriteChunkSize()) as $chunk) {
+                            DB::table('contact_contact_group')->insertOrIgnore($chunk);
+                        }
                     }
                 }
 
@@ -782,6 +809,8 @@ class ContactImportService
                 }
             });
 
+        ContactGroupCountService::rebuildForContacts(array_keys($touchedContactIds));
+
         $removedCount = ContactImportRow::query()
             ->where('contact_import_batch_id', $batch->id)
             ->where('status', 'removed')
@@ -794,6 +823,7 @@ class ContactImportService
 
         $invalidFailures = $invalidRows->map(function (ContactImportRow $row): array {
             $errors = (array) $row->errors;
+
             return [
                 'row' => $row->row_number,
                 'error' => implode(' | ', $errors),
@@ -826,6 +856,8 @@ class ContactImportService
             'report' => $report,
         ]);
 
+        ContactPageCache::forgetContactsCount($organizationId);
+
         return $report;
     }
 
@@ -855,9 +887,14 @@ class ContactImportService
         $failedRowsPreview = [];
         $seenPhones = [];
         $countedPhones = [];
+
         $contactsRemaining = (new SubscriptionUsageService())
             ->summary($organizationId, SubscriptionUsageService::CONTACTS)['remaining'];
         $remainingNewContacts = $contactsRemaining === -1 ? null : max(0, (int) $contactsRemaining);
+
+        $touchedContactIds = [];
+        $lastProgressUpdateRows = 0;
+        $progressPhase = 'reading_file';
 
         $batch->update([
             'status' => 'processing',
@@ -868,6 +905,32 @@ class ContactImportService
         $this->clearPreviousBackgroundRows($batch);
 
         try {
+            $maybeUpdateProgress = function (string $phase = null, bool $force = false) use ($batch, &$processed, &$valid, &$invalid, &$created, &$updated, &$duplicates, &$failedRowsPreview, &$lastProgressUpdateRows, &$progressPhase): void {
+                if ($phase !== null) {
+                    $progressPhase = $phase;
+                }
+
+                if (! $force && $processed - $lastProgressUpdateRows < $this->backgroundProgressUpdateInterval()) {
+                    return;
+                }
+
+                $this->updateBackgroundImportProgress(
+                    $batch,
+                    $processed,
+                    $valid,
+                    $invalid,
+                    $created,
+                    $updated,
+                    $duplicates,
+                    $failedRowsPreview,
+                    $progressPhase
+                );
+
+                $lastProgressUpdateRows = $processed;
+            };
+
+            $maybeUpdateProgress('reading_file', true);
+
             foreach ($this->iterateStoredFileRows(Storage::path($sourceFilePath), $headers) as $rows) {
                 if (empty($rows)) {
                     continue;
@@ -910,6 +973,9 @@ class ContactImportService
                             'created_at' => $now,
                             'updated_at' => $now,
                         ];
+
+                        $maybeUpdateProgress();
+
                         continue;
                     }
 
@@ -918,6 +984,9 @@ class ContactImportService
                     if ($phone === '') {
                         $invalid++;
                         $failedRowsPreview = $this->appendFailurePreview($failedRowsPreview, $rowNumber, 'Missing normalized phone.');
+
+                        $maybeUpdateProgress();
+
                         continue;
                     }
 
@@ -939,6 +1008,9 @@ class ContactImportService
                             'group_names' => $groupNames,
                             'row_numbers' => [$rowNumber],
                         ];
+
+                        $maybeUpdateProgress();
+
                         continue;
                     }
 
@@ -961,20 +1033,26 @@ class ContactImportService
                         ->values()
                         ->all();
                     unset($existing);
+
+                    $maybeUpdateProgress();
                 }
 
                 if (! empty($invalidRows)) {
+                    $maybeUpdateProgress('saving_invalid_rows', true);
+
                     foreach (array_chunk($invalidRows, self::INSERT_CHUNK_SIZE) as $chunk) {
                         DB::table('contact_import_rows')->insert($chunk);
                     }
                 }
 
                 if (! empty($entriesByPhone)) {
+                    $maybeUpdateProgress('saving_contacts', true);
+
                     $phones = array_keys($entriesByPhone);
                     $existingContacts = DB::table('contacts')
                         ->where('organization_id', $organizationId)
                         ->whereIn('phone', $phones)
-                        ->get(['id', 'phone', 'metadata'])
+                        ->get(['id', 'uuid', 'phone', 'metadata'])
                         ->keyBy('phone');
                     $limitFailedPhones = [];
 
@@ -1034,7 +1112,7 @@ class ContactImportService
                         $mergedMetadata = array_merge($existingMetadata, (array) ($entry['custom_attributes'] ?? []));
 
                         $contactRows[] = [
-                            'uuid' => (string) Str::uuid(),
+                            'uuid' => $existingContact ? (string) $existingContact->uuid : (string) Str::uuid(),
                             'organization_id' => $organizationId,
                             'first_name' => trim((string) ($entry['first_name'] ?? '')) !== '' ? trim((string) $entry['first_name']) : 'name',
                             'last_name' => trim((string) ($entry['last_name'] ?? '')) !== '' ? trim((string) $entry['last_name']) : null,
@@ -1051,18 +1129,28 @@ class ContactImportService
                     }
 
                     if (! empty($contactRows)) {
-                        DB::table('contacts')->upsert(
-                            $contactRows,
-                            ['organization_id', 'phone'],
-                            ['first_name', 'last_name', 'email', 'address', 'metadata', 'contact_source', 'deleted_at', 'updated_at']
-                        );
+                        foreach (array_chunk($contactRows, $this->contactWriteChunkSize()) as $chunk) {
+                            DB::table('contacts')->upsert(
+                                $chunk,
+                                ['organization_id', 'phone'],
+                                ['first_name', 'last_name', 'email', 'address', 'metadata', 'contact_source', 'deleted_at', 'updated_at']
+                            );
+                        }
                     }
+
+
+                    $maybeUpdateProgress('linking_audiences', true);
+
 
                     $contactIdsByPhone = DB::table('contacts')
                         ->where('organization_id', $organizationId)
                         ->whereIn('phone', $phones)
                         ->pluck('id', 'phone')
                         ->toArray();
+
+                    foreach ($contactIdsByPhone as $contactId) {
+                        $touchedContactIds[(int) $contactId] = true;
+                    }
 
                     $pivotRows = [];
                     foreach ($entriesByPhone as $phone => $entry) {
@@ -1091,27 +1179,26 @@ class ContactImportService
                     }
 
                     if (! empty($pivotRows)) {
-                        DB::table('contact_contact_group')->insertOrIgnore(
-                            collect($pivotRows)
-                                ->unique(fn ($row) => $row['contact_id'] . ':' . $row['contact_group_id'])
-                                ->values()
-                                ->all()
-                        );
+                        $pivotRows = collect($pivotRows)
+                            ->unique(fn ($row) => $row['contact_id'].':'.$row['contact_group_id'])
+                            ->values()
+                            ->all();
+
+                        foreach (array_chunk($pivotRows, $this->pivotWriteChunkSize()) as $chunk) {
+                            DB::table('contact_contact_group')->insertOrIgnore($chunk);
+                        }
                     }
+
                 }
 
-                $batch->update([
-                    'processed_rows' => $processed,
-                    'valid_rows' => $valid,
-                    'invalid_rows' => $invalid,
-                    'created_count' => $created,
-                    'updated_count' => $updated,
-                    'failed_count' => $invalid,
-                    'report' => $this->buildBackgroundReport($batch, $created, $updated, $valid, $invalid, $duplicates, $failedRowsPreview, false),
-                ]);
+                $maybeUpdateProgress('reading_file', true);
             }
 
-            $report = $this->buildBackgroundReport($batch, $created, $updated, $valid, $invalid, $duplicates, $failedRowsPreview, true);
+            $maybeUpdateProgress('refreshing_audience_counts', true);
+
+            ContactGroupCountService::rebuildForContacts(array_keys($touchedContactIds));
+
+            $report = $this->buildBackgroundReport($batch, $created, $updated, $valid, $invalid, $duplicates, $failedRowsPreview, true, 'completed');
 
             $batch->update([
                 'status' => 'committed',
@@ -1125,15 +1212,19 @@ class ContactImportService
                 'report' => $report,
             ]);
 
+            ContactPageCache::forgetContactsCount($organizationId);
+
             return $report;
         } catch (\Throwable $exception) {
+            $errorMessage = $this->summarizeExceptionMessage($exception);
+
             $batch->update([
                 'status' => 'failed',
                 'finished_at' => now(),
-                'error_message' => $exception->getMessage(),
+                'error_message' => $errorMessage,
                 'report' => array_merge((array) ($batch->report ?? []), [
                     'failed_at' => now()->toDateTimeString(),
-                    'error_message' => $exception->getMessage(),
+                    'error_message' => $errorMessage,
                 ]),
             ]);
 
@@ -1141,7 +1232,7 @@ class ContactImportService
         }
     }
 
-    public function paginateRows(ContactImportBatch $batch, int $page = 1, int $perPage = 15, ?string $status = null): LengthAwarePaginator
+    public function paginateRows(ContactImportBatch $batch, int $page = 1, int $perPage = 15, string $status = null): LengthAwarePaginator
     {
         $query = ContactImportRow::query()
             ->where('contact_import_batch_id', $batch->id)
@@ -1381,6 +1472,7 @@ class ContactImportService
 
         if (in_array($extension, ['csv', 'txt'], true)) {
             yield from $this->iterateCsvRows($path, $headers);
+
             return;
         }
 
@@ -1421,7 +1513,7 @@ class ContactImportService
                     'data' => $assoc,
                 ];
 
-                if (count($chunk) >= self::LARGE_IMPORT_CHUNK_SIZE) {
+                if (count($chunk) >= $this->largeImportChunkSize()) {
                     yield $chunk;
                     $chunk = [];
                 }
@@ -1446,8 +1538,10 @@ class ContactImportService
         $firstSheet = $worksheetInfo[0] ?? [];
         $lastRow = (int) ($firstSheet['totalRows'] ?? 1);
 
-        for ($startRow = 2; $startRow <= $lastRow; $startRow += self::LARGE_IMPORT_CHUNK_SIZE) {
-            $endRow = min($lastRow, $startRow + self::LARGE_IMPORT_CHUNK_SIZE - 1);
+        $chunkSize = $this->largeImportChunkSize();
+
+        for ($startRow = 2; $startRow <= $lastRow; $startRow += $chunkSize) {
+            $endRow = min($lastRow, $startRow + $chunkSize - 1);
             $reader = IOFactory::createReaderForFile($path);
             if (method_exists($reader, 'setReadDataOnly')) {
                 $reader->setReadDataOnly(true);
@@ -1489,7 +1583,8 @@ class ContactImportService
 
     private function rowRangeFilter(int $startRow, int $endRow): IReadFilter
     {
-        return new class($startRow, $endRow) implements IReadFilter {
+        return new class($startRow, $endRow) implements IReadFilter
+        {
             public function __construct(private readonly int $startRow, private readonly int $endRow)
             {
             }
@@ -1515,6 +1610,73 @@ class ContactImportService
         return $failedRowsPreview;
     }
 
+    private function summarizeExceptionMessage(\Throwable $exception): string
+    {
+        $message = $exception->getMessage();
+
+        if (str_contains($message, 'Got a packet bigger than')) {
+            return 'MySQL max_allowed_packet was exceeded while writing an import chunk. Reduce import DB write chunk size or increase MySQL max_allowed_packet.';
+        }
+
+        $message = preg_replace('/\s+/', ' ', $message) ?: $exception::class;
+
+        return mb_substr($message, 0, 1000);
+    }
+
+    private function processingChunkSize(): int
+    {
+        return $this->boundedImportConfigInt('processing_chunk_size', self::DEFAULT_PROCESSING_CHUNK_SIZE, 500, 10000);
+    }
+
+    private function largeImportChunkSize(): int
+    {
+        return $this->boundedImportConfigInt('large_file_read_chunk_size', self::DEFAULT_LARGE_IMPORT_CHUNK_SIZE, 1000, 20000);
+    }
+
+    private function contactWriteChunkSize(): int
+    {
+        return $this->boundedImportConfigInt('contact_write_chunk_size', self::DEFAULT_CONTACT_WRITE_CHUNK_SIZE, 100, 3000);
+    }
+
+    private function pivotWriteChunkSize(): int
+    {
+        return $this->boundedImportConfigInt('pivot_write_chunk_size', self::DEFAULT_PIVOT_WRITE_CHUNK_SIZE, 500, 10000);
+    }
+
+    private function backgroundProgressUpdateInterval(): int
+    {
+        return $this->boundedImportConfigInt('progress_update_interval', self::DEFAULT_BACKGROUND_PROGRESS_UPDATE_INTERVAL, 1000, 100000);
+    }
+
+    private function updateBackgroundImportProgress(
+        ContactImportBatch $batch,
+        int $processed,
+        int $valid,
+        int $invalid,
+        int $created,
+        int $updated,
+        int $duplicates,
+        array $failedRowsPreview = [],
+        string $phase = 'processing'
+    ): void {
+        $batch->update([
+            'processed_rows' => $processed,
+            'valid_rows' => $valid,
+            'invalid_rows' => $invalid,
+            'created_count' => $created,
+            'updated_count' => $updated,
+            'failed_count' => $invalid,
+            'report' => $this->buildBackgroundReport($batch, $created, $updated, $valid, $invalid, $duplicates, $failedRowsPreview, false, $phase),
+        ]);
+    }
+
+    private function boundedImportConfigInt(string $key, int $default, int $min, int $max): int
+    {
+        $value = (int) config("contact_management.import.$key", $default);
+
+        return max($min, min($value > 0 ? $value : $default, $max));
+    }
+
     private function buildBackgroundReport(
         ContactImportBatch $batch,
         int $created,
@@ -1523,10 +1685,12 @@ class ContactImportService
         int $invalid,
         int $duplicates,
         array $failedRowsPreview,
-        bool $finished
+        bool $finished,
+        string $phase = 'processing'
     ): array {
         return [
             'background' => true,
+            'phase' => $phase,
             'total_rows' => (int) $batch->total_rows,
             'created_count' => $created,
             'updated_count' => $updated,
@@ -1577,7 +1741,7 @@ class ContactImportService
             $rows = [];
             while (($values = fgetcsv($handle)) !== false) {
                 if (count($rows) >= self::MAX_PREVIEW_ROWS) {
-                    throw new \RuntimeException('The file is too large. Maximum allowed rows are ' . self::MAX_PREVIEW_ROWS . '.');
+                    throw new \RuntimeException('The file is too large. Maximum allowed rows are '.self::MAX_PREVIEW_ROWS.'.');
                 }
 
                 $assoc = [];
@@ -1625,7 +1789,7 @@ class ContactImportService
 
         foreach ($sheet->getRowIterator(2) as $row) {
             if (count($rows) >= self::MAX_PREVIEW_ROWS) {
-                throw new \RuntimeException('The file is too large. Maximum allowed rows are ' . self::MAX_PREVIEW_ROWS . '.');
+                throw new \RuntimeException('The file is too large. Maximum allowed rows are '.self::MAX_PREVIEW_ROWS.'.');
             }
 
             $rowIndex = $row->getRowIndex();
@@ -1657,13 +1821,13 @@ class ContactImportService
         $used = [];
 
         foreach ($headers as $index => $header) {
-            $base = $header !== '' ? $header : 'Column ' . ($index + 1);
+            $base = $header !== '' ? $header : 'Column '.($index + 1);
             $candidate = $base;
             $suffix = 1;
 
             while (isset($used[Str::lower($candidate)])) {
                 $suffix++;
-                $candidate = $base . ' (' . $suffix . ')';
+                $candidate = $base.' ('.$suffix.')';
             }
 
             $used[Str::lower($candidate)] = true;
@@ -1796,7 +1960,7 @@ class ContactImportService
         $countryCode = preg_replace('/[^\d+]/', '', $countryCode) ?: '';
 
         if ($countryCode !== '' && ! str_starts_with($countryCode, '+')) {
-            $countryCode = '+' . ltrim($countryCode, '+');
+            $countryCode = '+'.ltrim($countryCode, '+');
         }
 
         return $countryCode;
@@ -1810,17 +1974,18 @@ class ContactImportService
         }
 
         if (str_starts_with($phone, '00')) {
-            $phone = '+' . substr($phone, 2);
+            $phone = '+'.substr($phone, 2);
         }
 
         if (str_starts_with($phone, '+')) {
-            $phone = '+' . ltrim(substr($phone, 1), '+');
+            $phone = '+'.ltrim(substr($phone, 1), '+');
+
             return $phone;
         }
 
         // Accept international numbers that were entered without "+" first.
         if (strlen($phone) >= 10) {
-            $candidateInternational = '+' . ltrim($phone, '+');
+            $candidateInternational = '+'.ltrim($phone, '+');
             if (PhoneService::getE164FormatForImport($candidateInternational)) {
                 return $candidateInternational;
             }
@@ -1833,7 +1998,7 @@ class ContactImportService
 
         $defaultCountryCode = $this->normalizeCountryCode($defaultCountryCode);
         if ($defaultCountryCode !== '') {
-            return $defaultCountryCode . $local;
+            return $defaultCountryCode.$local;
         }
 
         return null;
@@ -1853,7 +2018,7 @@ class ContactImportService
         if (str_starts_with($phone, '+')) {
             $digits = preg_replace('/\D+/', '', substr($phone, 1)) ?: '';
 
-            return $digits !== '' ? '+' . $digits : '';
+            return $digits !== '' ? '+'.$digits : '';
         }
 
         return preg_replace('/\D+/', '', $phone) ?: '';
@@ -1871,7 +2036,7 @@ class ContactImportService
         }
 
         if (strlen($phone) >= 10) {
-            $candidateInternational = '+' . ltrim($phone, '+');
+            $candidateInternational = '+'.ltrim($phone, '+');
             if (PhoneService::getE164FormatForImport($candidateInternational)) {
                 return false;
             }
@@ -1898,12 +2063,17 @@ class ContactImportService
             return [];
         }
 
-        return collect(explode('|', $groupName))
-            ->map(fn ($name) => trim($name))
-            ->filter()
-            ->unique()
-            ->values()
-            ->all();
+        $groups = [];
+        foreach (explode('|', $groupName) as $name) {
+            $name = trim($name);
+            if ($name === '') {
+                continue;
+            }
+
+            $groups[$this->groupCacheKey($name)] = $name;
+        }
+
+        return array_values($groups);
     }
 
     private function buildFileGroupIdsByPhone(ContactImportBatch $batch, int $organizationId, int $userId, array &$groupCache): array
@@ -1916,7 +2086,7 @@ class ContactImportService
             ->where('is_removed', false)
             ->where('status', 'valid')
             ->orderBy('id')
-            ->chunkById(self::PROCESSING_CHUNK_SIZE, function ($rows) use (&$groupNamesByPhone): void {
+            ->chunkById($this->processingChunkSize(), function ($rows) use (&$groupNamesByPhone): void {
                 foreach ($rows as $row) {
                     $normalized = $this->decodeJsonArray($row->normalized_data);
                     $phone = trim((string) ($normalized['phone'] ?? ''));
@@ -2032,7 +2202,7 @@ class ContactImportService
 
     private function resolveSplitGroupId(int $organizationId, int $userId, array &$groupCache, $now, array &$splitState): ?int
     {
-        if (!($splitState['enabled'] ?? false)) {
+        if (! ($splitState['enabled'] ?? false)) {
             return null;
         }
 
@@ -2047,7 +2217,7 @@ class ContactImportService
                 $splitState['current_count'] = 0;
             }
 
-            $groupName = $prefix . '_' . ((int) ($splitState['current_index'] ?? 1));
+            $groupName = $prefix.'_'.((int) ($splitState['current_index'] ?? 1));
             $groupKey = $this->groupCacheKey($groupName);
 
             $this->ensureGroupIdsForNames([$groupName], $organizationId, $userId, $groupCache, $now);
@@ -2067,6 +2237,7 @@ class ContactImportService
             if ((int) $splitState['group_counts'][$groupKey] >= $size) {
                 $splitState['current_index'] = (int) ($splitState['current_index'] ?? 1) + 1;
                 $splitState['current_count'] = 0;
+
                 continue;
             }
 
@@ -2092,4 +2263,3 @@ class ContactImportService
         return is_array($decoded) ? $decoded : [];
     }
 }
-

@@ -188,6 +188,8 @@ class ProcessWebhookJob implements ShouldQueue
 
             $processingTime = (microtime(true) - $startTime) * 1000;
 
+            $this->markWebhookFailureResolved();
+
             Log::channel('webhook')->info('ProcessWebhookJob completed', [
                 'organization_id' => $this->organizationId,
                 'webhook_type' => $this->webhookType,
@@ -202,6 +204,28 @@ class ProcessWebhookJob implements ShouldQueue
             ]);
 
             throw $e; // Re-throw to trigger retry mechanism
+        }
+    }
+
+    protected function markWebhookFailureResolved(): void
+    {
+        $failureId = $this->context['webhook_failure_id'] ?? null;
+
+        if (! $failureId || ! Schema::hasColumn('webhook_failures', 'resolved_at')) {
+            return;
+        }
+
+        try {
+            WebhookFailure::whereKey($failureId)
+                ->whereNull('resolved_at')
+                ->update(['resolved_at' => now()]);
+        } catch (\Throwable $e) {
+            Log::channel('webhook')->warning('Failed to mark webhook failure as resolved', [
+                'webhook_failure_id' => $failureId,
+                'organization_id' => $this->organizationId,
+                'webhook_type' => $this->webhookType,
+                'error' => $e->getMessage(),
+            ]);
         }
     }
 
@@ -271,7 +295,7 @@ class ProcessWebhookJob implements ShouldQueue
         }
 
         // AC-1.2.5: Idempotency check - prevent duplicate chat creation
-        // Uses idx_wam_org index for efficient lookup
+        // Uses idx_chats_wam_org index for efficient lookup
         if ($this->isDuplicateMessage($wamId)) {
             Log::channel('webhook')->info('Duplicate webhook skipped', [
                 'organization_id' => $this->organizationId,
@@ -533,7 +557,7 @@ class ProcessWebhookJob implements ShouldQueue
     /**
      * Check if a message with this wam_id already exists (idempotency).
      *
-     * AC-1.2.5: Utilizes idx_wam_org index for efficient lookup.
+     * AC-1.2.5: Utilizes idx_chats_wam_org index for efficient lookup.
      *
      * @param  string  $wamId The WhatsApp message ID
      * @return bool True if duplicate exists
@@ -972,8 +996,8 @@ class ProcessWebhookJob implements ShouldQueue
             return;
         }
 
-        // Update chat status
-        $chat->update(['status' => $statusType]);
+        // Update chat status only when the incoming status progresses the current state.
+        Chat::updateStatusIfProgressed($chat->id, $statusType);
 
         // Create status log entry
         // Note: chat_status_logs table only has: id, chat_id, metadata, created_at
@@ -2306,7 +2330,7 @@ class ProcessWebhookJob implements ShouldQueue
 
         // Update chat status to the latest received status
         if ($latestStatus) {
-            $chat->update(['status' => $latestStatus]);
+            Chat::updateStatusIfProgressed($chat->id, $latestStatus);
 
             // AC-1.7.6: Trigger external webhook for the status update
             try {
@@ -2429,6 +2453,7 @@ class ProcessWebhookJob implements ShouldQueue
                 'webhook_type' => $this->webhookType,
                 'queue' => $this->queue,
                 'sample_id' => $this->context['sample_id'] ?? null,
+                'context' => $this->context,
             ] as $column => $value) {
                 if (Schema::hasColumn('webhook_failures', $column)) {
                     $failureData[$column] = $value;

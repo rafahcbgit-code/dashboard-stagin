@@ -43,9 +43,6 @@ class CampaignService
         } else {
             $selectedGroup = ContactGroup::where('uuid', $request->contacts)
                 ->where('organization_id', $organizationId)
-                ->withCount(['contacts as contacts_count' => function ($q) use ($organizationId) {
-                    $q->where('organization_id', $organizationId);
-                }])
                 ->first();
 
             if (!$selectedGroup) {
@@ -54,7 +51,7 @@ class CampaignService
                 ]);
             }
 
-            $selectedCount = $selectedGroup->contacts_count;
+            $selectedCount = (int) $selectedGroup->contacts_count;
         }
 
         if ($selectedCount > $tierLimit) {

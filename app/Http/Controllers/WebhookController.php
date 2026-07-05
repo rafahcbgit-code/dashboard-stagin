@@ -12,6 +12,7 @@ use App\Models\Template;
 use App\Models\ChatMedia;
 use App\Events\NewChatEvent;
 use App\Models\Organization;
+use App\Models\WebhookFailure;
 use Illuminate\Http\Request;
 use App\Models\ChatStatusLog;
 use App\Services\ChatService;
@@ -19,12 +20,14 @@ use App\Helpers\WebhookHelper;
 use App\Services\PhoneService;
 use App\Services\StripeService;
 use App\Services\AutoReplyService;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use App\Services\UnsubscribeChecker;
 use App\Services\SubscriptionService;
 use App\Models\MissedChatStatusUpdate;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Response;
 use GuzzleHttp\Exception\GuzzleException;
@@ -147,7 +150,15 @@ class WebhookController extends BaseController
 
     protected function getOrganizationByIdentifier($identifier)
     {
-        return Organization::where('identifier', $identifier)->first();
+        if (!$identifier) {
+            return null;
+        }
+
+        return Cache::remember(
+            "organization:webhook_identifier:{$identifier}",
+            now()->addMinute(),
+            fn () => Organization::where('identifier', $identifier)->first()
+        );
     }
 
     protected function getOrganizationByWabaId(string $wabaId)
@@ -304,6 +315,15 @@ class WebhookController extends BaseController
                 ]
             );
         } catch (\Throwable $e) {
+            $this->recordWebhookDispatchFailure(
+                $res,
+                $payload,
+                $organization->id,
+                $webhookType,
+                $entry[0]['id'] ?? null,
+                $e
+            );
+
             Log::channel('webhook_dispatch_failures')->critical('Failed to dispatch webhook processing job', [
                 'organization_id' => $organization->id,
                 'webhook_type' => $webhookType,
@@ -329,6 +349,72 @@ class WebhookController extends BaseController
 
         // Return HTTP 200 immediately (AC-1.1.1)
         return Response::json(['status' => 'success'], 200);
+    }
+
+    protected function recordWebhookDispatchFailure(
+        array $jobPayload,
+        array $rawPayload,
+        int $organizationId,
+        string $webhookType,
+        ?string $wabaId,
+        \Throwable $exception
+    ): void {
+        try {
+            $failureData = [
+                'organization_id' => $organizationId,
+                'job_type' => 'ProcessWebhookJob',
+                'error_message' => substr($exception->getMessage(), 0, 1000),
+                'error_code' => $exception->getCode() ? (string) $exception->getCode() : null,
+                'payload' => $jobPayload,
+                'attempts' => 0,
+            ];
+
+            foreach ([
+                'wam_id' => $this->extractFirstWebhookWamId($jobPayload),
+                'webhook_type' => $webhookType,
+                'queue' => ProcessWebhookJob::queueForType($webhookType),
+            ] as $column => $value) {
+                if (Schema::hasColumn('webhook_failures', $column)) {
+                    $failureData[$column] = $value;
+                }
+            }
+
+            if (Schema::hasColumn('webhook_failures', 'context')) {
+                $failureData['context'] = [
+                    'failure_stage' => 'dispatch',
+                    'waba_id' => $wabaId,
+                    'raw_payload' => $rawPayload,
+                    'failed_at' => now()->toIso8601String(),
+                    'exception_class' => get_class($exception),
+                ];
+            }
+
+            WebhookFailure::create($failureData);
+        } catch (\Throwable $loggingException) {
+            Log::channel('webhook_dispatch_failures')->error('Failed to store webhook dispatch failure', [
+                'organization_id' => $organizationId,
+                'webhook_type' => $webhookType,
+                'waba_id' => $wabaId,
+                'dispatch_error' => $exception->getMessage(),
+                'storage_error' => $loggingException->getMessage(),
+            ]);
+        }
+    }
+
+    protected function extractFirstWebhookWamId(array $change): ?string
+    {
+        $value = is_array($change['value'] ?? null) ? $change['value'] : [];
+
+        foreach (['messages', 'statuses', 'message_echoes'] as $key) {
+            $items = is_array($value[$key] ?? null) ? $value[$key] : [];
+            $wamId = $items[0]['id'] ?? null;
+
+            if (is_string($wamId) && $wamId !== '') {
+                return $wamId;
+            }
+        }
+
+        return null;
     }
 
     /**

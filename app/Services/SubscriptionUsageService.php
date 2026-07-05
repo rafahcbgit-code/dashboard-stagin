@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Models\Contact;
 use App\Models\ConversationWindow;
+use App\Models\Organization;
 use App\Models\ResourceAddon;
 use App\Models\Subscription;
 use App\Models\SubscriptionPlan;
@@ -31,6 +32,10 @@ class SubscriptionUsageService
         self::ORGANIZATIONS => 'organizations_limit',
     ];
 
+    private array $resourceAccountIdCache = [];
+
+    private array $organizationNameCache = [];
+
     public function canUse(int $organizationId, string $resource, int $amount = 1, ?int $userId = null): array
     {
         $summary = $this->summary($organizationId, $resource, $userId);
@@ -56,15 +61,21 @@ class SubscriptionUsageService
     {
         $resource = $this->normalizeResource($resource);
         $usageUserId = $userId ?: Auth::id();
-        $billingOrganizationId = $this->billingOrganizationId($organizationId, $resource, $usageUserId);
+        $billingOrganizationId = $this->resourceAccountId($organizationId);
+        $poolOrganizationCount = $this->resourcePoolOrganizationCount($billingOrganizationId);
         $subscription = $this->subscription($billingOrganizationId);
         $baseLimit = $this->baseLimit($subscription, $resource);
         $addonQuantity = $this->activeAddonQuantity($billingOrganizationId, $resource);
         $limit = $baseLimit === -1 ? -1 : $baseLimit + $addonQuantity;
-        $used = $this->used($organizationId, $resource, $subscription, $usageUserId);
+        $used = $this->used($billingOrganizationId, $resource, $subscription, $usageUserId);
 
         $summary = [
             'resource' => $resource,
+            'organization_id' => $organizationId,
+            'billing_organization_id' => $billingOrganizationId,
+            'billing_organization_name' => $this->organizationName($billingOrganizationId),
+            'pool_organization_count' => $poolOrganizationCount,
+            'is_shared_pool' => $poolOrganizationCount > 1 || $billingOrganizationId !== $organizationId,
             'limit' => $limit,
             'base_limit' => $baseLimit,
             'addon_quantity' => $addonQuantity,
@@ -73,7 +84,7 @@ class SubscriptionUsageService
         ];
 
         if ($resource === self::TEMPLATE_MESSAGES) {
-            $summary['source_breakdown'] = $this->templateMessageSourceBreakdown($organizationId, $subscription);
+            $summary['source_breakdown'] = $this->templateMessageSourceBreakdown($billingOrganizationId, $subscription);
         }
 
         return $summary;
@@ -105,7 +116,7 @@ class SubscriptionUsageService
         ?CarbonInterface $occurredAt = null
     ): ?SubscriptionUsageEvent {
         $resource = $this->normalizeResource($resource);
-        $subscription = $this->subscription($organizationId);
+        $subscription = $this->subscription($this->resourceAccountId($organizationId));
 
         try {
             return SubscriptionUsageEvent::create([
@@ -157,8 +168,8 @@ class SubscriptionUsageService
 
     public function createOrganizationAllowedForUser(int $userId, ?int $anchorOrganizationId = null): array
     {
-        $anchorOrganizationId = $this->primaryOwnedOrganizationId($userId)
-            ?: $anchorOrganizationId
+        $anchorOrganizationId = $anchorOrganizationId
+            ?: $this->primaryOwnedOrganizationId($userId)
             ?: $this->firstOwnedOrganizationId($userId);
 
         if (! $anchorOrganizationId) {
@@ -184,21 +195,21 @@ class SubscriptionUsageService
         };
     }
 
-    private function used(int $organizationId, string $resource, ?Subscription $subscription, ?int $userId = null): int
+    private function used(int $billingOrganizationId, string $resource, ?Subscription $subscription, ?int $userId = null): int
     {
         return match ($resource) {
-            self::TEMPLATE_MESSAGES => $this->usageEventsSum($organizationId, self::TEMPLATE_MESSAGES, $subscription),
-            self::CONVERSATIONS => $this->conversationWindowsCount($organizationId, $subscription),
-            self::CONTACTS => Contact::where('organization_id', $organizationId)->whereNull('deleted_at')->count(),
-            self::TEAM_MEMBERS => $this->teamMembersAndPendingInvitesCount($organizationId),
-            self::ORGANIZATIONS => $this->ownedOrganizationsCount($userId ?: Auth::id()),
+            self::TEMPLATE_MESSAGES => $this->usageEventsSum($billingOrganizationId, self::TEMPLATE_MESSAGES, $subscription),
+            self::CONVERSATIONS => $this->conversationWindowsCount($billingOrganizationId, $subscription),
+            self::CONTACTS => $this->scopeToResourcePool(Contact::query(), $billingOrganizationId)->whereNull('deleted_at')->count(),
+            self::TEAM_MEMBERS => $this->teamMembersAndPendingInvitesCount($billingOrganizationId),
+            self::ORGANIZATIONS => $this->resourcePoolOrganizationCount($billingOrganizationId),
             default => 0,
         };
     }
 
-    private function usageEventsSum(int $organizationId, string $resource, ?Subscription $subscription): int
+    private function usageEventsSum(int $billingOrganizationId, string $resource, ?Subscription $subscription): int
     {
-        $query = SubscriptionUsageEvent::where('organization_id', $organizationId)
+        $query = $this->scopeToResourcePool(SubscriptionUsageEvent::query(), $billingOrganizationId)
             ->where('resource', $resource);
 
         $this->scopeToSubscriptionPeriod($query, $subscription, 'occurred_at');
@@ -206,9 +217,9 @@ class SubscriptionUsageService
         return (int) $query->sum('quantity');
     }
 
-    private function templateMessageSourceBreakdown(int $organizationId, ?Subscription $subscription): array
+    private function templateMessageSourceBreakdown(int $billingOrganizationId, ?Subscription $subscription): array
     {
-        $query = SubscriptionUsageEvent::where('organization_id', $organizationId)
+        $query = $this->scopeToResourcePool(SubscriptionUsageEvent::query(), $billingOrganizationId)
             ->where('resource', self::TEMPLATE_MESSAGES)
             ->selectRaw("COALESCE(source_type, 'unknown') as source_type, SUM(quantity) as total")
             ->groupByRaw("COALESCE(source_type, 'unknown')")
@@ -225,21 +236,21 @@ class SubscriptionUsageService
             ->all();
     }
 
-    private function conversationWindowsCount(int $organizationId, ?Subscription $subscription): int
+    private function conversationWindowsCount(int $billingOrganizationId, ?Subscription $subscription): int
     {
-        $query = ConversationWindow::where('organization_id', $organizationId);
+        $query = $this->scopeToResourcePool(ConversationWindow::query(), $billingOrganizationId);
         $this->scopeToSubscriptionPeriod($query, $subscription, 'opened_at');
 
         return $query->count();
     }
 
-    private function teamMembersAndPendingInvitesCount(int $organizationId): int
+    private function teamMembersAndPendingInvitesCount(int $billingOrganizationId): int
     {
-        $teamCount = Team::where('organization_id', $organizationId)
+        $teamCount = $this->scopeToResourcePool(Team::query(), $billingOrganizationId)
             ->whereNull('deleted_at')
             ->count();
 
-        $inviteCount = TeamInvite::where('organization_id', $organizationId)
+        $inviteCount = $this->scopeToResourcePool(TeamInvite::query(), $billingOrganizationId)
             ->where('expire_at', '>=', now())
             ->count();
 
@@ -259,13 +270,55 @@ class SubscriptionUsageService
             ->count();
     }
 
-    private function billingOrganizationId(int $organizationId, string $resource, ?int $userId = null): int
+    public function resourceAccountId(int $organizationId): int
     {
-        if ($resource !== self::ORGANIZATIONS || ! $userId) {
-            return $organizationId;
+        if (array_key_exists($organizationId, $this->resourceAccountIdCache)) {
+            return $this->resourceAccountIdCache[$organizationId];
         }
 
-        return $this->primaryOwnedOrganizationId($userId) ?: $organizationId;
+        $billingOrganizationId = Organization::whereKey($organizationId)->value('billing_organization_id');
+
+        return $this->resourceAccountIdCache[$organizationId] = $billingOrganizationId ?: $organizationId;
+    }
+
+    public function resourcePoolOrganizationIds(int $billingOrganizationId): array
+    {
+        return $this->resourcePoolOrganizationIdQuery($billingOrganizationId)
+            ->orderBy('id')
+            ->pluck('id')
+            ->map(fn ($id) => (int) $id)
+            ->values()
+            ->all();
+    }
+
+    private function resourcePoolOrganizationCount(int $billingOrganizationId): int
+    {
+        return $this->resourcePoolOrganizationIdQuery($billingOrganizationId)->count();
+    }
+
+    private function scopeToResourcePool($query, int $billingOrganizationId, string $column = 'organization_id')
+    {
+        return $query->whereIn($column, $this->resourcePoolOrganizationIdQuery($billingOrganizationId));
+    }
+
+    private function resourcePoolOrganizationIdQuery(int $billingOrganizationId)
+    {
+        return Organization::query()
+            ->select('id')
+            ->whereNull('deleted_at')
+            ->where(function ($query) use ($billingOrganizationId): void {
+                $query->whereKey($billingOrganizationId)
+                    ->orWhere('billing_organization_id', $billingOrganizationId);
+            });
+    }
+
+    private function organizationName(int $organizationId): ?string
+    {
+        if (array_key_exists($organizationId, $this->organizationNameCache)) {
+            return $this->organizationNameCache[$organizationId];
+        }
+
+        return $this->organizationNameCache[$organizationId] = Organization::whereKey($organizationId)->value('name');
     }
 
     private function primaryOwnedOrganizationId(int $userId): ?int

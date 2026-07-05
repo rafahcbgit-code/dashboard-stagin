@@ -9,6 +9,7 @@ use App\Models\Organization;
 use App\Models\Team;
 use App\Services\OrganizationService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cookie;
 use Inertia\Inertia;
 
 class OrganizationController extends BaseController
@@ -43,6 +44,7 @@ class OrganizationController extends BaseController
 
         if($organization){
             session()->put('current_organization', $organization->id);
+            Cookie::queue('last_organization_id', (string) $organization->id, 60 * 24 * 365);
         }
 
         return to_route('dashboard');
@@ -54,6 +56,7 @@ class OrganizationController extends BaseController
 
         if($organization){
             session()->put('current_organization', $organization->id);
+            Cookie::queue('last_organization_id', (string) $organization->id, 60 * 24 * 365);
 
             return to_route('dashboard');
         }

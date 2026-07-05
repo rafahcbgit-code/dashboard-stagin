@@ -192,10 +192,34 @@ return [
             'days' => 7,
         ],
 
+        'ticket_assignment' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/ticket-assignment.log'),
+            'level' => 'debug',
+            'days' => 14,
+            'replace_placeholders' => true,
+        ],
+
         'woocommerce' => [
             'driver' => 'daily',
             'path' => storage_path('logs/woocommerce.log'),
             'level' => env('LOG_LEVEL', 'debug'),
+            'days' => 14,
+            'replace_placeholders' => true,
+        ],
+
+        'slow_queries' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/slow-queries.log'),
+            'level' => 'warning',
+            'days' => 14,
+            'replace_placeholders' => true,
+        ],
+
+        'slow_jobs' => [
+            'driver' => 'daily',
+            'path' => storage_path('logs/slow-jobs.log'),
+            'level' => 'warning',
             'days' => 14,
             'replace_placeholders' => true,
         ],

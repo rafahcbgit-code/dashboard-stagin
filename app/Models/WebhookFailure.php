@@ -42,7 +42,9 @@ class WebhookFailure extends Model
         'error_message',
         'error_code',
         'payload',
+        'context',
         'attempts',
+        'resolved_at',
     ];
 
     protected $casts = [
@@ -53,6 +55,8 @@ class WebhookFailure extends Model
         'attempts' => 'integer',
         'created_at' => 'datetime',
         'payload' => 'array',
+        'context' => 'array',
+        'resolved_at' => 'datetime',
     ];
 
     /**

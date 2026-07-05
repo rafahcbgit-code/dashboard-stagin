@@ -77,6 +77,9 @@
                     <div v-for="item in usageItems" :key="item.key" class="border rounded-md p-3">
                         <div class="text-xs text-gray-500">{{ item.label }}</div>
                         <div class="text-lg">{{ item.used }} / {{ item.limit }}</div>
+                        <div v-if="item.isSharedPool && item.billingOrganizationName" class="text-xs text-gray-500">
+                            {{ $t('Resource account') }}: {{ item.billingOrganizationName }}
+                        </div>
                         <div v-if="item.addonQuantity > 0" class="text-xs text-gray-500">
                             {{ $t('Plan') }}: {{ item.baseLimit }} + {{ $t('Add-ons') }}: {{ item.addonQuantity }}
                         </div>
@@ -242,6 +245,8 @@
             baseLimit: formatLimit(usage.base_limit ?? -1),
             addonQuantity: Number(usage.addon_quantity ?? 0),
             remaining: formatLimit(usage.remaining ?? -1),
+            isSharedPool: Boolean(usage.is_shared_pool),
+            billingOrganizationName: usage.billing_organization_name || null,
         };
     });
 

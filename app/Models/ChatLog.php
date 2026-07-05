@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use App\Helpers\DateTimeHelper;
 use App\Models\Chat;
+use App\Models\ChatArchive;
 use App\Models\ChatNote;
 use Carbon\Carbon;
 
@@ -48,6 +49,10 @@ class ChatLog extends Model
         switch ($entityType) {
             case 'chat':
                 $relatedEntity = Chat::with('media', 'user', 'logs')->find($entityId);
+
+                if (!$relatedEntity) {
+                    $relatedEntity = ChatArchive::with('media', 'user', 'logs')->find($entityId);
+                }
                 break;
             case 'ticket':
                 $relatedEntity = ChatTicketLog::find($entityId);

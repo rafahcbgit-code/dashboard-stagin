@@ -159,6 +159,16 @@ class Organization extends Model
         return $this->belongsTo(Subscription::class, 'id', 'organization_id');
     }
 
+    public function billingOrganization()
+    {
+        return $this->belongsTo(Organization::class, 'billing_organization_id');
+    }
+
+    public function resourceOrganizations()
+    {
+        return $this->hasMany(Organization::class, 'billing_organization_id');
+    }
+
     public function labels()
     {
         return $this->hasMany(Label::class);

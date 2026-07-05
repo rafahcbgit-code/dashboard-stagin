@@ -13,6 +13,7 @@ class BackfillConversationWindows extends Command
     protected $signature = 'subscription:backfill-conversation-windows
         {--organization= : Limit backfill to a single organization ID}
         {--dry-run : Show how many conversation windows would be created without writing}
+        {--without-archive : Ignore chats_archive even when the table exists}
         {--report-file= : Write the full per-organization report to a CSV file}
         {--report-limit=100 : Number of organizations to print in the console report}
         {--insert-batch=1000 : Number of conversation windows to insert per batch}';
@@ -46,6 +47,7 @@ class BackfillConversationWindows extends Command
         }
 
         $dryRun = (bool) $this->option('dry-run');
+        $includeArchive = ! (bool) $this->option('without-archive') && Schema::hasTable('chats_archive');
         $this->insertBatchSize = max(1, (int) $this->option('insert-batch'));
         $organizationId = $this->option('organization') !== null
             ? (int) $this->option('organization')
@@ -56,29 +58,17 @@ class BackfillConversationWindows extends Command
         $this->info($dryRun
             ? 'Dry run: no conversation windows will be written.'
             : 'Backfilling conversation windows...');
+        $this->line('Sources: chats'.($includeArchive ? ', chats_archive' : ''));
 
         $this->hasExistingWindows = ConversationWindow::query()
             ->when($organizationId, fn ($query) => $query->where('organization_id', $organizationId))
             ->exists();
 
-        $query = DB::table('chats')
-            ->select([
-                'id',
-                'organization_id',
-                'contact_id',
-                'created_at',
-            ])
-            ->whereNotNull('organization_id')
-            ->whereNotNull('contact_id')
-            ->whereNotNull('created_at')
+        $query = $this->chatSourceQuery($organizationId, $includeArchive)
             ->orderBy('organization_id')
             ->orderBy('contact_id')
             ->orderBy('created_at')
             ->orderBy('id');
-
-        if ($organizationId) {
-            $query->where('organization_id', $organizationId);
-        }
 
         foreach ($query->cursor() as $chat) {
             $this->processChat($chat, $dryRun);
@@ -135,7 +125,7 @@ class BackfillConversationWindows extends Command
                 'contact_id' => $contactId,
                 'opened_at' => $openedAt,
                 'closes_at' => $closesAt,
-                'source_chat_id' => (int) $chat->id,
+                'source_chat_id' => $chat->source_table === 'chats' ? (int) $chat->id : null,
                 'created_at' => $now,
                 'updated_at' => $now,
             ];
@@ -148,6 +138,43 @@ class BackfillConversationWindows extends Command
         $this->currentClosesAt = $closesAt;
         $this->incrementOrganizationStat($organizationId, 'created');
         $this->created++;
+    }
+
+    private function chatSourceQuery(?int $organizationId, bool $includeArchive)
+    {
+        $activeChats = $this->chatTableQuery('chats', 'chats', $organizationId);
+
+        if (! $includeArchive) {
+            return $activeChats;
+        }
+
+        $archivedChats = $this->chatTableQuery('chats_archive', 'chats_archive', $organizationId);
+
+        return DB::query()->fromSub(
+            $activeChats->unionAll($archivedChats),
+            'conversation_chat_sources'
+        );
+    }
+
+    private function chatTableQuery(string $table, string $sourceTable, ?int $organizationId)
+    {
+        $query = DB::table($table)
+            ->select([
+                'id',
+                'organization_id',
+                'contact_id',
+                'created_at',
+            ])
+            ->selectRaw('? as source_table', [$sourceTable])
+            ->whereNotNull('organization_id')
+            ->whereNotNull('contact_id')
+            ->whereNotNull('created_at');
+
+        if ($organizationId) {
+            $query->where('organization_id', $organizationId);
+        }
+
+        return $query;
     }
 
     private function flushPendingWindowRows(): void

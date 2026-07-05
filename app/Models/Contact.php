@@ -6,6 +6,7 @@ use App\Helpers\DateTimeHelper;
 use App\Http\Traits\HasUuid;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Propaganistas\LaravelPhone\PhoneNumber;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Auth;
@@ -90,7 +91,7 @@ class Contact extends Model
 
     public function lastChat()
     {
-        return $this->hasOne(Chat::class, 'contact_id')->with('media')->latest();
+        return $this->hasOne(Chat::class, 'contact_id')->with('media')->latestOfMany('created_at');
     }
 
     public function lastInboundChat()
@@ -98,7 +99,7 @@ class Contact extends Model
         return $this->hasOne(Chat::class, 'contact_id')
             ->where('type', 'inbound')
             ->with('media')
-            ->latest();
+            ->latestOfMany('created_at');
     }
 
     public function unreadInboundChats()
@@ -114,15 +115,27 @@ class Contact extends Model
         return $this->hasMany(ChatLog::class);
     }
 
-    public function contactsWithChats($organizationId, $searchTerm = null, $ticketingActive = false, $ticketState = null, $sortDirection = 'asc', $role = 'owner', $allowAgentsViewAllChats = true, $labelFilters = [], $assignedToMe = false, $assignedToFilter = null, $unreadOnly = false)
+    public function contactsWithChats($organizationId, $searchTerm = null, $ticketingActive = false, $ticketState = null, $sortDirection = 'asc', $role = 'owner', $allowAgentsViewAllChats = true, $labelFilters = [], $assignedToMe = false, $assignedToFilter = null, $unreadOnly = false, ?int $total = null)
     {
+        $needsTicketJoin = $ticketingActive && (
+            $assignedToFilter !== null
+            || ($assignedToMe && $role === 'agent')
+            || $ticketState === 'unassigned'
+            || ($ticketState !== null && $ticketState !== 'all')
+            || ($role === 'agent' && !$allowAgentsViewAllChats)
+        );
+
         $query = $this->newQuery()
             ->where('contacts.organization_id', $organizationId)
             ->whereNotNull('contacts.latest_chat_created_at')
             ->with(['lastChat', 'lastInboundChat', 'latestAssignedUser', 'labels', 'ticket'])
             ->whereNull('contacts.deleted_at')
-            ->select('contacts.*')
-            ->distinct();
+            ->select('contacts.*');
+
+        if ($needsTicketJoin) {
+            $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
+                ->distinct();
+        }
 
         // Apply label filtering
         if (!empty($labelFilters)) {
@@ -140,10 +153,8 @@ class Contact extends Model
             });
         }
 
-        // Apply ticketing conditions if active
-        if ($ticketingActive) {
-            $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id');
-
+        // Apply ticketing conditions only when a ticket filter is needed.
+        if ($needsTicketJoin) {
             // Apply assigned_to filter if provided
             if ($assignedToFilter !== null) {
                 $query->where('chat_tickets.assigned_to', $assignedToFilter);
@@ -162,14 +173,6 @@ class Contact extends Model
             }
         }
 
-        // Agent permission check
-        if ($role == 'agent' && $allowAgentsViewAllChats == false && !$assignedToMe) {
-            $query->where(function ($q) {
-                $q->whereNull('chat_tickets.assigned_to')
-                    ->orWhere('chat_tickets.assigned_to', auth()->user()->id);
-            });
-        }
-
         // Search filter
         if ($searchTerm) {
             $query->where(function ($q) use ($searchTerm) {
@@ -183,19 +186,42 @@ class Contact extends Model
 
         $query->orderBy('contacts.latest_chat_created_at', $sortDirection);
 
-        // Paginate
-        return $query->paginate(10);
+        $perPage = 10;
+        $page = LengthAwarePaginator::resolveCurrentPage();
+
+        if ($total === null) {
+            $total = (clone $query)->count();
+        }
+
+        $items = $query->forPage($page, $perPage)->get();
+
+        return new LengthAwarePaginator(
+            $items,
+            $total,
+            $perPage,
+            $page,
+            [
+                'path' => LengthAwarePaginator::resolveCurrentPath(),
+                'pageName' => 'page',
+            ]
+        );
     }
 
     public function contactsWithChatsCount($organizationId, $searchTerm = null, $ticketingActive = false, $ticketState = null, $sortDirection = 'asc', $role = 'owner', $allowAgentsViewAllChats = true, $labelFilters = [], $assignedToMe = false, $assignedToFilter = null, $unreadOnly = false)
     {
+        $needsTicketJoin = $ticketingActive && (
+            $assignedToFilter !== null
+            || ($assignedToMe && $role === 'agent')
+            || $ticketState === 'unassigned'
+            || ($ticketState !== null && $ticketState !== 'all')
+            || ($role === 'agent' && !$allowAgentsViewAllChats)
+        );
+
         $query = $this->newQuery()
             ->where('contacts.organization_id', $organizationId)
             ->whereNotNull('contacts.latest_chat_created_at')
             ->whereNull('contacts.deleted_at')
-            ->with(['lastChat', 'lastInboundChat', 'ticket'])
-            ->select('contacts.*')
-            ->orderBy('contacts.latest_chat_created_at', $sortDirection);
+            ->select('contacts.id');
 
         // Apply unread messages filter
         if ($unreadOnly) {
@@ -206,19 +232,16 @@ class Contact extends Model
             });
         }
 
-        if ($ticketingActive) {
-            // Conditional join with chat_tickets table and comparison with ticketState
+        if ($needsTicketJoin) {
+            $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id');
+
+            // Conditional comparison with ticketState
             if ($assignedToFilter !== null) {
-                $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
-                    ->where('chat_tickets.assigned_to', $assignedToFilter);
+                $query->where('chat_tickets.assigned_to', $assignedToFilter);
             } elseif ($ticketState === 'unassigned') {
-                $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
-                    ->whereNull('chat_tickets.assigned_to');
+                $query->whereNull('chat_tickets.assigned_to');
             } elseif ($ticketState !== null && $ticketState !== 'all') {
-                $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id')
-                    ->where('chat_tickets.status', $ticketState);
-            } else if ($ticketState === 'all') {
-                $query->leftJoin('chat_tickets', 'contacts.id', '=', 'chat_tickets.contact_id');
+                $query->where('chat_tickets.status', $ticketState);
             }
 
             // "Assigned to Me" filter
@@ -231,13 +254,6 @@ class Contact extends Model
                     $q->where('chat_tickets.assigned_to', auth()->user()->id);
                 });
             }
-        }
-
-        if ($role == 'agent' && $allowAgentsViewAllChats == false && !$assignedToMe) {
-            $query->where(function ($q) {
-                $q->whereNull('chat_tickets.assigned_to')
-                    ->orWhere('chat_tickets.assigned_to', auth()->user()->id);
-            });
         }
 
         // Apply label filtering
@@ -268,7 +284,9 @@ class Contact extends Model
             });
         }
 
-        return $query->count();
+        return $needsTicketJoin
+            ? $query->distinct()->count('contacts.id')
+            : $query->count();
     }
 
     public function getFirstNameAttribute()

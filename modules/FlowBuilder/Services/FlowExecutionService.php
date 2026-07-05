@@ -29,6 +29,7 @@ class FlowExecutionService
     private $metaPayload;
 
     private int $logNodesProcessed = 0;
+    private array $flowCache = [];
 
     public function __construct(int $organizationId, $metaPayload = null)
     {
@@ -52,6 +53,15 @@ class FlowExecutionService
         );
     }
 
+    private function findFlow(int $flowId): ?Flow
+    {
+        if (!array_key_exists($flowId, $this->flowCache)) {
+            $this->flowCache[$flowId] = Flow::find($flowId);
+        }
+
+        return $this->flowCache[$flowId];
+    }
+
     /**
      * Resume an active flow for a contact, or return false if none active.
      * Called by AutoReplyService when no trigger matched — only resumes existing flows.
@@ -69,7 +79,7 @@ class FlowExecutionService
         }
 
         // Check if the flow still exists
-        $flow = Flow::find($flowData->flow_id);
+        $flow = $this->findFlow((int) $flowData->flow_id);
         if (!$flow) {
             Log::info("FlowExecution: flow {$flowData->flow_id} deleted, clearing state for contact {$chat->contact_id}");
             $flowData->delete();
@@ -317,7 +327,7 @@ class FlowExecutionService
      */
     private function processFlow($chat, FlowUserData $flowData, string $message)
     {
-        $flow = Flow::find($flowData->flow_id);
+        $flow = $this->findFlow((int) $flowData->flow_id);
         if (!$flow || empty($flow->metadata)) {
             Log::warning('FlowExecution::processFlow - flow not found or empty metadata', [
                 'flow_id' => $flowData->flow_id,
@@ -1072,7 +1082,9 @@ class FlowExecutionService
 
     private function updateStep(int $contactId, string $step): void
     {
-        FlowUserData::where('contact_id', $contactId)->update(['current_step' => $step]);
+        FlowUserData::where('contact_id', $contactId)
+            ->where('current_step', '!=', $step)
+            ->update(['current_step' => $step]);
     }
 
     private function endFlow(int $contactId, string $reason = 'completed', ?int $chatId = null): void
@@ -1290,7 +1302,7 @@ class FlowExecutionService
             }
 
             // Advance past the question node and continue processing
-            $flow = Flow::find($flowData->flow_id);
+            $flow = $this->findFlow((int) $flowData->flow_id);
             if (!$flow) {
                 $this->endFlow($chat->contact_id, 'completed', $chat->id);
                 return false;
@@ -1334,7 +1346,7 @@ class FlowExecutionService
             $this->storeQuestionAttempt($chat, $flowData, $config, $message, 'max_retries_exceeded', $currentRetries);
 
             // Max retries reached — look for fail route or end flow
-            $flow = Flow::find($flowData->flow_id);
+            $flow = $this->findFlow((int) $flowData->flow_id);
             if (!$flow) {
                 $this->endFlow($chat->contact_id, 'completed', $chat->id);
                 return false;

@@ -7,8 +7,10 @@ use App\Models\Chat;
 use App\Models\Contact;
 use App\Models\ContactGroup;
 use App\Models\Setting;
+use App\Support\ContactPageCache;
 use Illuminate\Database\Eloquent\Builder as EloquentBuilder;
 use Illuminate\Database\QueryException;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 
@@ -57,14 +59,14 @@ class ContactService
                     ->orWhere('phone', $phone);
             })
             ->first();
-            
-            if ($contact) {
-                if ($contact->trashed()) {
-                    $contact->restore();
-                }
 
-                return ['contact' => $contact, 'isNew' => false];
+        if ($contact) {
+            if ($contact->trashed()) {
+                $contact->restore();
             }
+
+            return ['contact' => $contact, 'isNew' => false];
+        }
 
         // Parse name into first/last name
         $nameParts = $name ? explode(' ', $name, 2) : [];
@@ -112,7 +114,7 @@ class ContactService
 
         $candidates = array_filter([
             $normalizedPhone,
-            '+' . $rawPhone,
+            '+'.$rawPhone,
             $rawPhone,
         ]);
 
@@ -228,29 +230,33 @@ class ContactService
             $incomingMetadata = json_last_error() === JSON_ERROR_NONE ? $decodedMetadata : [];
         }
 
-        if (!is_array($incomingMetadata)) {
+        if (! is_array($incomingMetadata)) {
             $incomingMetadata = [];
         }
 
         if ($uuid !== null) {
             $existingMetadata = $contact->metadata ? json_decode($contact->metadata, true) : [];
-            if (!is_array($existingMetadata)) {
+            if (! is_array($existingMetadata)) {
                 $existingMetadata = [];
             }
 
             $incomingMetadata = array_merge($existingMetadata, $incomingMetadata);
         }
 
-        $contact->metadata = !empty($incomingMetadata) ? json_encode($incomingMetadata) : null;
+        $contact->metadata = ! empty($incomingMetadata) ? json_encode($incomingMetadata) : null;
         $contact->updated_at = now();
         $contact->save();
+        $this->forgetContactsCountCache();
 
         $groups = $request->input('group', []);
         if (empty($groups)) {
+            $currentGroupIds = $contact->contactGroups()->pluck('contact_groups.id')->all();
             $contact->contactGroups()->detach();
+            ContactGroupCountService::rebuildGroups($currentGroupIds);
         }
 
         if ($request->group) {
+            $currentGroupIds = $contact->contactGroups()->pluck('contact_groups.id')->all();
             $normalizedGroups = collect($request->group)
                 ->map(function ($item) {
                     if (is_string($item) || is_numeric($item)) {
@@ -273,13 +279,14 @@ class ContactService
 
                     return null;
                 })
-                ->filter(fn ($value) => !is_null($value) && $value !== '')
+                ->filter(fn ($value) => ! is_null($value) && $value !== '')
                 ->values();
 
             $groupIdsByUuid = ContactGroup::whereIn('uuid', $normalizedGroups->all())->pluck('id')->toArray();
             $groupIdsById = ContactGroup::whereIn('id', $normalizedGroups->filter(fn ($value) => ctype_digit($value))->all())->pluck('id')->toArray();
             $groupIds = array_values(array_unique(array_merge($groupIdsByUuid, $groupIdsById)));
             $contact->contactGroups()->sync($groupIds);
+            ContactGroupCountService::rebuildGroups(array_merge($currentGroupIds, $groupIds));
         }
 
         // Prepare a clean contact object for webhook
@@ -348,6 +355,11 @@ class ContactService
                     return;
                 }
 
+                $affectedGroupIds = DB::table('contact_contact_group')
+                    ->whereIn('contact_id', $contactIds)
+                    ->pluck('contact_group_id')
+                    ->all();
+
                 Chat::whereIn('contact_id', $contactIds)
                     ->where('type', 'inbound')
                     ->whereNull('deleted_at')
@@ -366,6 +378,8 @@ class ContactService
                     ];
                 }
 
+                ContactGroupCountService::rebuildGroups($affectedGroupIds);
+
                 if (count($webhookContacts) >= 1000) {
                     $this->triggerDeletedContactsWebhook($webhookContacts);
                     $webhookContacts = [];
@@ -376,7 +390,16 @@ class ContactService
             $this->triggerDeletedContactsWebhook($webhookContacts);
         }
 
+        if ($deletedCount > 0) {
+            $this->forgetContactsCountCache();
+        }
+
         return $deletedCount;
+    }
+
+    private function forgetContactsCountCache(): void
+    {
+        ContactPageCache::forgetContactsCount($this->organizationId);
     }
 
     private function triggerDeletedContactsWebhook(array $deletedContacts): void

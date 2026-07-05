@@ -106,6 +106,71 @@
                                 :class="'sm:col-span-6'"
                                 :type="'text'"
                             />
+                            <div class="sm:col-span-6">
+                                <label class="block text-sm leading-6 text-gray-900">{{ $t('Resource sharing') }}</label>
+                                <div class="grid grid-cols-2 gap-2 rounded-md bg-slate-100 p-1 text-sm">
+                                    <button
+                                        type="button"
+                                        class="rounded-md px-3 py-2"
+                                        :class="!form.billing_organization_id ? 'bg-white shadow-sm' : 'text-gray-600'"
+                                        @click="setStandaloneResourceAccount"
+                                    >
+                                        {{ $t('Standalone account') }}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="rounded-md px-3 py-2"
+                                        :class="form.billing_organization_id ? 'bg-white shadow-sm' : 'text-gray-600'"
+                                        @click="enableSharedResourceAccount"
+                                    >
+                                        {{ $t('Use another account') }}
+                                    </button>
+                                </div>
+                                <div v-if="resourceSharingEnabled" class="mt-3">
+                                    <Combobox
+                                        by="value"
+                                        :model-value="selectedResourceAccountOption"
+                                        @update:model-value="selectResourceAccount"
+                                    >
+                                        <div class="relative">
+                                            <ComboboxInput
+                                                class="w-full rounded-md border border-gray-300 py-2 px-3 text-sm focus:border-indigo-500 focus:outline-none focus:ring-indigo-500"
+                                                :displayValue="option => option?.label || ''"
+                                                :placeholder="$t('Search resource account')"
+                                                @change="resourceAccountQuery = $event.target.value"
+                                            />
+                                            <ComboboxButton class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
+                                                <span>v</span>
+                                            </ComboboxButton>
+                                            <ComboboxOptions class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-sm shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
+                                                <div
+                                                    v-if="filteredResourceAccountOptions.length === 0"
+                                                    class="px-4 py-2 text-gray-500"
+                                                >
+                                                    {{ $t('Nothing found') }}
+                                                </div>
+                                                <ComboboxOption
+                                                    v-for="option in filteredResourceAccountOptions"
+                                                    :key="option.value"
+                                                    :value="option"
+                                                    as="template"
+                                                    v-slot="{ active, selected }"
+                                                >
+                                                    <li class="cursor-default select-none px-4 py-2" :class="active ? 'bg-indigo-600 text-white' : 'text-gray-900'">
+                                                        <span :class="selected ? 'font-medium' : 'font-normal'">{{ option.label }}</span>
+                                                    </li>
+                                                </ComboboxOption>
+                                            </ComboboxOptions>
+                                        </div>
+                                    </Combobox>
+                                </div>
+                                <div v-if="form.errors.billing_organization_id" class="form-error text-[#b91c1c] text-xs">
+                                    {{ form.errors.billing_organization_id }}
+                                </div>
+                                <p v-if="form.billing_organization_id" class="mt-2 text-xs text-gray-500">
+                                    {{ $t('This organization will consume subscription limits and add-ons from the selected resource account.') }}
+                                </p>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -189,6 +254,13 @@
     import AppLayout from "./../Layout/App.vue";
     import{ computed, ref } from 'vue';
     import { Link, useForm } from "@inertiajs/vue3";
+    import {
+        Combobox,
+        ComboboxInput,
+        ComboboxButton,
+        ComboboxOptions,
+        ComboboxOption,
+    } from '@headlessui/vue';
     import FormInput from '@/Components/FormInput.vue';
     import FormPhoneInput from '@/Components/FormPhoneInput.vue';
     import FormSelect from '@/Components/FormSelect.vue';
@@ -207,6 +279,10 @@
         users: Object, 
         invoices: Object, 
         plans: Object, 
+        resourceAccounts: {
+            type: Array,
+            default: () => [],
+        },
         subscriptionEvents: {
             type: Array,
             default: () => [],
@@ -248,6 +324,7 @@
         plan: initialPlanValue,
         subscription_status: props.organization?.subscription?.status ?? 'trial',
         valid_until: formatDatetimeForInput(props.organization?.subscription?.valid_until),
+        billing_organization_id: props.organization?.billing_organization_id ?? null,
         create_user: 1,
         first_name: null,
         last_name: null,
@@ -298,6 +375,40 @@
         { value: 'active', label: trans('Active') },
         { value: 'suspended', label: trans('Suspended') },
     ]);
+
+    const resourceAccountQuery = ref('');
+    const resourceSharingEnabled = ref(Boolean(form.billing_organization_id));
+    const resourceAccountOptions = computed(() =>
+        (props.resourceAccounts ?? []).map((organization) => ({
+            value: organization.id,
+            label: organization.name,
+        })),
+    );
+    const filteredResourceAccountOptions = computed(() => {
+        const query = resourceAccountQuery.value.toLowerCase().replace(/\s+/g, '');
+
+        if (!query) {
+            return resourceAccountOptions.value;
+        }
+
+        return resourceAccountOptions.value.filter((option) =>
+            option.label.toLowerCase().replace(/\s+/g, '').includes(query),
+        );
+    });
+    const selectedResourceAccountOption = computed(() =>
+        resourceAccountOptions.value.find((option) => Number(option.value) === Number(form.billing_organization_id)) || null,
+    );
+    const selectResourceAccount = (option) => {
+        form.billing_organization_id = option?.value || null;
+    };
+    const setStandaloneResourceAccount = () => {
+        resourceSharingEnabled.value = false;
+        form.billing_organization_id = null;
+        resourceAccountQuery.value = '';
+    };
+    const enableSharedResourceAccount = () => {
+        resourceSharingEnabled.value = true;
+    };
 
     const subscriptionEvents = computed(() => props.subscriptionEvents ?? []);
     const eventLabels = {

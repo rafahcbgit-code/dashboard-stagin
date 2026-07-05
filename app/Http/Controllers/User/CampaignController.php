@@ -17,12 +17,16 @@ use App\Models\Subscription;
 use App\Models\Team;
 use App\Models\Template;
 use App\Services\CampaignService;
+use App\Services\CampaignStatsService;
 use App\Services\ContactFieldService;
 use App\Services\SubscriptionUsageService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\Redirect;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\Schema;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Carbon\Carbon;
 use Inertia\Inertia;
@@ -64,22 +68,29 @@ class CampaignController extends BaseController
 
     private function getCampaignAnalyticsForOrganization(int $organizationId, Carbon $start, Carbon $end): array
     {
-        $stats = DB::table('campaign_logs')
-            ->join('campaigns', 'campaign_logs.campaign_id', '=', 'campaigns.id')
-            ->leftJoin('chats as chat', 'chat.id', '=', 'campaign_logs.chat_id')
-            ->where('campaigns.organization_id', $organizationId)
-            ->whereNull('campaigns.deleted_at')
-            ->whereBetween('campaign_logs.created_at', [$start->toDateTimeString(), $end->toDateTimeString()])
-            ->selectRaw('
-                SUM(CASE WHEN campaign_logs.status = "success" AND chat.status IN ("accepted", "sent", "delivered", "read") THEN 1 ELSE 0 END) as sent,
-                SUM(CASE WHEN campaign_logs.status = "success" AND chat.status IN ("delivered", "read") THEN 1 ELSE 0 END) as delivered,
-                SUM(CASE WHEN campaign_logs.status = "success" AND chat.status = "read" THEN 1 ELSE 0 END) as read_count,
-                SUM(CASE WHEN campaign_logs.status IN ("failed", "permanently_failed") THEN 1 ELSE 0 END) +
-                    SUM(CASE WHEN campaign_logs.status = "success" AND chat.status = "failed" THEN 1 ELSE 0 END) as failed,
-                SUM(CASE WHEN campaign_logs.status = "ongoing" THEN 1 ELSE 0 END) as processing,
-                SUM(CASE WHEN campaign_logs.status = "pending" THEN 1 ELSE 0 END) as queued
-            ')
-            ->first();
+        $cacheKey = sprintf(
+            'campaign_analytics:%d:%s:%s',
+            $organizationId,
+            $start->format('YmdHis'),
+            $end->format('YmdHis')
+        );
+
+        $stats = Cache::remember($cacheKey, 30, function () use ($organizationId, $start, $end) {
+            return DB::table('campaign_stats')
+                ->join('campaigns', 'campaign_stats.campaign_id', '=', 'campaigns.id')
+                ->where('campaigns.organization_id', $organizationId)
+                ->whereNull('campaigns.deleted_at')
+                ->whereBetween('campaigns.created_at', [$start->toDateTimeString(), $end->toDateTimeString()])
+                ->selectRaw('
+                    SUM(campaign_stats.total_sent_count) as sent,
+                    SUM(campaign_stats.total_delivered_count) as delivered,
+                    SUM(campaign_stats.total_read_count) as read_count,
+                    SUM(campaign_stats.total_failed_count) as failed,
+                    SUM(campaign_stats.processing_count) as processing,
+                    SUM(campaign_stats.queued_count) as queued
+                ')
+                ->first();
+        });
 
         return [
             'sent' => (int) ($stats->sent ?? 0),
@@ -89,6 +100,92 @@ class CampaignController extends BaseController
             'processing' => (int) ($stats->processing ?? 0),
             'queued' => (int) ($stats->queued ?? 0),
         ];
+    }
+
+    private function rateLimitedCampaignLogsQuery(int $campaignId)
+    {
+        $query = CampaignLog::where('campaign_id', $campaignId)
+            ->where(function ($query) {
+                $query->whereIn('status', ['failed', 'permanently_failed'])
+                    ->orWhere(function ($query) {
+                        $query->where('status', 'success')
+                            ->whereNull('chat_id');
+                    });
+            });
+
+        if ($this->campaignLogsRateLimitErrorColumnExists()) {
+            return $query->where('rate_limit_error_code', '130429');
+        }
+
+        return $query->where(function ($query) {
+            $query->whereRaw("JSON_EXTRACT(metadata, '$.data.error.code') = 130429")
+                ->orWhereRaw("JSON_EXTRACT(metadata, '$.error.code') = 130429");
+        });
+    }
+
+    private function campaignLogsRateLimitErrorColumnExists(): bool
+    {
+        static $exists = null;
+
+        if ($exists === null) {
+            $exists = Schema::hasColumn('campaign_logs', 'rate_limit_error_code');
+        }
+
+        return $exists;
+    }
+
+    private function paginateCampaignLogs(Campaign $campaign, ?string $searchTerm): LengthAwarePaginator
+    {
+        $perPage = 10;
+        $page = LengthAwarePaginator::resolveCurrentPage();
+        $searchTerm = trim((string) $searchTerm);
+
+        if ($searchTerm !== '') {
+            $query = CampaignLog::with([
+                'contact:id,first_name,last_name,phone',
+                'chat:id,status,created_at',
+                'chat.logs:id,chat_id,metadata,created_at',
+            ])
+                ->select(['id', 'campaign_id', 'contact_id', 'chat_id', 'status', 'created_at', 'updated_at', 'retry_count'])
+                ->where('campaign_id', $campaign->id)
+                ->orderBy('id');
+
+            $query->whereHas('contact', function ($contactQuery) use ($searchTerm) {
+                $like = '%' . $searchTerm . '%';
+
+                $contactQuery->where(function ($query) use ($like) {
+                    $query->where('first_name', 'like', $like)
+                        ->orWhere('last_name', 'like', $like)
+                        ->orWhere('phone', 'like', $like);
+                });
+            });
+
+            return $query->paginate($perPage)->withQueryString();
+        }
+
+        $total = (int) ($campaign->getCounts()->total_message_count ?? 0);
+        $items = CampaignLog::with([
+                'contact:id,first_name,last_name,phone',
+                'chat:id,status,created_at',
+                'chat.logs:id,chat_id,metadata,created_at',
+            ])
+            ->select(['id', 'campaign_id', 'contact_id', 'chat_id', 'status', 'created_at', 'updated_at', 'retry_count'])
+            ->forceIndex('idx_campaign_logs_campaign_id_id')
+            ->where('campaign_id', $campaign->id)
+            ->orderBy('id')
+            ->forPage($page, $perPage)
+            ->get();
+
+        return new LengthAwarePaginator(
+            $items,
+            $total,
+            $perPage,
+            $page,
+            [
+                'path' => LengthAwarePaginator::resolveCurrentPath(),
+                'query' => request()->query(),
+            ]
+        );
     }
 
     private function mapCampaignDeliveryStatus(string $campaignLogStatus, ?string $chatStatus): string
@@ -145,19 +242,27 @@ class CampaignController extends BaseController
             $campaignLimit = $showStats ? Campaign::campaignMessagesLimit() : null;
             $campaignAnalytics = $this->getCampaignAnalyticsForOrganization((int) $organizationId, $start, $end);
 
-            $rows = CampaignResource::collection(
-                Campaign::with(['template'])
-                    ->where('organization_id', $organizationId)
-                    ->where('deleted_at', null)
-                    ->where(function ($query) use ($searchTerm) {
-                        $query->where('name', 'like', '%' . $searchTerm . '%')
-                            ->orWhereHas('template', function ($templateQuery) use ($searchTerm) {
-                                $templateQuery->where('name', 'like', '%' . $searchTerm . '%');
-                            });
-                    })
-                    ->latest()
-                    ->paginate(10)
+            $campaigns = Campaign::with(['template', 'contactGroup'])
+                ->where('organization_id', $organizationId)
+                ->where('deleted_at', null)
+                ->where(function ($query) use ($searchTerm) {
+                    $query->where('name', 'like', '%' . $searchTerm . '%')
+                        ->orWhereHas('template', function ($templateQuery) use ($searchTerm) {
+                            $templateQuery->where('name', 'like', '%' . $searchTerm . '%');
+                        });
+                })
+                ->latest()
+                ->paginate(10);
+
+            $countsByCampaignId = Campaign::aggregateCountsForCampaignIds(
+                $campaigns->getCollection()->pluck('id')
             );
+
+            $campaigns->getCollection()->each(function (Campaign $campaign) use ($countsByCampaignId): void {
+                $campaign->setPrecomputedCounts($countsByCampaignId->get($campaign->id));
+            });
+
+            $rows = CampaignResource::collection($campaigns);
         
             return Inertia::render('User/Campaign/Index', [
                 'title' => __('Campaigns'),
@@ -186,10 +291,7 @@ class CampaignController extends BaseController
 
             $data['contactGroups'] = ContactGroup::where('organization_id', $organizationId)
                 ->whereNull('deleted_at')
-                ->whereHas('contacts')
-                ->withCount(['contacts as contacts_count' => function ($query) use ($organizationId) {
-                    $query->where('organization_id', $organizationId);
-                }])
+                ->where('contacts_count', '>', 0)
                 ->get();
 
             $usageService = new SubscriptionUsageService();
@@ -227,40 +329,14 @@ class CampaignController extends BaseController
             $campaign['total_delivered_count'] = $counts->total_delivered_count ?? 0;
             $campaign['total_failed_count'] = $counts->total_failed_count ?? 0;
             $campaign['total_read_count'] = $counts->total_read_count ?? 0;
-            $campaign['rate_limited_failed_count'] = CampaignLog::where('campaign_id', $campaign->id)
-                ->where(function ($query) {
-                    $query->whereIn('status', ['failed', 'permanently_failed'])
-                        ->where(function ($q) {
-                            $q->whereRaw("JSON_EXTRACT(metadata, '$.data.error.code') = 130429")
-                              ->orWhereRaw("JSON_EXTRACT(metadata, '$.error.code') = 130429");
-                        });
-                })
-                ->orWhere(function ($query) {
-                    $query->where('status', 'success')
-                        ->whereNull('chat_id')
-                        ->where(function ($q) {
-                            $q->whereRaw("JSON_EXTRACT(metadata, '$.data.error.code') = 130429")
-                              ->orWhereRaw("JSON_EXTRACT(metadata, '$.error.code') = 130429");
-                        });
-                })
-                ->count();
+            $campaign['rate_limited_failed_count'] = $this->rateLimitedCampaignLogsQuery($campaign->id)->count();
             $data['campaign'] = $campaign;
 
             $data['filters'] = request()->all(['search']);
 
             $searchTerm = $request->query('search');
             $data['rows'] = CampaignLogResource::collection(
-                CampaignLog::with('contact', 'chat.logs')
-                    ->where('campaign_id', $campaign->id)
-                    ->where(function ($query) use ($searchTerm) {
-                        $query->whereHas('contact', function ($contactQuery) use ($searchTerm) {
-                            $contactQuery->where('first_name', 'like', '%' . $searchTerm . '%')
-                                ->orWhere('last_name', 'like', '%' . $searchTerm . '%')
-                                ->orWhere('phone', 'like', '%' . $searchTerm . '%');
-                        });
-                    })
-                    ->orderBy('id')
-                    ->paginate(10)
+                $this->paginateCampaignLogs($campaign, $searchTerm)
             );
             $data['title'] = __('View campaign');
 
@@ -472,26 +548,32 @@ class CampaignController extends BaseController
         $campaign->update(['status' => 'cancelled']);
 
         // AC-2.6.3: Bulk update all pending CampaignLog records to cancelled
+        $oldSnapshots = CampaignLog::where('campaign_id', $campaign->id)
+            ->where('status', 'pending')
+            ->get(['id', 'campaign_id', 'status', 'chat_id'])
+            ->map(fn (CampaignLog $log): array => CampaignStatsService::snapshot($log))
+            ->all();
+
         $cancelledCount = CampaignLog::where('campaign_id', $campaign->id)
             ->where('status', 'pending')
             ->update(['status' => 'cancelled']);
 
+        $newSnapshots = collect($oldSnapshots)
+            ->map(fn (array $row): array => array_merge($row, ['status' => 'cancelled']))
+            ->all();
+
+        CampaignStatsService::recordSnapshotsChanged($oldSnapshots, $newSnapshots);
+
         // AC-2.6.5: Calculate final stats
-        $stats = CampaignLog::where('campaign_id', $campaign->id)
-            ->selectRaw("
-                SUM(CASE WHEN status = 'success' THEN 1 ELSE 0 END) as sent,
-                SUM(CASE WHEN status = 'cancelled' THEN 1 ELSE 0 END) as cancelled,
-                SUM(CASE WHEN status IN ('failed', 'permanently_failed') THEN 1 ELSE 0 END) as failed
-            ")
-            ->first();
+        $stats = Campaign::aggregateCountsForCampaignIds([$campaign->id])->get($campaign->id);
 
         return response()->json([
             'status' => 'cancelled',
             'message' => 'Campaign cancellation initiated',
             'stats' => [
-                'sent' => (int) $stats->sent,
-                'cancelled' => (int) $stats->cancelled,
-                'failed' => (int) $stats->failed,
+                'sent' => (int) ($stats->total_sent_count ?? 0),
+                'cancelled' => (int) $cancelledCount,
+                'failed' => (int) ($stats->total_failed_count ?? 0),
             ],
         ]);
     }
@@ -515,24 +597,7 @@ class CampaignController extends BaseController
             ], 400);
         }
 
-        $rateLimitedQuery = CampaignLog::where('campaign_id', $campaign->id)
-            ->where(function ($query) {
-                // Failed or permanently_failed logs with rate limit error
-                $query->whereIn('status', ['failed', 'permanently_failed'])
-                    ->where(function ($q) {
-                        $q->whereRaw("JSON_EXTRACT(metadata, '$.data.error.code') = 130429")
-                          ->orWhereRaw("JSON_EXTRACT(metadata, '$.error.code') = 130429");
-                    });
-            })
-            ->orWhere(function ($query) {
-                // Success logs with rate limit error in metadata (bug: marked success incorrectly)
-                $query->where('status', 'success')
-                    ->whereNull('chat_id')
-                    ->where(function ($q) {
-                        $q->whereRaw("JSON_EXTRACT(metadata, '$.data.error.code') = 130429")
-                          ->orWhereRaw("JSON_EXTRACT(metadata, '$.error.code') = 130429");
-                    });
-            });
+        $rateLimitedQuery = $this->rateLimitedCampaignLogsQuery($campaign->id);
 
         $failedCount = $rateLimitedQuery->count();
 

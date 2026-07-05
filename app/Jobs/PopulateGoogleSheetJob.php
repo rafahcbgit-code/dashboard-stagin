@@ -93,6 +93,16 @@ class PopulateGoogleSheetJob implements ShouldQueue
         $service = GoogleSheetsService::fromOrganization($this->organizationId);
         $headers = $service->getSheetHeaders($spreadsheetId, $tab);
 
+        if (empty($mapping)) {
+            $mapping = $this->buildAutomaticMapping($flow, $headers);
+            $columnValues = $this->buildColumnValues($mapping, $submittedValues);
+
+            Log::info('PopulateGoogleSheetJob: using automatic sheet mapping', [
+                'response_id' => $this->metaFlowResponseId,
+                'mapping'     => $mapping,
+            ]);
+        }
+
         $row = array_map(fn($header) => $columnValues[$header] ?? '', $headers);
 
         Log::info('PopulateGoogleSheetJob: [DEBUG] final row before append', [
@@ -109,6 +119,60 @@ class PopulateGoogleSheetJob implements ShouldQueue
             'organization_id' => $this->organizationId,
             'spreadsheet_id' => $spreadsheetId,
         ]);
+    }
+
+    private function buildColumnValues(array $mapping, array $submittedValues): array
+    {
+        $columnValues = [];
+
+        foreach ($mapping as $map) {
+            $field       = $map['flow_field']   ?? '';
+            $sheetColumn = $map['sheet_column'] ?? '';
+
+            if (!$sheetColumn || $sheetColumn === '__skip__') {
+                continue;
+            }
+
+            $columnValues[$sheetColumn] = $submittedValues[$field] ?? '';
+        }
+
+        return $columnValues;
+    }
+
+    private function buildAutomaticMapping(MetaFlow $flow, array $headers): array
+    {
+        $headersByKey = [];
+
+        foreach ($headers as $header) {
+            $headersByKey[$this->normalizeMappingKey($header)] = $header;
+        }
+
+        $mapping = [];
+
+        foreach ($flow->extractFlowFields() as $field) {
+            $fieldName = $field['name'] ?? '';
+            $label     = $field['label'] ?? '';
+
+            foreach ([$fieldName, $label] as $candidate) {
+                $header = $headersByKey[$this->normalizeMappingKey($candidate)] ?? null;
+
+                if ($fieldName && $header) {
+                    $mapping[] = [
+                        'flow_field'   => $fieldName,
+                        'sheet_column' => $header,
+                    ];
+
+                    break;
+                }
+            }
+        }
+
+        return $mapping;
+    }
+
+    private function normalizeMappingKey(?string $value): string
+    {
+        return strtolower(trim((string) $value));
     }
 
     // Log permanent failures after all retries are exhausted

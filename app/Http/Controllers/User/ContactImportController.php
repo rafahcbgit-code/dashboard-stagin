@@ -513,6 +513,7 @@ class ContactImportController extends BaseController
             'failed_count' => (int) $batch->failed_count,
             'duplicates_count' => $duplicatesCount,
             'imported_contacts_count' => $importedContactsCount,
+            'progress_phase' => (string) data_get($batch->report, 'phase', $batch->status ?: 'queued'),
             'started_at' => optional($batch->started_at)->toDateTimeString(),
             'finished_at' => optional($batch->finished_at)->toDateTimeString(),
             'error_message' => $batch->error_message,
@@ -603,6 +604,7 @@ class ContactImportController extends BaseController
                 foreach ($value as $customField => $column) {
                     $columns[] = ['label' => "custom_attributes.$customField", 'column' => (string) $column];
                 }
+
                 continue;
             }
 

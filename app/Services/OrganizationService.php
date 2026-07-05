@@ -188,6 +188,7 @@ class OrganizationService
     public function getByUuid($request, $uuid = null)
     {
         $result['plans'] = SubscriptionPlan::whereNull('deleted_at')->get();
+        $result['resource_accounts'] = $this->resourceAccountOptions();
 
         if ($uuid === null) {
             $result['organization'] = null;
@@ -198,11 +199,12 @@ class OrganizationService
             return $result;
         }
 
-        $organization = Organization::with('subscription.plan')->where('uuid', $uuid)->first();
+        $organization = Organization::with(['subscription.plan', 'billingOrganization:id,name,uuid'])->where('uuid', $uuid)->first();
         $users = (new User)->listAll('user', $request->query('search'), $organization->id);
         $billing = (new BillingTransaction)->listAll($request->query('search'), $organization->id);
         app(SubscriptionAuditService::class)->recordDueEventsForOrganization((int) $organization->id);
 
+        $result['resource_accounts'] = $this->resourceAccountOptions((int) $organization->id);
         $result['organization'] = $organization;
         $result['billing'] = BillingResource::collection($billing);
         $result['users'] = UserResource::collection($users);
@@ -327,6 +329,7 @@ class OrganizationService
                     'zip' => $request->zip,
                     'country' => $request->country,
                 ]),
+                'billing_organization_id' => $this->resolveBillingOrganizationId($request),
                 'created_by' => auth()->user()->id,
             ]);
 
@@ -373,6 +376,7 @@ class OrganizationService
                 'zip' => $request->zip,
                 'country' => $request->country,
             ]),
+            'billing_organization_id' => $this->resolveBillingOrganizationId($request, (int) $organization->id),
         ]);
 
         $subscription = Subscription::where('organization_id', $organization->id)->first();
@@ -397,6 +401,35 @@ class OrganizationService
         }
 
         return $organization;
+    }
+
+    private function resourceAccountOptions(?int $excludeOrganizationId = null)
+    {
+        return Organization::query()
+            ->whereNull('billing_organization_id')
+            ->when($excludeOrganizationId, fn ($query) => $query->where('id', '!=', $excludeOrganizationId))
+            ->orderBy('name')
+            ->get(['id', 'uuid', 'name']);
+    }
+
+    private function resolveBillingOrganizationId(object $request, ?int $organizationId = null): ?int
+    {
+        if ($request->has('billing_organization_id')) {
+            $billingOrganizationId = $request->input('billing_organization_id');
+
+            return $billingOrganizationId ? (int) $billingOrganizationId : null;
+        }
+
+        if (! request()->routeIs('user.organization.store')) {
+            return null;
+        }
+
+        $currentOrganizationId = session()->get('current_organization');
+        if (! $currentOrganizationId || (int) $currentOrganizationId === $organizationId) {
+            return null;
+        }
+
+        return (new SubscriptionUsageService())->resourceAccountId((int) $currentOrganizationId);
     }
 
     private function resolveSubscriptionExpiration($request, ?SubscriptionPlan $plan): array
