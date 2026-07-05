@@ -13,20 +13,25 @@ class ContactFilter
         $search = trim((string) $request->query('search', ''));
 
         if ($search !== '') {
-            $phoneSearchCandidates = $this->phoneSearchCandidates($search);
-            $normalizedPhoneExpression = $this->normalizedPhoneExpression();
+            $phoneSearch = $this->phoneSearch($search);
+            $phoneOnlySearch = $this->isPhoneOnlySearch($search, $phoneSearch['digits']);
             $searchLike = '%' . $search . '%';
 
-            $query->where(function (Builder $builder) use ($searchLike, $phoneSearchCandidates, $normalizedPhoneExpression) {
-                $builder->where('contacts.first_name', 'like', $searchLike)
-                    ->orWhere('contacts.last_name', 'like', $searchLike)
-                    ->orWhereRaw("CONCAT(contacts.first_name, ' ', contacts.last_name) LIKE ?", [$searchLike])
-                    ->orWhere('contacts.phone', 'like', $searchLike)
-                    ->orWhere('contacts.email', 'like', $searchLike)
-                    ->orWhereRaw("JSON_UNQUOTE(JSON_EXTRACT(contacts.address, '$.country')) LIKE ?", [$searchLike]);
+            $query->where(function (Builder $builder) use ($searchLike, $phoneSearch, $phoneOnlySearch) {
+                if (! $phoneOnlySearch) {
+                    $builder->where('contacts.first_name', 'like', $searchLike)
+                        ->orWhere('contacts.last_name', 'like', $searchLike)
+                        ->orWhereRaw("CONCAT(contacts.first_name, ' ', contacts.last_name) LIKE ?", [$searchLike])
+                        ->orWhere('contacts.phone', 'like', $searchLike)
+                        ->orWhere('contacts.email', 'like', $searchLike)
+                        ->orWhereRaw("JSON_UNQUOTE(JSON_EXTRACT(contacts.address, '$.country')) LIKE ?", [$searchLike]);
+                }
 
-                foreach ($phoneSearchCandidates as $phoneSearchCandidate) {
-                    $builder->orWhereRaw("{$normalizedPhoneExpression} LIKE ?", ['%' . $phoneSearchCandidate . '%']);
+                if ($phoneSearch['digits'] !== '') {
+                    $phoneMethod = $phoneOnlySearch ? 'where' : 'orWhere';
+                    $builder->{$phoneMethod}(function (Builder $phoneBuilder) use ($phoneSearch) {
+                        $this->applyPhoneSearch($phoneBuilder, $phoneSearch);
+                    });
                 }
             });
         }
@@ -75,10 +80,10 @@ class ContactFilter
         }
 
         if ($countryDialCode !== '') {
-            $normalizedPhoneExpression = $this->normalizedPhoneExpression();
-            $query->where(function (Builder $builder) use ($normalizedPhoneExpression, $countryDialCode) {
-                $builder->whereRaw("{$normalizedPhoneExpression} LIKE ?", [$countryDialCode . '%'])
-                    ->orWhereRaw("{$normalizedPhoneExpression} LIKE ?", ['00' . $countryDialCode . '%']);
+            $query->where(function (Builder $builder) use ($countryDialCode) {
+                $builder->where('contacts.phone', 'like', '+' . $countryDialCode . '%')
+                    ->orWhere('contacts.phone', 'like', $countryDialCode . '%')
+                    ->orWhere('contacts.phone', 'like', '00' . $countryDialCode . '%');
             });
         }
 
@@ -189,28 +194,74 @@ class ContactFilter
         return in_array((string) $value, ['1', 'true', 'yes', 'on'], true);
     }
 
-    private function phoneSearchCandidates(string $value): array
+    private function phoneSearch(string $value): array
     {
         preg_match_all('/\d+/', $value, $matches);
 
         $parts = $matches[0] ?? [];
-        $candidates = [implode('', $parts)];
+        $digits = implode('', $parts);
+        $exact = [];
+        $contains = [];
 
-        foreach ($parts as $part) {
-            if (strlen($part) >= 6) {
-                $candidates[] = $part;
+        if ($digits !== '') {
+            $exact[] = $digits;
+            $exact[] = '+' . $digits;
+
+            if (str_starts_with($digits, '00') && strlen($digits) > 2) {
+                $exact[] = '+' . substr($digits, 2);
+            }
+
+            if (! str_starts_with($value, '+') && strlen($digits) < 10) {
+                $contains[] = $digits;
             }
         }
 
-        return collect($candidates)
-            ->filter()
-            ->unique()
-            ->values()
-            ->all();
+        foreach ($parts as $part) {
+            if (strlen($part) >= 6 && ! in_array($part, $contains, true)) {
+                $contains[] = $part;
+            }
+        }
+
+        return [
+            'digits' => $digits,
+            'exact' => $this->uniqueStrings($exact),
+            'contains' => $this->uniqueStrings($contains),
+        ];
     }
 
-    private function normalizedPhoneExpression(): string
+    private function isPhoneOnlySearch(string $search, string $digits): bool
     {
-        return "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(contacts.phone, ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), '.', ''), '/', ''), CHAR(160), '')";
+        return $digits !== ''
+            && preg_match('/[[:alpha:]]/u', $search) !== 1
+            && preg_match('/^\s*[\+0-9\-\.\(\)\/\s]+$/u', $search) === 1;
+    }
+
+    private function applyPhoneSearch(Builder $builder, array $phoneSearch): void
+    {
+        $hasCondition = false;
+
+        if (! empty($phoneSearch['exact'])) {
+            $builder->whereIn('contacts.phone', $phoneSearch['exact']);
+            $hasCondition = true;
+        }
+
+        foreach ($phoneSearch['contains'] as $candidate) {
+            $method = $hasCondition ? 'orWhere' : 'where';
+            $builder->{$method}('contacts.phone', 'like', '%' . $candidate . '%');
+            $hasCondition = true;
+        }
+
+        if (! $hasCondition) {
+            $builder->whereRaw('1 = 0');
+        }
+    }
+
+    private function uniqueStrings(array $values): array
+    {
+        return collect($values)
+            ->filter(fn ($value): bool => is_string($value) && $value !== '')
+            ->uniqueStrict()
+            ->values()
+            ->all();
     }
 }
