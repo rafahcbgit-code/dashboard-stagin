@@ -13,10 +13,11 @@ class ContactFilter
         $search = trim((string) $request->query('search', ''));
 
         if ($search !== '') {
-            $normalizedPhoneSearch = preg_replace('/[\s\-\(\)\+]/', '', $search);
+            $phoneSearchCandidates = $this->phoneSearchCandidates($search);
+            $normalizedPhoneExpression = $this->normalizedPhoneExpression();
             $searchLike = '%' . $search . '%';
 
-            $query->where(function (Builder $builder) use ($search, $searchLike, $normalizedPhoneSearch) {
+            $query->where(function (Builder $builder) use ($searchLike, $phoneSearchCandidates, $normalizedPhoneExpression) {
                 $builder->where('contacts.first_name', 'like', $searchLike)
                     ->orWhere('contacts.last_name', 'like', $searchLike)
                     ->orWhereRaw("CONCAT(contacts.first_name, ' ', contacts.last_name) LIKE ?", [$searchLike])
@@ -24,11 +25,8 @@ class ContactFilter
                     ->orWhere('contacts.email', 'like', $searchLike)
                     ->orWhereRaw("JSON_UNQUOTE(JSON_EXTRACT(contacts.address, '$.country')) LIKE ?", [$searchLike]);
 
-                if ($normalizedPhoneSearch !== '') {
-                    $builder->orWhereRaw(
-                        "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(contacts.phone, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '') LIKE ?",
-                        ['%' . $normalizedPhoneSearch . '%']
-                    );
+                foreach ($phoneSearchCandidates as $phoneSearchCandidate) {
+                    $builder->orWhereRaw("{$normalizedPhoneExpression} LIKE ?", ['%' . $phoneSearchCandidate . '%']);
                 }
             });
         }
@@ -77,7 +75,7 @@ class ContactFilter
         }
 
         if ($countryDialCode !== '') {
-            $normalizedPhoneExpression = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(contacts.phone, ' ', ''), '-', ''), '(', ''), ')', ''), '+', '')";
+            $normalizedPhoneExpression = $this->normalizedPhoneExpression();
             $query->where(function (Builder $builder) use ($normalizedPhoneExpression, $countryDialCode) {
                 $builder->whereRaw("{$normalizedPhoneExpression} LIKE ?", [$countryDialCode . '%'])
                     ->orWhereRaw("{$normalizedPhoneExpression} LIKE ?", ['00' . $countryDialCode . '%']);
@@ -189,5 +187,30 @@ class ContactFilter
         }
 
         return in_array((string) $value, ['1', 'true', 'yes', 'on'], true);
+    }
+
+    private function phoneSearchCandidates(string $value): array
+    {
+        preg_match_all('/\d+/', $value, $matches);
+
+        $parts = $matches[0] ?? [];
+        $candidates = [implode('', $parts)];
+
+        foreach ($parts as $part) {
+            if (strlen($part) >= 6) {
+                $candidates[] = $part;
+            }
+        }
+
+        return collect($candidates)
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+    }
+
+    private function normalizedPhoneExpression(): string
+    {
+        return "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(contacts.phone, ' ', ''), '-', ''), '(', ''), ')', ''), '+', ''), '.', ''), '/', ''), CHAR(160), '')";
     }
 }
