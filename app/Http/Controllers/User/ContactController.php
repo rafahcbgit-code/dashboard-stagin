@@ -54,12 +54,13 @@ class ContactController extends BaseController
     {
         return Cache::remember(
             ContactPageCache::contactGroupsKey($organizationId),
-            now()->addMinutes(5),
-            fn () => ContactGroup::query()
+            now()->addMinutes(30),
+            fn () => DB::table('contact_groups')
+                ->select('id', 'uuid', 'name', 'contacts_count')
                 ->where('organization_id', $organizationId)
                 ->whereNull('deleted_at')
                 ->orderBy('name')
-                ->get(['id', 'uuid', 'name', 'contacts_count'])
+                ->get()
         );
     }
 
