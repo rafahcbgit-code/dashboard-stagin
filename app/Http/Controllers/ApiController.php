@@ -448,7 +448,17 @@ class ApiController extends Controller
 
         // Extract the UUID of the contact
         $this->initializeWhatsappService($request->organization);
-        $responseObject = $this->whatsappService->sendTemplateMessage($contact->uuid, $request->template, 0);
+        $responseObject = $this->whatsappService->sendTemplateMessage(
+            $contact->uuid,
+            $request->template,
+            0,
+            null,
+            null,
+            null,
+            null,
+            null,
+            'api'
+        );
 
         return response()->json([
             'statusCode' => 200,

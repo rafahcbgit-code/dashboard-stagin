@@ -5,6 +5,7 @@ use App\Http\Controllers\Zid\ZidAuthController;
 use App\Http\Controllers\Zid\ZidSubscriptionController;
 use App\Models\Language;
 use Illuminate\Foundation\Auth\EmailVerificationRequest;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\File;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Http;
@@ -71,10 +72,21 @@ Route::get('/current-locale', function () {
 });
 
 Route::get('/locales', function () {
-    $locales = Language::all()->pluck('code');
+    $locales = Cache::remember(
+        'locales:active-codes',
+        now()->addMinutes(10),
+        fn () => Language::query()
+            ->whereNull('deleted_at')
+            ->where('status', 'active')
+            ->orderBy('id')
+            ->pluck('code')
+    );
 
     return response()->json($locales);
-});
+})->withoutMiddleware([
+    \App\Http\Middleware\HandleInertiaRequests::class,
+    \App\Http\Middleware\Localization::class,
+]);
 
 Route::get('/translations/{locale}', function ($locale) {
     $path = base_path("lang/{$locale}.json");
@@ -450,7 +462,12 @@ Route::middleware(['auth:user'])->group(function () {
                     Route::post('/settings/notifications/email', [App\Http\Controllers\User\SettingController::class, 'updateEmailSettings']);
                     Route::post('/settings/notifications/email/test', [App\Http\Controllers\User\SettingController::class, 'testEmailSettings']);
                     Route::get('/notifications', [App\Http\Controllers\User\NotificationController::class, 'index']);
-                    Route::get('/notifications/unread-count', [App\Http\Controllers\User\NotificationController::class, 'unreadCount']);
+                    Route::get('/notifications/unread-count', [App\Http\Controllers\User\NotificationController::class, 'unreadCount'])
+                        ->withoutMiddleware([
+                            \App\Http\Middleware\HandleInertiaRequests::class,
+                            \App\Http\Middleware\Localization::class,
+                            \App\Http\Middleware\IsTrial::class,
+                        ]);
                     Route::post('/notifications/{id}/click', [App\Http\Controllers\User\NotificationController::class, 'markClicked']);
                     Route::post('/notifications/mark-all-read', [App\Http\Controllers\User\NotificationController::class, 'markAllRead']);
                     Route::resource('contact-fields', App\Http\Controllers\User\ContactFieldController::class);
@@ -492,6 +509,7 @@ Route::prefix('admin')->middleware(['auth:admin'])->group(function () {
     Route::resource('team/roles', App\Http\Controllers\Admin\RoleController::class);
     Route::resource('billing', App\Http\Controllers\Admin\BillingController::class);
     Route::resource('addons', App\Http\Controllers\Admin\AddonController::class);
+    Route::resource('resource-addons', App\Http\Controllers\Admin\ResourceAddonController::class)->only(['index', 'store', 'destroy']);
     Route::resource('otp-config', App\Http\Controllers\Admin\OtpConfigController::class);
     Route::post('addons/install', [App\Http\Controllers\Admin\AddonController::class, 'install']);
     Route::post('addons/update', [App\Http\Controllers\Admin\AddonController::class, 'update']);

@@ -196,12 +196,13 @@ class Campaign extends Model
      */
     public static function campaignMessagesLimit(): int
     {
-        $setting = Setting::where('key', 'trial_limits')->first();
-        if (!$setting) {
-            return 250;
-        }
+        $limits = Cache::remember('settings:trial_limits', now()->addMinutes(10), function (): array {
+            $setting = Setting::where('key', 'trial_limits')->first();
+            $limits = $setting ? json_decode($setting->value, true) : [];
 
-        $limits = json_decode($setting->value, true);
+            return is_array($limits) ? $limits : [];
+        });
+
         if (isset($limits['campaign_messages'])) {
             return (int) $limits['campaign_messages'];
         }

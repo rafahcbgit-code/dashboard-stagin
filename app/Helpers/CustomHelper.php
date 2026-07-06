@@ -33,42 +33,57 @@ class CustomHelper {
     }
 
     public static function isModuleEnabled($module, $organizationId = NULL){
-        $addon = Addon::where('name', $module)
-            ->where('status', 1)
-            ->where('is_active', 1)
-            ->exists();
-
         $orgId = $organizationId != NULL ? $organizationId : session()->get('current_organization');
 
-        $subscription = Subscription::with('plan')
-            ->where('organization_id', $orgId)
-            ->first();
-
-        if($addon){
-            // Allow trial organizations without a selected plan to test enabled addons.
-            if ($subscription && $subscription->status === 'trial' && $subscription->valid_until && Carbon::parse($subscription->valid_until)->isFuture()) {
-                return true;
-            }
-
-            // Guard against organizations that have no subscription record or selected plan.
-            if (!$subscription || !$subscription->plan) {
-                return false;
-            }
-
-            $plan = SubscriptionPlan::where('id', $subscription->plan->id)->first();
-
-            if (!$plan) {
-                return false; // Plan not found
-            }
-
-            $metadata = json_decode($plan->metadata, true);
-
-            if (isset($metadata['addons']) && is_array($metadata['addons'])) {
-                // Return true if the module exists and is set to true, otherwise false
-                return isset($metadata['addons'][$module]) && $metadata['addons'][$module] === true;
-            }
+        if (!$orgId) {
+            return false;
         }
 
-        return false; // Default to false if addons key or module is not found
+        return Cache::remember(
+            'module-enabled:' . $orgId . ':' . md5((string) $module),
+            now()->addMinutes(5),
+            function () use ($module, $orgId) {
+                $addon = Addon::where('name', $module)
+                    ->where('status', 1)
+                    ->where('is_active', 1)
+                    ->exists();
+
+                if (!$addon) {
+                    return false;
+                }
+
+                $subscription = Subscription::query()
+                    ->where('organization_id', $orgId)
+                    ->orderByDesc('id')
+                    ->first(['id', 'plan_id', 'status', 'valid_until']);
+
+                // Allow trial organizations without a selected plan to test enabled addons.
+                if ($subscription && $subscription->status === 'trial' && $subscription->valid_until && Carbon::parse($subscription->valid_until)->isFuture()) {
+                    return true;
+                }
+
+                // Guard against organizations that have no subscription record or selected plan.
+                if (!$subscription || !$subscription->plan_id) {
+                    return false;
+                }
+
+                $planMetadata = SubscriptionPlan::whereKey($subscription->plan_id)
+                    ->whereNull('deleted_at')
+                    ->value('metadata');
+
+                if (!$planMetadata) {
+                    return false; // Plan not found
+                }
+
+                $metadata = json_decode($planMetadata, true);
+
+                if (isset($metadata['addons']) && is_array($metadata['addons'])) {
+                    // Return true if the module exists and is set to true, otherwise false
+                    return isset($metadata['addons'][$module]) && $metadata['addons'][$module] === true;
+                }
+
+                return false; // Default to false if addons key or module is not found
+            }
+        );
     }
 }

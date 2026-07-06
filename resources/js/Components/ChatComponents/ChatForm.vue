@@ -17,6 +17,7 @@ const metaFlowsModule   = computed(() => usePage().props.meta_flows_module ?? fa
 
 const processingForm = ref(null);
 const processingAISuggestions = ref(false);
+const outboundError = ref(null);
 const formTextInput = ref(null);
 const showRepliesModal = ref(false);
 const isRecording = ref(false);
@@ -52,6 +53,13 @@ watchEffect(() => {
 
 const emit = defineEmits(['response', 'viewTemplate']);
 
+const messageFromError = (error) => {
+    return error?.response?.data?.message
+        || error?.response?.data?.errors?.contacts?.[0]
+        || error?.response?.data?.errors?.message?.[0]
+        || 'Unable to send message.';
+};
+
 const viewTemplate = () => {
     if (isContactBlocked.value) {
         return;
@@ -68,6 +76,7 @@ const sendMessage = async () => {
 
     form.value.message = formTextInput.value;
     processingForm.value = true;
+    outboundError.value = null;
 
     if (form.value.message != null || form.value.file != null) {
         const formData = new FormData();
@@ -93,8 +102,8 @@ const sendMessage = async () => {
 
             processingForm.value = false;
         } catch (error) {
-            // Handle the error
-            // console.error('Error:', error);
+            outboundError.value = messageFromError(error);
+            processingForm.value = false;
         }
     } else {
         if (isAudioRecording.value == true) {
@@ -112,13 +121,14 @@ const sendPreCreatedReply = async (payload) => {
     }
 
     processingForm.value = true;
+    outboundError.value = null;
     try {
         await axios.post('/chats', payload);
         
         // Reset form if needed or show success
         processingForm.value = false;
     } catch (error) {
-        console.error('Error sending reply:', error);
+        outboundError.value = messageFromError(error);
         processingForm.value = false;
     }
 }
@@ -143,8 +153,7 @@ const sendAudioMessage = async () => {
             deleteRecording();
         }
     } catch (error) {
-        // Handle the error
-        // console.error('Error:', error);
+        outboundError.value = messageFromError(error);
     }
 }
 
@@ -455,6 +464,11 @@ onBeforeUnmount(() => {
 });
 </script>
 <template>
+    <div v-if="outboundError" class="flex justify-center items-center w-full px-6 md:px-4">
+        <div class="w-full rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 mb-2">
+            {{ $t(outboundError) }}
+        </div>
+    </div>
     <div v-if="props.chatLimitReached" class="flex justify-center items-center w-full px-6 md:px-4">
         <div class="flex items-start space-x-4 bg-orange-100 rounded-lg p-2 mb-2 px-4">
             <span class="text-red-700">

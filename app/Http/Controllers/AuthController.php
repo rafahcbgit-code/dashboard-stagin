@@ -533,7 +533,13 @@ public function sendVerificationCodeToEmail(Request $request)
      $response = $this->whatsappService->sendTemplateMessage(
          $contact->uuid,
          $templatePayload,
-         0
+         0,
+         null,
+         null,
+         $contact,
+         null,
+         null,
+         'auth'
      );
 
     return response()->json([

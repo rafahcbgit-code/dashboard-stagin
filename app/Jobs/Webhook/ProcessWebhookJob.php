@@ -15,6 +15,7 @@ use App\Services\BotSettingsService;
 use App\Services\ChatService;
 use App\Services\ContactService;
 use App\Services\SubscriptionService;
+use App\Services\SubscriptionUsageService;
 use App\Services\UnsubscribeChecker;
 use App\Services\Meta\WhatsApp\TemplateStatusWebhookProcessor;
 use Carbon\Carbon;
@@ -364,6 +365,12 @@ class ProcessWebhookJob implements ShouldQueue
             'is_read' => 0,
             'created_at' => now(),
         ]);
+
+        (new SubscriptionUsageService())->ensureConversationWindowForInbound(
+            (int) $this->organizationId,
+            (int) $contact->id,
+            (int) $chat->id
+        );
 
         // Create ChatLog entry for the chat thread view
         ChatLog::create([
@@ -1009,6 +1016,8 @@ class ProcessWebhookJob implements ShouldQueue
             'wam_id' => $wamId,
             'status' => $statusType,
         ]);
+
+        $this->recordDeliveredTemplateUsage($chat, $statusType, $status);
 
         // AC-1.7.6: Trigger external webhook for status update (fire-and-forget)
         try {
@@ -2297,6 +2306,7 @@ class ProcessWebhookJob implements ShouldQueue
 
                 // Track the latest status to update chat
                 $latestStatus = $pendingUpdate->status;
+                $this->recordDeliveredTemplateUsage($chat, $pendingUpdate->status, $payload);
 
                 // AC-1.7.5: Mark as PROCESSED
                 $pendingUpdate->update([
@@ -2342,6 +2352,66 @@ class ProcessWebhookJob implements ShouldQueue
                 ]);
             }
         }
+    }
+
+    protected function recordDeliveredTemplateUsage(Chat $chat, ?string $statusType, array $payload = []): void
+    {
+        if ($statusType !== 'delivered' || $chat->type !== 'outbound' || ! $chat->wam_id) {
+            return;
+        }
+
+        $templateContext = $this->templateBillingContext($chat);
+        if ($templateContext === null) {
+            return;
+        }
+
+        (new SubscriptionUsageService())->recordUsage(
+            (int) $chat->organization_id,
+            SubscriptionUsageService::TEMPLATE_MESSAGES,
+            1,
+            'template-delivered:' . $chat->wam_id,
+            (string) ($templateContext['source'] ?? 'template'),
+            is_numeric($templateContext['source_id'] ?? null) ? (int) $templateContext['source_id'] : $chat->id,
+            [
+                'chat_id' => $chat->id,
+                'wam_id' => $chat->wam_id,
+                'template_context' => $templateContext,
+                'status_payload' => $payload,
+            ]
+        );
+    }
+
+    protected function templateBillingContext(Chat $chat): ?array
+    {
+        $metadata = json_decode((string) $chat->metadata, true);
+        if (! is_array($metadata)) {
+            return null;
+        }
+
+        $billing = $metadata['billing'] ?? [];
+        $billing = is_array($billing) ? $billing : [];
+
+        $isTemplate = $this->truthy($billing['is_template'] ?? null)
+            || ($metadata['message_type'] ?? null) === 'template'
+            || $this->truthy($metadata['template_message'] ?? null)
+            || ($metadata['type'] ?? null) === 'carousel';
+
+        if (! $isTemplate) {
+            return null;
+        }
+
+        return [
+            'is_template' => true,
+            'resource' => SubscriptionUsageService::TEMPLATE_MESSAGES,
+            'source' => $billing['source'] ?? 'template',
+            'source_id' => $billing['source_id'] ?? $chat->id,
+            'count_on_status' => 'delivered',
+        ];
+    }
+
+    protected function truthy(mixed $value): bool
+    {
+        return $value === true || $value === 1 || $value === '1' || $value === 'true';
     }
 
     /**

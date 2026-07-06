@@ -33,6 +33,12 @@ class CampaignService
         $organizationMetadata = is_array($organizationMetadata) ? $organizationMetadata : [];
         $timezone = $organizationMetadata['timezone'] ?? $timezone;
 
+        if (SubscriptionService::isTrialExpiredForOutbound((int) $organizationId)) {
+            throw ValidationException::withMessages([
+                'contacts' => SubscriptionService::trialExpiredOutboundMessage(),
+            ]);
+        }
+
         // Enforce messaging_limit_tier: selected group size must be <= allowed tier value
         $tierLimit = $this->resolveTierLimit($organizationMetadata);
 
@@ -60,6 +66,27 @@ class CampaignService
                     'The selected group contains :groupCount contacts, which exceeds your messaging limit of :limit. Please choose a smaller group or update your WhatsApp tier.',
                     ['groupCount' => $selectedCount, 'limit' => $tierLimit]
                 ),
+            ]);
+        }
+
+        $usageService = new SubscriptionUsageService();
+        $templateCheck = $usageService->canUse($organizationId, SubscriptionUsageService::TEMPLATE_MESSAGES, $selectedCount);
+        if (! $templateCheck['allowed']) {
+            throw ValidationException::withMessages([
+                'contacts' => __('This campaign requires :required template messages, but only :remaining are remaining.', [
+                    'required' => $selectedCount,
+                    'remaining' => $templateCheck['summary']['remaining'],
+                ]),
+            ]);
+        }
+
+        $conversationCheck = $usageService->canUse($organizationId, SubscriptionUsageService::CONVERSATIONS, $selectedCount);
+        if (! $conversationCheck['allowed']) {
+            throw ValidationException::withMessages([
+                'contacts' => __('This campaign requires :required conversations, but only :remaining are remaining.', [
+                    'required' => $selectedCount,
+                    'remaining' => $conversationCheck['summary']['remaining'],
+                ]),
             ]);
         }
 

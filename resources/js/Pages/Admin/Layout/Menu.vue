@@ -93,6 +93,12 @@
                         <span>{{ $t('Subscription plans') }}</span>
                     </Link>
                 </li>
+                <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate" :class="$page.url.startsWith('/admin/resource-addons') ? 'bg-slate-50 text-black' : ''">
+                    <Link rel="noopener noreferrer" href="/admin/resource-addons" class="flex items-center p-2 space-x-3 rounded-md">
+                        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 5v14m7-7H5"/></svg>
+                        <span>{{ $t('Resource add-ons') }}</span>
+                    </Link>
+                </li>
                 <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate" :class="$page.url.startsWith('/billing') || $page.url.startsWith('/subscription') ? 'bg-slate-50 text-black' : ''">
                     <Link rel="noopener noreferrer" href="/admin/faqs" class="flex items-center p-2 space-x-3 rounded-md">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M5.455 15L1 18.5V3a1 1 0 0 1 1-1h15a1 1 0 0 1 1 1v12zm-.692-2H16V4H3v10.385zM8 17h10.237L20 18.385V8h1a1 1 0 0 1 1 1v13.5L17.546 19H9a1 1 0 0 1-1-1z"/></svg>

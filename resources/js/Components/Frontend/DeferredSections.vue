@@ -36,9 +36,11 @@
                 </p>
                 <ul class="mt-4 space-y-2 text-sm text-gray-600">
                     <li>{{ $t('Campaigns') }}: {{ limitText(plan, 'campaign_limit') }}</li>
-                    <li>{{ $t('Messages') }}: {{ limitText(plan, 'message_limit') }}</li>
+                    <li>{{ $t('Template messages') }}: {{ limitText(plan, 'template_messages_limit') }}</li>
+                    <li>{{ $t('Conversations') }}: {{ limitText(plan, 'conversations_limit') }}</li>
                     <li>{{ $t('Contacts') }}: {{ limitText(plan, 'contacts_limit') }}</li>
                     <li>{{ $t('Users') }}: {{ limitText(plan, 'team_limit') }}</li>
+                    <li>{{ $t('Organizations') }}: {{ limitText(plan, 'organizations_limit') }}</li>
                 </ul>
                 <Link href="/signup" class="mt-6 inline-flex rounded-lg bg-primary px-4 py-2 text-white">
                     {{ $t('Get started') }}

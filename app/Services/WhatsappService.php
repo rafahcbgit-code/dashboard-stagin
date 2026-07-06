@@ -132,6 +132,16 @@ class WhatsappService
             return $this->buildBlockedContactResponse($contact);
         }
 
+        $trialExpiredGuard = $this->guardExpiredTrial((int) $contact->organization_id);
+        if ($trialExpiredGuard !== null) {
+            return $trialExpiredGuard;
+        }
+
+        $conversationGuard = $this->guardConversationLimit((int) $contact->organization_id);
+        if ($conversationGuard !== null) {
+            return $conversationGuard;
+        }
+
         $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}/messages";
         
         $headers = $this->setHeaders();
@@ -209,6 +219,8 @@ class WhatsappService
                 'created_at' => now(),
             ]);
 
+            $this->recordConversationWindowForOutbound($chat, $contact);
+
             $chat = Chat::with('contact','media')->where('id', $chat->id)->first();
             $responseObject->data->chat = $chat;
 
@@ -243,7 +255,7 @@ class WhatsappService
      * @param string $messageContent The content of the message to be sent.
      * @return mixed Returns the response from the HTTP request.
      */
-    public function sendTemplateMessage($contactUuId, $templateContent, $userId = NULL, $campaignId = NULL, $mediaId = NULL, ?Contact $contact = null, ?Campaign $campaign = null, ?Template $campaignTemplate = null)
+    public function sendTemplateMessage($contactUuId, $templateContent, $userId = NULL, $campaignId = NULL, $mediaId = NULL, ?Contact $contact = null, ?Campaign $campaign = null, ?Template $campaignTemplate = null, ?string $billingSource = null, ?int $billingSourceId = null)
     {
         $contact = $contact ?? Contact::where('uuid', $contactUuId)->first();
 
@@ -253,6 +265,21 @@ class WhatsappService
 
         if ((bool) ($contact->is_blocked ?? false)) {
             return $this->buildBlockedContactResponse($contact);
+        }
+
+        $trialExpiredGuard = $this->guardExpiredTrial((int) $contact->organization_id);
+        if ($trialExpiredGuard !== null) {
+            return $trialExpiredGuard;
+        }
+
+        $conversationGuard = $this->guardConversationLimit((int) $contact->organization_id);
+        if ($conversationGuard !== null) {
+            return $conversationGuard;
+        }
+
+        $templateMessagesGuard = $this->guardTemplateMessagesLimit((int) $contact->organization_id);
+        if ($templateMessagesGuard !== null) {
+            return $templateMessagesGuard;
         }
 
         $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}/messages";
@@ -376,6 +403,8 @@ class WhatsappService
                 }
             }
 
+            $metadata = $this->attachTemplateBillingMetadata($metadata, $campaignId, $billingSource, $billingSourceId);
+
             $chat = Chat::create([
                 'organization_id' => $contact->organization_id,
                 'wam_id' => $responseObject->data->messages[0]->id,
@@ -387,6 +416,8 @@ class WhatsappService
                 'status' => isset($responseObject->data->messages[0]->message_status) ? $responseObject->data->messages[0]->message_status : 'sent',
                 'created_at' => now()
             ]);
+
+            $this->recordConversationWindowForOutbound($chat, $contact);
 
             $responseObject->data->chat = $chat;
 
@@ -1665,6 +1696,16 @@ class WhatsappService
             return $this->buildBlockedContactResponse($contact);
         }
 
+        $trialExpiredGuard = $this->guardExpiredTrial((int) $contact->organization_id);
+        if ($trialExpiredGuard !== null) {
+            return $trialExpiredGuard;
+        }
+
+        $conversationGuard = $this->guardConversationLimit((int) $contact->organization_id);
+        if ($conversationGuard !== null) {
+            return $conversationGuard;
+        }
+
         $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->phoneNumberId}/messages";
         
         $headers = $this->setHeaders();
@@ -1712,6 +1753,8 @@ class WhatsappService
                 'status' => 'sent',
                 'created_at' => now()
             ]);
+
+            $this->recordConversationWindowForOutbound($chat, $contact);
 
             $chatlogId = ChatLog::insertGetId([
                 'contact_id' => $contact->id,
@@ -1800,6 +1843,70 @@ class WhatsappService
         ]);
 
         return $this->buildErrorResponse('Contact is blocked', 403, 'CONTACT_BLOCKED');
+    }
+
+    private function guardExpiredTrial(int $organizationId): ?\stdClass
+    {
+        if (! SubscriptionService::isTrialExpiredForOutbound($organizationId)) {
+            return null;
+        }
+
+        return $this->buildErrorResponse(
+            SubscriptionService::trialExpiredOutboundMessage(),
+            403,
+            'TRIAL_EXPIRED'
+        );
+    }
+
+    private function guardConversationLimit(int $organizationId): ?\stdClass
+    {
+        $check = (new SubscriptionUsageService())->canUse($organizationId, SubscriptionUsageService::CONVERSATIONS);
+
+        if ($check['allowed']) {
+            return null;
+        }
+
+        return $this->buildErrorResponse($check['message'], 403, 'CONVERSATIONS_LIMIT_REACHED');
+    }
+
+    private function guardTemplateMessagesLimit(int $organizationId): ?\stdClass
+    {
+        $check = (new SubscriptionUsageService())->canUse($organizationId, SubscriptionUsageService::TEMPLATE_MESSAGES);
+
+        if ($check['allowed']) {
+            return null;
+        }
+
+        return $this->buildErrorResponse($check['message'], 403, 'TEMPLATE_MESSAGES_LIMIT_REACHED');
+    }
+
+    private function recordConversationWindowForOutbound(Chat $chat, Contact $contact): void
+    {
+        (new SubscriptionUsageService())->ensureConversationWindowForInbound(
+            (int) $chat->organization_id,
+            (int) $contact->id,
+            (int) $chat->id
+        );
+    }
+
+    private function attachTemplateBillingMetadata($metadata, ?int $campaignId, ?string $billingSource = null, ?int $billingSourceId = null): string
+    {
+        $decoded = is_string($metadata) ? json_decode($metadata, true) : $metadata;
+        $decoded = is_array($decoded) ? $decoded : [];
+
+        $resolvedSource = $billingSource ?: ($campaignId ? 'campaign' : 'live_chat');
+        $resolvedSourceId = $billingSourceId ?? $campaignId;
+
+        $decoded['message_type'] = 'template';
+        $decoded['billing'] = array_merge($decoded['billing'] ?? [], [
+            'is_template' => true,
+            'resource' => SubscriptionUsageService::TEMPLATE_MESSAGES,
+            'source' => $resolvedSource,
+            'source_id' => $resolvedSourceId,
+            'count_on_status' => 'delivered',
+        ]);
+
+        return json_encode($decoded, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
     }
 
     private function buildErrorResponse(string $message, int $statusCode = 422, ?string $code = null): \stdClass
@@ -3564,8 +3671,12 @@ class WhatsappService
         ?string $metadata,
         $mediaId,
         ?int $campaignId,
-        array $flowStubs = []
+        array $flowStubs = [],
+        ?string $billingSource = null,
+        ?int $billingSourceId = null
     ): array {
+        $metadata = $this->attachTemplateBillingMetadata($metadata, $campaignId, $billingSource, $billingSourceId);
+
         $chat = Chat::create([
             'organization_id' => $organizationId ?? $contact->organization_id,
             'wam_id' => $responseObject->data->messages[0]->id,
@@ -3579,6 +3690,8 @@ class WhatsappService
                 : 'sent',
             'created_at' => now(),
         ]);
+
+        $this->recordConversationWindowForOutbound($chat, $contact);
 
         $responseObject->data->chat = $chat;
 

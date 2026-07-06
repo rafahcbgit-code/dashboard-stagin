@@ -9,6 +9,7 @@ use App\Http\Resources\CampaignLogResource;
 use App\Http\Resources\CampaignResource;
 use App\Models\Campaign;
 use App\Models\CampaignLog;
+use App\Models\Contact;
 use App\Models\ContactGroup;
 use App\Models\Organization;
 use App\Models\Setting;
@@ -18,6 +19,7 @@ use App\Models\Template;
 use App\Services\CampaignService;
 use App\Services\CampaignStatsService;
 use App\Services\ContactFieldService;
+use App\Services\SubscriptionUsageService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Pagination\LengthAwarePaginator;
@@ -226,10 +228,18 @@ class CampaignController extends BaseController
     public function index(Request $request, $uuid = null)
     {
         $organizationId = session()->get('current_organization');
-        $team = Team::where('organization_id', $organizationId)->where('user_id', auth()->user()->id)->first();
+        $userId = (int) auth()->user()->id;
+        $teamRole = Cache::remember(
+            "team-role:{$organizationId}:{$userId}",
+            now()->addMinutes(5),
+            fn () => Team::where('organization_id', $organizationId)
+                ->where('user_id', $userId)
+                ->whereNull('deleted_at')
+                ->value('role')
+        );
 
         if ($uuid == null) {
-            $searchTerm = $request->query('search');
+            $searchTerm = trim((string) $request->query('search'));
             $settings = Organization::where('id', $organizationId)->first();
             [$start, $end] = $this->resolveDateRange($request);
 
@@ -243,10 +253,14 @@ class CampaignController extends BaseController
             $campaigns = Campaign::with(['template', 'contactGroup'])
                 ->where('organization_id', $organizationId)
                 ->where('deleted_at', null)
-                ->where(function ($query) use ($searchTerm) {
-                    $query->where('name', 'like', '%' . $searchTerm . '%')
-                        ->orWhereHas('template', function ($templateQuery) use ($searchTerm) {
-                            $templateQuery->where('name', 'like', '%' . $searchTerm . '%');
+                ->when($searchTerm !== '', function ($query) use ($searchTerm) {
+                    $query->where(function ($query) use ($searchTerm) {
+                        $like = '%' . $searchTerm . '%';
+
+                        $query->where('name', 'like', $like)
+                            ->orWhereHas('template', function ($templateQuery) use ($like) {
+                                $templateQuery->where('name', 'like', $like);
+                            });
                         });
                 })
                 ->latest()
@@ -268,7 +282,7 @@ class CampaignController extends BaseController
                 'rows' => $rows,
                 'filters' => request()->all(['search', 'start_date', 'end_date']),
                 'settings' => $settings,
-                'role' => $team->role,
+                'role' => $teamRole,
                 'overall_delivery_count' => $overallDelivered,
                 'campaign_messages_limit' => $campaignLimit,
                 'trial' => $showStats,
@@ -291,6 +305,15 @@ class CampaignController extends BaseController
                 ->whereNull('deleted_at')
                 ->where('contacts_count', '>', 0)
                 ->get();
+
+            $usageService = new SubscriptionUsageService();
+            $data['resourceUsage'] = [
+                'template_messages' => $usageService->summary((int) $organizationId, SubscriptionUsageService::TEMPLATE_MESSAGES),
+                'conversations' => $usageService->summary((int) $organizationId, SubscriptionUsageService::CONVERSATIONS),
+            ];
+            $data['totalContacts'] = Contact::where('organization_id', $organizationId)
+                ->whereNull('deleted_at')
+                ->count();
 
             $data['title'] = __('Create campaign');
 

@@ -9,6 +9,7 @@ use App\Services\SubscriptionService;
 use Illuminate\Support\Facades\Redirect;
 use Inertia\Inertia;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 
 class CheckClientRole
 {
@@ -21,9 +22,16 @@ class CheckClientRole
             // Check if the user role is 'user'
             if ($user->role === 'user') {
                 $organizationId = session()->get('current_organization');
-                $team = Team::where('organization_id', $organizationId)->where('user_id', auth()->user()->id)->first();
+                $teamRole = Cache::remember(
+                    "team-role:{$organizationId}:{$user->id}",
+                    now()->addMinutes(5),
+                    fn () => Team::where('organization_id', $organizationId)
+                        ->where('user_id', $user->id)
+                        ->whereNull('deleted_at')
+                        ->value('role')
+                );
 
-                if($team->role === 'manager' || $team->role === 'agent'){
+                if($teamRole === 'manager' || $teamRole === 'agent'){
                     return to_route('dashboard');
                 }
             }

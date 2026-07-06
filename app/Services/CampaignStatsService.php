@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schema;
 
 class CampaignStatsService
@@ -280,7 +281,11 @@ class CampaignStatsService
     private static function available(): bool
     {
         if (self::$available === null) {
-            self::$available = Schema::hasTable('campaign_stats');
+            self::$available = Cache::remember(
+                'schema:has_table:campaign_stats',
+                now()->addHour(),
+                fn () => Schema::hasTable('campaign_stats')
+            );
         }
 
         return self::$available;

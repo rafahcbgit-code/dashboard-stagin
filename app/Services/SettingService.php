@@ -90,6 +90,7 @@ class SettingService
 
                         // cleanup legacy separate setting if it exists
                         DB::table('settings')->where('key', 'campaign_messages_limit')->delete();
+                        Cache::forget('settings:trial_limits');
                     } catch (\Exception $e) {
                         //dd($e->getMessage());
                         Log::error($e->message());

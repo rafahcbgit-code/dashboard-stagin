@@ -160,7 +160,13 @@ class WooCommerceOrderUpdatedHandler implements WooCommerceWebhookEventHandlerIn
                 $delivery,
                 'order.updated.' . $currentStatus,
                 $contact,
-                $template
+                $template,
+                [
+                    'header' => $headerMeta,
+                    'body' => $bodyMeta,
+                    'buttons' => $buttonsMeta,
+                    'source' => 'woocommerce',
+                ]
             );
 
             try {
@@ -170,7 +176,8 @@ class WooCommerceOrderUpdatedHandler implements WooCommerceWebhookEventHandlerIn
                     $template,
                     $headerMeta,
                     $bodyMeta,
-                    $buttonsMeta
+                    $buttonsMeta,
+                    'woocommerce'
                 );
             } catch (\Throwable $e) {
                 $this->outboundLogger->logFailure($outboundMessage, $attemptNo, $requestPayload, null, $e->getMessage());

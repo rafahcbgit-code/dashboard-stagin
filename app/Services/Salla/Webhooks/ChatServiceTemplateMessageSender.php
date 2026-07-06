@@ -14,7 +14,8 @@ class ChatServiceTemplateMessageSender implements SallaWebhookMessageSenderInter
         Template $template,
         ?array $headerMeta,
         array $bodyMeta,
-        array $buttonsMeta
+        array $buttonsMeta,
+        ?string $billingSource = null
     ): object {
         $chatService = new ChatService($organizationId);
 
@@ -25,6 +26,7 @@ class ChatServiceTemplateMessageSender implements SallaWebhookMessageSenderInter
             'buttons' => $buttonsMeta,
             'footer' => ['text' => null],
             'user_id' => 0,
+            'billing_source' => $billingSource ?: 'salla',
         ], $contact->uuid);
     }
 }

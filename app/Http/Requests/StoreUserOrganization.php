@@ -4,6 +4,7 @@ namespace App\Http\Requests;
 
 use App\Rules\NotRoleUser;
 use App\Rules\NotUniqueEmail;
+use App\Rules\OrganizationLimit;
 use App\Rules\UniqueEmail;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
@@ -26,7 +27,7 @@ class StoreUserOrganization extends FormRequest
     public function rules(): array
     {
         $rules = [
-            'name' => 'required',
+            'name' => ['required', new OrganizationLimit],
             'email' => 'required',
         ];
 

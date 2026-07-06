@@ -37,12 +37,48 @@
                 <div @click="changeTab('organization')" class="cursor-pointer px-2 py-2" :class="tab === 'organization' ? 'bg-white' : ''">{{ $t('User details') }}</div>
                 <div @click="changeTab('team')" class="cursor-pointer px-2 py-2" :class="tab === 'team' ? 'bg-white' : ''">{{ $t('Team') }}</div>
                 <div @click="changeTab('billing')" class="cursor-pointer px-2 py-2" :class="tab === 'billing' ? 'bg-white' : ''">{{ $t('Billing history') }}</div>
+                <div @click="changeTab('subscription_history')" class="cursor-pointer px-2 py-2" :class="tab === 'subscription_history' ? 'bg-white' : ''">{{ $t('Subscription history') }}</div>
             </div>
             <div v-if="props.organization && tab === 'team'" class="pt-5">
                 <UserTable :rows="props.users" :filters="props.filters" :type="'user'" :showRole="true" :showDeleteBtn="false"/>
             </div>
             <div v-if="props.organization && tab === 'billing'" class="pt-5">
                 <BillingTable :rows="props.invoices" :filters="props.filters" :uuid="props.organization.uuid"/>
+            </div>
+            <div v-if="props.organization && tab === 'subscription_history'" class="pt-5">
+                <div class="overflow-x-auto rounded-md border bg-white">
+                    <table class="min-w-full divide-y divide-gray-200 text-sm">
+                        <thead class="bg-slate-50 text-left text-xs text-gray-500">
+                            <tr>
+                                <th class="px-4 py-3 font-medium">{{ $t('Event') }}</th>
+                                <th class="px-4 py-3 font-medium">{{ $t('Source') }}</th>
+                                <th class="px-4 py-3 font-medium">{{ $t('Actor') }}</th>
+                                <th class="px-4 py-3 font-medium">{{ $t('Details') }}</th>
+                                <th class="px-4 py-3 font-medium">{{ $t('Date') }}</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-gray-100">
+                            <tr v-if="subscriptionEvents.length === 0">
+                                <td class="px-4 py-4 text-gray-500" colspan="5">{{ $t('No subscription events found') }}</td>
+                            </tr>
+                            <tr v-for="event in subscriptionEvents" :key="event.id">
+                                <td class="px-4 py-3">
+                                    <div class="font-medium">{{ $t(event.description || eventLabel(event.event_type)) }}</div>
+                                    <div class="text-xs text-gray-500">{{ event.event_type }}</div>
+                                </td>
+                                <td class="px-4 py-3 capitalize">{{ event.source || '-' }}</td>
+                                <td class="px-4 py-3">
+                                    <div>{{ event.actor_guard || '-' }}</div>
+                                    <div v-if="event.actor_id" class="text-xs text-gray-500">#{{ event.actor_id }}</div>
+                                </td>
+                                <td class="px-4 py-3 text-xs text-gray-600">
+                                    <div v-for="line in eventDetails(event)" :key="line">{{ line }}</div>
+                                </td>
+                                <td class="px-4 py-3 whitespace-nowrap">{{ event.occurred_at }}</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
             </div>
             <form v-if="tab === 'organization'" @submit.prevent="submitForm()" class="bg-white py-5 px-5 rounded-bl-[0.5rem] rounded-br-[0.5rem]">
                 <div class="sm:flex border-b py-5">
@@ -70,6 +106,84 @@
                                 :class="'sm:col-span-6'"
                                 :type="'text'"
                             />
+                            <div class="sm:col-span-6">
+                                <label class="block text-sm leading-6 text-gray-900">{{ $t('Resource sharing') }}</label>
+                                <div class="grid grid-cols-2 gap-2 rounded-md bg-slate-100 p-1 text-sm">
+                                    <button
+                                        type="button"
+                                        class="rounded-md px-3 py-2"
+                                        :class="!form.billing_organization_id ? 'bg-white shadow-sm' : 'text-gray-600'"
+                                        @click="setStandaloneResourceAccount"
+                                    >
+                                        {{ $t('Standalone account') }}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        class="rounded-md px-3 py-2"
+                                        :class="form.billing_organization_id ? 'bg-white shadow-sm' : 'text-gray-600'"
+                                        @click="enableSharedResourceAccount"
+                                    >
+                                        {{ $t('Use another account') }}
+                                    </button>
+                                </div>
+                                <div v-if="resourceSharingEnabled" class="mt-3">
+                                    <Combobox
+                                        by="value"
+                                        :model-value="selectedResourceAccountOption"
+                                        @update:model-value="selectResourceAccount"
+                                    >
+                                        <div class="relative">
+                                            <ComboboxInput
+                                                class="w-full rounded-md border border-gray-300 py-2 px-3 text-sm focus:border-indigo-500 focus:outline-none focus:ring-indigo-500"
+                                                :displayValue="option => option?.label || ''"
+                                                :placeholder="$t('Search resource account')"
+                                                @change="resourceAccountQuery = $event.target.value"
+                                            />
+                                            <ComboboxButton class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-500">
+                                                <span>v</span>
+                                            </ComboboxButton>
+                                            <ComboboxOptions class="absolute z-50 mt-1 max-h-60 w-full overflow-auto rounded-md bg-white py-1 text-sm shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none">
+                                                <div
+                                                    v-if="filteredResourceAccountOptions.length === 0"
+                                                    class="px-4 py-2 text-gray-500"
+                                                >
+                                                    {{ $t('Nothing found') }}
+                                                </div>
+                                                <ComboboxOption
+                                                    v-for="option in filteredResourceAccountOptions"
+                                                    :key="option.value"
+                                                    :value="option"
+                                                    as="template"
+                                                    v-slot="{ active, selected }"
+                                                >
+                                                    <li class="cursor-default select-none px-4 py-2" :class="active ? 'bg-indigo-600 text-white' : 'text-gray-900'">
+                                                        <span :class="selected ? 'font-medium' : 'font-normal'">{{ option.label }}</span>
+                                                    </li>
+                                                </ComboboxOption>
+                                            </ComboboxOptions>
+                                        </div>
+                                    </Combobox>
+                                </div>
+                                <div v-if="form.errors.billing_organization_id" class="form-error text-[#b91c1c] text-xs">
+                                    {{ form.errors.billing_organization_id }}
+                                </div>
+                                <p v-if="form.billing_organization_id" class="mt-2 text-xs text-gray-500">
+                                    {{ $t('This organization will consume subscription limits and add-ons from the selected resource account.') }}
+                                </p>
+                                <div v-if="props.organization" class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-gray-600">
+                                    <div class="font-medium text-gray-800">{{ resourceSharingStatus.title }}</div>
+                                    <div class="mt-1">{{ resourceSharingStatus.description }}</div>
+                                    <div v-if="resourceChildOrganizations.length > 0" class="mt-2 flex flex-wrap gap-2">
+                                        <span
+                                            v-for="organization in resourceChildOrganizations"
+                                            :key="organization.id"
+                                            class="rounded-md bg-white px-2 py-1 text-gray-700 ring-1 ring-slate-200"
+                                        >
+                                            {{ organization.name }}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -151,8 +265,15 @@
 </template>
 <script setup>
     import AppLayout from "./../Layout/App.vue";
-    import{ ref } from 'vue';
+    import{ computed, ref } from 'vue';
     import { Link, useForm } from "@inertiajs/vue3";
+    import {
+        Combobox,
+        ComboboxInput,
+        ComboboxButton,
+        ComboboxOptions,
+        ComboboxOption,
+    } from '@headlessui/vue';
     import FormInput from '@/Components/FormInput.vue';
     import FormPhoneInput from '@/Components/FormPhoneInput.vue';
     import FormSelect from '@/Components/FormSelect.vue';
@@ -171,6 +292,14 @@
         users: Object, 
         invoices: Object, 
         plans: Object, 
+        resourceAccounts: {
+            type: Array,
+            default: () => [],
+        },
+        subscriptionEvents: {
+            type: Array,
+            default: () => [],
+        },
         filters: Object, 
         mode: String 
     });
@@ -208,6 +337,7 @@
         plan: initialPlanValue,
         subscription_status: props.organization?.subscription?.status ?? 'trial',
         valid_until: formatDatetimeForInput(props.organization?.subscription?.valid_until),
+        billing_organization_id: props.organization?.billing_organization_id ?? null,
         create_user: 1,
         first_name: null,
         last_name: null,
@@ -258,6 +388,134 @@
         { value: 'active', label: trans('Active') },
         { value: 'suspended', label: trans('Suspended') },
     ]);
+
+    const resourceAccountQuery = ref('');
+    const resourceSharingEnabled = ref(Boolean(form.billing_organization_id));
+    const resourceAccountOptions = computed(() =>
+        (props.resourceAccounts ?? []).map((organization) => ({
+            value: organization.id,
+            label: organization.name,
+        })),
+    );
+    const filteredResourceAccountOptions = computed(() => {
+        const query = resourceAccountQuery.value.toLowerCase().replace(/\s+/g, '');
+
+        if (!query) {
+            return resourceAccountOptions.value;
+        }
+
+        return resourceAccountOptions.value.filter((option) =>
+            option.label.toLowerCase().replace(/\s+/g, '').includes(query),
+        );
+    });
+    const selectedResourceAccountOption = computed(() =>
+        resourceAccountOptions.value.find((option) => Number(option.value) === Number(form.billing_organization_id)) || null,
+    );
+    const resourceChildOrganizations = computed(() => props.organization?.resource_organizations ?? []);
+    const resourceSharingStatus = computed(() => {
+        if (props.organization?.billing_organization_id) {
+            const sharingEnabled = Boolean(props.organization?.resource_account_sharing_enabled);
+
+            return {
+                title: sharingEnabled ? trans('Uses shared resources') : trans('Linked account'),
+                description: sharingEnabled
+                    ? `${trans('Resource account')}: ${props.organization?.billing_organization?.name || '-'}`
+                    : trans('The selected resource account plan does not currently allow resource sharing.'),
+            };
+        }
+
+        if (resourceChildOrganizations.value.length > 0) {
+            const sharingEnabled = Boolean(props.organization?.resource_sharing_enabled);
+
+            return {
+                title: sharingEnabled ? trans('Resource account') : trans('Resource sharing disabled'),
+                description: sharingEnabled
+                    ? `${resourceChildOrganizations.value.length} ${trans('organizations use this account resources')}`
+                    : trans('This organization has linked organizations, but its current plan does not allow resource sharing.'),
+            };
+        }
+
+        if (props.organization?.resource_sharing_enabled) {
+            return {
+                title: trans('Resource sharing enabled'),
+                description: trans('No organizations are currently linked to this resource account.'),
+            };
+        }
+
+        return {
+            title: trans('Standalone account'),
+            description: trans('No organizations are currently using this account resources.'),
+        };
+    });
+    const selectResourceAccount = (option) => {
+        form.billing_organization_id = option?.value || null;
+    };
+    const setStandaloneResourceAccount = () => {
+        resourceSharingEnabled.value = false;
+        form.billing_organization_id = null;
+        resourceAccountQuery.value = '';
+    };
+    const enableSharedResourceAccount = () => {
+        resourceSharingEnabled.value = true;
+    };
+
+    const subscriptionEvents = computed(() => props.subscriptionEvents ?? []);
+    const eventLabels = {
+        subscription_created: 'Subscription Created',
+        subscription_activated: 'Subscription Activated',
+        subscription_renewed: 'Subscription Renewed',
+        subscription_expired: 'Subscription Expired',
+        subscription_expiration_changed: 'Subscription Expiration Changed',
+        plan_assigned: 'Plan Assigned',
+        plan_changed: 'Plan Changed',
+        plan_upgraded: 'Plan Upgraded',
+        plan_downgraded: 'Plan Downgraded',
+        add_on_purchased: 'Add-on Purchased',
+        add_on_expired: 'Add-on Expired',
+        add_on_deleted: 'Add-on Deleted',
+        trial_started: 'Trial Started',
+        trial_ended: 'Trial Ended',
+    };
+
+    const eventLabel = (eventType) => eventLabels[eventType] || 'Subscription Event';
+
+    const eventDetails = (event) => {
+        const oldValues = event.old_values || {};
+        const newValues = event.new_values || {};
+        const metadata = event.metadata || {};
+        const lines = [];
+
+        addChangedLine(lines, trans('Plan'), oldValues.plan_name, newValues.plan_name);
+        addChangedLine(lines, trans('Status'), oldValues.status, newValues.status);
+        addChangedLine(lines, trans('Valid until'), oldValues.valid_until, newValues.valid_until);
+
+        if (metadata.resource) {
+            lines.push(`${trans('Resource')}: ${metadata.resource}`);
+        }
+
+        if (metadata.quantity) {
+            lines.push(`${trans('Quantity')}: ${metadata.quantity}`);
+        }
+
+        return lines.length ? lines : ['-'];
+    };
+
+    const addChangedLine = (lines, label, oldValue, newValue) => {
+        if (!oldValue && !newValue) {
+            return;
+        }
+
+        if (String(oldValue || '') === String(newValue || '')) {
+            if (!oldValue || oldValue === '-') {
+                return;
+            }
+
+            lines.push(`${label}: ${oldValue}`);
+            return;
+        }
+
+        lines.push(`${label}: ${oldValue || '-'} -> ${newValue || '-'}`);
+    };
 
     const isOpenFormModal = ref(false);
     
