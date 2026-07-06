@@ -170,6 +170,19 @@
                                 <p v-if="form.billing_organization_id" class="mt-2 text-xs text-gray-500">
                                     {{ $t('This organization will consume subscription limits and add-ons from the selected resource account.') }}
                                 </p>
+                                <div v-if="props.organization" class="mt-3 rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-gray-600">
+                                    <div class="font-medium text-gray-800">{{ resourceSharingStatus.title }}</div>
+                                    <div class="mt-1">{{ resourceSharingStatus.description }}</div>
+                                    <div v-if="resourceChildOrganizations.length > 0" class="mt-2 flex flex-wrap gap-2">
+                                        <span
+                                            v-for="organization in resourceChildOrganizations"
+                                            :key="organization.id"
+                                            class="rounded-md bg-white px-2 py-1 text-gray-700 ring-1 ring-slate-200"
+                                        >
+                                            {{ organization.name }}
+                                        </span>
+                                    </div>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -398,6 +411,42 @@
     const selectedResourceAccountOption = computed(() =>
         resourceAccountOptions.value.find((option) => Number(option.value) === Number(form.billing_organization_id)) || null,
     );
+    const resourceChildOrganizations = computed(() => props.organization?.resource_organizations ?? []);
+    const resourceSharingStatus = computed(() => {
+        if (props.organization?.billing_organization_id) {
+            const sharingEnabled = Boolean(props.organization?.resource_account_sharing_enabled);
+
+            return {
+                title: sharingEnabled ? trans('Uses shared resources') : trans('Linked account'),
+                description: sharingEnabled
+                    ? `${trans('Resource account')}: ${props.organization?.billing_organization?.name || '-'}`
+                    : trans('The selected resource account plan does not currently allow resource sharing.'),
+            };
+        }
+
+        if (resourceChildOrganizations.value.length > 0) {
+            const sharingEnabled = Boolean(props.organization?.resource_sharing_enabled);
+
+            return {
+                title: sharingEnabled ? trans('Resource account') : trans('Resource sharing disabled'),
+                description: sharingEnabled
+                    ? `${resourceChildOrganizations.value.length} ${trans('organizations use this account resources')}`
+                    : trans('This organization has linked organizations, but its current plan does not allow resource sharing.'),
+            };
+        }
+
+        if (props.organization?.resource_sharing_enabled) {
+            return {
+                title: trans('Resource sharing enabled'),
+                description: trans('No organizations are currently linked to this resource account.'),
+            };
+        }
+
+        return {
+            title: trans('Standalone account'),
+            description: trans('No organizations are currently using this account resources.'),
+        };
+    });
     const selectResourceAccount = (option) => {
         form.billing_organization_id = option?.value || null;
     };

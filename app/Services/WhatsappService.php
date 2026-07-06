@@ -132,6 +132,11 @@ class WhatsappService
             return $this->buildBlockedContactResponse($contact);
         }
 
+        $trialExpiredGuard = $this->guardExpiredTrial((int) $contact->organization_id);
+        if ($trialExpiredGuard !== null) {
+            return $trialExpiredGuard;
+        }
+
         $conversationGuard = $this->guardConversationLimit((int) $contact->organization_id);
         if ($conversationGuard !== null) {
             return $conversationGuard;
@@ -260,6 +265,11 @@ class WhatsappService
 
         if ((bool) ($contact->is_blocked ?? false)) {
             return $this->buildBlockedContactResponse($contact);
+        }
+
+        $trialExpiredGuard = $this->guardExpiredTrial((int) $contact->organization_id);
+        if ($trialExpiredGuard !== null) {
+            return $trialExpiredGuard;
         }
 
         $conversationGuard = $this->guardConversationLimit((int) $contact->organization_id);
@@ -1686,6 +1696,11 @@ class WhatsappService
             return $this->buildBlockedContactResponse($contact);
         }
 
+        $trialExpiredGuard = $this->guardExpiredTrial((int) $contact->organization_id);
+        if ($trialExpiredGuard !== null) {
+            return $trialExpiredGuard;
+        }
+
         $conversationGuard = $this->guardConversationLimit((int) $contact->organization_id);
         if ($conversationGuard !== null) {
             return $conversationGuard;
@@ -1828,6 +1843,19 @@ class WhatsappService
         ]);
 
         return $this->buildErrorResponse('Contact is blocked', 403, 'CONTACT_BLOCKED');
+    }
+
+    private function guardExpiredTrial(int $organizationId): ?\stdClass
+    {
+        if (! SubscriptionService::isTrialExpiredForOutbound($organizationId)) {
+            return null;
+        }
+
+        return $this->buildErrorResponse(
+            SubscriptionService::trialExpiredOutboundMessage(),
+            403,
+            'TRIAL_EXPIRED'
+        );
     }
 
     private function guardConversationLimit(int $organizationId): ?\stdClass

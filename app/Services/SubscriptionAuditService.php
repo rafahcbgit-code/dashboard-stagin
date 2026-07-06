@@ -7,6 +7,7 @@ use App\Models\Subscription;
 use App\Models\SubscriptionEvent;
 use App\Models\SubscriptionPlan;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schema;
 
 class SubscriptionAuditService
@@ -166,7 +167,7 @@ class SubscriptionAuditService
 
     public function record(string $eventType, int $organizationId, array $attributes = []): ?SubscriptionEvent
     {
-        if (! Schema::hasTable('subscription_events')) {
+        if (! Cache::remember('schema:has_table:subscription_events', now()->addHour(), fn () => Schema::hasTable('subscription_events'))) {
             return null;
         }
 

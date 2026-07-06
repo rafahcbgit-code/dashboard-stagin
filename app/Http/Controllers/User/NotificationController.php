@@ -33,7 +33,8 @@ class NotificationController extends BaseController
         $organizationId = session()->get('current_organization');
         $userId = $request->user()->id;
 
-        $count = NotificationLog::where('user_id', $userId)
+        $count = NotificationLog::query()
+            ->where('user_id', $userId)
             ->where('organization_id', $organizationId)
             ->where('notification_type', 'chat_assigned')
             ->where('clicked', false)

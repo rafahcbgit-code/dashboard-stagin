@@ -32,6 +32,7 @@ class StoreSubscriptionPlan extends FormRequest
             'contacts_limit' => 'required|numeric|gte:-1',
             'team_limit' => 'required|numeric|gte:-1',
             'organizations_limit' => 'required|numeric|gte:-1',
+            'resource_sharing_enabled' => 'nullable|boolean',
             'status' => 'required',
             'salla_integration_enabled' => 'sometimes|boolean',
             'shopify_integration_enabled' => 'sometimes|boolean',

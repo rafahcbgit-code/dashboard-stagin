@@ -45,6 +45,26 @@ class ChatService
         $this->organizationId = $organizationId;
     }
 
+    private function organization()
+    {
+        return Cache::remember(
+            "organization:chat:{$this->organizationId}",
+            now()->addMinute(),
+            fn () => Organization::query()
+                ->select(['id', 'uuid', 'name', 'metadata', 'billing_organization_id'])
+                ->whereKey($this->organizationId)
+                ->first()
+        );
+    }
+
+    private function organizationMetadata(): array
+    {
+        $metadata = $this->organization()?->metadata;
+        $metadata = $metadata ? json_decode($metadata, true) : [];
+
+        return is_array($metadata) ? $metadata : [];
+    }
+
     /**
      * Get authenticated user ID (supports both session and Sanctum)
      */
@@ -158,8 +178,7 @@ class ChatService
             return;
         }
 
-        $config = Organization::where('id', $this->organizationId)->first()->metadata;
-        $config = $config ? json_decode($config, true) : [];
+        $config = $this->organizationMetadata();
 
         $accessToken = $config['whatsapp']['access_token'] ?? null;
         $apiVersion = config('graph.api_version');
@@ -224,7 +243,7 @@ class ChatService
             $ticketState = 'all';
         }
 
-        $config = Organization::where('id', $this->organizationId)->first();
+        $config = $this->organization();
         $agents = Team::where('organization_id', $this->organizationId)->get();
         $allowAgentsToViewAllChats = true;
         $ticketingActive = false;
@@ -541,8 +560,7 @@ class ChatService
             $organizationId = $this->organizationId;
 
             // Get organization settings
-            $settings = Organization::where('id', $organizationId)->first();
-            $settings = json_decode($settings->metadata);
+            $settings = json_decode($this->organization()?->metadata);
             $isSpecificAgentEnabled = !empty($settings->tickets->assigned_to_specific_agents ?? false);
 
             // Skip if ticket already exists, is open AND is already assigned
@@ -743,6 +761,12 @@ class ChatService
         if ((bool) ($contact->is_blocked ?? false)) {
             $result->success = false;
             $result->message = 'Contact is blocked.';
+            return $result;
+        }
+
+        if (SubscriptionService::isTrialExpiredForOutbound((int) $this->organizationId)) {
+            $result->success = false;
+            $result->message = SubscriptionService::trialExpiredOutboundMessage();
             return $result;
         }
 
@@ -1403,7 +1427,7 @@ class ChatService
     private function getLocationSettings()
     {
         // Retrieve the settings for the current organization
-        $settings = Organization::where('id', $this->organizationId)->first();
+        $settings = $this->organization();
 
         if ($settings) {
             // Decode the JSON metadata column into an associative array

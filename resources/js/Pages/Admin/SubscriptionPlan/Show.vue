@@ -64,6 +64,15 @@
                             <FormInput v-model="form.contacts_limit" :name="$t('Contacts limit')" :error="form.errors.contacts_limit" :type="'number'" :class="'sm:col-span-3'"/>
                             <FormInput v-model="form.team_limit" :name="$t('User limit')" :error="form.errors.team_limit" :type="'number'" :class="'sm:col-span-3'"/>
                             <FormInput v-model="form.organizations_limit" :name="$t('Organizations limit')" :error="form.errors.organizations_limit" :type="'number'" :class="'sm:col-span-3'"/>
+                            <div class="sm:col-span-6 rounded-md border border-slate-200 bg-slate-50 p-3">
+                                <div class="flex items-center justify-between gap-4">
+                                    <div>
+                                        <div class="text-sm text-gray-900">{{ $t('Enable resource sharing') }}</div>
+                                        <p class="text-xs text-slate-600">{{ $t('Organizations assigned to this plan can share their plan limits and resource add-ons with their linked organizations.') }}</p>
+                                    </div>
+                                    <FormToggleSwitch v-model="form.resource_sharing_enabled"/>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -209,6 +218,7 @@
         contacts_limit: getDetail(props.plan?.metadata, 'contacts_limit') ?? '-1',
         team_limit: getDetail(props.plan?.metadata, 'team_limit') ?? '-1',
         organizations_limit: getDetail(props.plan?.metadata, 'organizations_limit') ?? '-1',
+        resource_sharing_enabled: getDetail(props.plan?.metadata, 'resource_sharing_enabled') == 1,
         ai_text_response_limit: getDetail(props.plan?.metadata, 'ai_text_response_limit') ?? '-1',
     ai_audio_response_limit: getDetail(props.plan?.metadata, 'ai_audio_response_limit') ?? '-1',
     receive_messages_after_expiration: getDetail(props.plan?.metadata, 'receive_messages_after_expiration') == 1 || getDetail(props.plan?.metadata, 'receive_messages_after_expiration') == null ? true : false,

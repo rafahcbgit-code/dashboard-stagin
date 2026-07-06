@@ -27,6 +27,35 @@ use DB;
 
 class SubscriptionService
 {
+    public const TRIAL_EXPIRED_OUTBOUND_MESSAGE = 'تم انتهاء المدة التجريبية الرجاء تفعيل باقة';
+
+    private static function trialLimits(): array
+    {
+        return Cache::remember('settings:trial_limits', now()->addMinutes(10), function (): array {
+            $limit = optional(Setting::where('key', 'trial_limits')->first())->value;
+            $limits = $limit ? json_decode($limit, true) : [];
+
+            return is_array($limits) ? $limits : [];
+        });
+    }
+
+    public static function trialExpiredOutboundMessage(): string
+    {
+        return __(self::TRIAL_EXPIRED_OUTBOUND_MESSAGE);
+    }
+
+    public static function isTrialExpiredForOutbound(int $organizationId): bool
+    {
+        $subscription = Subscription::where('organization_id', $organizationId)
+            ->orderByDesc('id')
+            ->first();
+
+        return $subscription
+            && $subscription->status === 'trial'
+            && $subscription->valid_until
+            && Carbon::parse($subscription->valid_until)->lt(now());
+    }
+
     public static function isSubscriptionActive(string $organizationId)
     {
         $subscription = Subscription::where('organization_id', $organizationId)->first();
@@ -392,8 +421,7 @@ class SubscriptionService
             $count = Contact::where('organization_id', $organizationId)->whereNull('deleted_at')->count();
 
             if($subscription->status === 'trial' && $subscription->valid_until > now()){
-                $limit = optional(Setting::where('key', 'trial_limits')->first())->value;
-                $usageLimit = $limit ? json_decode($limit, true)['contacts'] ?? '-1' : '-1';
+                $usageLimit = self::trialLimits()['contacts'] ?? '-1';
 
                 return $usageLimit == -1 ? false : $count >= $usageLimit;
             }
@@ -407,8 +435,7 @@ class SubscriptionService
             $count = Campaign::where('organization_id', $organizationId)->count();
 
             if($subscription->status === 'trial' && $subscription->valid_until > now()){
-                $limit = optional(Setting::where('key', 'trial_limits')->first())->value;
-                $usageLimit = $limit ? json_decode($limit, true)['campaigns'] ?? '-1' : '-1';
+                $usageLimit = self::trialLimits()['campaigns'] ?? '-1';
 
                 return $usageLimit == -1 ? false : $count >= $usageLimit;
             }
@@ -429,8 +456,7 @@ class SubscriptionService
             }
 
             if($subscription->status === 'trial' && $subscription->valid_until > now()){
-                $limit = optional(Setting::where('key', 'trial_limits')->first())->value;
-                $usageLimit = $limit ? json_decode($limit, true)['messages'] ?? '-1' : '-1';
+                $usageLimit = self::trialLimits()['messages'] ?? '-1';
 
                 return $usageLimit == -1 ? false : $count >= $usageLimit;
             }
@@ -444,8 +470,7 @@ class SubscriptionService
             $count = Team::where('organization_id', $organizationId)->count();
 
             if($subscription->status === 'trial' && $subscription->valid_until > now()){
-                $limit = optional(Setting::where('key', 'trial_limits')->first())->value;
-                $usageLimit = $limit ? json_decode($limit, true)['users'] ?? '-1' : '-1';
+                $usageLimit = self::trialLimits()['users'] ?? '-1';
 
                 return $usageLimit == -1 ? false : $count >= $usageLimit;
             }

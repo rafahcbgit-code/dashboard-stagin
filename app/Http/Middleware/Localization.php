@@ -6,6 +6,7 @@ use Closure;
 use App\Models\Setting;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\App;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Session;
 
 class Localization
@@ -23,7 +24,11 @@ class Localization
             App::setLocale(strtolower(Session::get('locale')));
         } else {
             if ($this->isInstalled()) {
-                $locale = Setting::where('key', 'default_language')->value('value') ?? 'en';
+                $locale = Cache::remember(
+                    'settings:default_language',
+                    now()->addMinutes(10),
+                    fn () => Setting::where('key', 'default_language')->value('value') ?? 'en'
+                );
             } else {
                 $locale = 'en';
             }

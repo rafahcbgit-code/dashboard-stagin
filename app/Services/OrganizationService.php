@@ -188,7 +188,9 @@ class OrganizationService
     public function getByUuid($request, $uuid = null)
     {
         $result['plans'] = SubscriptionPlan::whereNull('deleted_at')->get();
-        $result['resource_accounts'] = $this->resourceAccountOptions();
+        $plansById = $result['plans']->keyBy('id');
+        $sharingPlanIds = $this->resourceSharingPlanIds($result['plans']);
+        $result['resource_accounts'] = $this->resourceAccountOptions(null, $sharingPlanIds);
 
         if ($uuid === null) {
             $result['organization'] = null;
@@ -199,12 +201,28 @@ class OrganizationService
             return $result;
         }
 
-        $organization = Organization::with(['subscription.plan', 'billingOrganization:id,name,uuid'])->where('uuid', $uuid)->first();
+        $organization = Organization::with([
+            'subscription',
+            'billingOrganization:id,name,uuid',
+            'resourceOrganizations:id,name,uuid,billing_organization_id',
+        ])->where('uuid', $uuid)->first();
+        if ($organization?->subscription?->plan_id) {
+            $plan = $plansById->get($organization->subscription->plan_id);
+
+            if ($plan) {
+                $organization->subscription->setRelation('plan', $plan);
+            }
+        }
         $users = (new User)->listAll('user', $request->query('search'), $organization->id);
         $billing = (new BillingTransaction)->listAll($request->query('search'), $organization->id);
         app(SubscriptionAuditService::class)->recordDueEventsForOrganization((int) $organization->id);
+        $usageService = new SubscriptionUsageService();
+        $organization->resource_sharing_enabled = $usageService->resourceSharingEnabledForOrganization((int) $organization->id);
+        $organization->resource_account_sharing_enabled = $organization->billing_organization_id
+            ? $usageService->resourceSharingEnabledForOrganization((int) $organization->billing_organization_id)
+            : false;
 
-        $result['resource_accounts'] = $this->resourceAccountOptions((int) $organization->id);
+        $result['resource_accounts'] = $this->resourceAccountOptions((int) $organization->id, $sharingPlanIds);
         $result['organization'] = $organization;
         $result['billing'] = BillingResource::collection($billing);
         $result['users'] = UserResource::collection($users);
@@ -215,7 +233,7 @@ class OrganizationService
 
     private function subscriptionEvents(int $organizationId)
     {
-        if (! Schema::hasTable('subscription_events')) {
+        if (! Cache::remember('schema:has_table:subscription_events', now()->addHour(), fn () => Schema::hasTable('subscription_events'))) {
             return collect();
         }
 
@@ -403,13 +421,46 @@ class OrganizationService
         return $organization;
     }
 
-    private function resourceAccountOptions(?int $excludeOrganizationId = null)
+    private function resourceAccountOptions(?int $excludeOrganizationId = null, ?array $sharingPlanIds = null)
     {
+        $sharingPlanIds ??= $this->resourceSharingPlanIds(
+            SubscriptionPlan::query()
+                ->whereNull('deleted_at')
+                ->get(['id', 'metadata'])
+        );
+
+        if ($sharingPlanIds === []) {
+            return collect();
+        }
+
         return Organization::query()
             ->whereNull('billing_organization_id')
             ->when($excludeOrganizationId, fn ($query) => $query->where('id', '!=', $excludeOrganizationId))
+            ->whereExists(function ($query) use ($sharingPlanIds): void {
+                $query->selectRaw('1')
+                    ->from('subscriptions')
+                    ->whereColumn('subscriptions.organization_id', 'organizations.id')
+                    ->whereIn('subscriptions.plan_id', $sharingPlanIds)
+                    ->whereRaw(
+                        'subscriptions.id = (select max(`latest_subscriptions`.`id`) from `subscriptions` as `latest_subscriptions` where `latest_subscriptions`.`organization_id` = `organizations`.`id`)'
+                    );
+            })
             ->orderBy('name')
-            ->get(['id', 'uuid', 'name']);
+            ->get(['id', 'uuid', 'name'])
+            ->values();
+    }
+
+    private function resourceSharingPlanIds($plans): array
+    {
+        return $plans
+            ->filter(function (SubscriptionPlan $plan): bool {
+                $metadata = json_decode((string) $plan->metadata, true);
+                $metadata = is_array($metadata) ? $metadata : [];
+
+                return (bool) ((int) ($metadata['resource_sharing_enabled'] ?? 0));
+            })
+            ->pluck('id')
+            ->all();
     }
 
     private function resolveBillingOrganizationId(object $request, ?int $organizationId = null): ?int
@@ -429,7 +480,12 @@ class OrganizationService
             return null;
         }
 
-        return (new SubscriptionUsageService())->resourceAccountId((int) $currentOrganizationId);
+        $usageService = new SubscriptionUsageService();
+        $resourceAccountId = $usageService->resourceAccountId((int) $currentOrganizationId);
+
+        return $usageService->resourceSharingEnabledForOrganization($resourceAccountId)
+            ? $resourceAccountId
+            : null;
     }
 
     private function resolveSubscriptionExpiration($request, ?SubscriptionPlan $plan): array

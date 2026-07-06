@@ -64,6 +64,13 @@ class MessageController extends Controller
             }
 
             // Check subscription
+            if (SubscriptionService::isTrialExpiredForOutbound((int) $organizationId)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => SubscriptionService::trialExpiredOutboundMessage()
+                ], 403);
+            }
+
             if (!SubscriptionService::isSubscriptionActive($organizationId)) {
                 return response()->json([
                     'success' => false,
@@ -426,6 +433,13 @@ class MessageController extends Controller
             }
 
             // Check subscription
+            if (SubscriptionService::isTrialExpiredForOutbound((int) $organizationId)) {
+                return response()->json([
+                    'success' => false,
+                    'message' => SubscriptionService::trialExpiredOutboundMessage()
+                ], 403);
+            }
+
             if (!SubscriptionService::isSubscriptionActive($organizationId)) {
                 return response()->json([
                     'success' => false,

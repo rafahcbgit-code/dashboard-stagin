@@ -15,6 +15,7 @@ use Carbon\Carbon;
 use Carbon\CarbonInterface;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 
 class SubscriptionUsageService
 {
@@ -35,6 +36,10 @@ class SubscriptionUsageService
     private array $resourceAccountIdCache = [];
 
     private array $organizationNameCache = [];
+
+    private array $subscriptionCache = [];
+
+    private array $resourceSharingEnabledCache = [];
 
     public function canUse(int $organizationId, string $resource, int $amount = 1, ?int $userId = null): array
     {
@@ -277,8 +282,47 @@ class SubscriptionUsageService
         }
 
         $billingOrganizationId = Organization::whereKey($organizationId)->value('billing_organization_id');
+        if ($billingOrganizationId && ! $this->resourceSharingEnabledForOrganization((int) $billingOrganizationId)) {
+            $billingOrganizationId = null;
+        }
 
         return $this->resourceAccountIdCache[$organizationId] = $billingOrganizationId ?: $organizationId;
+    }
+
+    public function resourceSharingEnabledForOrganization(int $organizationId): bool
+    {
+        if (array_key_exists($organizationId, $this->resourceSharingEnabledCache)) {
+            return $this->resourceSharingEnabledCache[$organizationId];
+        }
+
+        return $this->resourceSharingEnabledCache[$organizationId] = Cache::remember(
+            "subscription:resource-sharing-enabled:{$organizationId}",
+            now()->addMinutes(10),
+            function () use ($organizationId): bool {
+                $planId = Subscription::query()
+                    ->where('subscriptions.organization_id', $organizationId)
+                    ->orderByDesc('subscriptions.id')
+                    ->value('subscriptions.plan_id');
+
+                if (! $planId) {
+                    return false;
+                }
+
+                $planMetadata = SubscriptionPlan::query()
+                    ->whereKey($planId)
+                    ->whereNull('deleted_at')
+                    ->value('metadata');
+
+                if (! $planMetadata) {
+                    return false;
+                }
+
+                $metadata = json_decode((string) $planMetadata, true);
+                $metadata = is_array($metadata) ? $metadata : [];
+
+                return (bool) ((int) ($metadata['resource_sharing_enabled'] ?? 0));
+            }
+        );
     }
 
     public function resourcePoolOrganizationIds(int $billingOrganizationId): array
@@ -293,23 +337,36 @@ class SubscriptionUsageService
 
     private function resourcePoolOrganizationCount(int $billingOrganizationId): int
     {
+        if (! $this->resourceSharingEnabledForOrganization($billingOrganizationId)) {
+            return 1;
+        }
+
         return $this->resourcePoolOrganizationIdQuery($billingOrganizationId)->count();
     }
 
     private function scopeToResourcePool($query, int $billingOrganizationId, string $column = 'organization_id')
     {
+        if (! $this->resourceSharingEnabledForOrganization($billingOrganizationId)) {
+            return $query->where($column, $billingOrganizationId);
+        }
+
         return $query->whereIn($column, $this->resourcePoolOrganizationIdQuery($billingOrganizationId));
     }
 
     private function resourcePoolOrganizationIdQuery(int $billingOrganizationId)
     {
-        return Organization::query()
+        $query = Organization::query()
             ->select('id')
-            ->whereNull('deleted_at')
-            ->where(function ($query) use ($billingOrganizationId): void {
-                $query->whereKey($billingOrganizationId)
-                    ->orWhere('billing_organization_id', $billingOrganizationId);
-            });
+            ->whereNull('deleted_at');
+
+        if (! $this->resourceSharingEnabledForOrganization($billingOrganizationId)) {
+            return $query->whereKey($billingOrganizationId);
+        }
+
+        return $query->where(function ($query) use ($billingOrganizationId): void {
+            $query->whereKey($billingOrganizationId)
+                ->orWhere('billing_organization_id', $billingOrganizationId);
+        });
     }
 
     private function organizationName(int $organizationId): ?string
@@ -386,9 +443,12 @@ class SubscriptionUsageService
 
     private function trialLimit(string $resource): int
     {
-        $limit = optional(\App\Models\Setting::where('key', 'trial_limits')->first())->value;
-        $limits = $limit ? json_decode($limit, true) : [];
-        $limits = is_array($limits) ? $limits : [];
+        $limits = Cache::remember('settings:trial_limits', now()->addMinutes(10), function (): array {
+            $limit = optional(\App\Models\Setting::where('key', 'trial_limits')->first())->value;
+            $limits = $limit ? json_decode($limit, true) : [];
+
+            return is_array($limits) ? $limits : [];
+        });
 
         return match ($resource) {
             self::TEMPLATE_MESSAGES => (int) ($limits['template_messages'] ?? $limits['campaign_messages'] ?? $limits['messages'] ?? -1),
@@ -402,7 +462,11 @@ class SubscriptionUsageService
 
     private function subscription(int $organizationId): ?Subscription
     {
-        return Subscription::with('plan')
+        if (array_key_exists($organizationId, $this->subscriptionCache)) {
+            return $this->subscriptionCache[$organizationId];
+        }
+
+        return $this->subscriptionCache[$organizationId] = Subscription::with('plan')
             ->where('organization_id', $organizationId)
             ->orderByDesc('id')
             ->first();

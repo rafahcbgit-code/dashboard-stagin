@@ -228,10 +228,18 @@ class CampaignController extends BaseController
     public function index(Request $request, $uuid = null)
     {
         $organizationId = session()->get('current_organization');
-        $team = Team::where('organization_id', $organizationId)->where('user_id', auth()->user()->id)->first();
+        $userId = (int) auth()->user()->id;
+        $teamRole = Cache::remember(
+            "team-role:{$organizationId}:{$userId}",
+            now()->addMinutes(5),
+            fn () => Team::where('organization_id', $organizationId)
+                ->where('user_id', $userId)
+                ->whereNull('deleted_at')
+                ->value('role')
+        );
 
         if ($uuid == null) {
-            $searchTerm = $request->query('search');
+            $searchTerm = trim((string) $request->query('search'));
             $settings = Organization::where('id', $organizationId)->first();
             [$start, $end] = $this->resolveDateRange($request);
 
@@ -245,10 +253,14 @@ class CampaignController extends BaseController
             $campaigns = Campaign::with(['template', 'contactGroup'])
                 ->where('organization_id', $organizationId)
                 ->where('deleted_at', null)
-                ->where(function ($query) use ($searchTerm) {
-                    $query->where('name', 'like', '%' . $searchTerm . '%')
-                        ->orWhereHas('template', function ($templateQuery) use ($searchTerm) {
-                            $templateQuery->where('name', 'like', '%' . $searchTerm . '%');
+                ->when($searchTerm !== '', function ($query) use ($searchTerm) {
+                    $query->where(function ($query) use ($searchTerm) {
+                        $like = '%' . $searchTerm . '%';
+
+                        $query->where('name', 'like', $like)
+                            ->orWhereHas('template', function ($templateQuery) use ($like) {
+                                $templateQuery->where('name', 'like', $like);
+                            });
                         });
                 })
                 ->latest()
@@ -270,7 +282,7 @@ class CampaignController extends BaseController
                 'rows' => $rows,
                 'filters' => request()->all(['search', 'start_date', 'end_date']),
                 'settings' => $settings,
-                'role' => $team->role,
+                'role' => $teamRole,
                 'overall_delivery_count' => $overallDelivered,
                 'campaign_messages_limit' => $campaignLimit,
                 'trial' => $showStats,

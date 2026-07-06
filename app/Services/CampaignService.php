@@ -33,6 +33,12 @@ class CampaignService
         $organizationMetadata = is_array($organizationMetadata) ? $organizationMetadata : [];
         $timezone = $organizationMetadata['timezone'] ?? $timezone;
 
+        if (SubscriptionService::isTrialExpiredForOutbound((int) $organizationId)) {
+            throw ValidationException::withMessages([
+                'contacts' => SubscriptionService::trialExpiredOutboundMessage(),
+            ]);
+        }
+
         // Enforce messaging_limit_tier: selected group size must be <= allowed tier value
         $tierLimit = $this->resolveTierLimit($organizationMetadata);
 

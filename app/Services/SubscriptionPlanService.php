@@ -69,6 +69,7 @@ class SubscriptionPlanService
                 'contacts_limit' => $request->input('contacts_limit'),
                 'team_limit' => $request->input('team_limit'),
                 'organizations_limit' => $request->input('organizations_limit'),
+                'resource_sharing_enabled' => $request->input('resource_sharing_enabled') == true ? 1 : 0,
                 'receive_messages_after_expiration' => $request->input('receive_messages_after_expiration') == true ? 1 : 0,
                 'ai_text_response_limit' => $request->input('ai_text_response_limit'),
                 'ai_audio_response_limit' => $request->input('ai_audio_response_limit'),
@@ -111,6 +112,7 @@ class SubscriptionPlanService
         $metadata['contacts_limit'] = $request->input('contacts_limit');
         $metadata['team_limit'] = $request->input('team_limit');
         $metadata['organizations_limit'] = $request->input('organizations_limit');
+        $metadata['resource_sharing_enabled'] = $request->input('resource_sharing_enabled') == true ? 1 : 0;
         $metadata['receive_messages_after_expiration'] = $request->input('receive_messages_after_expiration') == true ? 1 : 0;
         $metadata['ai_text_response_limit'] = $request->input('ai_text_response_limit');
         $metadata['ai_audio_response_limit'] = $request->input('ai_audio_response_limit');

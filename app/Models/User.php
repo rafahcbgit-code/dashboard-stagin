@@ -62,6 +62,8 @@ class User extends Authenticatable implements MustVerifyEmail
     
     public function listAll($role, $searchTerm, $organizationId = null)
     {
+        $searchTerm = trim((string) $searchTerm);
+
         $query = $this->where(function ($query) use ($role) {
                 if ($role === 'user') {
                     $query->where('users.role', '=', 'user');
@@ -69,17 +71,20 @@ class User extends Authenticatable implements MustVerifyEmail
                     $query->where('users.role', '!=', 'user');
                 }
             })
-            ->where(function ($query) use ($searchTerm) {
-                $query->where('first_name', 'like', '%' . $searchTerm . '%')
-                    ->orWhere('last_name', 'like', '%' . $searchTerm . '%')
-                    ->orWhere('email', 'like', '%' . $searchTerm . '%')
-                    ->orWhere('phone', 'like', '%' . $searchTerm . '%');
+            ->when($searchTerm !== '', function ($query) use ($searchTerm) {
+                $query->where(function ($query) use ($searchTerm) {
+                    $query->where('first_name', 'like', '%' . $searchTerm . '%')
+                        ->orWhere('last_name', 'like', '%' . $searchTerm . '%')
+                        ->orWhere('email', 'like', '%' . $searchTerm . '%')
+                        ->orWhere('phone', 'like', '%' . $searchTerm . '%');
+                });
             })
             ->latest('users.created_at');
 
         if ($organizationId !== null) {
             $query->join('teams', 'teams.user_id', '=', 'users.id')
                 ->where('teams.organization_id', '=', $organizationId)
+                ->whereNull('teams.deleted_at')
                 ->select('users.*', 'teams.role');
         }
 

@@ -8,6 +8,7 @@ use Symfony\Component\HttpFoundation\Response;
 use App\Models\Subscription;
 use App\Models\OtpConfig;
 use Inertia\Inertia;
+use Illuminate\Support\Facades\Cache;
 
 class IsTrial
 {
@@ -23,10 +24,23 @@ class IsTrial
         if ($user->code_verified != 1) {
             return Inertia::location(route('VerifyAccount'));
         }
-        $subscription = Subscription::where('organization_id', $organizationId)->first();
+        $subscription = Cache::remember(
+            "subscription:trial-middleware:{$organizationId}",
+            now()->addMinute(),
+            fn () => Subscription::where('organization_id', $organizationId)
+                ->orderByDesc('id')
+                ->first(['id', 'organization_id', 'status', 'valid_until'])
+        );
 
-        $phone = OtpConfig::value('contact_phone') ?? "+966542922948";
-        $calendly_url = OtpConfig::value('calendly_url') ?? "https://calendly.com/chatberry-info/chatberry-whatsapp-meeting-clone?month=2025-07";
+        $otpConfig = Cache::remember(
+            'otp_config:contact_links',
+            now()->addMinutes(10),
+            fn () => OtpConfig::query()
+                ->orderBy('id')
+                ->first(['contact_phone', 'calendly_url'])
+        );
+        $phone = $otpConfig?->contact_phone ?? "+966542922948";
+        $calendly_url = $otpConfig?->calendly_url ?? "https://calendly.com/chatberry-info/chatberry-whatsapp-meeting-clone?month=2025-07";
 
         $phone = ltrim($phone, '+');
 

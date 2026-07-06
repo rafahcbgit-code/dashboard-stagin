@@ -70,6 +70,10 @@ class StoreOrganization extends FormRequest
                 $validator->errors()->add('billing_organization_id', __('Please select a standalone organization as the resource account.'));
             }
 
+            if (! (new SubscriptionUsageService())->resourceSharingEnabledForOrganization((int) $billingOrganizationId)) {
+                $validator->errors()->add('billing_organization_id', __('The selected organization plan does not allow resource sharing.'));
+            }
+
             if ($currentOrganizationId && Organization::where('billing_organization_id', $currentOrganizationId)->exists()) {
                 $validator->errors()->add('billing_organization_id', __('An organization that already has shared-resource organizations cannot be moved under another resource account.'));
             }

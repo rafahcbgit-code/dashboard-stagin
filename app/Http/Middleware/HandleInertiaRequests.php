@@ -12,6 +12,7 @@ use App\Models\User;
 use App\Helpers\CustomHelper;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\App;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
 use Inertia\Middleware;
 use libphonenumber\PhoneNumberUtil;
@@ -87,7 +88,14 @@ class HandleInertiaRequests extends Middleware
                 ->where('user_id', $user->id)
                 ->whereHas('organization')
                 ->get();
-            $organization = Organization::where('id', $organizationId)->first();
+            $organization = Cache::remember(
+                "organization:shared:{$organizationId}",
+                now()->addMinute(),
+                fn () => Organization::query()
+                    ->select(['id', 'uuid', 'name', 'metadata', 'billing_organization_id', 'deleted_at'])
+                    ->whereKey($organizationId)
+                    ->first()
+            );
             $unreadMessages = \Illuminate\Support\Facades\Cache::remember("org_{$organizationId}_global_unread", 60, function () use ($organizationId) {
                 return Chat::where('organization_id', $organizationId)
                     ->where('type', 'inbound')
@@ -100,10 +108,22 @@ class HandleInertiaRequests extends Middleware
         if ($this->isInstalled()) {
             $keys = ['favicon', 'logo', 'company_name', 'address', 'currency', 'email', 'phone', 'socials', 'trial_period', 'recaptcha_site_key', 'recaptcha_active', 'google_analytics_tracking_id', 'google_maps_api_key', 'pusher_app_key', 'pusher_app_cluster', 'google_auth_active', 'enable_api_key_input', 'enable_model_selection', 'default_open_ai_text_model', 'default_open_ai_audio_model'];
             $config = Setting::whereIn('key', $keys)->get();
-            $languages = Language::where('deleted_at', null)
-                ->where('status', 'active')
-                ->get();
-            $currentLanguage = Language::where('code', session('locale') ?? App::getLocale())->first();
+            $languages = Cache::remember(
+                'languages:active:shared',
+                now()->addMinutes(10),
+                fn () => Language::query()
+                    ->whereNull('deleted_at')
+                    ->where('status', 'active')
+                    ->orderBy('id')
+                    ->get(['id', 'name', 'code', 'status', 'is_rtl'])
+            );
+            $currentLanguage = Cache::remember(
+                'languages:current:' . (session('locale') ?? App::getLocale()),
+                now()->addMinutes(10),
+                fn () => Language::query()
+                    ->where('code', session('locale') ?? App::getLocale())
+                    ->first(['id', 'name', 'code', 'status', 'is_rtl'])
+            );
             $isRtl = $currentLanguage ? $currentLanguage->is_rtl : false;
         } else {
             $config = [];
