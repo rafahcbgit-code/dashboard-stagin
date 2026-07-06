@@ -16,6 +16,7 @@ class BackfillConversationWindows extends Command
         {--without-archive : Ignore chats_archive even when the table exists}
         {--report-file= : Write the full per-organization report to a CSV file}
         {--report-limit=100 : Number of organizations to print in the console report}
+        {--progress-every=50000 : Print progress after this many chat rows are scanned}
         {--insert-batch=1000 : Number of conversation windows to insert per batch}';
 
     protected $description = 'Backfill 24-hour conversation windows from existing chat records.';
@@ -31,8 +32,11 @@ class BackfillConversationWindows extends Command
     private array $existingWindows = [];
     private int $existingWindowIndex = 0;
     private bool $hasExistingWindows = false;
+    private bool $checkExistingWindows = false;
     private array $pendingWindowRows = [];
     private int $insertBatchSize = 1000;
+    private int $scanned = 0;
+    private int $progressEvery = 50000;
 
     public function handle(): int
     {
@@ -46,32 +50,42 @@ class BackfillConversationWindows extends Command
             return self::FAILURE;
         }
 
+        if (! Schema::hasTable('contacts')) {
+            $this->error('contacts table does not exist.');
+            return self::FAILURE;
+        }
+
         $dryRun = (bool) $this->option('dry-run');
         $includeArchive = ! (bool) $this->option('without-archive') && Schema::hasTable('chats_archive');
         $this->insertBatchSize = max(1, (int) $this->option('insert-batch'));
+        $this->progressEvery = max(0, (int) $this->option('progress-every'));
         $organizationId = $this->option('organization') !== null
             ? (int) $this->option('organization')
             : null;
 
         DB::disableQueryLog();
 
+        $sourceTables = $this->sourceTables($includeArchive);
+
         $this->info($dryRun
             ? 'Dry run: no conversation windows will be written.'
             : 'Backfilling conversation windows...');
-        $this->line('Sources: chats'.($includeArchive ? ', chats_archive' : ''));
+        $this->line('Sources: '.implode(', ', array_values($sourceTables)));
 
-        $this->hasExistingWindows = ConversationWindow::query()
+        if ($dryRun && $includeArchive) {
+            $this->warn('Dry-run with chats_archive is a scalable estimate. The real run may create fewer windows because archive windows are written before active chats are processed.');
+        }
+
+        $startedWithExistingWindows = ConversationWindow::query()
             ->when($organizationId, fn ($query) => $query->where('organization_id', $organizationId))
             ->exists();
+        $this->hasExistingWindows = $startedWithExistingWindows;
 
-        $query = $this->chatSourceQuery($organizationId, $includeArchive)
-            ->orderBy('organization_id')
-            ->orderBy('contact_id')
-            ->orderBy('created_at')
-            ->orderBy('id');
-
-        foreach ($query->cursor() as $chat) {
-            $this->processChat($chat, $dryRun);
+        foreach ($sourceTables as $sourceTable => $table) {
+            $this->line("Processing {$table}...");
+            $checkExistingWindows = $startedWithExistingWindows
+                || (! $dryRun && $includeArchive && $sourceTable === 'chats' && $this->hasExistingWindows);
+            $this->processSourceTable($table, $sourceTable, $organizationId, $dryRun, $checkExistingWindows);
         }
 
         $this->flushPendingWindowRows();
@@ -83,6 +97,7 @@ class BackfillConversationWindows extends Command
         $this->info("Already existing: {$this->existing}");
         $this->info("Inside existing/new 24h window: {$this->insideWindow}");
         $this->info("Skipped: {$this->skipped}");
+        $this->info("Scanned chat rows: {$this->scanned}");
 
         return self::SUCCESS;
     }
@@ -140,38 +155,62 @@ class BackfillConversationWindows extends Command
         $this->created++;
     }
 
-    private function chatSourceQuery(?int $organizationId, bool $includeArchive)
+    private function sourceTables(bool $includeArchive): array
     {
-        $activeChats = $this->chatTableQuery('chats', 'chats', $organizationId);
+        $tables = [];
 
-        if (! $includeArchive) {
-            return $activeChats;
+        if ($includeArchive) {
+            $tables['chats_archive'] = 'chats_archive';
         }
 
-        $archivedChats = $this->chatTableQuery('chats_archive', 'chats_archive', $organizationId);
+        $tables['chats'] = 'chats';
 
-        return DB::query()->fromSub(
-            $activeChats->unionAll($archivedChats),
-            'conversation_chat_sources'
-        );
+        return $tables;
+    }
+
+    private function processSourceTable(string $table, string $sourceTable, ?int $organizationId, bool $dryRun, bool $checkExistingWindows): void
+    {
+        $this->checkExistingWindows = $checkExistingWindows;
+
+        $query = $this->chatTableQuery($table, $sourceTable, $organizationId)
+            ->orderBy("{$table}.organization_id")
+            ->orderBy("{$table}.contact_id")
+            ->orderBy("{$table}.created_at")
+            ->orderBy("{$table}.id");
+
+        foreach ($query->cursor() as $chat) {
+            $this->scanned++;
+            $this->processChat($chat, $dryRun);
+
+            if ($this->progressEvery > 0 && $this->scanned % $this->progressEvery === 0) {
+                $this->line("Scanned {$this->scanned} rows; created {$this->created}, existing {$this->existing}, inside windows {$this->insideWindow}.");
+            }
+        }
+
+        $this->flushPendingWindowRows();
+        $this->resetCurrentContactState();
     }
 
     private function chatTableQuery(string $table, string $sourceTable, ?int $organizationId)
     {
         $query = DB::table($table)
+            ->join('contacts', function ($join) use ($table): void {
+                $join->on('contacts.id', '=', "{$table}.contact_id")
+                    ->on('contacts.organization_id', '=', "{$table}.organization_id");
+            })
             ->select([
-                'id',
-                'organization_id',
-                'contact_id',
-                'created_at',
+                "{$table}.id",
+                "{$table}.organization_id",
+                "{$table}.contact_id",
+                "{$table}.created_at",
             ])
             ->selectRaw('? as source_table', [$sourceTable])
-            ->whereNotNull('organization_id')
-            ->whereNotNull('contact_id')
-            ->whereNotNull('created_at');
+            ->whereNotNull("{$table}.organization_id")
+            ->whereNotNull("{$table}.contact_id")
+            ->whereNotNull("{$table}.created_at");
 
         if ($organizationId) {
-            $query->where('organization_id', $organizationId);
+            $query->where("{$table}.organization_id", $organizationId);
         }
 
         return $query;
@@ -185,6 +224,16 @@ class BackfillConversationWindows extends Command
 
         DB::table('conversation_windows')->insert($this->pendingWindowRows);
         $this->pendingWindowRows = [];
+        $this->hasExistingWindows = true;
+    }
+
+    private function resetCurrentContactState(): void
+    {
+        $this->currentOrganizationId = null;
+        $this->currentContactId = null;
+        $this->currentClosesAt = null;
+        $this->existingWindows = [];
+        $this->existingWindowIndex = 0;
     }
 
     private function loadExistingWindows(int $organizationId, int $contactId): void
@@ -193,7 +242,7 @@ class BackfillConversationWindows extends Command
         $this->currentContactId = $contactId;
         $this->currentClosesAt = null;
         $this->existingWindowIndex = 0;
-        if (! $this->hasExistingWindows) {
+        if (! $this->checkExistingWindows) {
             $this->existingWindows = [];
             return;
         }
