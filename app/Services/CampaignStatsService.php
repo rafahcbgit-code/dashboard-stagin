@@ -253,9 +253,10 @@ class CampaignStatsService
 
         $updates = ['updated_at' => now()];
         foreach ($deltas as $column => $delta) {
-            $operator = $delta >= 0 ? '+' : '-';
             $amount = abs((int) $delta);
-            $updates[$column] = DB::raw("GREATEST(`{$column}` {$operator} {$amount}, 0)");
+            $updates[$column] = $delta >= 0
+                ? DB::raw("`{$column}` + {$amount}")
+                : DB::raw("CASE WHEN `{$column}` >= {$amount} THEN `{$column}` - {$amount} ELSE 0 END");
         }
 
         DB::table('campaign_stats')->where('campaign_id', $campaignId)->update($updates);
