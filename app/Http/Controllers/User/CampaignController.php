@@ -557,7 +557,10 @@ class CampaignController extends BaseController
         }
 
         // AC-2.6.2: Update campaign status to cancelled
-        $campaign->update(['status' => 'cancelled']);
+        $campaign->update([
+            'status' => 'cancelled',
+            'completed_at' => $campaign->completed_at ?? now(),
+        ]);
 
         // AC-2.6.3: Bulk update all pending CampaignLog records to cancelled
         $oldSnapshots = CampaignLog::where('campaign_id', $campaign->id)
@@ -622,7 +625,11 @@ class CampaignController extends BaseController
             'retry_count' => 0,
         ]);
 
-        $campaign->update(['status' => 'ongoing']);
+        $campaign->update([
+            'status' => 'ongoing',
+            'started_at' => now(),
+            'completed_at' => null,
+        ]);
 
         return response()->json([
             'status' => 'ongoing',

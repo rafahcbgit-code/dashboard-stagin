@@ -40,6 +40,24 @@ class Campaign extends Model
         return DateTimeHelper::convertToOrganizationTimezone($value)->toDateTimeString();
     }
 
+    public function getStartedAtAttribute($value)
+    {
+        if (empty($value)) {
+            return null;
+        }
+
+        return DateTimeHelper::convertToOrganizationTimezone($value)->toDateTimeString();
+    }
+
+    public function getCompletedAtAttribute($value)
+    {
+        if (empty($value)) {
+            return null;
+        }
+
+        return DateTimeHelper::convertToOrganizationTimezone($value)->toDateTimeString();
+    }
+
     public function organization()
     {
         return $this->belongsTo(Organization::class, 'organization_id', 'id');

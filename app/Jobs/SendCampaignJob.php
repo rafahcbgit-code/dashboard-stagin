@@ -147,7 +147,18 @@ class SendCampaignJob implements ShouldQueue
 
     protected function updateCampaignStatus(Campaign $campaign, $status)
     {
-        return Campaign::where('uuid', $campaign->uuid)->update(['status' => $status]);
+        $updates = ['status' => $status];
+
+        if ($status === 'ongoing') {
+            $updates['started_at'] = $campaign->started_at ?? now();
+            $updates['completed_at'] = null;
+        }
+
+        if ($status === 'completed') {
+            $updates['completed_at'] = $campaign->completed_at ?? now();
+        }
+
+        return Campaign::where('uuid', $campaign->uuid)->update($updates);
     }
 
     protected function sendOngoingCampaignMessages(Campaign $campaign)

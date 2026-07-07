@@ -332,6 +332,7 @@ class ProcessCampaignMessagesJob implements ShouldQueue
 
         if (! $failedLogsCanRetry) {
             $campaign->status = 'completed';
+            $campaign->completed_at = $campaign->completed_at ?? now();
             $campaign->save();
             Log::info("Campaign {$campaignId} marked as completed.");
         }
