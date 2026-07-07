@@ -23,12 +23,19 @@ class CreateCampaignLogsJob implements ShouldQueue
 
     public $tries = 3;
 
+    public function __construct(
+        public ?int $campaignId = null
+    ) {
+        $this->queue = config('campaigns.queues.logs', 'campaign-logs');
+    }
+
     public function handle()
     {
         try {
             $campaigns = Campaign::where('status', 'scheduled')
                 ->with('organization')
                 ->whereNull('deleted_at')
+                ->when($this->campaignId !== null, fn ($query) => $query->where('id', $this->campaignId))
                 ->cursor();
 
             foreach ($campaigns as $campaign) {
@@ -59,7 +66,7 @@ class CreateCampaignLogsJob implements ShouldQueue
 
     protected function processCampaign(Campaign $campaign)
     {
-        /* $lock = Cache::lock('campaign_logs_create_'.$campaign->id, 120);
+        $lock = Cache::store('redis')->lock('campaign_logs_create_'.$campaign->id, 3600);
 
         if (! $lock->get()) {
             Log::info('Skipping campaign log creation due to active lock', [
@@ -67,13 +74,17 @@ class CreateCampaignLogsJob implements ShouldQueue
             ]);
 
             return;
-        } */
-
-        $contacts = $this->getContactsForCampaign($campaign);
+        }
 
         try {
+            $contacts = $this->getContactsForCampaign($campaign);
+
             if ($this->createCampaignLogs($campaign, $contacts)) {
-                Campaign::where('uuid', $campaign->uuid)->update(['status' => 'ongoing']);
+                Campaign::where('uuid', $campaign->uuid)->update([
+                    'status' => 'ongoing',
+                    'started_at' => $campaign->started_at ?? now(),
+                    'completed_at' => null,
+                ]);
                 Log::info("Campaign {$campaign->uuid} marked ongoing.");
 
                 // Dispatch ProcessCampaignMessagesJob for this org (Story 2.1: AC-2.1.1)
@@ -84,7 +95,7 @@ class CreateCampaignLogsJob implements ShouldQueue
                 Log::info("Campaign {$campaign->uuid} not marked ongoing.");
             }
         } finally {
-            // optional($lock)->release();
+            optional($lock)->release();
         }
     }
 

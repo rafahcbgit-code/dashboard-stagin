@@ -24,6 +24,8 @@ class CampaignResource extends JsonResource
             'template' => $this->template,
             'status' => $this->status,
             'scheduled_at' => $this->scheduled_at,
+            'started_at' => $this->started_at,
+            'completed_at' => $this->completed_at,
             'contacts_count' => $counts->total_message_count ?? 0,
             'delivery_count' => $counts->total_delivered_count ?? 0,
             'read_count' => $counts->total_read_count ?? 0,

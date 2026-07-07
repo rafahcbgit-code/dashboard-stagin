@@ -681,7 +681,10 @@ class ProcessCampaignChunkJob implements ShouldQueue
         }
 
         if (!$hasRetriableLogs) {
-            $campaign->update(['status' => 'completed']);
+            $campaign->update([
+                'status' => 'completed',
+                'completed_at' => $campaign->completed_at ?? now(),
+            ]);
             Log::info("Campaign {$this->campaignId} marked as completed.");
         }
     }

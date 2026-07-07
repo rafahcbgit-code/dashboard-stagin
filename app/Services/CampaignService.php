@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use Carbon\Carbon;
+use App\Jobs\CreateCampaignLogsJob;
 use App\Jobs\SendCampaignJob;
 use App\Models\Campaign;
 use App\Models\ChatMedia;
@@ -117,8 +118,10 @@ class CampaignService
         $template = Template::where('uuid', $request->template)->first();
         $contactGroup = ContactGroup::where('uuid', $request->contacts)->first();
 
+        $shouldStartImmediately = false;
+
         try {
-            DB::transaction(function () use ($request, $organizationId, $template, $contactGroup, $timezone) {
+            $campaign = DB::transaction(function () use ($request, $organizationId, $template, $contactGroup, $timezone, &$shouldStartImmediately) {
                 //Request metadata
                 $mediaId = null;
                 $defaultHeaderMedia = $this->resolveTemplateDefaultHeaderMedia($template);
@@ -174,6 +177,7 @@ class CampaignService
 
                 // Convert $request->time from organization's timezone to UTC
                 $scheduledAt = $request->skip_schedule ? Carbon::now('UTC') : Carbon::parse($request->time, $timezone)->setTimezone('UTC');
+                $shouldStartImmediately = $scheduledAt->lte(Carbon::now('UTC'));
 
                 //Create campaign
                 $campaign = new Campaign;
@@ -186,6 +190,8 @@ class CampaignService
                 $campaign['status'] = 'scheduled';
                 $campaign['scheduled_at'] = $scheduledAt;
                 $campaign->save();
+
+                return $campaign;
             });
         } catch (\Exception $e) {
             // Handle the exception here if needed.
@@ -198,7 +204,16 @@ class CampaignService
                 'user_id' => auth()->user()->id,
                 'stack_trace' => $e->getTraceAsString(),
             ]);
+
+            throw $e;
         }
+
+        if ($shouldStartImmediately) {
+            CreateCampaignLogsJob::dispatch($campaign->id)
+                ->onQueue(config('campaigns.queues.logs', 'campaign-logs'));
+        }
+
+        return $campaign;
     }
 
     private function resolveTierLimit(array $metadata): int

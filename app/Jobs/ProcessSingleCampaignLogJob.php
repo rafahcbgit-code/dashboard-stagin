@@ -301,7 +301,10 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
 
         // Mark campaign as completed if no pending/ongoing logs AND no retriable failed logs
         if (! $hasRetriableLogs) {
-            $campaign->update(['status' => 'completed']);
+            $campaign->update([
+                'status' => 'completed',
+                'completed_at' => $campaign->completed_at ?? now(),
+            ]);
             Log::info("Campaign {$campaignId} marked as completed.");
         }
     }
