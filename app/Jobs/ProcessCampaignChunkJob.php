@@ -5,11 +5,10 @@ namespace App\Jobs;
 use App\Events\CampaignProgressEvent;
 use App\Models\Campaign;
 use App\Models\CampaignLog;
-use App\Models\Chat;
-use App\Models\ChatLog;
 use App\Models\Contact;
 use App\Models\Template;
 use App\Services\CampaignStatsService;
+use App\Services\CampaignRateLimiter;
 use App\Services\OrganizationService;
 use App\Services\WhatsappService;
 use App\Traits\TemplateTrait;
@@ -22,7 +21,6 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 
 class ProcessCampaignChunkJob implements ShouldQueue
@@ -46,7 +44,7 @@ class ProcessCampaignChunkJob implements ShouldQueue
         public int $concurrency = 10,
         public int $requestDelayMs = 100,
     ) {
-        $this->queue = 'campaign-messages';
+        $this->queue = config('campaigns.queues.messages', 'campaign-messages');
     }
 
     public function handle(): void
@@ -56,7 +54,7 @@ class ProcessCampaignChunkJob implements ShouldQueue
 
         // 1. Bulk-lock all logs for this chunk
         $logs = CampaignLog::whereIn('id', $this->logIds)
-            ->whereIn('status', ['pending', 'failed'])
+            ->whereIn('status', ['pending', 'failed', 'ongoing'])
             ->lockForUpdate()
             ->get();
 
@@ -68,12 +66,12 @@ class ProcessCampaignChunkJob implements ShouldQueue
         $campaign = $this->getCampaignCached();
         if (!$campaign || $campaign->status === 'cancelled') {
             $oldSnapshots = $logs
-                ->where('status', 'pending')
+                ->whereIn('status', ['pending', 'ongoing'])
                 ->map(fn (CampaignLog $log): array => CampaignStatsService::snapshot($log))
                 ->all();
 
             CampaignLog::whereIn('id', $logs->pluck('id'))
-                ->where('status', 'pending')
+                ->whereIn('status', ['pending', 'ongoing'])
                 ->update(['status' => 'cancelled']);
 
             $newSnapshots = collect($oldSnapshots)
@@ -119,7 +117,7 @@ class ProcessCampaignChunkJob implements ShouldQueue
         $retryIntervals = $orgMetadata['campaigns']['resend_intervals'] ?? [];
         $maxRetries = count($retryIntervals);
 
-        // 6. Mark all logs as 'ongoing' in one bulk update
+        // 6. Mark all reserved pending/failed logs as 'ongoing' in one bulk update
         $startingSnapshots = $logs
             ->whereIn('status', ['pending', 'failed'])
             ->map(fn (CampaignLog $log): array => CampaignStatsService::snapshot($log))
@@ -221,19 +219,7 @@ class ProcessCampaignChunkJob implements ShouldQueue
                     $templatePayload
                 );
 
-                // Debug: log payload details for diagnosing template errors
-                Log::channel('campaign')->info('CampaignChunkJob sending payload', [
-                    'log_id' => $log->id,
-                    'campaign_id' => $this->campaignId,
-                    'organization_id' => $this->organizationId,
-                    'template_name' => $templatePayload['name'] ?? null,
-                    'template_language' => $templatePayload['language'] ?? null,
-                    'contact_phone' => $contact->phone,
-                    'send_url' => $whatsappService->getSendUrl(),
-                    'phone_number_id' => $whatsappService->getPhoneNumberIdProperty(),
-                    'payload_components_count' => count($templatePayload['components'] ?? []),
-                    'has_flow_stubs' => !empty($flowStubs),
-                ]);
+                $this->samplePayloadLog($log, $templatePayload, $contact, $whatsappService, $flowStubs);
 
                 $payloads[] = [
                     'log' => $log,
@@ -263,35 +249,6 @@ class ProcessCampaignChunkJob implements ShouldQueue
         }
 
         // 8. Send concurrently via Guzzle Pool (or skip in load test mode)
-        // Debug: For FLOW templates, also send via sendTemplateMessage to compare
-        $hasFlowStubs = !empty(array_filter($payloads, fn($p) => !empty($p['flowStubs'])));
-        if ($hasFlowStubs && !empty($payloads)) {
-            $testPayload = $payloads[0];
-            try {
-                $testResult = $whatsappService->sendTemplateMessage(
-                    $testPayload['contact']->uuid,
-                    $testPayload['templateContent'],
-                    $this->createdBy,
-                    $this->campaignId,
-                    null,
-                    $testPayload['contact'],
-                    $campaign,
-                    $template
-                );
-                Log::channel('campaign')->info('CampaignChunkJob FLOW template sendTemplateMessage test', [
-                    'campaign_id' => $this->campaignId,
-                    'template_name' => $testPayload['templateContent']['name'] ?? null,
-                    'success' => $testResult->success ?? false,
-                    'phone_number_id' => $whatsappService->getPhoneNumberIdProperty(),
-                ]);
-            } catch (\Exception $e) {
-                Log::channel('campaign')->error('CampaignChunkJob FLOW template sendTemplateMessage test FAILED', [
-                    'campaign_id' => $this->campaignId,
-                    'error' => $e->getMessage(),
-                ]);
-            }
-        }
-
         if ($isLoadTest) {
             $results = [];
             foreach ($payloads as $idx => $payload) {
@@ -306,9 +263,10 @@ class ProcessCampaignChunkJob implements ShouldQueue
             $results = $this->sendConcurrently($payloads, $whatsappService);
         }
 
-        // 9. Process results: create Chat/ChatLog records, batch-update CampaignLog statuses
+        // 9. Process results: update CampaignLog statuses and enqueue post-send finalizers
         $successIds = [];
         $failedUpdates = [];
+        $finalizers = [];
 
         foreach ($payloads as $idx => $payload) {
             $log = $payload['log'];
@@ -327,55 +285,33 @@ class ProcessCampaignChunkJob implements ShouldQueue
 
             if ($result->success === true) {
                 try {
-                    $campaignMetadata = json_decode($campaign->metadata);
-
-                    if ($isCarousel) {
-                        $chatMetadata = $whatsappService->buildCarouselTemplateChatMessage(
-                            $contact->uuid,
-                            $template->id,
-                            $template
-                        );
-                    } else {
-                        $chatMetadata = $whatsappService->buildCampaignTemplateChatMessage(
-                            $campaignMetadata,
-                            $contact->uuid,
-                            $contact,
-                            null,
-                            $template
-                        );
-                    }
-
-                    $mediaId = $whatsappService->getMediaIdFromCampaign($this->campaignId);
-
-                    $created = $whatsappService->createChatLogFromResponse(
-                        $result,
-                        $contact,
-                        $this->createdBy,
-                        $this->organizationId,
-                        $chatMetadata,
-                        $mediaId,
-                        $this->campaignId,
-                        $payload['flowStubs']
-                    );
-
-                    $chat = $created['chat'];
+                    $finalizers[] = [
+                        'logId' => $log->id,
+                        'organizationId' => $this->organizationId,
+                        'campaignId' => $this->campaignId,
+                        'templateId' => $this->templateId,
+                        'contactId' => $contact->id,
+                        'createdBy' => $this->createdBy,
+                        'result' => json_decode(json_encode($result), true),
+                        'templateContent' => $payload['templateContent'],
+                        'flowStubs' => $payload['flowStubs'],
+                    ];
 
                     $successIds[] = [
                         'id' => $log->id,
-                        'chat_id' => $chat->id,
                         'status' => 'success',
                         'metadata' => $this->cleanResponseMetadata($result),
                         'updated_at' => now(),
                     ];
                 } catch (\Exception $e) {
-                    Log::error('Error creating chat log for campaign message', [
+                    Log::error('Error preparing campaign post-send finalizer', [
                         'log_id' => $log->id,
                         'error' => $e->getMessage(),
                     ]);
                     $successIds[] = [
                         'id' => $log->id,
                         'status' => 'success',
-                        'metadata' => json_encode(['success' => true, 'chat_creation_error' => $e->getMessage()]),
+                        'metadata' => json_encode(['success' => true, 'post_send_dispatch_error' => $e->getMessage()]),
                         'updated_at' => now(),
                     ];
                 }
@@ -429,6 +365,20 @@ class ProcessCampaignChunkJob implements ShouldQueue
 
         CampaignStatsService::recordSnapshotsChanged($oldSnapshots, $newSnapshots);
 
+        foreach ($finalizers as $finalizer) {
+            try {
+                FinalizeCampaignSendResultsJob::dispatch(...$finalizer)
+                    ->onQueue(config('campaigns.queues.post_send', 'campaign-post-send'));
+            } catch (\Throwable $e) {
+                Log::error('Failed to dispatch campaign post-send finalizer', [
+                    'log_id' => $finalizer['logId'] ?? null,
+                    'campaign_id' => $this->campaignId,
+                    'organization_id' => $this->organizationId,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
         // 10. Broadcast progress once per chunk
         $this->broadcastProgressIfNeeded();
 
@@ -451,6 +401,7 @@ class ProcessCampaignChunkJob implements ShouldQueue
         $client = WhatsappService::getSharedClient();
         $url = $whatsappService->getSendUrl();
         $headers = $whatsappService->setHeaders();
+        $phoneNumberId = $whatsappService->getPhoneNumberIdProperty();
 
         // Debug: log first payload to verify request structure
         if (!empty($payloads)) {
@@ -467,11 +418,15 @@ class ProcessCampaignChunkJob implements ShouldQueue
 
         $delayMs = $this->requestDelayMs;
 
-        $requests = function () use ($payloads, $url, $headers, $delayMs) {
+        $requests = function () use ($payloads, $url, $headers, $delayMs, $phoneNumberId) {
             foreach ($payloads as $idx => $payload) {
                 if ($idx > 0 && $delayMs > 0) {
                     usleep($delayMs * 1000);
                 }
+                CampaignRateLimiter::waitForPhoneCapacity(
+                    $this->organizationId,
+                    $phoneNumberId
+                );
                 yield $idx => new Request(
                     'POST',
                     $url,
@@ -544,6 +499,38 @@ class ProcessCampaignChunkJob implements ShouldQueue
         $pool->promise()->wait();
 
         return $results;
+    }
+
+    private function samplePayloadLog(
+        CampaignLog $log,
+        array $templatePayload,
+        Contact $contact,
+        WhatsappService $whatsappService,
+        array $flowStubs
+    ): void {
+        $sampleRate = (float) config('campaigns.success_log_sample_rate', 0.01);
+        if ($sampleRate <= 0) {
+            return;
+        }
+
+        $sampleEvery = max(1, (int) round(1 / min(1, $sampleRate)));
+        if (($log->id % $sampleEvery) !== 0) {
+            return;
+        }
+
+        Log::channel('campaign')->info('CampaignChunkJob sampled payload', [
+            'log_id' => $log->id,
+            'campaign_id' => $this->campaignId,
+            'organization_id' => $this->organizationId,
+            'template_name' => $templatePayload['name'] ?? null,
+            'template_language' => $templatePayload['language'] ?? null,
+            'contact_phone' => $contact->phone,
+            'send_url' => $whatsappService->getSendUrl(),
+            'phone_number_id' => $whatsappService->getPhoneNumberIdProperty(),
+            'payload_components_count' => count($templatePayload['components'] ?? []),
+            'has_flow_stubs' => !empty($flowStubs),
+            'sample_rate' => $sampleRate,
+        ]);
     }
 
     protected function getCampaignCached(): ?Campaign
@@ -686,7 +673,7 @@ class ProcessCampaignChunkJob implements ShouldQueue
                     $delayMinutes = $retryIntervals[$log->retries_count] ?? null;
                     if ($delayMinutes !== null) {
                         RetryCampaignLogJob::dispatch($this->organizationId, $log->id, $log->retries_count)
-                            ->onQueue('campaign-messages')
+                            ->onQueue(config('campaigns.queues.messages', 'campaign-messages'))
                             ->delay(now()->addMinutes($delayMinutes));
                     }
                 }

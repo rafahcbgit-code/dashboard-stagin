@@ -17,7 +17,7 @@ class Kernel extends ConsoleKernel
      */
     protected function schedule(Schedule $schedule): void
     {
-        $schedule->job(new CreateCampaignLogsJob(), 'campaign-logs')
+        $schedule->job(new CreateCampaignLogsJob(), config('campaigns.queues.logs', 'campaign-logs'))
             ->everyTwoMinutes()
             ->withoutOverlapping();
 
@@ -32,7 +32,8 @@ class Kernel extends ConsoleKernel
                 ->pluck('organization_id');
 
             foreach ($activeOrgIds as $orgId) {
-                ProcessCampaignMessagesJob::dispatchForOrganization($orgId);
+                ProcessCampaignMessagesJob::dispatchForOrganization($orgId)
+                    ->onQueue(config('campaigns.queues.dispatchers', 'campaign-dispatchers'));
             }
         })
         ->name('process-campaign-messages-per-org')

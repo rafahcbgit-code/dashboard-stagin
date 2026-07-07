@@ -77,7 +77,8 @@ class CreateCampaignLogsJob implements ShouldQueue
                 Log::info("Campaign {$campaign->uuid} marked ongoing.");
 
                 // Dispatch ProcessCampaignMessagesJob for this org (Story 2.1: AC-2.1.1)
-                ProcessCampaignMessagesJob::dispatchForOrganization($campaign->organization_id);
+                ProcessCampaignMessagesJob::dispatchForOrganization($campaign->organization_id)
+                    ->onQueue(config('campaigns.queues.dispatchers', 'campaign-dispatchers'));
                 Log::info("ProcessCampaignMessagesJob dispatched for org {$campaign->organization_id}.");
             } else {
                 Log::info("Campaign {$campaign->uuid} not marked ongoing.");
