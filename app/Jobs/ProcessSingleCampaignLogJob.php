@@ -57,7 +57,7 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
         int $contactId,
         string $contactUuid
     ) {
-        $this->queue = 'campaign-messages';
+        $this->queue = config('campaigns.queues.messages', 'campaign-messages');
         $this->campaignLogId = $campaignLogId;
         $this->organizationId = $organizationId;
         $this->campaignId = $campaignId;
@@ -293,7 +293,7 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
 
                 if ($delayMinutes !== null) {
                     RetryCampaignLogJob::dispatch($campaign->organization_id, $log->id, $retryCount)
-                        ->onQueue('campaign-messages')
+                        ->onQueue(config('campaigns.queues.messages', 'campaign-messages'))
                         ->delay(now()->addMinutes($delayMinutes));
                 }
             }

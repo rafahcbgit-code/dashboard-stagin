@@ -6,6 +6,7 @@ use App\Models\CampaignLog;
 use App\Models\CampaignLogRetry;
 use App\Services\ContactGroupCountService;
 use App\Services\CampaignStatsService;
+use App\Services\CampaignRateLimiter;
 use App\Services\OrganizationService;
 use App\Services\WhatsappService;
 use App\Traits\TemplateTrait;
@@ -97,6 +98,11 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
 
             $template = $this->buildTemplateRequest($log->campaign_id, $log->contact, $log->campaign, $log->campaign->template ?? null);
             $campaign_user_id = $log->campaign->created_by;
+
+            CampaignRateLimiter::waitForPhoneCapacity(
+                $this->organizationId,
+                $this->whatsappService->getPhoneNumberIdProperty()
+            );
 
             $response = $this->whatsappService->sendTemplateMessage(
                 $log->contact->uuid,
@@ -193,7 +199,7 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
         if ($this->retryIndex + 1 < $maxRetries && isset($intervals[$this->retryIndex + 1])) {
             $nextInterval = $intervals[$this->retryIndex + 1];
             self::dispatch($this->organizationId, $log->id, $this->retryIndex + 1)
-                ->onQueue('campaign-messages')
+                ->onQueue(config('campaigns.queues.messages', 'campaign-messages'))
                 ->delay(now()->addMinutes($nextInterval));
         }
     }

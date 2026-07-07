@@ -14,7 +14,7 @@ return [
     |
     */
 
-    'batch_size' => env('CAMPAIGN_BATCH_SIZE', 500),
+    'batch_size' => env('CAMPAIGN_BATCH_SIZE', 1000),
 
     /*
     |--------------------------------------------------------------------------
@@ -74,7 +74,7 @@ return [
     |
     */
 
-    'chunk_size' => env('CAMPAIGN_CHUNK_SIZE', 50),
+    'chunk_size' => env('CAMPAIGN_CHUNK_SIZE', 100),
 
     'concurrency' => env('CAMPAIGN_CONCURRENCY', 10),
 
@@ -92,8 +92,32 @@ return [
     |
     */
 
-    'request_delay_ms' => env('CAMPAIGN_REQUEST_DELAY_MS', 100),
+    'request_delay_ms' => env('CAMPAIGN_REQUEST_DELAY_MS', 0),
 
     'load_test_mode' => env('CAMPAIGN_LOAD_TEST_MODE', false),
+
+    'success_log_sample_rate' => (float) env('CAMPAIGN_SUCCESS_LOG_SAMPLE_RATE', 0.01),
+
+    'throttle' => [
+        'enabled' => env('CAMPAIGN_THROTTLE_ENABLED', true),
+        'default_phone_mps' => (int) env('CAMPAIGN_DEFAULT_PHONE_MPS', 70),
+        'max_phone_mps' => (int) env('CAMPAIGN_MAX_PHONE_MPS', 80),
+        'per_campaign_mps' => (int) env('CAMPAIGN_PER_CAMPAIGN_MPS', 70),
+    ],
+
+    'dispatch' => [
+        'wave_size' => (int) env('CAMPAIGN_DISPATCH_WAVE_SIZE', 2100),
+        'per_campaign_wave_size' => (int) env('CAMPAIGN_DISPATCH_PER_CAMPAIGN_WAVE_SIZE', 700),
+        'redispatch_delay_seconds' => (int) env('CAMPAIGN_REDISPATCH_DELAY_SECONDS', 5),
+        'lock_seconds' => (int) env('CAMPAIGN_DISPATCH_LOCK_SECONDS', 30),
+        'reservation_ttl_seconds' => (int) env('CAMPAIGN_DISPATCH_RESERVATION_TTL_SECONDS', 900),
+    ],
+
+    'queues' => [
+        'logs' => env('CAMPAIGN_LOGS_QUEUE', 'campaign-logs'),
+        'dispatchers' => env('CAMPAIGN_DISPATCHERS_QUEUE', 'campaign-dispatchers'),
+        'messages' => env('CAMPAIGN_MESSAGES_QUEUE', 'campaign-messages'),
+        'post_send' => env('CAMPAIGN_POST_SEND_QUEUE', 'campaign-post-send'),
+    ],
 
 ];

@@ -10,13 +10,11 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Foundation\Bus\PendingDispatch;
 use Illuminate\Queue\InteractsWithQueue;
-use Illuminate\Contracts\Queue\ShouldBeUnique;
 use Illuminate\Queue\SerializesModels;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
 
-class ProcessCampaignMessagesJob implements ShouldQueue, ShouldBeUnique
+class ProcessCampaignMessagesJob implements ShouldQueue
 {
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels;
 
@@ -32,15 +30,7 @@ class ProcessCampaignMessagesJob implements ShouldQueue, ShouldBeUnique
     public function __construct(
         public int $organizationId
     ) {
-        $this->queue = 'campaign-messages';
-    }
-
-    /**
-     * The unique ID of the job.
-     */
-    public function uniqueId(): string
-    {
-        return (string) $this->organizationId;
+        $this->queue = config('campaigns.queues.dispatchers', 'campaign-dispatchers');
     }
 
     /**
@@ -55,159 +45,197 @@ class ProcessCampaignMessagesJob implements ShouldQueue, ShouldBeUnique
 
     public function handle()
     {
-        /* $lock = Cache::lock('campaign_messages_org_'.$this->organizationId, 300);
+        $cache = Cache::store('redis');
+        $lock = $cache->lock(
+            'campaign_dispatch_org_'.$this->organizationId,
+            (int) config('campaigns.dispatch.lock_seconds', 30)
+        );
 
         if (! $lock->get()) {
-            Log::info('Skipping ProcessCampaignMessagesJob due to active lock', [
+            Log::info('Skipping campaign dispatcher due to active lock', [
                 'organization_id' => $this->organizationId,
             ]);
 
             return;
-        } */
+        }
 
-        // Task 2.2: Query count and timing instrumentation (AC-2.2.1, AC-2.2.4)
         $startTime = microtime(true);
-        DB::enableQueryLog();
-        $initialQueryCount = count(DB::getQueryLog());
 
         try {
-            // Track campaigns to check completion later
-            $campaignsProcessed = [];
-
-            // Task 2.2: AC-2.2.2 - Fetch cached metadata once per job (not per log)
             $orgMetadata = OrganizationService::getCachedMetadata($this->organizationId);
             $retryEnabled = $orgMetadata['campaigns']['enable_resend'] ?? false;
             $retryIntervals = $orgMetadata['campaigns']['resend_intervals'] ?? [];
             $maxRetries = count($retryIntervals);
 
-            // Task 2.3: AC-2.3.1, AC-2.3.2, AC-2.3.3 - Configurable batch size with org override
-            $batchSize = $this->getBatchSize($orgMetadata);
-            $batchNumber = 0;
-            $totalProcessed = 0;
+            $chunkSize = $this->getChunkSize($orgMetadata);
+            $concurrency = $this->getConcurrency($orgMetadata);
+            $requestDelayMs = $this->getRequestDelayMs($orgMetadata);
+            $waveSize = max(1, (int) config('campaigns.dispatch.wave_size', 2100));
+            $perCampaignWaveSize = max(1, (int) config('campaigns.dispatch.per_campaign_wave_size', 700));
+            $messagesQueue = config('campaigns.queues.messages', 'campaign-messages');
 
-            // Process logs in chunks - now org-scoped (Task 2.1: AC-2.1.1, AC-2.1.2)
-            // Task 2.2: AC-2.2.3 - Selective column loading for reduced data transfer
-            // Task 2.8: AC-2.8.3 - Use withCount('retries') to avoid N+1 query pattern
-            CampaignLog::select(['id', 'campaign_id', 'contact_id', 'status'])
-                ->withCount('retries')
-                ->with([
-                    'campaign' => fn($q) => $q->select(['id', 'organization_id', 'status', 'uuid', 'created_by', 'template_id']),
-                    'contact',
-                ])
-                ->whereIn('status', ['pending', 'failed'])
-                ->whereHas('campaign', function ($query) {
-                    $query->where('status', 'ongoing')
-                        ->where('organization_id', $this->organizationId);
-                })
-                ->chunk($batchSize, function ($logs) use (&$campaignsProcessed, &$batchNumber, &$totalProcessed, $batchSize, $retryEnabled, $maxRetries, $orgMetadata) {
-                    $batchNumber++;
-                    // Task 2.3: AC-2.3.4 - Log batch progress at start of each chunk
-                    Log::info('ProcessCampaignMessagesJob batch started', [
-                        'organization_id' => $this->organizationId,
-                        'batch_number' => $batchNumber,
-                        'batch_size' => count($logs),
-                        'configured_batch_size' => $batchSize,
-                    ]);
+            $campaigns = Campaign::query()
+                ->select(['id', 'organization_id', 'status', 'uuid', 'created_by', 'template_id'])
+                ->where('status', 'ongoing')
+                ->where('organization_id', $this->organizationId)
+                ->whereHas('campaignLogs', fn ($query) => $query->whereIn('status', ['pending', 'failed']))
+                ->orderBy('id')
+                ->get();
 
-                    // Task 2.6: Track campaigns that were cancelled mid-batch
-                    $cancelledCampaigns = [];
-                    $byCampaign = [];
+            $chunksByCampaign = [];
+            $campaignsProcessed = [];
+            $selectedCount = 0;
+            $shouldRedispatch = false;
 
-                    foreach ($logs as $log) {
-                        // Task 2.6: AC-2.6.4 - Skip if campaign was cancelled mid-batch
-                        if ($log->campaign && $log->campaign->status === 'cancelled') {
-                            if (! in_array($log->campaign_id, $cancelledCampaigns)) {
-                                $cancelledCampaigns[] = $log->campaign_id;
-                                Log::info('Skipping batch dispatch for cancelled campaign', [
-                                    'campaign_id' => $log->campaign_id,
-                                    'organization_id' => $this->organizationId,
-                                ]);
-                            }
+            foreach ($campaigns as $campaign) {
+                if ($selectedCount >= $waveSize) {
+                    $shouldRedispatch = true;
+                    break;
+                }
 
-                            continue;
-                        }
+                $remainingForWave = $waveSize - $selectedCount;
+                $limit = min($perCampaignWaveSize, $remainingForWave);
+                $candidateLogs = $this->eligibleLogsForCampaign($campaign->id, $limit, $retryEnabled, $maxRetries);
 
-                        // Task 2.8: AC-2.8.1 - Use pre-loaded retries_count instead of N+1 query
-                        $retryCount = $log->retries_count;
+                if ($candidateLogs->isEmpty()) {
+                    $this->markCampaignAsCompleted($campaign->id);
+                    continue;
+                }
 
-                        // Add eligible logs grouped by campaign
-                        if (
-                            $log->status === 'pending' ||
-                            ($log->status === 'failed' && $retryEnabled && $retryCount < $maxRetries)
-                        ) {
-                            $campaignId = $log->campaign_id;
-                            if (!isset($byCampaign[$campaignId])) {
-                                $byCampaign[$campaignId] = [];
-                            }
-                            $byCampaign[$campaignId][] = $log;
-                        }
+                $logs = $this->reserveLogsForDispatch($candidateLogs, $limit);
+                if ($logs->isEmpty()) {
+                    $shouldRedispatch = true;
+                    continue;
+                }
 
-                        // Track campaign IDs
-                        if (! in_array($log->campaign_id, $campaignsProcessed)) {
-                            $campaignsProcessed[] = $log->campaign_id;
-                        }
-                    }
+                $campaignsProcessed[] = $campaign->id;
+                $selectedCount += $logs->count();
 
-                    // Dispatch ProcessCampaignChunkJob per chunk per campaign
-                    $chunkSize = $this->getChunkSize($orgMetadata);
-                    $concurrency = $this->getConcurrency($orgMetadata);
-                    $requestDelayMs = $this->getRequestDelayMs($orgMetadata);
+                if ($logs->count() >= $limit || $candidateLogs->count() > $limit) {
+                    $shouldRedispatch = true;
+                }
 
-                    foreach ($byCampaign as $campaignId => $campaignLogs) {
-                        $campaign = $campaignLogs[0]->campaign;
-                        if (! $campaign) continue;
+                $chunksByCampaign[$campaign->id] = [
+                    'campaign' => $campaign,
+                    'chunks' => $logs->pluck('id')->chunk($chunkSize)->values(),
+                ];
+            }
 
-                        foreach (collect($campaignLogs)->chunk($chunkSize) as $chunk) {
-                            ProcessCampaignChunkJob::dispatch(
-                                logIds: $chunk->pluck('id')->toArray(),
-                                organizationId: $this->organizationId,
-                                campaignId: $campaignId,
-                                templateId: $campaign->template_id,
-                                createdBy: $campaign->created_by,
-                                concurrency: $concurrency,
-                                requestDelayMs: $requestDelayMs,
-                            )->onQueue($this->queue);
-                        }
-                    }
+            $dispatchedChunks = $this->dispatchRoundRobinChunks(
+                $chunksByCampaign,
+                $concurrency,
+                $requestDelayMs,
+                $messagesQueue
+            );
 
-                    // Task 2.3: AC-2.3.4 - Track total processed
-                    $totalProcessed += count($logs);
-                });
-
-            // Task 2.3: AC-2.3.4 - Log total processed count after all batches complete
-            Log::info('ProcessCampaignMessagesJob batches completed', [
+            Log::info('ProcessCampaignMessagesJob wave dispatched', [
                 'organization_id' => $this->organizationId,
-                'total_batches' => $batchNumber,
-                'total_processed' => $totalProcessed,
-                'batch_size_used' => $batchSize,
+                'campaigns' => $campaignsProcessed,
+                'selected_messages' => $selectedCount,
+                'dispatched_chunks' => $dispatchedChunks,
+                'wave_size' => $waveSize,
+                'per_campaign_wave_size' => $perCampaignWaveSize,
             ]);
 
             foreach ($campaignsProcessed as $campaignId) {
                 $this->markCampaignAsCompleted($campaignId);
             }
 
-            // Task 2.2: Log query metrics for performance baseline (AC-2.2.1, AC-2.2.4)
-            $this->logQueryMetrics($startTime, $initialQueryCount, count($campaignsProcessed));
+            if ($shouldRedispatch) {
+                self::dispatchForOrganization($this->organizationId)
+                    ->onQueue(config('campaigns.queues.dispatchers', 'campaign-dispatchers'))
+                    ->delay(now()->addSeconds((int) config('campaigns.dispatch.redispatch_delay_seconds', 5)));
+            }
+
+            $this->logDispatcherMetrics($startTime, count($campaignsProcessed));
         } catch (\Exception $e) {
             Log::error('Error in ProcessCampaignMessagesJob: ' . $e->getMessage());
             throw $e;
         } finally {
-            // optional($lock)->release();
+            optional($lock)->release();
         }
     }
 
+    private function eligibleLogsForCampaign(int $campaignId, int $limit, bool $retryEnabled, int $maxRetries)
+    {
+        $scanLimit = max($limit, min($limit * 5, $limit + 5000));
+
+        return CampaignLog::select(['id', 'campaign_id', 'contact_id', 'status', 'chat_id'])
+            ->where('campaign_id', $campaignId)
+            ->where(function ($query) use ($retryEnabled, $maxRetries) {
+                $query->where('status', 'pending');
+
+                if ($retryEnabled && $maxRetries > 0) {
+                    $query->orWhere(function ($failedQuery) use ($maxRetries) {
+                        $failedQuery->where('status', 'failed')
+                            ->whereRaw(
+                                '(select count(*) from campaign_log_retries where campaign_log_retries.campaign_log_id = campaign_logs.id) < ?',
+                                [$maxRetries]
+                            );
+                    });
+                }
+            })
+            ->orderBy('id')
+            ->limit($scanLimit)
+            ->get();
+    }
+
+    private function reserveLogsForDispatch($logs, int $limit)
+    {
+        $ttl = max(60, (int) config('campaigns.dispatch.reservation_ttl_seconds', 900));
+        $cache = Cache::store('redis');
+
+        return $logs
+            ->filter(fn (CampaignLog $log): bool => $cache->add($this->reservationKey($log->id), 1, $ttl))
+            ->take($limit)
+            ->values();
+    }
+
+    private function dispatchRoundRobinChunks(array $chunksByCampaign, int $concurrency, int $requestDelayMs, string $queue): int
+    {
+        $dispatched = 0;
+
+        while (! empty($chunksByCampaign)) {
+            foreach ($chunksByCampaign as $campaignId => &$entry) {
+                $chunk = $entry['chunks']->shift();
+                if (! $chunk) {
+                    unset($chunksByCampaign[$campaignId]);
+                    continue;
+                }
+
+                $campaign = $entry['campaign'];
+                ProcessCampaignChunkJob::dispatch(
+                    logIds: $chunk->values()->all(),
+                    organizationId: $this->organizationId,
+                    campaignId: (int) $campaignId,
+                    templateId: (int) $campaign->template_id,
+                    createdBy: (int) $campaign->created_by,
+                    concurrency: $concurrency,
+                    requestDelayMs: $requestDelayMs,
+                )->onQueue($queue);
+
+                $dispatched++;
+            }
+            unset($entry);
+        }
+
+        return $dispatched;
+    }
+
+    private function reservationKey(int $campaignLogId): string
+    {
+        return 'campaign:dispatch:reserved:'.$campaignLogId;
+    }
+
     /**
-     * Log query count and timing metrics for performance analysis.
-     * Task 2.2: AC-2.2.1 (query count), AC-2.2.4 (processing time)
+     * Log timing metrics without enabling DB query logging in production workers.
      */
-    private function logQueryMetrics(float $startTime, int $initialQueryCount, int $campaignsProcessed): void
+    private function logDispatcherMetrics(float $startTime, int $campaignsProcessed): void
     {
         $elapsedTime = round((microtime(true) - $startTime) * 1000, 2);
-        $queryCount = count(DB::getQueryLog()) - $initialQueryCount;
 
         Log::info('ProcessCampaignMessagesJob metrics', [
             'organization_id' => $this->organizationId,
-            'query_count' => $queryCount,
             'elapsed_ms' => $elapsedTime,
             'campaigns_processed' => $campaignsProcessed,
             'queue' => $this->queue,
