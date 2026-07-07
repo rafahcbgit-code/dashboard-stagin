@@ -43,9 +43,17 @@ class AppServiceProvider extends ServiceProvider
         Subscription::observe(SubscriptionObserver::class);
         ResourceAddon::observe(ResourceAddonObserver::class);
 
-        DB::listen(function (QueryExecuted $query) {
+        $logChannelWarning = static function (string $channel, string $message, array $context = []): void {
+            try {
+                Log::channel($channel)->warning($message, $context);
+            } catch (\Throwable $e) {
+                error_log(sprintf('Unable to write to [%s] log channel: %s', $channel, $e->getMessage()));
+            }
+        };
+
+        DB::listen(function (QueryExecuted $query) use ($logChannelWarning) {
             if ($query->time >= 150) {
-                Log::channel('slow_queries')->warning('Slow Database Query', [
+                $logChannelWarning('slow_queries', 'Slow Database Query', [
                     'sql' => $query->sql,
                     'bindings' => $query->bindings,
                     'time_ms' => $query->time,
@@ -63,7 +71,7 @@ class AppServiceProvider extends ServiceProvider
                 ?: $event->connectionName.':'.$event->job->getQueue().':'.$event->job->getJobId().':'.spl_object_id($event->job);
         };
 
-        $logSlowJob = function (JobProcessed|JobExceptionOccurred $event, string $status) use (&$slowJobStartedAt, $jobKey, $slowJobThresholdMs): void {
+        $logSlowJob = function (JobProcessed|JobExceptionOccurred $event, string $status) use (&$slowJobStartedAt, $jobKey, $slowJobThresholdMs, $logChannelWarning): void {
             $key = $jobKey($event);
             $startedAt = $slowJobStartedAt[$key] ?? null;
 
@@ -95,7 +103,7 @@ class AppServiceProvider extends ServiceProvider
                 $context['message'] = $event->exception->getMessage();
             }
 
-            Log::channel('slow_jobs')->warning('Slow Queue Job', $context);
+            $logChannelWarning('slow_jobs', 'Slow Queue Job', $context);
         };
 
         Queue::before(function (JobProcessing $event) use (&$slowJobStartedAt, $jobKey): void {
