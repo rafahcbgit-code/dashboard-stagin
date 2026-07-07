@@ -54,12 +54,13 @@ class ContactController extends BaseController
     {
         return Cache::remember(
             ContactPageCache::contactGroupsKey($organizationId),
-            now()->addMinutes(5),
-            fn () => ContactGroup::query()
+            now()->addMinutes(30),
+            fn () => DB::table('contact_groups')
+                ->select('id', 'uuid', 'name', 'contacts_count')
                 ->where('organization_id', $organizationId)
                 ->whereNull('deleted_at')
                 ->orderBy('name')
-                ->get(['id', 'uuid', 'name', 'contacts_count'])
+                ->get()
         );
     }
 
@@ -152,17 +153,21 @@ class ContactController extends BaseController
 
         $contactsQuery = (new ContactFilter())->apply($contactsQuery, $request);
 
-        $contacts = $contactsQuery
+        $contactsQuery = $contactsQuery
             ->orderByDesc('contacts.is_favorite')
-            ->orderByDesc('contacts.created_at')
-            ->paginate(
+            ->orderByDesc('contacts.created_at');
+
+        $contacts = $hasActiveFilters
+            ? $contactsQuery->paginate($perPage, ['*'], 'page')
+            : $contactsQuery->paginate(
                 $perPage,
                 ['*'],
                 'page',
                 null,
-                $hasActiveFilters ? null : $rowCount
-            )
-            ->withQueryString();
+                $rowCount
+            );
+
+        $contacts->withQueryString();
 
         $contactIds = $contacts->getCollection()->pluck('id')->all();
         $unreadCounts = empty($contactIds)

@@ -4,13 +4,16 @@ namespace App\Services;
 
 use App\Models\Contact;
 use App\Models\Label;
+use App\Support\ContactPageCache;
 use Carbon\Carbon;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Log;
+
 class ReportService
 {
     private $organizationId;
     private array $conversationStartCache = [];
+    private array $contactsCountCache = [];
 
     public function __construct(int $organizationId)
     {
@@ -34,7 +37,21 @@ class ReportService
 
     public function totalContacts(?Carbon $start = null, ?Carbon $end = null): int
     {
-        return $this->baseQuery($start, $end)->count();
+        if (!$start && !$end) {
+            return Cache::remember(
+                ContactPageCache::contactsCountKey($this->organizationId),
+                now()->addMinutes(30),
+                fn () => (int) $this->baseQuery(null, null)->count()
+            );
+        }
+
+        $cacheKey = $this->contactsCountCacheKey($start, $end);
+
+        if (!array_key_exists($cacheKey, $this->contactsCountCache)) {
+            $this->contactsCountCache[$cacheKey] = (int) $this->baseQuery($start, $end)->count();
+        }
+
+        return $this->contactsCountCache[$cacheKey];
     }
 
     public function newContactsCount(?Carbon $start = null, ?Carbon $end = null): int
@@ -57,10 +74,17 @@ class ReportService
 
     public function subscribedUnsubscribedCounts(?Carbon $start = null, ?Carbon $end = null): array
     {
-        $total = $this->totalContacts($start, $end);
+        $row = $this->baseQuery($start, $end)
+            ->selectRaw('COUNT(*) as total')
+            ->selectRaw('SUM(CASE WHEN is_subscribed = 1 THEN 1 ELSE 0 END) as subscribed')
+            ->selectRaw('SUM(CASE WHEN is_subscribed = 0 THEN 1 ELSE 0 END) as unsubscribed')
+            ->first();
 
-        $subscribed = $this->baseQuery($start, $end)->where('is_subscribed', 1)->count();
-        $unsubscribed = $this->baseQuery($start, $end)->where('is_subscribed', 0)->count();
+        $total = (int) ($row->total ?? 0);
+        $subscribed = (int) ($row->subscribed ?? 0);
+        $unsubscribed = (int) ($row->unsubscribed ?? 0);
+
+        $this->contactsCountCache[$this->contactsCountCacheKey($start, $end)] = $total;
 
         $subscribedPercent = $total > 0 ? round(($subscribed / $total) * 100, 2) : 0;
         $unsubscribedPercent = $total > 0 ? round(($unsubscribed / $total) * 100, 2) : 0;
@@ -78,6 +102,71 @@ class ReportService
         ];
     }
 
+    public function contactsOverview(?Carbon $start = null, ?Carbon $end = null): array
+    {
+        if (!$start) {
+            $start = Carbon::now()->startOfDay()->subDays(6);
+        }
+        if (!$end) {
+            $end = Carbon::now()->endOfDay();
+        }
+
+        $rows = DB::table('contacts')
+            ->select(DB::raw('DATE(created_at) as day'))
+            ->selectRaw('COUNT(*) as count')
+            ->selectRaw('SUM(CASE WHEN is_subscribed = 1 THEN 1 ELSE 0 END) as subscribed')
+            ->selectRaw('SUM(CASE WHEN is_subscribed = 0 THEN 1 ELSE 0 END) as unsubscribed')
+            ->where('organization_id', $this->organizationId)
+            ->whereNull('deleted_at')
+            ->whereBetween('created_at', [$start->toDateTimeString(), $end->toDateTimeString()])
+            ->groupBy('day')
+            ->orderBy('day')
+            ->get()
+            ->keyBy('day');
+
+        $points = [];
+        $total = 0;
+        $subscribed = 0;
+        $unsubscribed = 0;
+        $cursor = $start->copy()->startOfDay();
+        $endDay = $end->copy()->startOfDay();
+
+        while ($cursor->lte($endDay)) {
+            $dayStr = $cursor->toDateString();
+            $row = $rows->get($dayStr);
+            $count = (int) ($row->count ?? 0);
+
+            $total += $count;
+            $subscribed += (int) ($row->subscribed ?? 0);
+            $unsubscribed += (int) ($row->unsubscribed ?? 0);
+
+            $points[] = [
+                'x' => $dayStr,
+                'y' => $count,
+            ];
+
+            $cursor->addDay();
+        }
+
+        $this->contactsCountCache[$this->contactsCountCacheKey($start, $end)] = $total;
+
+        return [
+            'new_contacts' => $total,
+            'area_series' => $points,
+            'subscription_counts' => [
+                'total' => $total,
+                'subscribed' => [
+                    'count' => $subscribed,
+                    'percentage' => $total > 0 ? round(($subscribed / $total) * 100, 2) : 0,
+                ],
+                'unsubscribed' => [
+                    'count' => $unsubscribed,
+                    'percentage' => $total > 0 ? round(($unsubscribed / $total) * 100, 2) : 0,
+                ],
+            ],
+        ];
+    }
+
     /**
      * Return statistics per label: id, title, color, count, percentage (relative to filtered total)
      * Filters by contact created_at range when provided.
@@ -89,48 +178,49 @@ class ReportService
         // total contacts in the same range
         $total = $this->totalContacts($start, $end);
 
-        // build base contacts filter and pluck ids (safer across DB drivers)
-        $contactsQuery = DB::table('contacts')
-            ->where('contacts.organization_id', $this->organizationId)
-            ->whereNull('contacts.deleted_at')
-            ->whereNotNull('contacts.created_at');
+        $labels = DB::table('labels')
+            ->leftJoin('contact_label', 'contact_label.label_id', '=', 'labels.id')
+            ->leftJoin('contacts', function ($join) use ($start, $end) {
+                $join->on('contact_label.contact_id', '=', 'contacts.id')
+                    ->where('contacts.organization_id', $this->organizationId)
+                    ->whereNull('contacts.deleted_at')
+                    ->whereNotNull('contacts.created_at');
 
-        if ($start && $end) {
-            $contactsQuery->whereBetween('contacts.created_at', [$start->toDateTimeString(), $end->toDateTimeString()]);
-        } elseif ($start) {
-            $contactsQuery->where('contacts.created_at', '>=', $start->toDateTimeString());
-        } elseif ($end) {
-            $contactsQuery->where('contacts.created_at', '<=', $end->toDateTimeString());
-        }
+                if ($start && $end) {
+                    $join->whereBetween('contacts.created_at', [$start->toDateTimeString(), $end->toDateTimeString()]);
+                } elseif ($start) {
+                    $join->where('contacts.created_at', '>=', $start->toDateTimeString());
+                } elseif ($end) {
+                    $join->where('contacts.created_at', '<=', $end->toDateTimeString());
+                }
+            })
+            ->where('labels.organization_id', $this->organizationId)
+            ->whereNull('labels.deleted_at')
+            ->select(
+                'labels.id',
+                'labels.title',
+                'labels.color',
+                DB::raw('count(contacts.id) as count')
+            )
+            ->groupBy('labels.id', 'labels.title', 'labels.color')
+            ->orderBy('labels.title')
+            ->get()
+            ->map(function ($label) {
+                $label->count = (int) $label->count;
 
-        $contactIds = $contactsQuery->pluck('id')->toArray();
-
-        $counts = [];
-        if (!empty($contactIds)) {
-            $rows = DB::table('contact_label')
-                ->select('label_id', DB::raw('count(distinct contact_id) as count'))
-                ->whereIn('contact_id', $contactIds)
-                ->groupBy('label_id')
-                ->get();
-
-            $counts = $rows->keyBy('label_id')->map(function ($row) {
-                return (int) $row->count;
-            })->toArray();
-        }
-
-        // fetch labels for organization
-        $labels = Label::where('organization_id', $this->organizationId)->whereNull('deleted_at')->get();
+                return $label;
+            });
 
         $result = [];
         foreach ($labels as $label) {
-            $cnt = isset($counts[$label->id]) ? $counts[$label->id] : 0;
+            $cnt = (int) $label->count;
             $pct = $total > 0 ? round(($cnt / $total) * 100, 2) : 0;
             $result[] = [
                 'id' => $label->id,
-                'uuid' => $label->uuid ?? null,
+                'uuid' => null,
                 'title' => $label->title,
                 'color' => $label->color,
-                'count' => (int) $cnt,
+                'count' => $cnt,
                 'percentage' => $pct,
             ];
         }
@@ -194,38 +284,32 @@ class ReportService
 
     /**
      * Conversations: total, open, closed counts within optional created_at range.
-     * Uses chat_tickets joined to contacts to filter by organization.
      */
     public function conversationsCounts(?Carbon $start = null, ?Carbon $end = null): array
     {
         $base = DB::table('chat_tickets')
-            ->join('contacts', 'chat_tickets.contact_id', '=', 'contacts.id')
-            ->where('contacts.organization_id', $this->organizationId)
-            ->whereNull('contacts.deleted_at');
+            ->where('organization_id', $this->organizationId);
 
         if ($start && $end) {
-            $base->whereBetween('chat_tickets.created_at', [$start->toDateTimeString(), $end->toDateTimeString()]);
+            $base->whereBetween('created_at', [$start->toDateTimeString(), $end->toDateTimeString()]);
         } elseif ($start) {
-            $base->where('chat_tickets.created_at', '>=', $start->toDateTimeString());
+            $base->where('created_at', '>=', $start->toDateTimeString());
         } elseif ($end) {
-            $base->where('chat_tickets.created_at', '<=', $end->toDateTimeString());
+            $base->where('created_at', '<=', $end->toDateTimeString());
         }
 
-        $total = (int) (clone $base)->count();
-
-        $open = (int) (clone $base)->where('chat_tickets.status', 'open')->count();
-        $closed = (int) (clone $base)->where('chat_tickets.status', 'closed')->count();
-        // treat assigned_to NULL or 0 as unassigned
-        $unassigned = (int) (clone $base)
-            ->where(function ($q) {
-                $q->whereNull('chat_tickets.assigned_to')->orWhere('chat_tickets.assigned_to', 0);
-            })->count();
+        $row = $base
+            ->selectRaw('COUNT(*) as total')
+            ->selectRaw("SUM(CASE WHEN status = 'open' THEN 1 ELSE 0 END) as open")
+            ->selectRaw("SUM(CASE WHEN status = 'closed' THEN 1 ELSE 0 END) as closed")
+            ->selectRaw('SUM(CASE WHEN assigned_to IS NULL OR assigned_to = 0 THEN 1 ELSE 0 END) as unassigned')
+            ->first();
 
         return [
-            'total' => $total,
-            'open' => $open,
-            'closed' => $closed,
-            'unassigned' => $unassigned,
+            'total' => (int) ($row->total ?? 0),
+            'open' => (int) ($row->open ?? 0),
+            'closed' => (int) ($row->closed ?? 0),
+            'unassigned' => (int) ($row->unassigned ?? 0),
         ];
     }
 
@@ -242,11 +326,9 @@ class ReportService
         }
 
         $rows = DB::table('chat_tickets')
-            ->join('contacts', 'chat_tickets.contact_id', '=', 'contacts.id')
-            ->where('contacts.organization_id', $this->organizationId)
-            ->whereNull('contacts.deleted_at')
-            ->whereBetween('chat_tickets.created_at', [$start->toDateTimeString(), $end->toDateTimeString()])
-            ->select(DB::raw('DATE(chat_tickets.created_at) as day'), DB::raw('count(*) as count'))
+            ->where('organization_id', $this->organizationId)
+            ->whereBetween('created_at', [$start->toDateTimeString(), $end->toDateTimeString()])
+            ->select(DB::raw('DATE(created_at) as day'), DB::raw('count(*) as count'))
             ->groupBy('day')
             ->orderBy('day')
             ->get()
@@ -276,11 +358,9 @@ class ReportService
     public function unassignedAllTime(): int
     {
         $q = DB::table('chat_tickets')
-            ->join('contacts', 'chat_tickets.contact_id', '=', 'contacts.id')
-            ->where('contacts.organization_id', $this->organizationId)
-            ->whereNull('contacts.deleted_at')
+            ->where('organization_id', $this->organizationId)
             ->where(function ($q) {
-                $q->whereNull('chat_tickets.assigned_to')->orWhere('chat_tickets.assigned_to', 0);
+                $q->whereNull('assigned_to')->orWhere('assigned_to', 0);
             });
 
         return (int) $q->count();
@@ -304,13 +384,20 @@ class ReportService
             $query->where('created_at', '<=', $end->toDateTimeString());
         }
 
-        $sent = (int) (clone $query)->where('type', 'outbound')->count();
-        $received = (int) (clone $query)->where('type', 'inbound')->count();
+        $row = $query
+            ->selectRaw("SUM(CASE WHEN type = 'outbound' THEN 1 ELSE 0 END) as sent")
+            ->selectRaw("SUM(CASE WHEN type = 'inbound' THEN 1 ELSE 0 END) as received")
+            ->first();
 
         return [
-            'sent' => $sent,
-            'received' => $received,
+            'sent' => (int) ($row->sent ?? 0),
+            'received' => (int) ($row->received ?? 0),
         ];
+    }
+
+    private function contactsCountCacheKey(?Carbon $start = null, ?Carbon $end = null): string
+    {
+        return ($start?->toDateTimeString() ?? 'null') . '|' . ($end?->toDateTimeString() ?? 'null');
     }
 
     /**
