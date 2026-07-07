@@ -85,11 +85,25 @@ return new class extends Migration
 
     private function columnExists(string $table, string $column): bool
     {
-        return count(DB::select("SHOW COLUMNS FROM `{$table}` LIKE ?", [$column])) > 0;
+        return count(DB::select(
+            'SELECT 1 FROM information_schema.COLUMNS
+             WHERE TABLE_SCHEMA = DATABASE()
+             AND TABLE_NAME = ?
+             AND COLUMN_NAME = ?
+             LIMIT 1',
+            [$table, $column]
+        )) > 0;
     }
 
     private function indexExists(string $table, string $index): bool
     {
-        return count(DB::select("SHOW INDEXES FROM `{$table}` WHERE Key_name = ?", [$index])) > 0;
+        return count(DB::select(
+            'SELECT 1 FROM information_schema.STATISTICS
+             WHERE TABLE_SCHEMA = DATABASE()
+             AND TABLE_NAME = ?
+             AND INDEX_NAME = ?
+             LIMIT 1',
+            [$table, $index]
+        )) > 0;
     }
 };
