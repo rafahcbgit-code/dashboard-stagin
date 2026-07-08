@@ -8,6 +8,7 @@
         placeholder: String,
         type: String,
         min: [Number, String],
+        max: [Number, String],
         maxLength: [Number, String],
         className: String,
         labelClass: String,
@@ -36,6 +37,7 @@
             @input="updateValue"
             :step="'any'"
             :min="min"
+            :max="max"
             :maxlength="maxLength"
             :placeholder="placeholder"
             :disabled="disabled"

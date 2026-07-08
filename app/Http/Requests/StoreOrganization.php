@@ -33,6 +33,7 @@ class StoreOrganization extends FormRequest
             'valid_until' => 'nullable|date|after_or_equal:now',
             'subscription_status' => 'nullable|in:trial,active,suspended',
             'billing_organization_id' => 'nullable|integer|exists:organizations,id',
+            'campaign_phone_mps' => 'nullable|integer|min:1|max:'.((int) config('campaigns.throttle.max_phone_mps', 80)),
         ];
 
         if ($this->isMethod('post')) {

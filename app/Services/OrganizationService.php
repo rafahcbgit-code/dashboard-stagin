@@ -348,6 +348,7 @@ class OrganizationService
                     'country' => $request->country,
                 ]),
                 'billing_organization_id' => $this->resolveBillingOrganizationId($request),
+                'metadata' => $this->metadataWithCampaignPhoneMps(null, $this->campaignPhoneMpsFromRequest($request, true)),
                 'created_by' => auth()->user()->id,
             ]);
 
@@ -385,7 +386,7 @@ class OrganizationService
     {
         $organization = Organization::where('uuid', $uuid)->firstOrFail();
 
-        $organization->update([
+        $updateData = [
             'name' => $request->input('name'),
             'address' => json_encode([
                 'street' => $request->street,
@@ -395,7 +396,14 @@ class OrganizationService
                 'country' => $request->country,
             ]),
             'billing_organization_id' => $this->resolveBillingOrganizationId($request, (int) $organization->id),
-        ]);
+        ];
+
+        $campaignPhoneMps = $this->campaignPhoneMpsFromRequest($request);
+        if ($campaignPhoneMps !== null) {
+            $updateData['metadata'] = $this->metadataWithCampaignPhoneMps($organization->metadata, $campaignPhoneMps);
+        }
+
+        $organization->update($updateData);
 
         $subscription = Subscription::where('organization_id', $organization->id)->first();
         $plan = SubscriptionPlan::where('uuid', $request->plan)->first();
@@ -419,6 +427,35 @@ class OrganizationService
         }
 
         return $organization;
+    }
+
+    private function campaignPhoneMpsFromRequest(object $request, bool $useDefaultWhenMissing = false): ?int
+    {
+        if (! $useDefaultWhenMissing && ! $request->has('campaign_phone_mps')) {
+            return null;
+        }
+
+        $value = $request->input('campaign_phone_mps');
+
+        if ($value === null || $value === '') {
+            return (int) config('campaigns.throttle.default_phone_mps', 20);
+        }
+
+        return (int) $value;
+    }
+
+    private function metadataWithCampaignPhoneMps(?string $currentMetadata, int $campaignPhoneMps): string
+    {
+        $metadata = json_decode((string) $currentMetadata, true);
+        $metadata = is_array($metadata) ? $metadata : [];
+
+        if (! isset($metadata['campaigns']) || ! is_array($metadata['campaigns'])) {
+            $metadata['campaigns'] = [];
+        }
+
+        $metadata['campaigns']['phone_mps'] = $campaignPhoneMps;
+
+        return json_encode($metadata);
     }
 
     private function resourceAccountOptions(?int $excludeOrganizationId = null, ?array $sharingPlanIds = null)
