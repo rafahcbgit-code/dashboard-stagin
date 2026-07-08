@@ -13,6 +13,7 @@ class CampaignConfigCommand extends Command
                             {--chunk-size= : Messages per chunk job (1-200)}
                             {--concurrency= : Concurrent HTTP requests per chunk (1-50)}
                             {--delay= : Milliseconds between each API request (0-2000)}
+                            {--phone-mps= : Max messages per second per WhatsApp phone number (1-80)}
                             {--batch-size= : Logs fetched per query batch (100-1000)}
                             {--show : Display current settings without changing}
                             {--reset : Remove org overrides, revert to env/defaults}';
@@ -23,6 +24,7 @@ class CampaignConfigCommand extends Command
         'chunk_size'     => ['min' => 1,   'max' => 200],
         'concurrency'    => ['min' => 1,   'max' => 50],
         'request_delay_ms' => ['min' => 0, 'max' => 2000],
+        'phone_mps'      => ['min' => 1,   'max' => 80],
         'batch_size'     => ['min' => 100, 'max' => 1000],
     ];
 
@@ -42,11 +44,11 @@ class CampaignConfigCommand extends Command
         }
 
         $hasChanges = $this->option('chunk-size') || $this->option('concurrency')
-            || $this->option('delay') || $this->option('batch-size');
+            || $this->option('delay') || $this->option('phone-mps') || $this->option('batch-size');
 
         if (!$hasChanges) {
-            $this->warn('No settings provided. Use --show to view current settings, or pass --chunk-size, --concurrency, --delay, --batch-size.');
-            $this->line('Example: php artisan campaign:config 1 --concurrency=5 --delay=100');
+            $this->warn('No settings provided. Use --show to view current settings, or pass --chunk-size, --concurrency, --delay, --phone-mps, --batch-size.');
+            $this->line('Example: php artisan campaign:config 1 --phone-mps=10 --concurrency=2 --delay=100');
 
             return 1;
         }
@@ -80,7 +82,7 @@ class CampaignConfigCommand extends Command
         $this->newLine();
 
         $rows = [];
-        foreach (['chunk_size', 'concurrency', 'request_delay_ms', 'batch_size'] as $key) {
+        foreach (['chunk_size', 'concurrency', 'request_delay_ms', 'phone_mps', 'batch_size'] as $key) {
             $orgVal = $campaigns[$key] ?? null;
             $defaultVal = $this->getConfigDefault($key);
             $effectiveVal = $orgVal ?? $defaultVal;
@@ -110,6 +112,7 @@ class CampaignConfigCommand extends Command
             'chunk-size'  => 'chunk_size',
             'concurrency' => 'concurrency',
             'delay'       => 'request_delay_ms',
+            'phone-mps'   => 'phone_mps',
             'batch-size'  => 'batch_size',
         ];
 
@@ -177,7 +180,7 @@ class CampaignConfigCommand extends Command
     {
         $metadata = json_decode($org->metadata, true) ?? [];
         $campaigns = $metadata['campaigns'] ?? [];
-        $overrideKeys = ['chunk_size', 'concurrency', 'request_delay_ms', 'batch_size'];
+        $overrideKeys = ['chunk_size', 'concurrency', 'request_delay_ms', 'phone_mps', 'batch_size'];
         $found = false;
 
         foreach ($overrideKeys as $key) {
@@ -245,6 +248,7 @@ class CampaignConfigCommand extends Command
             'chunk_size'       => config('campaigns.chunk_size', 50),
             'concurrency'      => config('campaigns.concurrency', 10),
             'request_delay_ms' => config('campaigns.request_delay_ms', 100),
+            'phone_mps'        => config('campaigns.throttle.default_phone_mps', 10),
             'batch_size'       => config('campaigns.batch_size', 500),
             default            => '-',
         };

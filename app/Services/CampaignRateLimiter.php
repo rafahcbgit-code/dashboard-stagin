@@ -45,20 +45,21 @@ LUA;
             return;
         }
 
-        $rate = max(1, min(
-            (int) config('campaigns.throttle.default_phone_mps', 70),
-            (int) config('campaigns.throttle.max_phone_mps', 80)
-        ));
+        $rate = self::phoneRate($organizationId);
 
         $capacity = max(1, $rate);
-        $key = sprintf(
-            'campaign:rate:%d:%s',
-            $organizationId,
-            preg_replace('/[^A-Za-z0-9:_-]/', '_', (string) ($phoneNumberId ?: 'unknown'))
-        );
+        $key = self::rateKey($organizationId, $phoneNumberId);
+        $backoffKey = self::backoffKey($organizationId, $phoneNumberId);
 
         while (true) {
             try {
+                $pausedUntil = (int) (Redis::get($backoffKey) ?: 0);
+                $now = self::nowMs();
+                if ($pausedUntil > $now) {
+                    usleep(min(5000, $pausedUntil - $now) * 1000);
+                    continue;
+                }
+
                 $result = Redis::eval(self::LUA_SCRIPT, 1, $key, self::nowMs(), $rate, $capacity, 1);
             } catch (\Throwable $e) {
                 Log::warning('Campaign rate limiter unavailable; applying local fallback delay', [
@@ -79,6 +80,64 @@ LUA;
             $waitMs = max(1, min(1000, (int) ($result[1] ?? 1)));
             usleep($waitMs * 1000);
         }
+    }
+
+    public static function pausePhone(int $organizationId, ?string $phoneNumberId, ?int $seconds = null, array $context = []): void
+    {
+        if (! config('campaigns.throttle.enabled', true)) {
+            return;
+        }
+
+        $seconds = max(1, $seconds ?? (int) config('campaigns.throttle.rate_limit_backoff_seconds', 120));
+        $key = self::backoffKey($organizationId, $phoneNumberId);
+        $pausedUntil = self::nowMs() + ($seconds * 1000);
+
+        try {
+            $currentPausedUntil = (int) (Redis::get($key) ?: 0);
+            if ($currentPausedUntil >= $pausedUntil) {
+                return;
+            }
+
+            Redis::setex($key, $seconds + 60, (string) $pausedUntil);
+
+            Log::warning('Campaign sending paused after WhatsApp rate limit', array_filter([
+                'organization_id' => $organizationId,
+                'phone_number_id' => $phoneNumberId,
+                'pause_seconds' => $seconds,
+                'context' => $context ?: null,
+            ], static fn ($value) => $value !== null));
+        } catch (\Throwable $e) {
+            Log::warning('Unable to record WhatsApp rate-limit backoff', [
+                'organization_id' => $organizationId,
+                'phone_number_id' => $phoneNumberId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    private static function phoneRate(int $organizationId): int
+    {
+        $metadata = OrganizationService::getCachedMetadata($organizationId);
+        $orgRate = $metadata['campaigns']['phone_mps'] ?? null;
+        $defaultRate = (int) config('campaigns.throttle.default_phone_mps', 10);
+        $maxRate = (int) config('campaigns.throttle.max_phone_mps', 80);
+
+        return max(1, min((int) ($orgRate ?? $defaultRate), $maxRate));
+    }
+
+    private static function backoffKey(int $organizationId, ?string $phoneNumberId): string
+    {
+        return self::rateKey($organizationId, $phoneNumberId).':backoff';
+    }
+
+    private static function rateKey(int $organizationId, ?string $phoneNumberId): string
+    {
+        return sprintf(
+            'campaign:rate:%s',
+            $phoneNumberId
+                ? 'phone:'.preg_replace('/[^A-Za-z0-9:_-]/', '_', $phoneNumberId)
+                : 'org:'.$organizationId.':unknown'
+        );
     }
 
     private static function nowMs(): int

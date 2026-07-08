@@ -438,13 +438,21 @@ class ProcessCampaignChunkJob implements ShouldQueue
 
         $pool = new Pool($client, $requests(), [
             'concurrency' => $this->concurrency,
-            'fulfilled' => function ($response, $index) use (&$results) {
+            'fulfilled' => function ($response, $index) use (&$results, $phoneNumberId) {
                 $responseObject = new \stdClass();
                 $body = json_decode($response->getBody()->getContents());
 
                 // Meta can return HTTP 200 with an error object in the body
                 // (e.g. rate limit 130429). Treat these as failures.
                 if (isset($body->error)) {
+                    if ($this->isWhatsAppRateLimitResponse($body)) {
+                        CampaignRateLimiter::pausePhone($this->organizationId, $phoneNumberId, context: [
+                            'campaign_id' => $this->campaignId,
+                            'response_index' => $index,
+                            'source' => 'fulfilled',
+                        ]);
+                    }
+
                     $responseObject->success = false;
                     $responseObject->data = $body;
                     $responseObject->message = $body->error->error_user_msg
@@ -457,7 +465,7 @@ class ProcessCampaignChunkJob implements ShouldQueue
 
                 $results[$index] = $responseObject;
             },
-            'rejected' => function ($reason, $index) use (&$results, $payloads) {
+            'rejected' => function ($reason, $index) use (&$results, $payloads, $phoneNumberId) {
                 $responseObject = new \stdClass();
                 $responseObject->success = false;
 
@@ -482,6 +490,13 @@ class ProcessCampaignChunkJob implements ShouldQueue
                 } elseif ($reason instanceof GuzzleException && method_exists($reason, 'getResponse') && $reason->getResponse()) {
                     $response = $reason->getResponse();
                     $responseObject->data = json_decode($response->getBody()->getContents());
+                    if ($this->isWhatsAppRateLimitResponse($responseObject->data)) {
+                        CampaignRateLimiter::pausePhone($this->organizationId, $phoneNumberId, context: [
+                            'campaign_id' => $this->campaignId,
+                            'response_index' => $index,
+                            'source' => 'rejected',
+                        ]);
+                    }
                     $responseObject->message = $responseObject->data->error->error_user_msg
                         ?? $responseObject->data->error->message
                         ?? 'Unknown error';
@@ -499,6 +514,11 @@ class ProcessCampaignChunkJob implements ShouldQueue
         $pool->promise()->wait();
 
         return $results;
+    }
+
+    private function isWhatsAppRateLimitResponse(?object $body): bool
+    {
+        return (string) ($body->error->code ?? '') === '130429';
     }
 
     private function samplePayloadLog(
