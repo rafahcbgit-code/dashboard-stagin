@@ -86,13 +86,13 @@ return [
     | Milliseconds to pause between each API request within a chunk job.
     | This spaces out sends to avoid hitting Meta's rate limits (130429).
     |
-    | At concurrency=5 with delay=100ms: effective rate ~50 req/sec
-    | At concurrency=5 with delay=200ms: effective rate ~25 req/sec
+    | At concurrency=2 with delay=100ms: effective rate ~10 req/sec
+    | At concurrency=5 with delay=200ms: effective rate ~5 req/sec
     | At concurrency=5 with delay=0: no throttling, burst as fast as possible
     |
     */
 
-    'request_delay_ms' => env('CAMPAIGN_REQUEST_DELAY_MS', 0),
+    'request_delay_ms' => env('CAMPAIGN_REQUEST_DELAY_MS', 100),
 
     'load_test_mode' => env('CAMPAIGN_LOAD_TEST_MODE', false),
 
@@ -100,9 +100,9 @@ return [
 
     'throttle' => [
         'enabled' => env('CAMPAIGN_THROTTLE_ENABLED', true),
-        'default_phone_mps' => (int) env('CAMPAIGN_DEFAULT_PHONE_MPS', 70),
+        'default_phone_mps' => (int) env('CAMPAIGN_DEFAULT_PHONE_MPS', 10),
         'max_phone_mps' => (int) env('CAMPAIGN_MAX_PHONE_MPS', 80),
-        'per_campaign_mps' => (int) env('CAMPAIGN_PER_CAMPAIGN_MPS', 70),
+        'rate_limit_backoff_seconds' => (int) env('CAMPAIGN_RATE_LIMIT_BACKOFF_SECONDS', 120),
     ],
 
     'dispatch' => [

@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller as BaseController;
 use App\Http\Requests\StoreCampaign;
 use App\Http\Resources\CampaignLogResource;
 use App\Http\Resources\CampaignResource;
+use App\Jobs\ProcessCampaignMessagesJob;
 use App\Models\Campaign;
 use App\Models\CampaignLog;
 use App\Models\Contact;
@@ -620,16 +621,25 @@ class CampaignController extends BaseController
             return response()->json(['error' => 'No rate-limited messages to resend'], 400);
         }
 
+        $rateLimitedIds = (clone $rateLimitedQuery)->pluck('id');
+
         $rateLimitedQuery->update([
             'status' => 'pending',
             'retry_count' => 0,
         ]);
+
+        foreach ($rateLimitedIds as $rateLimitedId) {
+            Cache::store('redis')->forget('campaign:dispatch:reserved:'.$rateLimitedId);
+        }
 
         $campaign->update([
             'status' => 'ongoing',
             'started_at' => now(),
             'completed_at' => null,
         ]);
+
+        ProcessCampaignMessagesJob::dispatchForOrganization($campaign->organization_id)
+            ->onQueue(config('campaigns.queues.dispatchers', 'campaign-dispatchers'));
 
         return response()->json([
             'status' => 'ongoing',
