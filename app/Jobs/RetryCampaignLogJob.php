@@ -29,6 +29,8 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
 
     private $campaignLogId;
 
+    private $whatsappService;
+
     protected $retryIndex;
 
     public function __construct(int $organizationId, int $campaignLogId, int $retryIndex)

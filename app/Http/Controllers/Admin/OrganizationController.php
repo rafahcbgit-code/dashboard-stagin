@@ -106,6 +106,7 @@ class OrganizationController extends BaseController
             'organization' => $res['organization'],
             'users' => $res['users'],
             'plans' => $res['plans'],
+            'campaignRateConfig' => $this->campaignRateConfig(),
             'resourceAccounts' => $res['resource_accounts'],
             'invoices' => $res['billing'],
             'subscriptionEvents' => $res['subscription_events'],
@@ -127,6 +128,7 @@ class OrganizationController extends BaseController
             'organization' => $res['organization'],
             'users' => $res['users'],
             'plans' => $res['plans'],
+            'campaignRateConfig' => $this->campaignRateConfig(),
             'resourceAccounts' => $res['resource_accounts'],
             'invoices' => $res['billing'],
             'subscriptionEvents' => $res['subscription_events'],
@@ -186,5 +188,13 @@ class OrganizationController extends BaseController
                 'message' => $query ? __('Organization deleted successfully!') : __('This organization does not exist!')
             ]
         );
+    }
+
+    private function campaignRateConfig(): array
+    {
+        return [
+            'default_phone_mps' => (int) config('campaigns.throttle.default_phone_mps', 20),
+            'max_phone_mps' => (int) config('campaigns.throttle.max_phone_mps', 80),
+        ];
     }
 }

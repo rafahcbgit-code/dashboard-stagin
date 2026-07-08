@@ -106,6 +106,19 @@
                                 :class="'sm:col-span-6'"
                                 :type="'text'"
                             />
+                            <FormInput
+                                v-model="form.campaign_phone_mps"
+                                :name="$t('Campaign send speed (messages/sec)')"
+                                :error="form.errors.campaign_phone_mps"
+                                :type="'number'"
+                                :min="1"
+                                :max="campaignMaxPhoneMps"
+                                :class="'sm:col-span-6'"
+                            />
+                            <p class="text-xs text-gray-500 sm:col-span-6">
+                                {{ $t('Default campaign speed') }}: {{ campaignDefaultPhoneMps }} {{ $t('messages per second') }}.
+                                {{ $t('Maximum') }}: {{ campaignMaxPhoneMps }}.
+                            </p>
                             <div class="sm:col-span-6">
                                 <label class="block text-sm leading-6 text-gray-900">{{ $t('Resource sharing') }}</label>
                                 <div class="grid grid-cols-2 gap-2 rounded-md bg-slate-100 p-1 text-sm">
@@ -291,7 +304,8 @@
         organization: Object, 
         users: Object, 
         invoices: Object, 
-        plans: Object, 
+        plans: Object,
+        campaignRateConfig: Object,
         resourceAccounts: {
             type: Array,
             default: () => [],
@@ -316,6 +330,28 @@
         }
     };
 
+    const getOrganizationMetadata = () => {
+        const metadata = props.organization?.metadata;
+
+        if (!metadata) {
+            return {};
+        }
+
+        if (typeof metadata === 'object') {
+            return metadata;
+        }
+
+        try {
+            return JSON.parse(metadata);
+        } catch (error) {
+            return {};
+        }
+    };
+
+    const campaignDefaultPhoneMps = props.campaignRateConfig?.default_phone_mps ?? 20;
+    const campaignMaxPhoneMps = props.campaignRateConfig?.max_phone_mps ?? 80;
+    const campaignPhoneMps = () => getOrganizationMetadata()?.campaigns?.phone_mps ?? campaignDefaultPhoneMps;
+
     const formatDatetimeForInput = (value) => {
         if (!value) {
             return null;
@@ -338,6 +374,7 @@
         subscription_status: props.organization?.subscription?.status ?? 'trial',
         valid_until: formatDatetimeForInput(props.organization?.subscription?.valid_until),
         billing_organization_id: props.organization?.billing_organization_id ?? null,
+        campaign_phone_mps: campaignPhoneMps(),
         create_user: 1,
         first_name: null,
         last_name: null,

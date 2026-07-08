@@ -100,7 +100,7 @@ return [
 
     'throttle' => [
         'enabled' => env('CAMPAIGN_THROTTLE_ENABLED', true),
-        'default_phone_mps' => (int) env('CAMPAIGN_DEFAULT_PHONE_MPS', 10),
+        'default_phone_mps' => (int) env('CAMPAIGN_DEFAULT_PHONE_MPS', 20),
         'max_phone_mps' => (int) env('CAMPAIGN_MAX_PHONE_MPS', 80),
         'rate_limit_backoff_seconds' => (int) env('CAMPAIGN_RATE_LIMIT_BACKOFF_SECONDS', 120),
     ],

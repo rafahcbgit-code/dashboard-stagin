@@ -119,7 +119,7 @@ LUA;
     {
         $metadata = OrganizationService::getCachedMetadata($organizationId);
         $orgRate = $metadata['campaigns']['phone_mps'] ?? null;
-        $defaultRate = (int) config('campaigns.throttle.default_phone_mps', 10);
+        $defaultRate = (int) config('campaigns.throttle.default_phone_mps', 20);
         $maxRate = (int) config('campaigns.throttle.max_phone_mps', 80);
 
         return max(1, min((int) ($orgRate ?? $defaultRate), $maxRate));
