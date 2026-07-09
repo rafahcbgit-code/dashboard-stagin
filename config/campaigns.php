@@ -103,6 +103,7 @@ return [
         'default_phone_mps' => (int) env('CAMPAIGN_DEFAULT_PHONE_MPS', 20),
         'max_phone_mps' => (int) env('CAMPAIGN_MAX_PHONE_MPS', 80),
         'rate_limit_backoff_seconds' => (int) env('CAMPAIGN_RATE_LIMIT_BACKOFF_SECONDS', 120),
+        'rate_limit_retry_delay_seconds' => (int) env('CAMPAIGN_RATE_LIMIT_RETRY_DELAY_SECONDS', 60),
     ],
 
     'dispatch' => [

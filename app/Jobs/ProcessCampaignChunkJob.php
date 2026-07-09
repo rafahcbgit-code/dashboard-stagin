@@ -21,6 +21,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 class ProcessCampaignChunkJob implements ShouldQueue
@@ -266,6 +267,7 @@ class ProcessCampaignChunkJob implements ShouldQueue
         // 9. Process results: update CampaignLog statuses and enqueue post-send finalizers
         $successIds = [];
         $failedUpdates = [];
+        $pendingUpdates = [];
         $finalizers = [];
 
         foreach ($payloads as $idx => $payload) {
@@ -316,12 +318,21 @@ class ProcessCampaignChunkJob implements ShouldQueue
                     ];
                 }
             } else {
-                $failedUpdates[] = [
-                    'id' => $log->id,
-                    'status' => 'failed',
-                    'metadata' => json_encode($result->data ?? ['error' => ['message' => $result->message ?? 'Unknown error']]),
-                    'updated_at' => now(),
-                ];
+                if ($this->isWhatsAppRateLimitResponse($result->data ?? null)) {
+                    $pendingUpdates[] = [
+                        'id' => $log->id,
+                        'status' => 'pending',
+                        'metadata' => $this->rateLimitMetadata($result),
+                        'updated_at' => now(),
+                    ];
+                } else {
+                    $failedUpdates[] = [
+                        'id' => $log->id,
+                        'status' => 'failed',
+                        'metadata' => json_encode($result->data ?? ['error' => ['message' => $result->message ?? 'Unknown error']]),
+                        'updated_at' => now(),
+                    ];
+                }
             }
         }
 
@@ -363,7 +374,32 @@ class ProcessCampaignChunkJob implements ShouldQueue
             }
         }
 
+        // Rate-limited messages were not accepted by Meta. Keep them pending,
+        // hold their dispatch reservation briefly, and resume after backoff.
+        foreach ($pendingUpdates as $update) {
+            $id = $update['id'];
+            unset($update['id']);
+            CampaignLog::where('id', $id)->update($update);
+            $this->holdDispatchReservation($id, $this->rateLimitRetryDelaySeconds());
+
+            $oldLog = $logsById->get($id);
+            if ($oldLog) {
+                $old = CampaignStatsService::snapshot($oldLog);
+                $oldSnapshots[] = $old;
+                $newSnapshots[] = array_merge($old, [
+                    'status' => $update['status'] ?? $old['status'],
+                    'chat_id' => array_key_exists('chat_id', $update) ? $update['chat_id'] : $old['chat_id'],
+                ]);
+            }
+        }
+
         CampaignStatsService::recordSnapshotsChanged($oldSnapshots, $newSnapshots);
+
+        if (!empty($pendingUpdates)) {
+            ProcessCampaignMessagesJob::dispatchForOrganization($this->organizationId)
+                ->onQueue(config('campaigns.queues.dispatchers', 'campaign-dispatchers'))
+                ->delay(now()->addSeconds($this->rateLimitRetryDelaySeconds()));
+        }
 
         foreach ($finalizers as $finalizer) {
             try {
@@ -446,11 +482,16 @@ class ProcessCampaignChunkJob implements ShouldQueue
                 // (e.g. rate limit 130429). Treat these as failures.
                 if (isset($body->error)) {
                     if ($this->isWhatsAppRateLimitResponse($body)) {
-                        CampaignRateLimiter::pausePhone($this->organizationId, $phoneNumberId, context: [
-                            'campaign_id' => $this->campaignId,
-                            'response_index' => $index,
-                            'source' => 'fulfilled',
-                        ]);
+                        CampaignRateLimiter::pausePhone(
+                            $this->organizationId,
+                            $phoneNumberId,
+                            $this->rateLimitRetryDelaySeconds(),
+                            [
+                                'campaign_id' => $this->campaignId,
+                                'response_index' => $index,
+                                'source' => 'fulfilled',
+                            ]
+                        );
                     }
 
                     $responseObject->success = false;
@@ -491,11 +532,16 @@ class ProcessCampaignChunkJob implements ShouldQueue
                     $response = $reason->getResponse();
                     $responseObject->data = json_decode($response->getBody()->getContents());
                     if ($this->isWhatsAppRateLimitResponse($responseObject->data)) {
-                        CampaignRateLimiter::pausePhone($this->organizationId, $phoneNumberId, context: [
-                            'campaign_id' => $this->campaignId,
-                            'response_index' => $index,
-                            'source' => 'rejected',
-                        ]);
+                        CampaignRateLimiter::pausePhone(
+                            $this->organizationId,
+                            $phoneNumberId,
+                            $this->rateLimitRetryDelaySeconds(),
+                            [
+                                'campaign_id' => $this->campaignId,
+                                'response_index' => $index,
+                                'source' => 'rejected',
+                            ]
+                        );
                     }
                     $responseObject->message = $responseObject->data->error->error_user_msg
                         ?? $responseObject->data->error->message
@@ -519,6 +565,37 @@ class ProcessCampaignChunkJob implements ShouldQueue
     private function isWhatsAppRateLimitResponse(?object $body): bool
     {
         return (string) ($body->error->code ?? '') === '130429';
+    }
+
+    private function rateLimitRetryDelaySeconds(): int
+    {
+        return max(1, (int) config('campaigns.throttle.rate_limit_retry_delay_seconds', 60));
+    }
+
+    private function holdDispatchReservation(int $campaignLogId, int $seconds): void
+    {
+        try {
+            Cache::store('redis')->put('campaign:dispatch:reserved:'.$campaignLogId, 1, $seconds);
+        } catch (\Throwable $e) {
+            Log::warning('Unable to hold campaign dispatch reservation after rate limit', [
+                'campaign_log_id' => $campaignLogId,
+                'campaign_id' => $this->campaignId,
+                'organization_id' => $this->organizationId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    private function rateLimitMetadata(object $result): string
+    {
+        return json_encode([
+            'success' => false,
+            'deferred' => true,
+            'message' => $result->message ?? 'WhatsApp rate limit hit',
+            'retry_after_seconds' => $this->rateLimitRetryDelaySeconds(),
+            'error' => $result->data->error ?? null,
+            'deferred_at' => now()->toISOString(),
+        ]);
     }
 
     private function samplePayloadLog(
