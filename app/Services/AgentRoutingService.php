@@ -23,16 +23,25 @@ class AgentRoutingService
      * @param int $contactId
      * @param string $targetType  'auto_assignment' or 'specific_agent'
      * @param int|null $targetAgentId  Required when target_type is 'specific_agent'
+     * @param bool $disableBot  Whether assignment should pause the chatbot for this contact
      * @return ChatTicket|null  The assigned ticket, or null on failure
      */
-    public function assignToAgent(int $organizationId, int $contactId, string $targetType, ?int $targetAgentId = null): ?ChatTicket
+    public function assignToAgent(
+        int $organizationId,
+        int $contactId,
+        string $targetType,
+        ?int $targetAgentId = null,
+        bool $disableBot = true
+    ): ?ChatTicket
     {
         try {
             // Reset fallback counter — escalation served its purpose
             app(RateLimitService::class)->resetFallbackCounter($organizationId, $contactId);
 
-            // Disable bot for this contact on escalation
-            $this->disableBotOnEscalation($organizationId, $contactId);
+            if ($disableBot) {
+                // Disable bot for this contact on escalation
+                $this->disableBotOnEscalation($organizationId, $contactId);
+            }
 
             $existingTicket = ChatTicket::where('contact_id', $contactId)
                 ->where('organization_id', $organizationId)

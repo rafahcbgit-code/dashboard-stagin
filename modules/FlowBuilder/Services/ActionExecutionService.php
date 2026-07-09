@@ -777,7 +777,8 @@ class ActionExecutionService
                 $this->organizationId,
                 $contact->id,
                 $assignmentType,
-                $assignmentType === 'specific_agent' ? $agentId : null
+                $assignmentType === 'specific_agent' ? $agentId : null,
+                false
             );
 
             if ($ticket) {
