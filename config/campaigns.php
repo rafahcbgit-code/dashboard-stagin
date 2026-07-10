@@ -102,6 +102,7 @@ return [
         'enabled' => env('CAMPAIGN_THROTTLE_ENABLED', true),
         'default_phone_mps' => (int) env('CAMPAIGN_DEFAULT_PHONE_MPS', 20),
         'max_phone_mps' => (int) env('CAMPAIGN_MAX_PHONE_MPS', 80),
+        'pause_on_rate_limit' => env('CAMPAIGN_PAUSE_ON_RATE_LIMIT', false),
         'rate_limit_backoff_seconds' => (int) env('CAMPAIGN_RATE_LIMIT_BACKOFF_SECONDS', 120),
         'rate_limit_retry_delay_seconds' => (int) env('CAMPAIGN_RATE_LIMIT_RETRY_DELAY_SECONDS', 60),
     ],

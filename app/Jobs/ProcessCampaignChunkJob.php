@@ -481,7 +481,7 @@ class ProcessCampaignChunkJob implements ShouldQueue
                 // Meta can return HTTP 200 with an error object in the body
                 // (e.g. rate limit 130429). Treat these as failures.
                 if (isset($body->error)) {
-                    if ($this->isWhatsAppRateLimitResponse($body)) {
+                    if ($this->isWhatsAppRateLimitResponse($body) && $this->shouldPausePhoneOnRateLimit()) {
                         CampaignRateLimiter::pausePhone(
                             $this->organizationId,
                             $phoneNumberId,
@@ -531,7 +531,7 @@ class ProcessCampaignChunkJob implements ShouldQueue
                 } elseif ($reason instanceof GuzzleException && method_exists($reason, 'getResponse') && $reason->getResponse()) {
                     $response = $reason->getResponse();
                     $responseObject->data = json_decode($response->getBody()->getContents());
-                    if ($this->isWhatsAppRateLimitResponse($responseObject->data)) {
+                    if ($this->isWhatsAppRateLimitResponse($responseObject->data) && $this->shouldPausePhoneOnRateLimit()) {
                         CampaignRateLimiter::pausePhone(
                             $this->organizationId,
                             $phoneNumberId,
@@ -565,6 +565,11 @@ class ProcessCampaignChunkJob implements ShouldQueue
     private function isWhatsAppRateLimitResponse(?object $body): bool
     {
         return (string) ($body->error->code ?? '') === '130429';
+    }
+
+    private function shouldPausePhoneOnRateLimit(): bool
+    {
+        return (bool) config('campaigns.throttle.pause_on_rate_limit', false);
     }
 
     private function rateLimitRetryDelaySeconds(): int
