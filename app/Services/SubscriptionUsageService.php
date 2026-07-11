@@ -16,6 +16,7 @@ use Carbon\CarbonInterface;
 use Illuminate\Database\QueryException;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 class SubscriptionUsageService
 {
@@ -24,6 +25,9 @@ class SubscriptionUsageService
     public const CONTACTS = 'contacts';
     public const TEAM_MEMBERS = 'team_members';
     public const ORGANIZATIONS = 'organizations';
+
+    private const CONTACT_COUNTS_CACHE_PREFIX = 'subscription:usage:contacts-counts:';
+    private const CONTACT_COUNTS_CACHE_TTL_SECONDS = 60;
 
     private const LIMIT_KEYS = [
         self::TEMPLATE_MESSAGES => 'template_messages_limit',
@@ -114,6 +118,74 @@ class SubscriptionUsageService
             ->all();
     }
 
+    public function bulkSummaries(array $organizationIds, ?int $userId = null): array
+    {
+        $organizationIds = collect($organizationIds)
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($organizationIds === []) {
+            return [];
+        }
+
+        $context = $this->bulkUsageContext($organizationIds);
+        $usedByBilling = $this->bulkUsedByBilling($context);
+        $addonsByBilling = $this->bulkActiveAddonQuantities($context['billing_organization_ids']);
+        $results = [];
+
+        foreach ($organizationIds as $organizationId) {
+            $billingOrganizationId = $context['organization_to_billing'][$organizationId] ?? $organizationId;
+            $pool = $context['pools'][$billingOrganizationId] ?? [
+                'count' => 1,
+                'breakdown' => [],
+            ];
+            $poolOrganizationCount = (int) $pool['count'];
+            $isSharedPool = $poolOrganizationCount > 1 || $billingOrganizationId !== $organizationId;
+            $subscription = $context['subscriptions']->get($billingOrganizationId);
+            $summaries = [];
+
+            foreach ($this->resources() as $resource) {
+                $baseLimit = $this->baseLimit($subscription, $resource);
+                $addonQuantity = (int) ($addonsByBilling[$billingOrganizationId][$resource] ?? 0);
+                $limit = $baseLimit === -1 ? -1 : $baseLimit + $addonQuantity;
+                $used = $resource === self::ORGANIZATIONS
+                    ? $poolOrganizationCount
+                    : (int) ($usedByBilling['totals'][$billingOrganizationId][$resource] ?? 0);
+
+                $summary = [
+                    'resource' => $resource,
+                    'organization_id' => $organizationId,
+                    'billing_organization_id' => $billingOrganizationId,
+                    'billing_organization_name' => $context['billing_organization_names'][$billingOrganizationId] ?? null,
+                    'pool_organization_count' => $poolOrganizationCount,
+                    'is_shared_pool' => $isSharedPool,
+                    'limit' => $limit,
+                    'base_limit' => $baseLimit,
+                    'addon_quantity' => $addonQuantity,
+                    'used' => $used,
+                    'remaining' => $limit === -1 ? -1 : max(0, $limit - $used),
+                ];
+
+                if ($resource === self::TEMPLATE_MESSAGES) {
+                    $summary['source_breakdown'] = $usedByBilling['template_source_breakdown'][$billingOrganizationId] ?? [];
+                }
+
+                if ($resource === self::ORGANIZATIONS) {
+                    $summary['organization_breakdown'] = $pool['breakdown'];
+                }
+
+                $summaries[$resource] = $summary;
+            }
+
+            $results[$organizationId] = $summaries;
+        }
+
+        return $results;
+    }
+
     public function recordUsage(
         int $organizationId,
         string $resource,
@@ -202,6 +274,427 @@ class SubscriptionUsageService
             'organizations_limit', 'whatsapp_numbers_limit' => self::ORGANIZATIONS,
             default => $resource,
         };
+    }
+
+    private function resources(): array
+    {
+        return [
+            self::TEMPLATE_MESSAGES,
+            self::CONVERSATIONS,
+            self::CONTACTS,
+            self::TEAM_MEMBERS,
+            self::ORGANIZATIONS,
+        ];
+    }
+
+    private function bulkUsageContext(array $organizationIds): array
+    {
+        $requestedOrganizations = Organization::query()
+            ->whereIn('id', $organizationIds)
+            ->get(['id', 'name', 'billing_organization_id'])
+            ->keyBy('id');
+
+        $candidateBillingIds = $requestedOrganizations
+            ->pluck('billing_organization_id')
+            ->filter()
+            ->map(fn ($id) => (int) $id)
+            ->values();
+
+        $potentialBillingIds = collect($organizationIds)
+            ->merge($candidateBillingIds)
+            ->unique()
+            ->values()
+            ->all();
+
+        $subscriptions = $this->latestSubscriptionsForOrganizations($potentialBillingIds);
+        $sharingEnabled = collect($potentialBillingIds)
+            ->mapWithKeys(function (int $organizationId) use ($subscriptions): array {
+                $enabled = $this->subscriptionEnablesResourceSharing($subscriptions->get($organizationId));
+                $this->resourceSharingEnabledCache[$organizationId] = $enabled;
+
+                return [$organizationId => $enabled];
+            })
+            ->all();
+
+        $organizationToBilling = [];
+        foreach ($organizationIds as $organizationId) {
+            $organization = $requestedOrganizations->get($organizationId);
+            $candidateBillingId = $organization?->billing_organization_id
+                ? (int) $organization->billing_organization_id
+                : null;
+
+            $organizationToBilling[$organizationId] = $candidateBillingId && ($sharingEnabled[$candidateBillingId] ?? false)
+                ? $candidateBillingId
+                : $organizationId;
+
+            $this->resourceAccountIdCache[$organizationId] = $organizationToBilling[$organizationId];
+        }
+
+        $billingOrganizationIds = collect($organizationToBilling)
+            ->values()
+            ->unique()
+            ->values()
+            ->all();
+
+        $billingOrganizations = Organization::query()
+            ->whereIn('id', $billingOrganizationIds)
+            ->get(['id', 'name', 'billing_organization_id'])
+            ->keyBy('id');
+
+        foreach ($billingOrganizationIds as $billingOrganizationId) {
+            $this->organizationNameCache[$billingOrganizationId] = $billingOrganizations->get($billingOrganizationId)?->name;
+
+            if (! array_key_exists($billingOrganizationId, $sharingEnabled)) {
+                $enabled = $this->subscriptionEnablesResourceSharing($subscriptions->get($billingOrganizationId));
+                $sharingEnabled[$billingOrganizationId] = $enabled;
+                $this->resourceSharingEnabledCache[$billingOrganizationId] = $enabled;
+            }
+        }
+
+        $poolRows = Organization::query()
+            ->where(function ($query) use ($billingOrganizationIds): void {
+                $query->whereIn('id', $billingOrganizationIds)
+                    ->orWhereIn('billing_organization_id', $billingOrganizationIds);
+            })
+            ->orderBy('name')
+            ->get(['id', 'name', 'billing_organization_id']);
+
+        $poolRowsById = $poolRows->keyBy('id');
+        $childrenByBilling = $poolRows
+            ->filter(fn (Organization $organization) => $organization->billing_organization_id !== null)
+            ->groupBy('billing_organization_id');
+        $pools = [];
+        $scopeRows = [];
+
+        foreach ($billingOrganizationIds as $billingOrganizationId) {
+            $poolOrganizations = collect();
+
+            if ($poolRowsById->has($billingOrganizationId)) {
+                $poolOrganizations->push($poolRowsById->get($billingOrganizationId));
+            }
+
+            if ($sharingEnabled[$billingOrganizationId] ?? false) {
+                $poolOrganizations = $poolOrganizations
+                    ->merge($childrenByBilling->get($billingOrganizationId, collect()))
+                    ->unique('id')
+                    ->values();
+            }
+
+            if ($poolOrganizations->isEmpty()) {
+                $poolOrganizations = collect([(object) [
+                    'id' => $billingOrganizationId,
+                    'name' => $billingOrganizations->get($billingOrganizationId)?->name,
+                    'billing_organization_id' => null,
+                ]]);
+            }
+
+            $period = $this->subscriptionPeriodBounds($subscriptions->get($billingOrganizationId));
+            $poolIds = $poolOrganizations
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->values()
+                ->all();
+
+            foreach ($poolIds as $poolOrganizationId) {
+                $scopeRows[] = [
+                    'billing_organization_id' => $billingOrganizationId,
+                    'organization_id' => $poolOrganizationId,
+                    'period_start' => $period['start'],
+                    'period_end' => $period['end'],
+                ];
+            }
+
+            $pools[$billingOrganizationId] = [
+                'ids' => $poolIds,
+                'count' => count($poolIds),
+                'breakdown' => $poolOrganizations
+                    ->sortBy(fn ($organization) => (int) $organization->id === $billingOrganizationId ? '' : (string) $organization->name)
+                    ->values()
+                    ->map(fn ($organization) => [
+                        'organization_id' => (int) $organization->id,
+                        'organization_name' => $organization->name,
+                        'role' => (int) $organization->id === $billingOrganizationId
+                            ? 'resource_account'
+                            : 'shared_account',
+                        'counts_as' => 1,
+                    ])
+                    ->values()
+                    ->all(),
+            ];
+        }
+
+        return [
+            'organization_to_billing' => $organizationToBilling,
+            'billing_organization_ids' => $billingOrganizationIds,
+            'billing_organization_names' => $billingOrganizations
+                ->mapWithKeys(fn (Organization $organization) => [(int) $organization->id => $organization->name])
+                ->all(),
+            'subscriptions' => $subscriptions,
+            'pools' => $pools,
+            'scope_rows' => $scopeRows,
+        ];
+    }
+
+    private function latestSubscriptionsForOrganizations(array $organizationIds)
+    {
+        $organizationIds = collect($organizationIds)
+            ->map(fn ($id) => (int) $id)
+            ->filter()
+            ->unique()
+            ->values()
+            ->all();
+
+        if ($organizationIds === []) {
+            return collect();
+        }
+
+        $latestSubscriptionIds = Subscription::query()
+            ->selectRaw('MAX(id) as id')
+            ->whereIn('organization_id', $organizationIds)
+            ->groupBy('organization_id');
+
+        $subscriptions = Subscription::query()
+            ->with('plan')
+            ->whereIn('id', $latestSubscriptionIds)
+            ->get()
+            ->keyBy('organization_id');
+
+        foreach ($subscriptions as $organizationId => $subscription) {
+            $this->subscriptionCache[(int) $organizationId] = $subscription;
+        }
+
+        return $subscriptions;
+    }
+
+    private function subscriptionEnablesResourceSharing(?Subscription $subscription): bool
+    {
+        $metadata = json_decode((string) $subscription?->plan?->metadata, true);
+        $metadata = is_array($metadata) ? $metadata : [];
+
+        return (bool) ((int) ($metadata['resource_sharing_enabled'] ?? 0));
+    }
+
+    private function subscriptionPeriodBounds(?Subscription $subscription): array
+    {
+        if (! $subscription) {
+            return ['start' => null, 'end' => null];
+        }
+
+        $startDate = $subscription->getRawOriginal('start_date') ?: $subscription->start_date;
+        $validUntil = $subscription->getRawOriginal('valid_until') ?: $subscription->valid_until;
+
+        return [
+            'start' => $startDate ? Carbon::parse($startDate)->toDateTimeString() : null,
+            'end' => $validUntil ? Carbon::parse($validUntil)->toDateTimeString() : null,
+        ];
+    }
+
+    private function bulkActiveAddonQuantities(array $billingOrganizationIds): array
+    {
+        if ($billingOrganizationIds === []) {
+            return [];
+        }
+
+        $rows = ResourceAddon::query()
+            ->whereIn('organization_id', $billingOrganizationIds)
+            ->where(function ($query): void {
+                $query->whereNull('valid_until')
+                    ->orWhere('valid_until', '>=', now());
+            })
+            ->selectRaw('organization_id, resource, SUM(quantity) as total')
+            ->groupBy('organization_id', 'resource')
+            ->get();
+
+        $addons = [];
+        foreach ($rows as $row) {
+            $addons[(int) $row->organization_id][(string) $row->resource] = (int) $row->total;
+        }
+
+        return $addons;
+    }
+
+    private function bulkUsedByBilling(array $context): array
+    {
+        $totals = [];
+        foreach ($context['billing_organization_ids'] as $billingOrganizationId) {
+            foreach ($this->resources() as $resource) {
+                $totals[$billingOrganizationId][$resource] = 0;
+            }
+
+            $totals[$billingOrganizationId][self::ORGANIZATIONS] = (int) ($context['pools'][$billingOrganizationId]['count'] ?? 1);
+        }
+
+        $poolIdsByBilling = collect($context['pools'])
+            ->map(fn (array $pool) => $pool['ids'] ?? [])
+            ->all();
+        $allPoolOrganizationIds = collect($poolIdsByBilling)
+            ->flatten()
+            ->map(fn ($id) => (int) $id)
+            ->unique()
+            ->sort()
+            ->values()
+            ->all();
+
+        $contactCounts = $this->contactCountsByOrganization($allPoolOrganizationIds);
+        $teamCounts = $this->countsByOrganization(
+            Team::query()->whereNull('deleted_at'),
+            $allPoolOrganizationIds
+        );
+        $inviteCounts = $this->countsByOrganization(
+            TeamInvite::query()->where('expire_at', '>=', now()),
+            $allPoolOrganizationIds
+        );
+
+        foreach ($poolIdsByBilling as $billingOrganizationId => $poolOrganizationIds) {
+            $totals[$billingOrganizationId][self::CONTACTS] = $this->sumCountsForPool($contactCounts, $poolOrganizationIds);
+            $totals[$billingOrganizationId][self::TEAM_MEMBERS] =
+                $this->sumCountsForPool($teamCounts, $poolOrganizationIds)
+                + $this->sumCountsForPool($inviteCounts, $poolOrganizationIds);
+        }
+
+        $templateSourceBreakdown = $this->scopedTemplateSourceBreakdown($context['scope_rows']);
+        foreach ($templateSourceBreakdown as $billingOrganizationId => $sources) {
+            $totals[$billingOrganizationId][self::TEMPLATE_MESSAGES] = collect($sources)->sum('quantity');
+        }
+
+        foreach ($this->scopedConversationTotals($context['scope_rows']) as $billingOrganizationId => $total) {
+            $totals[$billingOrganizationId][self::CONVERSATIONS] = $total;
+        }
+
+        return [
+            'totals' => $totals,
+            'template_source_breakdown' => $templateSourceBreakdown,
+        ];
+    }
+
+    private function contactCountsByOrganization(array $organizationIds): array
+    {
+        if ($organizationIds === []) {
+            return [];
+        }
+
+        sort($organizationIds);
+
+        return Cache::remember(
+            self::CONTACT_COUNTS_CACHE_PREFIX . md5(implode(',', $organizationIds)),
+            self::CONTACT_COUNTS_CACHE_TTL_SECONDS,
+            function () use ($organizationIds): array {
+                $table = DB::getDriverName() === 'mysql'
+                    ? DB::raw('`contacts` FORCE INDEX (`idx_contacts_org_deleted`)')
+                    : 'contacts';
+
+                return DB::table($table)
+                    ->whereNull('deleted_at')
+                    ->whereIn('organization_id', $organizationIds)
+                    ->selectRaw('organization_id, COUNT(*) as total')
+                    ->groupBy('organization_id')
+                    ->pluck('total', 'organization_id')
+                    ->map(fn ($total) => (int) $total)
+                    ->all();
+            }
+        );
+    }
+
+    private function countsByOrganization($query, array $organizationIds): array
+    {
+        if ($organizationIds === []) {
+            return [];
+        }
+
+        return $query
+            ->whereIn('organization_id', $organizationIds)
+            ->selectRaw('organization_id, COUNT(*) as total')
+            ->groupBy('organization_id')
+            ->pluck('total', 'organization_id')
+            ->map(fn ($total) => (int) $total)
+            ->all();
+    }
+
+    private function sumCountsForPool(array $countsByOrganization, array $poolOrganizationIds): int
+    {
+        return collect($poolOrganizationIds)
+            ->sum(fn ($organizationId) => (int) ($countsByOrganization[(int) $organizationId] ?? 0));
+    }
+
+    private function scopedTemplateSourceBreakdown(array $scopeRows): array
+    {
+        $breakdown = [];
+
+        foreach (array_chunk($scopeRows, 500) as $chunk) {
+            [$scopeSql, $bindings] = $this->scopeRowsSql($chunk);
+            $rows = DB::select(
+                "SELECT scope.billing_organization_id,
+                        COALESCE(events.source_type, 'unknown') as source_type,
+                        SUM(events.quantity) as total
+                 FROM subscription_usage_events events
+                 INNER JOIN ({$scopeSql}) scope ON scope.organization_id = events.organization_id
+                 WHERE events.resource = ?
+                   AND (scope.period_start IS NULL OR events.occurred_at >= scope.period_start)
+                   AND (scope.period_end IS NULL OR events.occurred_at <= scope.period_end)
+                 GROUP BY scope.billing_organization_id, COALESCE(events.source_type, 'unknown')",
+                array_merge($bindings, [self::TEMPLATE_MESSAGES])
+            );
+
+            foreach ($rows as $row) {
+                $billingOrganizationId = (int) $row->billing_organization_id;
+                $source = (string) $row->source_type;
+                $breakdown[$billingOrganizationId][$source] = ($breakdown[$billingOrganizationId][$source] ?? 0) + (int) $row->total;
+            }
+        }
+
+        foreach ($breakdown as $billingOrganizationId => $sources) {
+            arsort($sources);
+            $breakdown[$billingOrganizationId] = collect($sources)
+                ->map(fn (int $quantity, string $source) => [
+                    'source' => $source,
+                    'quantity' => $quantity,
+                ])
+                ->values()
+                ->all();
+        }
+
+        return $breakdown;
+    }
+
+    private function scopedConversationTotals(array $scopeRows): array
+    {
+        $totals = [];
+
+        foreach (array_chunk($scopeRows, 500) as $chunk) {
+            [$scopeSql, $bindings] = $this->scopeRowsSql($chunk);
+            $rows = DB::select(
+                "SELECT scope.billing_organization_id, COUNT(*) as total
+                 FROM conversation_windows windows
+                 INNER JOIN ({$scopeSql}) scope ON scope.organization_id = windows.organization_id
+                 WHERE (scope.period_start IS NULL OR windows.opened_at >= scope.period_start)
+                   AND (scope.period_end IS NULL OR windows.opened_at <= scope.period_end)
+                 GROUP BY scope.billing_organization_id",
+                $bindings
+            );
+
+            foreach ($rows as $row) {
+                $billingOrganizationId = (int) $row->billing_organization_id;
+                $totals[$billingOrganizationId] = ($totals[$billingOrganizationId] ?? 0) + (int) $row->total;
+            }
+        }
+
+        return $totals;
+    }
+
+    private function scopeRowsSql(array $scopeRows): array
+    {
+        $selects = [];
+        $bindings = [];
+
+        foreach ($scopeRows as $row) {
+            $selects[] = 'SELECT ? AS billing_organization_id, ? AS organization_id, ? AS period_start, ? AS period_end';
+            $bindings[] = (int) $row['billing_organization_id'];
+            $bindings[] = (int) $row['organization_id'];
+            $bindings[] = $row['period_start'];
+            $bindings[] = $row['period_end'];
+        }
+
+        return [implode(' UNION ALL ', $selects), $bindings];
     }
 
     private function used(int $billingOrganizationId, string $resource, ?Subscription $subscription, ?int $userId = null): int

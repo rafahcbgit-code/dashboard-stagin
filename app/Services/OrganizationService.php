@@ -100,8 +100,13 @@ class OrganizationService
             ->cursorPaginate($this->resolveCrmPageSize($request))
             ->withQueryString();
         $dateFormats = $this->crmDateFormats();
+        $usageService = new SubscriptionUsageService();
+        $usageByOrganization = $usageService->bulkSummaries(
+            collect($organizations->items())->pluck('id')->all(),
+            $userId
+        );
 
-        return $organizations->through(function (Organization $organization) use ($dateFormats) {
+        return $organizations->through(function (Organization $organization) use ($dateFormats, $usageByOrganization) {
             $data = $organization->toArray();
             $teams = $organization->teams;
             $subscription = $organization->subscription;
@@ -125,6 +130,7 @@ class OrganizationService
             $data['plan'] = $subscription?->plan?->toArray();
             $data['team'] = $teamData;
             $data['teams'] = $teamData;
+            $data['resource_usage'] = $usageByOrganization[(int) $organization->id] ?? [];
 
             if ($subscription) {
                 $data['subscription']['next_billing_date'] = $subscription->next_billing_date;
