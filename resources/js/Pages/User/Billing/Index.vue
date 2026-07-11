@@ -98,6 +98,34 @@
                         </div>
                     </div>
                 </div>
+                <div v-if="showOrganizationPoolBreakdown" class="mt-4 border rounded-md p-3">
+                    <div class="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
+                        <h3 class="text-xs text-gray-500">{{ $t('Organizations in this shared pool') }}</h3>
+                        <div class="text-xs text-gray-500">
+                            {{ $t('Total organizations in pool') }}: {{ organizationPoolTotal }}
+                        </div>
+                    </div>
+                    <div class="overflow-x-auto">
+                        <table class="min-w-full text-left text-sm">
+                            <thead class="text-xs text-gray-500">
+                                <tr>
+                                    <th class="whitespace-nowrap border-b px-3 py-2 font-normal">{{ $t('Organization') }}</th>
+                                    <th class="whitespace-nowrap border-b px-3 py-2 font-normal">{{ $t('Resource role') }}</th>
+                                    <th class="whitespace-nowrap border-b px-3 py-2 font-normal">{{ $t('Included in limit') }}</th>
+                                    <th class="whitespace-nowrap border-b px-3 py-2 font-normal">{{ $t('Counts as') }}</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                <tr v-for="organization in organizationPoolBreakdown" :key="organization.organization_id">
+                                    <td class="whitespace-nowrap border-b px-3 py-2">{{ organization.organization_name }}</td>
+                                    <td class="whitespace-nowrap border-b px-3 py-2 text-gray-600">{{ organization.roleLabel }}</td>
+                                    <td class="whitespace-nowrap border-b px-3 py-2 text-gray-600">{{ $t('Yes') }}</td>
+                                    <td class="whitespace-nowrap border-b px-3 py-2 text-gray-600">{{ organization.counts_as }}</td>
+                                </tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
             </div>
             <div class=" bg-slate-100 md:bg-gray-50 p-5 md:px-0 rounded-[0.5rem] mt-10 w-full">
                 <div class="w-full">
@@ -249,6 +277,17 @@
             billingOrganizationName: usage.billing_organization_name || null,
         };
     });
+    const organizationRoleLabels = {
+        resource_account: 'Resource Account',
+        shared_account: 'Shared Account',
+    };
+    const organizationPoolBreakdown = (props.resourceUsage?.organizations?.organization_breakdown || []).map((organization) => ({
+        ...organization,
+        roleLabel: trans(organizationRoleLabels[organization.role] || organization.role || 'Shared Account'),
+        counts_as: Number(organization.counts_as ?? 1),
+    }));
+    const showOrganizationPoolBreakdown = Boolean(props.resourceUsage?.organizations?.is_shared_pool) && organizationPoolBreakdown.length > 0;
+    const organizationPoolTotal = organizationPoolBreakdown.reduce((total, organization) => total + organization.counts_as, 0);
 
     const selectPayment = (method) => {
         form.method = method;

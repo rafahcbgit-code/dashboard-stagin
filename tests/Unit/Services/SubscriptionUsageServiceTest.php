@@ -366,3 +366,58 @@ it('treats -1 as unlimited', function () {
     expect($result['allowed'])->toBeTrue()
         ->and($result['summary']['remaining'])->toBe(-1);
 });
+
+it('builds bulk summaries that match individual summaries', function () {
+    [$user, $organization] = createUsageContext([
+        'template_messages_limit' => 10,
+        'conversations_limit' => 10,
+        'contacts_limit' => 10,
+        'team_limit' => 10,
+        'organizations_limit' => 10,
+    ]);
+    [, $secondOrganization] = createUsageContext([
+        'template_messages_limit' => 5,
+        'conversations_limit' => 5,
+        'contacts_limit' => 5,
+        'team_limit' => 5,
+        'organizations_limit' => 5,
+    ]);
+
+    $contact = Contact::factory()->create([
+        'organization_id' => $organization->id,
+    ]);
+    Contact::factory()->count(2)->create([
+        'organization_id' => $organization->id,
+    ]);
+    Team::create([
+        'uuid' => (string) Str::uuid(),
+        'organization_id' => $organization->id,
+        'user_id' => $user->id,
+        'role' => 'owner',
+        'status' => 'active',
+        'created_by' => $user->id,
+    ]);
+    TeamInvite::create([
+        'organization_id' => $organization->id,
+        'email' => 'bulk-pending@example.com',
+        'code' => 'bulk-pending-code',
+        'invited_by' => $user->id,
+        'expire_at' => now()->addDay(),
+    ]);
+    ResourceAddon::create([
+        'uuid' => (string) Str::uuid(),
+        'organization_id' => $organization->id,
+        'resource' => SubscriptionUsageService::TEMPLATE_MESSAGES,
+        'quantity' => 3,
+        'valid_until' => now()->addDay(),
+    ]);
+
+    $service = new SubscriptionUsageService();
+    $service->recordUsage($organization->id, SubscriptionUsageService::TEMPLATE_MESSAGES, 2, 'bulk-template-1', 'campaign');
+    $service->ensureConversationWindowForInbound($organization->id, $contact->id);
+
+    $bulk = $service->bulkSummaries([$organization->id, $secondOrganization->id]);
+
+    expect($bulk[$organization->id])->toEqual($service->summaries($organization->id))
+        ->and($bulk[$secondOrganization->id])->toEqual($service->summaries($secondOrganization->id));
+});
