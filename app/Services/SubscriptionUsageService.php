@@ -92,6 +92,10 @@ class SubscriptionUsageService
             $summary['source_breakdown'] = $this->templateMessageSourceBreakdown($billingOrganizationId, $subscription);
         }
 
+        if ($resource === self::ORGANIZATIONS) {
+            $summary['organization_breakdown'] = $this->resourcePoolOrganizationBreakdown($billingOrganizationId);
+        }
+
         return $summary;
     }
 
@@ -342,6 +346,24 @@ class SubscriptionUsageService
         }
 
         return $this->resourcePoolOrganizationIdQuery($billingOrganizationId)->count();
+    }
+
+    private function resourcePoolOrganizationBreakdown(int $billingOrganizationId): array
+    {
+        return $this->resourcePoolOrganizationIdQuery($billingOrganizationId)
+            ->orderByRaw('CASE WHEN id = ? THEN 0 ELSE 1 END', [$billingOrganizationId])
+            ->orderBy('name')
+            ->get(['id', 'name', 'billing_organization_id'])
+            ->map(fn (Organization $organization) => [
+                'organization_id' => (int) $organization->id,
+                'organization_name' => $organization->name,
+                'role' => (int) $organization->id === $billingOrganizationId
+                    ? 'resource_account'
+                    : 'shared_account',
+                'counts_as' => 1,
+            ])
+            ->values()
+            ->all();
     }
 
     private function scopeToResourcePool($query, int $billingOrganizationId, string $column = 'organization_id')
