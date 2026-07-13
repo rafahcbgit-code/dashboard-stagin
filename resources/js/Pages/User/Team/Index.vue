@@ -22,6 +22,33 @@
                 <form @submit.prevent="submitForm()" class="grid gap-x-6 gap-y-4 sm:grid-cols-6">
                     <FormInput v-model="form.email" :error="form.errors.email" :name="$t('Email')" :type="'email'" :class="'sm:col-span-6'" :disabled="formMethod === 'put' ? true : false"/>
                     <FormSelect v-model="form.role" :error="form.errors.role" :options="roleOptions" :name="$t('Role')" :class="'sm:col-span-6'" :placeholder="$t('Select Role')"/>
+                    <label v-if="formMethod === 'post'" class="sm:col-span-6 flex cursor-pointer items-start gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">
+                        <input
+                            v-model="form.create_password"
+                            type="checkbox"
+                            class="mt-1 h-4 w-4 rounded border-slate-300 text-primary focus:ring-primary"
+                        />
+                        <span>
+                            <span class="block font-medium text-slate-900">{{ $t('Create password for this user') }}</span>
+                            <span class="block text-xs text-slate-500">{{ $t('The user will be added directly and no invitation email will be sent.') }}</span>
+                        </span>
+                    </label>
+                    <template v-if="formMethod === 'post' && form.create_password">
+                        <FormInput v-model="form.password" :error="form.errors.password" :name="$t('Password')" :type="'password'" :class="'sm:col-span-3'"/>
+                        <FormInput v-model="form.password_confirmation" :error="form.errors.password_confirmation" :name="$t('Confirm password')" :type="'password'" :class="'sm:col-span-3'"/>
+                        <div class="sm:col-span-6 flex flex-wrap items-center gap-3">
+                            <button type="button" @click="generatePassword" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm hover:bg-slate-50">
+                                {{ $t('Generate password') }}
+                            </button>
+                            <button v-if="generatedPassword" type="button" @click="copyGeneratedPassword" class="rounded-md border border-slate-300 bg-white px-3 py-2 text-sm text-slate-700 shadow-sm hover:bg-slate-50">
+                                {{ $t('Copy password') }}
+                            </button>
+                        </div>
+                        <div v-if="generatedPassword" class="sm:col-span-6 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                            <span class="font-medium text-slate-900">{{ $t('Generated password') }}:</span>
+                            <span class="ml-2 font-mono">{{ generatedPassword }}</span>
+                        </div>
+                    </template>
                     <div class="mt-4 flex">
                         <button type="button" @click="closeFormModal" class="inline-flex justify-center rounded-md border border-transparent bg-slate-50 px-4 py-2 text-sm text-slate-500 hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 mr-4">{{ $t('Cancel') }}</button>
                         <button :class="['inline-flex justify-center rounded-md border border-transparent bg-primary px-4 py-2 text-sm text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2', { 'opacity-50': form.processing }]" :disabled="form.processing">
@@ -51,10 +78,14 @@
     const formUrl = ref('/team/invite');
     const formMethod = ref('post');
     const label = ref('Invite user');
+    const generatedPassword = ref(null);
 
     const form = useForm({
         email: null,
         role: null,
+        create_password: false,
+        password: null,
+        password_confirmation: null,
     });
 
     const roleOptions = [
@@ -62,11 +93,69 @@
         { value: 'agent', label: trans('Agent') },
     ]
 
+    const randomFrom = (characters) => {
+        const values = new Uint32Array(1);
+
+        if (window.crypto?.getRandomValues) {
+            window.crypto.getRandomValues(values);
+            return characters[values[0] % characters.length];
+        }
+
+        return characters[Math.floor(Math.random() * characters.length)];
+    }
+
+    const shufflePassword = (password) => {
+        const characters = password.split('');
+
+        for (let index = characters.length - 1; index > 0; index--) {
+            const values = new Uint32Array(1);
+            const randomIndex = window.crypto?.getRandomValues
+                ? (window.crypto.getRandomValues(values), values[0] % (index + 1))
+                : Math.floor(Math.random() * (index + 1));
+
+            [characters[index], characters[randomIndex]] = [characters[randomIndex], characters[index]];
+        }
+
+        return characters.join('');
+    }
+
+    const generatePassword = () => {
+        const lowercase = 'abcdefghijkmnopqrstuvwxyz';
+        const uppercase = 'ABCDEFGHJKLMNPQRSTUVWXYZ';
+        const numbers = '23456789';
+        const symbols = '!@#$%^&*';
+        const allCharacters = lowercase + uppercase + numbers + symbols;
+
+        let password = [
+            randomFrom(lowercase),
+            randomFrom(uppercase),
+            randomFrom(numbers),
+            randomFrom(symbols),
+        ].join('');
+
+        while (password.length < 14) {
+            password += randomFrom(allCharacters);
+        }
+
+        generatedPassword.value = shufflePassword(password);
+        form.password = generatedPassword.value;
+        form.password_confirmation = generatedPassword.value;
+    }
+
+    const copyGeneratedPassword = async () => {
+        if (!generatedPassword.value || !navigator.clipboard) {
+            return;
+        }
+
+        await navigator.clipboard.writeText(generatedPassword.value);
+    }
+
     const openModal = (key, formData = {}) => {
         label.value = trans('Invite user');
         formUrl.value = '/team/invite';
         formMethod.value = 'post';
         form.clearErrors();
+        generatedPassword.value = null;
 
         if (key) {
             label.value = trans('Update user');
@@ -74,10 +163,16 @@
             formMethod.value = 'put';
             form.email = key.email;
             form.role = key.role
+            form.create_password = false;
+            form.password = null;
+            form.password_confirmation = null;
             isOpenFormModal.value = true;
         } else {
             form.email = null;
             form.role = null;
+            form.create_password = false;
+            form.password = null;
+            form.password_confirmation = null;
             isOpenFormModal.value = true;
         }
     }
@@ -85,6 +180,7 @@
     const closeFormModal = () => {
         isOpenFormModal.value = false;
         form.clearErrors();
+        generatedPassword.value = null;
     }
 
     const submitForm = () => {

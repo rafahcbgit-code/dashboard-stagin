@@ -51,11 +51,14 @@ class TeamController extends BaseController
         $this->teamService->invite($request);
 
         //response()->json(['success' => true, 'message'=> __('User invited successfully!'), 'data' => $invite])
+        $message = $request->boolean('create_password')
+            ? __('User account created successfully!')
+            : __('User invited successfully!');
 
         return Redirect::back()->with(
             'status', [
                 'type' => 'success', 
-                'message' => __('User invited successfully!')
+                'message' => $message
             ]
         );
     }
