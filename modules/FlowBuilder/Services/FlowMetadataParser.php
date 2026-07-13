@@ -2,6 +2,8 @@
 
 namespace Modules\FlowBuilder\Services;
 
+use Illuminate\Support\Arr;
+
 /**
  * Parses flow metadata JSON into a traversable structure.
  * Provides clean methods for flow execution to consume without
@@ -77,13 +79,31 @@ class FlowMetadataParser
             return null;
         }
 
+        $sourceNode = $this->nodeMap[$sourceId] ?? null;
+
+        // Interactive selections must match the user's button/list choice, even
+        // when the node has only one outgoing edge.
+        if (trim($message) !== '' && $this->isInteractiveChoiceNode($sourceNode)) {
+            $derivedHandle = $this->deriveHandle($sourceNode, $message);
+            if ($derivedHandle === null) {
+                return null;
+            }
+
+            foreach ($edges as $edge) {
+                if (($edge['sourceHandle'] ?? null) === $derivedHandle) {
+                    return $this->resolveTargetNode($edge);
+                }
+            }
+
+            return null;
+        }
+
         // Single edge — follow it directly
         if (count($edges) === 1) {
             return $this->resolveTargetNode($edges[0]);
         }
 
         // Multiple edges — resolve by message content (interactive buttons/lists)
-        $sourceNode = $this->nodeMap[$sourceId] ?? null;
         $derivedHandle = $this->deriveHandle($sourceNode, $message);
 
         if ($derivedHandle !== null) {
@@ -103,6 +123,33 @@ class FlowMetadataParser
         return null;
     }
 
+    private function isInteractiveChoiceNode(?array $sourceNode): bool
+    {
+        if ($sourceNode === null) {
+            return false;
+        }
+
+        $buttons = Arr::get($sourceNode, 'data.metadata.fields.buttons', []);
+        if (is_array($buttons)) {
+            foreach ($buttons as $label) {
+                if (is_string($label) && trim($label) !== '') {
+                    return true;
+                }
+            }
+        }
+
+        $sections = Arr::get($sourceNode, 'data.metadata.fields.sections', []);
+        if (is_array($sections)) {
+            foreach ($sections as $section) {
+                if (!empty($section['rows']) && is_array($section['rows'])) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     /**
      * Derive a sourceHandle from the user's message and the source node definition.
      */
@@ -114,7 +161,7 @@ class FlowMetadataParser
         }
 
         // Interactive buttons: button1→a, button2→b, button3→c
-        $buttons = \Arr::get($sourceNode, 'data.metadata.fields.buttons', []);
+        $buttons = Arr::get($sourceNode, 'data.metadata.fields.buttons', []);
         if (!empty($buttons) && is_array($buttons)) {
             $map = ['button1' => 'a', 'button2' => 'b', 'button3' => 'c'];
             foreach ($buttons as $key => $label) {
@@ -129,7 +176,7 @@ class FlowMetadataParser
         }
 
         // Interactive list: match row title → handle
-        $sections = \Arr::get($sourceNode, 'data.metadata.fields.sections', []);
+        $sections = Arr::get($sourceNode, 'data.metadata.fields.sections', []);
         if (!empty($sections) && is_array($sections)) {
             foreach ($sections as $sIdx => $section) {
                 foreach ($section['rows'] ?? [] as $rIdx => $row) {
@@ -166,7 +213,7 @@ class FlowMetadataParser
     public function getActionType(string $nodeId): ?string
     {
         $node = $this->getNodeById($nodeId);
-        return \Arr::get($node, 'data.actionType');
+        return Arr::get($node, 'data.actionType');
     }
 
     /**
@@ -175,7 +222,7 @@ class FlowMetadataParser
     public function getNodeFields(string $nodeId): ?array
     {
         $node = $this->getNodeById($nodeId);
-        return \Arr::get($node, 'data.metadata.fields');
+        return Arr::get($node, 'data.metadata.fields');
     }
 
     /**
@@ -184,7 +231,7 @@ class FlowMetadataParser
     public function getActionConfig(string $nodeId): ?array
     {
         $node = $this->getNodeById($nodeId);
-        return \Arr::get($node, 'data.config');
+        return Arr::get($node, 'data.config');
     }
 
     private function resolveTargetNode(array $edge): ?array
