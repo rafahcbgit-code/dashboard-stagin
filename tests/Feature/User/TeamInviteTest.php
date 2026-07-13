@@ -10,6 +10,7 @@ use App\Models\TeamInvite;
 use App\Models\User;
 use App\Http\Middleware\VerifyCsrfToken;
 use Illuminate\Foundation\Testing\DatabaseTransactions;
+use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Mail;
 
 uses(DatabaseTransactions::class);
@@ -87,6 +88,53 @@ it('allows managers to invite team members and queues the invite email', functio
         ->exists())->toBeTrue();
 
     Mail::assertQueued(CustomEmail::class);
+});
+
+it('allows managers to create team members with a password without sending an invite email', function () {
+    Mail::fake();
+
+    $owner = User::factory()->create(['code_verified' => 1]);
+    $organization = Organization::factory()->create(['created_by' => $owner->id]);
+    createActiveSubscriptionForInviteTest($organization);
+
+    Team::create([
+        'organization_id' => $organization->id,
+        'user_id' => $owner->id,
+        'role' => 'owner',
+        'status' => 'active',
+        'created_by' => $owner->id,
+    ]);
+
+    $manager = createTeamUserForInviteTest('manager', $organization, $owner);
+
+    $response = $this
+        ->withoutMiddleware(VerifyCsrfToken::class)
+        ->actingAs($manager)
+        ->withSession(['current_organization' => $organization->id])
+        ->post('/team/invite', [
+            'email' => 'direct-agent@example.com',
+            'role' => 'agent',
+            'create_password' => true,
+            'password' => 'secure-password',
+            'password_confirmation' => 'secure-password',
+        ]);
+
+    $response->assertRedirect();
+
+    $user = User::where('email', 'direct-agent@example.com')->first();
+
+    expect($user)->not->toBeNull()
+        ->and(Hash::check('secure-password', $user->password))->toBeTrue()
+        ->and($user->code_verified)->toBe(1)
+        ->and($user->email_verified_at)->not->toBeNull()
+        ->and(Team::where('organization_id', $organization->id)
+            ->where('user_id', $user->id)
+            ->where('role', 'agent')
+            ->where('status', 'active')
+            ->exists())->toBeTrue()
+        ->and(TeamInvite::where('email', 'direct-agent@example.com')->exists())->toBeFalse();
+
+    Mail::assertNothingQueued();
 });
 
 it('prevents agents from inviting team members directly', function () {

@@ -50,7 +50,9 @@ class StoreTeam extends FormRequest
                 }),
                 new TeamLimit
             ],
-            'role' => 'required'
+            'role' => 'required|in:manager,agent',
+            'create_password' => ['sometimes', 'boolean'],
+            'password' => ['required_if:create_password,true', 'nullable', 'string', 'min:8', 'confirmed'],
         ];
     }
 

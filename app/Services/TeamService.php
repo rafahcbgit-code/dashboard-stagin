@@ -20,6 +20,10 @@ class TeamService
 {
     public function invite(object $request)
     {
+        if ($request->boolean('create_password')) {
+            return $this->createMemberWithPassword($request);
+        }
+
         //check if invite already exists
         $invite = TeamInvite::where('email', $request->email)->first();
 
@@ -49,6 +53,73 @@ class TeamService
         Email::sendInvite('Invite', $request->email, $inviter, url('/invite/' . $inviteCode));
 
         return $invite;
+    }
+
+    private function createMemberWithPassword(object $request)
+    {
+        return DB::transaction(function () use ($request) {
+            $organizationId = session()->get('current_organization');
+            $email = strtolower(trim($request->email));
+            $user = User::withTrashed()->where('email', $email)->first();
+
+            if (!$user) {
+                $name = trim(str_replace(['.', '_', '-'], ' ', Str::before($email, '@')));
+
+                $user = User::create([
+                    'first_name' => $name !== '' ? $name : $email,
+                    'last_name' => null,
+                    'email' => $email,
+                    'password' => bcrypt($request->password),
+                    'role' => 'user',
+                    'code_verified' => 1,
+                ]);
+
+                $user->forceFill([
+                    'email_verified_at' => now(),
+                ])->save();
+            } else {
+                if ($user->trashed()) {
+                    $user->restore();
+                }
+
+                $user->forceFill([
+                    'password' => bcrypt($request->password),
+                    'code_verified' => 1,
+                    'email_verified_at' => $user->email_verified_at ?? now(),
+                ])->save();
+            }
+
+            $team = Team::withTrashed()
+                ->where('organization_id', $organizationId)
+                ->where('user_id', $user->id)
+                ->first();
+
+            if ($team) {
+                if ($team->trashed()) {
+                    $team->restore();
+                }
+
+                $team->update([
+                    'role' => $request->role,
+                    'status' => 'active',
+                    'created_by' => auth()->user()->id,
+                ]);
+            } else {
+                $team = Team::create([
+                    'organization_id' => $organizationId,
+                    'user_id' => $user->id,
+                    'role' => $request->role,
+                    'status' => 'active',
+                    'created_by' => auth()->user()->id,
+                ]);
+            }
+
+            TeamInvite::where('organization_id', $organizationId)
+                ->where('email', $email)
+                ->delete();
+
+            return $team;
+        });
     }
 
     public function store(object $request, $inviteCode)
