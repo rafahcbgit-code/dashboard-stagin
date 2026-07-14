@@ -2287,20 +2287,22 @@ class WhatsappService
 
         $carouselCards = [];   // → components[1].cards  (sent to Meta)
         $savedCards    = [];   // → metadata.carousel_cards  (persisted for Edit)
+        $uploadConcurrency = (int) config('services.meta.carousel_upload_concurrency', 3);
+        $uploadResults = $uploader->uploadManyToMeta($cardFiles, $uploadConcurrency);
 
         foreach ($cards as $index => $card) {
             $cardComponents = [];   // components array INSIDE this card
 
             // ── HEADER ──────────────────────────────────────────────────────────
             if (isset($cardFiles[$index])) {
-                $uploadResult = $uploader->uploadToMeta($cardFiles[$index]);
+                $uploadResult = $uploadResults[$index] ?? null;
 
-                if (!$uploadResult->success) {
+                if (!$uploadResult || !$uploadResult->success) {
                     $responseObject = new \stdClass();
                     $responseObject->success = false;
                     $responseObject->data    = new \stdClass();
                     $responseObject->data->error = new \stdClass();
-                    $responseObject->data->error->message = $uploadResult->error ?? 'Failed to upload card image';
+                    $responseObject->data->error->message = $uploadResult->error ?? 'Failed to upload card media';
                     return $responseObject;
                 }
 
