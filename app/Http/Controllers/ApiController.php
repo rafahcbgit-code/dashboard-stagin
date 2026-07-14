@@ -385,6 +385,9 @@ class ApiController extends Controller
                     $fail('The phone number is not valid.');
                 }
             }],
+            'name' => 'nullable|string|max:255',
+            'first_name' => 'nullable|string|max:255',
+            'last_name' => 'nullable|string|max:255',
             'template.name' => 'required',
             'template.language' => 'required',
         ];
@@ -434,10 +437,12 @@ class ApiController extends Controller
                 $contact->restore();
             }
         } else {
+            [$firstName, $lastName] = $this->resolveContactNameFromPayload($request);
+
             $contact = new Contact();
             $contact->organization_id = $request->organization;
-            $contact->first_name = $request->first_name ?? "name";
-            $contact->last_name = $request->last_name;
+            $contact->first_name = $firstName;
+            $contact->last_name = $lastName;
             $contact->email = $request->email;
             $contact->phone = $phone;
             $contact->contact_source = 'api';
@@ -464,6 +469,32 @@ class ApiController extends Controller
             'statusCode' => 200,
             'data' => $responseObject
         ], 200);
+    }
+
+    private function resolveContactNameFromPayload(Request $request): array
+    {
+        $firstName = $this->nullablePayloadString($request->input('first_name'));
+        $lastName = $this->nullablePayloadString($request->input('last_name'));
+        $fullName = $this->nullablePayloadString($request->input('name'));
+
+        if ($firstName === null && $fullName !== null) {
+            $parts = preg_split('/\s+/', $fullName, 2);
+            $firstName = $parts[0] ?? null;
+            $lastName = $lastName ?? ($parts[1] ?? null);
+        }
+
+        return [$firstName, $lastName];
+    }
+
+    private function nullablePayloadString($value): ?string
+    {
+        if ($value === null || is_array($value)) {
+            return null;
+        }
+
+        $value = trim((string) $value);
+
+        return $value === '' ? null : $value;
     }
 
     public function sendMediaMessage(Request $request){
