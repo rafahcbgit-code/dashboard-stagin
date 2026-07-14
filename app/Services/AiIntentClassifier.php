@@ -27,7 +27,9 @@ class AiIntentClassifier
         }
 
         // Filter out empty keywords
-        $keywords = array_filter($keywords, fn($kw) => !empty(trim($kw)));
+        // Keep numeric string keywords such as "0", which are commonly used
+        // as menu shortcuts for human escalation in rule-based bots.
+        $keywords = array_filter($keywords, fn($kw) => trim((string) $kw) !== '');
 
         if (empty($keywords)) {
             return null;
