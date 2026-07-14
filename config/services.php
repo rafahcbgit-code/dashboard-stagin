@@ -82,6 +82,10 @@ return [
         'api_secret' => env('SHOPIFY_API_SECRET'),
         'scopes'     => env('SHOPIFY_SCOPES'),
     ],
+
+    'meta' => [
+        'carousel_upload_concurrency' => env('META_CAROUSEL_UPLOAD_CONCURRENCY', 3),
+    ],
 ];
 
 

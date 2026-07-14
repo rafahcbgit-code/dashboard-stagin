@@ -2,7 +2,6 @@
 
 namespace App\Services;
 
-use App\Events\NewChatEvent;
 use App\Http\Resources\TemplateResource;
 use App\Models\Organization;
 use App\Models\Template;
@@ -11,17 +10,17 @@ use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Http;
-
 use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
-use DB;
 use Validator;
 
 class TemplateService
 {
     private const MAX_HEADER_IMAGE_BYTES = 5 * 1024 * 1024;
     private const MAX_HEADER_VIDEO_BYTES = 16 * 1024 * 1024;
+    private const MIN_CAROUSEL_CARDS = 2;
+    private const MAX_CAROUSEL_CARDS = 10;
     private const MAX_BUTTON_TEXT_CHARS = 40;
     private const MAX_COPY_CODE_CHARS = 20;
 
@@ -252,6 +251,11 @@ class TemplateService
         if ($request->get('template_type') === 'carousel') {
             $cards = $request->input('cards', []);
             $files = $request->file('card_files', []);
+            $cardCount = is_array($cards) ? count($cards) : 0;
+
+            if ($cardCount < self::MIN_CAROUSEL_CARDS || $cardCount > self::MAX_CAROUSEL_CARDS) {
+                return $this->carouselCardCountError();
+            }
 
             foreach ($cards as $index => $card) {
                 $headerType = strtoupper((string) ($card['header_type'] ?? ''));
@@ -535,5 +539,26 @@ class TemplateService
                 $field => [$message],
             ],
         ]);
+    }
+
+    private function carouselCardCountError()
+    {
+        $message = __('Carousel templates must contain between :min and :max cards.', [
+            'min' => self::MIN_CAROUSEL_CARDS,
+            'max' => self::MAX_CAROUSEL_CARDS,
+        ]);
+
+        return response()->json([
+            'success' => false,
+            'message' => $message,
+            'data' => [
+                'error' => [
+                    'message' => $message,
+                ],
+            ],
+            'errors' => [
+                'cards' => [$message],
+            ],
+        ], 422);
     }
 }
