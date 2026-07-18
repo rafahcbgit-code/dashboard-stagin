@@ -529,6 +529,70 @@ class CampaignController extends BaseController
     }
 
     /**
+     * Update the scheduled time for a campaign that has not started yet.
+     */
+    public function updateSchedule(Request $request, string $uuid): JsonResponse
+    {
+        $organizationId = (int) session()->get('current_organization');
+
+        $validated = $request->validate([
+            'time' => ['required', 'date_format:Y-m-d\\TH:i'],
+        ]);
+
+        $campaign = Campaign::where('uuid', $uuid)
+            ->where('organization_id', $organizationId)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (! $campaign) {
+            return response()->json(['error' => __('Campaign not found')], 404);
+        }
+
+        if ($campaign->status !== 'scheduled') {
+            return response()->json([
+                'error' => __('The scheduled time can only be changed while the campaign is scheduled.'),
+                'current_status' => $campaign->status,
+            ], 400);
+        }
+
+        $organization = Organization::find($organizationId);
+        $metadata = json_decode($organization?->metadata ?? '{}', true);
+        $timezone = is_array($metadata) ? ($metadata['timezone'] ?? 'UTC') : 'UTC';
+
+        try {
+            $scheduledAt = Carbon::createFromFormat('Y-m-d\\TH:i', $validated['time'], $timezone)->utc();
+        } catch (\Throwable $exception) {
+            return response()->json(['errors' => ['time' => [__('The scheduled time is invalid.')]]], 422);
+        }
+
+        if ($scheduledAt->lte(Carbon::now('UTC'))) {
+            return response()->json(['errors' => ['time' => [__('The scheduled time must be in the future.')]]], 422);
+        }
+
+        // Check the status again in the update query so a campaign that starts in
+        // parallel cannot have its schedule changed after it becomes ongoing.
+        $updated = Campaign::whereKey($campaign->id)
+            ->where('status', 'scheduled')
+            ->update(['scheduled_at' => $scheduledAt]);
+
+        if ($updated !== 1) {
+            $campaign->refresh();
+
+            return response()->json([
+                'error' => __('The campaign is no longer scheduled.'),
+                'current_status' => $campaign->status,
+            ], 409);
+        }
+
+        $campaign->refresh();
+
+        return response()->json([
+            'message' => __('Scheduled time updated successfully.'),
+            'scheduled_at' => $campaign->scheduled_at,
+        ]);
+    }
+
+    /**
      * Task 2.6: AC-2.6.1, AC-2.6.5, AC-2.6.6, AC-2.6.7 - Cancel a running campaign
      *
      * Cancels an ongoing campaign, marking all pending logs as cancelled.
