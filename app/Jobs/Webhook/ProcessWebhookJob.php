@@ -305,6 +305,16 @@ class ProcessWebhookJob implements ShouldQueue
             return;
         }
 
+        // A business-originated message can be delivered as a `messages` webhook
+        // when a WhatsApp Business App/coexistence integration echoes an outbound
+        // message. Treating it as inbound creates a duplicate in the customer
+        // thread. Normal customer messages never enter this branch.
+        if ($this->isBusinessPhoneNumber($senderPhone)) {
+            $this->processBusinessOriginatedMessage($message, $contactInfo);
+
+            return;
+        }
+
         // AC-1.2.1: Find or create contact via ContactService
         $contactService = new ContactService($this->organizationId);
         $contactName = $contactInfo['profile']['name'] ?? null;
@@ -552,6 +562,208 @@ class ProcessWebhookJob implements ShouldQueue
                 ]);
             }
         }
+    }
+
+    /**
+     * Process a message emitted by this organization's business phone number.
+     *
+     * The preferred outcome is to correlate it with the outbound chat that was
+     * already created by the send request. If it cannot be correlated safely,
+     * retain it as outbound rather than incorrectly creating an inbound chat.
+     */
+    protected function processBusinessOriginatedMessage(array $message, ?array $contactInfo): void
+    {
+        $wamId = $message['id'] ?? null;
+        $recipientPhone = $this->businessMessageRecipientPhone($message, $contactInfo);
+
+        if (! $wamId || ! $recipientPhone || $this->isBusinessPhoneNumber($recipientPhone)) {
+            Log::channel('webhook')->warning('Business-originated message skipped because its recipient could not be resolved safely', [
+                'organization_id' => $this->organizationId,
+                'wam_id' => $wamId,
+                'sender_phone' => $message['from'] ?? null,
+                'recipient_phone' => $recipientPhone,
+            ]);
+
+            return;
+        }
+
+        $contactService = new ContactService($this->organizationId);
+        $contactName = $contactInfo['profile']['name'] ?? null;
+        $result = $contactService->findOrCreateFromWebhook($recipientPhone, $contactName);
+        $contact = $result['contact'];
+
+        $originalChat = $this->findMatchingOutboundEcho($message, $contact->id);
+        if ($originalChat) {
+            Log::channel('webhook')->info('Business message echo matched to existing outbound chat and skipped', [
+                'organization_id' => $this->organizationId,
+                'wam_id' => $wamId,
+                'outbound_wam_id' => $originalChat->wam_id,
+                'chat_id' => $originalChat->id,
+                'contact_id' => $contact->id,
+            ]);
+
+            return;
+        }
+
+        $messageType = $message['type'] ?? 'text';
+        $metadata = $this->buildMessageMetadata($message, $messageType);
+        $metadata['origin'] = 'business_message_echo';
+
+        $chat = Chat::create([
+            'organization_id' => $this->organizationId,
+            'contact_id' => $contact->id,
+            'wam_id' => $wamId,
+            'type' => 'outbound',
+            'metadata' => $this->encodeChatMetadata($metadata),
+            'status' => 'sent',
+            'is_read' => 1,
+            'created_at' => now(),
+        ]);
+
+        ChatLog::create([
+            'contact_id' => $contact->id,
+            'entity_type' => 'chat',
+            'entity_id' => $chat->id,
+            'created_at' => now(),
+        ]);
+
+        ProcessWebhookNotificationsJob::dispatch(
+            $chat->id,
+            $contact->id,
+            $this->organizationId,
+            $result['isNew'],
+            $this->payload
+        )->onQueue('webhook-notifications');
+
+        Log::channel('webhook')->info('Business-originated message stored as outbound', [
+            'organization_id' => $this->organizationId,
+            'chat_id' => $chat->id,
+            'contact_id' => $contact->id,
+            'wam_id' => $wamId,
+            'message_type' => $messageType,
+        ]);
+    }
+
+    /**
+     * Find the recipient of an echoed business message without ever using the
+     * business sender as the customer contact.
+     */
+    protected function businessMessageRecipientPhone(array $message, ?array $contactInfo): ?string
+    {
+        $recipientPhone = $message['to'] ?? $contactInfo['wa_id'] ?? null;
+
+        return is_string($recipientPhone) && trim($recipientPhone) !== ''
+            ? $recipientPhone
+            : null;
+    }
+
+    /**
+     * Correlate an echoed text message only when both its body and its stable
+     * WAM message portion match a recent outbound chat for the same contact.
+     *
+     * The full WAM ID is intentionally not used: Meta may encode the sender
+     * number differently for an echoed copy of the same message.
+     */
+    protected function findMatchingOutboundEcho(array $message, int $contactId): ?Chat
+    {
+        $messageText = $message['text']['body'] ?? null;
+        $signature = $this->wamMessageSignature($message['id'] ?? null);
+
+        if (! is_string($messageText) || ! $signature) {
+            return null;
+        }
+
+        $candidates = Chat::where('organization_id', $this->organizationId)
+            ->where('contact_id', $contactId)
+            ->where('type', 'outbound')
+            ->where('created_at', '>=', now()->subMinutes(15))
+            ->orderByDesc('id')
+            ->limit(20)
+            ->get();
+
+        foreach ($candidates as $candidate) {
+            $candidateMetadata = $this->decodeChatMetadata($candidate->metadata);
+            $candidateText = $candidateMetadata['text']['body'] ?? null;
+
+            if (
+                is_string($candidateText)
+                && hash_equals($messageText, $candidateText)
+                && hash_equals($signature, $this->wamMessageSignature($candidate->wam_id) ?? '')
+            ) {
+                return $candidate;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * Return a stable message signature from the paired WAM ID layout observed
+     * in business-message echoes. Invalid or unknown IDs are never correlated,
+     * which keeps the fallback behavior conservative.
+     */
+    protected function wamMessageSignature(?string $wamId): ?string
+    {
+        if (! is_string($wamId) || ! str_starts_with($wamId, 'wamid.')) {
+            return null;
+        }
+
+        $decoded = base64_decode(substr($wamId, strlen('wamid.')), true);
+        if ($decoded === false || strlen($decoded) < 10 || ord($decoded[0]) !== 0x1c || ord($decoded[1]) !== 0x18) {
+            return null;
+        }
+
+        $phoneLength = ord($decoded[2]);
+        $messagePrefixOffset = 3 + $phoneLength;
+        $messagePrefix = "\x15\x02\x00\x11\x18\x14";
+
+        if (
+            $phoneLength === 0
+            || strlen($decoded) <= $messagePrefixOffset + strlen($messagePrefix)
+            || substr($decoded, $messagePrefixOffset, strlen($messagePrefix)) !== $messagePrefix
+        ) {
+            return null;
+        }
+
+        $messagePart = substr($decoded, $messagePrefixOffset + strlen($messagePrefix));
+        $messagePart = rtrim($messagePart, "\0");
+
+        return $messagePart === '' ? null : hash('sha256', $messagePart);
+    }
+
+    /**
+     * Whether a phone number belongs to this organization's business account.
+     * We use both the live webhook metadata and the saved organization metadata
+     * so normal incoming messages are unaffected when either source is absent.
+     */
+    protected function isBusinessPhoneNumber(?string $phone): bool
+    {
+        $normalizedPhone = $this->normalizePhoneDigits($phone);
+        if ($normalizedPhone === '') {
+            return false;
+        }
+
+        $metadata = $this->payload['value']['metadata'] ?? [];
+        $businessNumbers = [
+            $metadata['display_phone_number'] ?? null,
+        ];
+
+        $organization = Organization::find($this->organizationId);
+        $organizationMetadata = json_decode($organization?->metadata ?? '', true) ?: [];
+        $businessNumbers[] = $organizationMetadata['whatsapp']['display_phone_number'] ?? null;
+
+        foreach ($businessNumbers as $businessNumber) {
+            if ($normalizedPhone !== '' && $normalizedPhone === $this->normalizePhoneDigits($businessNumber)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    protected function normalizePhoneDigits(?string $phone): string
+    {
+        return preg_replace('/\D+/', '', (string) $phone) ?? '';
     }
 
     /**
@@ -1952,7 +2164,7 @@ class ProcessWebhookJob implements ShouldQueue
     protected function processHistoryMessage(array $message, $contact, bool $isNewContact): bool
     {
         $wamId = $message['id'] ?? null;
-        $direction = $message['direction'] ?? 'inbound';
+        $direction = $message['direction'] ?? null;
         $messageType = $message['type'] ?? 'text';
         $timestamp = $message['timestamp'] ?? time();
 
@@ -1962,6 +2174,20 @@ class ProcessWebhookJob implements ShouldQueue
                 'organization_id' => $this->organizationId,
                 'contact_id' => $contact->id,
                 'message' => $message,
+            ]);
+
+            return false;
+        }
+
+        // A history payload without direction cannot be classified safely.
+        // Do not turn an outbound business message into an inbound chat merely
+        // because the provider omitted this field.
+        if (! in_array($direction, ['inbound', 'outbound'], true)) {
+            Log::channel('webhook')->warning('History message skipped because direction is missing or invalid', [
+                'organization_id' => $this->organizationId,
+                'contact_id' => $contact->id,
+                'wam_id' => $wamId,
+                'direction' => $direction,
             ]);
 
             return false;
@@ -1978,9 +2204,9 @@ class ProcessWebhookJob implements ShouldQueue
         }
 
         // AC-1.12.5: Determine type from direction field
-        $chatType = ($direction === 'outbound') ? 'outbound' : 'inbound';
-        $chatStatus = ($direction === 'outbound') ? 'sent' : 'received';
-        $isRead = ($direction === 'outbound') ? 1 : 0;
+        $chatType = $direction === 'outbound' ? 'outbound' : 'inbound';
+        $chatStatus = $direction === 'outbound' ? 'sent' : 'received';
+        $isRead = $direction === 'outbound' ? 1 : 0;
 
         if ($chatType === 'inbound' && (bool) ($contact->is_blocked ?? false)) {
             Log::channel('webhook')->info('History inbound message ignored for blocked contact', [

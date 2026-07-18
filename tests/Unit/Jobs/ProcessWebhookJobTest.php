@@ -249,6 +249,63 @@ describe('AC-1.2.2: Chat Creation', function () {
         expect($chatLog)->not->toBeNull();
         expect($chatLog->contact_id)->toBe($chat->contact_id);
     });
+
+    it('does not create an inbound duplicate when a business-number echo matches an outbound chat', function () {
+        $organization = createOrganizationWithSubscription();
+        $customerPhone = '966555409609';
+        $businessPhone = '966565166676';
+        $messageBody = 'Booking service details';
+        $outboundWamId = 'wamid.HBgMOTY2NTU1NDA5NjA5FQIAERgUQ0UxMDcyNjEwOTY4RjkxOTA1QzMA';
+        $echoWamId = 'wamid.HBgMOTY2NTY1MTY2Njc2FQIAERgUQ0UxMDcyNjEwOTY4RjkxOTA1QzMA';
+
+        $contact = Contact::create([
+            'organization_id' => $organization->id,
+            'phone' => '+'.$customerPhone,
+            'first_name' => 'Customer',
+            'last_name' => 'One',
+            'is_subscribed' => 1,
+            'created_by' => 0,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+
+        Chat::create([
+            'organization_id' => $organization->id,
+            'contact_id' => $contact->id,
+            'wam_id' => $outboundWamId,
+            'type' => 'outbound',
+            'metadata' => json_encode(['type' => 'text', 'text' => ['body' => $messageBody]]),
+            'status' => 'delivered',
+            'is_read' => 1,
+            'created_at' => now(),
+        ]);
+
+        $payload = createMessagePayload('text', $echoWamId, $businessPhone, 'Customer One', ['body' => $messageBody]);
+        $payload['value']['metadata']['display_phone_number'] = '+966 56 516 6676';
+        $payload['value']['contacts'][0]['wa_id'] = $customerPhone;
+
+        (new ProcessWebhookJob($payload, $organization->id, 'messages'))->handle();
+
+        expect(Chat::where('organization_id', $organization->id)->count())->toBe(1);
+        expect(Chat::where('organization_id', $organization->id)->first()->type)->toBe('outbound');
+        expect(Chat::where('organization_id', $organization->id)->where('type', 'inbound')->exists())->toBeFalse();
+    });
+
+    it('stores an unmatched business-number message as outbound, never inbound', function () {
+        $organization = createOrganizationWithSubscription();
+        $customerPhone = '966555409609';
+        $businessPhone = '966565166676';
+        $payload = createMessagePayload('text', 'wamid.business_manual_'.uniqid(), $businessPhone, 'Customer One', ['body' => 'Manual business app message']);
+        $payload['value']['metadata']['display_phone_number'] = '+966 56 516 6676';
+        $payload['value']['contacts'][0]['wa_id'] = $customerPhone;
+
+        (new ProcessWebhookJob($payload, $organization->id, 'messages'))->handle();
+
+        $chat = Chat::where('organization_id', $organization->id)->sole();
+        expect($chat->type)->toBe('outbound');
+        expect($chat->status)->toBe('sent');
+        expect($chat->is_read)->toBe(1);
+    });
 });
 
 describe('AC-1.2.3: DownloadWebhookMediaJob Dispatch', function () {
@@ -3062,7 +3119,7 @@ describe('AC-1.12.5: Inbound and Outbound Direction Handling', function () {
         expect($chat->is_read)->toBe(1);
     });
 
-    it('defaults to inbound when direction is missing', function () {
+    it('skips a history message when direction is missing', function () {
         $organization = createOrganizationWithSyncHistory(true);
         $threadId = '6546546543';
 
@@ -3080,8 +3137,8 @@ describe('AC-1.12.5: Inbound and Outbound Direction Handling', function () {
         $job = new ProcessWebhookJob($payload, $organization->id, 'history');
         $job->handle();
 
-        $chat = Chat::where('organization_id', $organization->id)->first();
-        expect($chat->type)->toBe('inbound'); // Default
+        expect(Chat::where('organization_id', $organization->id)->exists())->toBeFalse();
+        Queue::assertNotPushed(ProcessWebhookNotificationsJob::class);
     });
 });
 
