@@ -659,6 +659,29 @@
         return JSON.parse(JSON.stringify(value));
     };
 
+    // Meta returns button examples as arrays, while the form inputs and their
+    // validation use a single string value.
+    const normalizeButtonExample = (example) => {
+        const value = Array.isArray(example) ? example[0] : example;
+
+        if (value === undefined || value === null) return null;
+        return typeof value === 'string' ? value : String(value);
+    };
+
+    const normalizeCopiedButtons = (buttons) => cloneValue(buttons, [])
+        .map((button) => {
+            if (!button || typeof button !== 'object') return button;
+
+            if (button.type === 'COPY_CODE' || button.type === 'URL') {
+                return {
+                    ...button,
+                    example: normalizeButtonExample(button.example),
+                };
+            }
+
+            return button;
+        });
+
     const normalizeCarouselCards = (metadata) => {
         const metadataComponents = Array.isArray(metadata.components) ? metadata.components : [];
         const carousel = metadataComponents.find(component => (component.type || '').toUpperCase() === 'CAROUSEL');
@@ -729,7 +752,7 @@
         form.value.footer.text = copiedFooter.text || null;
         form.value.footer.code_expiration_minutes = copiedFooter.code_expiration_minutes || 5;
         form.value.code_expiration = Boolean(copiedFooter.code_expiration_minutes);
-        form.value.buttons = cloneValue(copiedButtons.buttons, []);
+        form.value.buttons = normalizeCopiedButtons(copiedButtons.buttons);
 
         if (form.value.category === 'AUTHENTICATION' && form.value.buttons[0]) {
             form.value.authentication_button = {
@@ -1031,11 +1054,21 @@
             return false;
         }
 
-        if (form.value.buttons.some(btn => btn.type === 'COPY_CODE' && (!btn.example || btn.example.trim() === '' || btn.example.trim().length > COPY_CODE_LIMIT))) {
+        if (form.value.buttons.some(btn => {
+            if (btn.type !== 'COPY_CODE') return false;
+
+            const example = normalizeButtonExample(btn.example);
+            return !example || example.trim() === '' || example.trim().length > COPY_CODE_LIMIT;
+        })) {
             return false;
         }
 
-        if (form.value.buttons.some(btn => btn.type === 'URL' && isDynamicUrl(btn.url) && (!btn.example || btn.example.trim() === ''))) {
+        if (form.value.buttons.some(btn => {
+            if (btn.type !== 'URL' || !isDynamicUrl(btn.url)) return false;
+
+            const example = normalizeButtonExample(btn.example);
+            return !example || example.trim() === '';
+        })) {
             return false;
         }
         

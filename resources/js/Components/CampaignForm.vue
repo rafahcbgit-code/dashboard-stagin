@@ -45,6 +45,10 @@ const props = defineProps({
 });
 
 const isLoading = ref(false);
+const isTemplateLoading = ref(false);
+const templateLoadError = ref(null);
+const loadedTemplateUuid = ref(null);
+let templateLoadRequestId = 0;
 const contactGroupOptions = ref([
   { value: "all", label: trans("all contacts") },
 ]);
@@ -84,6 +88,24 @@ const hasButtonVariables = computed(() => {
   return form.buttons.some(
     (button) => button.parameters && button.parameters.length > 0,
   );
+});
+
+// A campaign must never be submitted while its template is still being fetched.
+// The campaign payload contains a snapshot of the template buttons, so submitting
+// during that request would otherwise persist an empty buttons array.
+const isTemplateReady = computed(() => {
+  return Boolean(form.template)
+    && !isTemplateLoading.value
+    && !templateLoadError.value
+    && String(loadedTemplateUuid.value) === String(form.template);
+});
+
+const isSubmitDisabled = computed(() => isLoading.value || !isTemplateReady.value);
+
+const submitLabel = computed(() => {
+  if (isTemplateLoading.value) return trans("Loading template...");
+
+  return props.sendText ? trans(props.sendText) : trans("Send");
 });
 
 const requiredCampaignMessages = computed(() => {
@@ -187,16 +209,36 @@ const form = useForm({
 });
 
 const loadTemplate = async (selectedTemplate = null) => {
+  const requestId = ++templateLoadRequestId;
+
   // Reset carousel state before loading new template
   isCarouselTemplate.value = false;
   carouselCards.value = [];
   carouselMessageBody.value = "";
 
+  // Clear the old snapshot immediately. This prevents buttons from a previously
+  // selected template from being sent while the new template is loading.
+  form.header = { format: null, text: null, parameters: [] };
+  form.body = { text: null, parameters: [] };
+  form.footer = { text: null };
+  form.buttons = [];
+  loadedTemplateUuid.value = null;
+  templateLoadError.value = null;
+  form.clearErrors("template");
+
   const templateUuid = selectedTemplate || form.template;
-  if (!templateUuid) return;
+  if (!templateUuid) {
+    isTemplateLoading.value = false;
+    return;
+  }
+
+  isTemplateLoading.value = true;
 
   try {
     const response = await axios.get("/templates/" + templateUuid);
+    // Ignore a late response if the user selected another template in the meantime.
+    if (requestId !== templateLoadRequestId) return;
+
     if (response) {
       const metadata = JSON.parse(response.data.metadata);
 
@@ -226,6 +268,7 @@ const loadTemplate = async (selectedTemplate = null) => {
         form.footer = { text: null };
         form.buttons = [];
 
+        loadedTemplateUuid.value = templateUuid;
         return; // Skip the standard extraction below
       }
 
@@ -327,9 +370,17 @@ const loadTemplate = async (selectedTemplate = null) => {
       } else {
         form.buttons = [];
       }
+
+      loadedTemplateUuid.value = templateUuid;
     }
   } catch (error) {
-    // console.error('Error fetching data:', error);
+    if (requestId === templateLoadRequestId) {
+      templateLoadError.value = trans("Unable to load the selected template. Please try again.");
+    }
+  } finally {
+    if (requestId === templateLoadRequestId) {
+      isTemplateLoading.value = false;
+    }
   }
 };
 
@@ -471,6 +522,14 @@ const transformOptions = (options) => {
 };
 
 const submitForm = () => {
+  if (!isTemplateReady.value) {
+    form.setError(
+      "template",
+      templateLoadError.value || trans("Please wait for the template to finish loading."),
+    );
+    return;
+  }
+
   isLoading.value = true;
 
   let hasValidationError = false;
@@ -705,17 +764,34 @@ onMounted(() => {
           :required="true"
           :class="'sm:col-span-6'"
         />
-        <FormSelect
-          v-model="form.template"
-          @update:modelValue="loadTemplate"
-          :options="templateOptions"
-          :required="true"
-          :error="form.errors.template"
-          :name="$t('Template')"
-          :class="'sm:col-span-3'"
-          :placeholder="$t('Select template')"
-          :native="isCampaignFlow"
-        />
+        <div class="sm:col-span-3 min-w-0">
+          <FormSelect
+            v-model="form.template"
+            @update:modelValue="loadTemplate"
+            :options="templateOptions"
+            :required="true"
+            :error="form.errors.template"
+            :name="$t('Template')"
+            :placeholder="$t('Select template')"
+            :native="isCampaignFlow"
+          />
+          <!-- Reserve a small status area so loading feedback never moves Send to. -->
+          <div
+            class="mt-1 flex min-h-[1.25rem] items-center gap-2 text-xs"
+            :class="templateLoadError ? 'text-red-600' : 'text-slate-500'"
+          >
+            <span v-if="isTemplateLoading" class="truncate">{{ $t("Loading template...") }}</span>
+            <span v-else-if="templateLoadError" class="truncate">{{ templateLoadError }}</span>
+            <button
+              v-if="templateLoadError && form.template"
+              type="button"
+              class="shrink-0 underline"
+              @click="loadTemplate(form.template)"
+            >
+              {{ $t("Try again") }}
+            </button>
+          </div>
+        </div>
         <FormSelect
           v-if="isCampaignFlow"
           v-model="form.contacts"
@@ -814,10 +890,10 @@ onMounted(() => {
             <button
               type="submit"
               class="rounded-md px-3 py-2 text-sm text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 bg-primary"
-              :disabled="isLoading"
+              :disabled="isSubmitDisabled"
             >
               <span v-if="!isLoading">{{
-                sendText ? $t(sendText) : $t("Send")
+                submitLabel
               }}</span>
               <svg
                 v-else
@@ -1186,10 +1262,10 @@ onMounted(() => {
               <button
                 type="submit"
                 class="rounded-md px-3 py-2 text-sm text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 bg-primary"
-                :disabled="isLoading"
+                :disabled="isSubmitDisabled"
               >
                 <span v-if="!isLoading">{{
-                  sendText ? $t(sendText) : $t("Send")
+                  submitLabel
                 }}</span>
                 <svg
                   v-else

@@ -31,6 +31,12 @@
 
     const form = useForm({'test': null});
 
+    const showScheduleEditor = ref(false);
+    const isUpdatingSchedule = ref(false);
+    const scheduleError = ref(null);
+    const scheduledTime = ref('');
+    const selectedCampaign = ref(null);
+
     const deleteAction = (key) => {
         form.delete('/campaigns/' + key);
     }
@@ -80,6 +86,64 @@
             data: params.value,
         })
     }
+
+    const minimumScheduleTime = () => {
+        const date = new Date();
+        date.setMinutes(date.getMinutes() - date.getTimezoneOffset());
+        return date.toISOString().slice(0, 16);
+    };
+
+    const scheduleTimeForInput = (value) => String(value || '')
+        .replace(' ', 'T')
+        .slice(0, 16);
+
+    const openScheduleEditor = (campaign) => {
+        selectedCampaign.value = campaign;
+        scheduledTime.value = scheduleTimeForInput(campaign.scheduled_at);
+        scheduleError.value = null;
+        showScheduleEditor.value = true;
+    };
+
+    const closeScheduleEditor = () => {
+        if (!isUpdatingSchedule.value) {
+            showScheduleEditor.value = false;
+            scheduleError.value = null;
+            selectedCampaign.value = null;
+        }
+    };
+
+    const updateSchedule = async () => {
+        if (!selectedCampaign.value) return;
+
+        isUpdatingSchedule.value = true;
+        scheduleError.value = null;
+
+        try {
+            const response = await fetch(`/campaigns/${selectedCampaign.value.uuid}/schedule`, {
+                method: 'PUT',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                    'Accept': 'application/json',
+                },
+                body: JSON.stringify({ time: scheduledTime.value }),
+            });
+            const data = await response.json();
+
+            if (!response.ok) {
+                scheduleError.value = data.errors?.time?.[0] || data.error || 'Unable to update the scheduled time.';
+                return;
+            }
+
+            showScheduleEditor.value = false;
+            selectedCampaign.value = null;
+            router.reload({ only: ['rows'] });
+        } catch (error) {
+            scheduleError.value = 'A network error occurred while updating the scheduled time.';
+        } finally {
+            isUpdatingSchedule.value = false;
+        }
+    };
 </script>
 <template>
     <div class="bg-[#f0f2f5] md:bg-white flex items-center md:border md:border-primary md:border-none md:shadow-sm h-12 md:h-10 w-full md:w-80 rounded-xl mb-6 text-sm mt-6">
@@ -163,6 +227,9 @@
                         <template #items>
                             <DropdownItemGroup>
                                 <DropdownItem :href="'/campaigns/' + item.uuid">{{ $t('View') }}</DropdownItem>
+                                <DropdownItem v-if="item.status === 'scheduled'" as="button" @click="openScheduleEditor(item)">
+                                    {{ $t('Edit scheduled time') }}
+                                </DropdownItem>
                                 <DropdownItem v-if="props.role !== 'agent'" as="button" @click="openAlert(item.uuid)">{{ $t('Delete') }}</DropdownItem>
                             </DropdownItemGroup>
                         </template>
@@ -193,5 +260,33 @@
         :label = "$t('Delete row')" 
         :description = "$t('Are you sure you want to delete this campaign? This action will only delete the campaign; sent messages will not be deleted from the chat history.')"
     />
+
+    <div v-if="showScheduleEditor" class="fixed inset-0 z-50 overflow-y-auto" role="dialog" aria-modal="true" aria-labelledby="schedule-editor-title">
+        <div class="flex min-h-screen items-end justify-center px-4 pb-20 pt-4 text-center sm:block sm:p-0">
+            <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="closeScheduleEditor"></div>
+            <span class="hidden sm:inline-block sm:h-screen sm:align-middle">&#8203;</span>
+            <div class="inline-block w-full max-w-lg transform overflow-hidden rounded-lg bg-white px-4 pb-4 pt-5 text-left align-bottom shadow-xl transition-all sm:my-8 sm:w-full sm:align-middle sm:p-6">
+                <h3 id="schedule-editor-title" class="text-lg font-medium leading-6 text-gray-900">{{ $t('Edit scheduled time') }}</h3>
+                <p class="mt-2 text-sm text-gray-500">{{ $t('Choose a new future date and time for this campaign.') }}</p>
+                <label for="scheduled-time" class="mt-4 block text-sm font-medium text-gray-700">{{ $t('Scheduled time') }}</label>
+                <input
+                    id="scheduled-time"
+                    v-model="scheduledTime"
+                    type="datetime-local"
+                    :min="minimumScheduleTime()"
+                    class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-indigo-500 focus:ring-indigo-500"
+                />
+                <p v-if="scheduleError" class="mt-2 text-sm text-red-600">{{ scheduleError }}</p>
+                <div class="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                    <button type="button" @click="closeScheduleEditor" :disabled="isUpdatingSchedule" class="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50">
+                        {{ $t('Cancel') }}
+                    </button>
+                    <button type="button" @click="updateSchedule" :disabled="isUpdatingSchedule || !scheduledTime" class="rounded-md bg-primary px-4 py-2 text-sm font-medium text-white hover:opacity-90 disabled:cursor-not-allowed disabled:opacity-50">
+                        {{ isUpdatingSchedule ? $t('Saving...') : $t('Save') }}
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
 </template>
   
