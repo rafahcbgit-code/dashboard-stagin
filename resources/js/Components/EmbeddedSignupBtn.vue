@@ -95,11 +95,17 @@
             waba_id: sessionWabaId,
         }, {
             preserveState: true,
-            onSuccess: () => {
+            onSuccess: (page) => {
+                isSetupLoading.value = false;
+                const status = page?.props?.flash?.status;
+
+                if (status?.type === 'error') {
+                    hasSubmitted = false;
+                    console.error('[ESU] Backend diagnosis:', status.message);
+                    return;
+                }
+
                 console.log('[ESU] Backend exchange-code: SUCCESS');
-                router.visit('/settings/whatsapp', {
-                    preserveState: false,
-                });
             },
             onError: (errors) => {
                 console.error('[ESU] Backend exchange-code: ERROR', JSON.stringify(errors));

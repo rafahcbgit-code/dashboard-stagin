@@ -62,8 +62,14 @@ function submitSignup() {
     waba_id: sessionWabaId,
   }, {
     preserveState: true,
-    onSuccess: () => {
-      router.visit('/settings/whatsapp', { preserveState: false });
+    onSuccess: (page) => {
+      isSetupLoading.value = false;
+      const status = page?.props?.flash?.status;
+
+      if (status?.type === 'error') {
+        hasSubmitted = false;
+        console.error('[ESU-CO] Backend diagnosis:', status.message);
+      }
     },
     onError: () => {
       isSetupLoading.value = false;
