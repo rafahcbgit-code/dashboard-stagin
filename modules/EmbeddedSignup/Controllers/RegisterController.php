@@ -88,11 +88,53 @@ class RegisterController extends BaseController
         $tokenInspection = $diagnostics->inspectToken($accessToken);
         Log::info('[STEP 2] Token inspection result', $tokenInspection);
 
+        $messagingToken = $accessToken;
+        $managementToken = $accessToken;
+        $managementTokenSource = 'onboarding_token';
+
         if (! $tokenInspection['success']) {
-            return back()->with('status', [
-                'type' => 'error',
-                'message' => $this->diagnosticMessage($tokenInspection),
+            if (! $diagnostics->supportsCentralManagementFallback($tokenInspection)) {
+                return back()->with('status', [
+                    'type' => 'error',
+                    'message' => $this->diagnosticMessage($tokenInspection),
+                ]);
+            }
+
+            Log::warning('[STEP 2F] Onboarding token has messaging access only; evaluating the central management-token fallback.', [
+                'onboarding_token_fingerprint' => $tokenInspection['details']['token_fingerprint'] ?? null,
+                'waba_id_from_ui' => $wabaIdFromUI,
             ]);
+
+            if (empty($wabaIdFromUI)) {
+                return back()->with('status', [
+                    'type' => 'error',
+                    'message' => '[CENTRAL_MANAGEMENT_FALLBACK_WABA_MISSING] '.__('The onboarding token has messaging permission only, and Meta did not return a WABA ID. Repeat onboarding and complete the final Meta step before closing the window.'),
+                ]);
+            }
+
+            $centralManagementToken = (string) $settings->get('whatsapp_access_token', '');
+            if ($centralManagementToken === '' || hash_equals($messagingToken, $centralManagementToken)) {
+                return back()->with('status', [
+                    'type' => 'error',
+                    'message' => '[CENTRAL_MANAGEMENT_TOKEN_MISSING] '.__('The onboarding token has messaging permission only, and no separate central system-user token is configured for WhatsApp management.'),
+                ]);
+            }
+
+            $centralTokenInspection = $diagnostics->inspectToken(
+                $centralManagementToken,
+                ['whatsapp_business_management']
+            );
+            Log::info('[STEP 2F] Central management token inspection result', $centralTokenInspection);
+
+            if (! $centralTokenInspection['success']) {
+                return back()->with('status', [
+                    'type' => 'error',
+                    'message' => '[CENTRAL_MANAGEMENT_TOKEN_INVALID] '.__('The configured central system-user token cannot be used as a management fallback. ').$this->diagnosticMessage($centralTokenInspection),
+                ]);
+            }
+
+            $managementToken = $centralManagementToken;
+            $managementTokenSource = 'central_system_token';
         }
 
         $tokenDetails = $tokenInspection['details'];
@@ -120,7 +162,7 @@ class RegisterController extends BaseController
         // 2b) Prove access to this exact WABA and its message_templates edge. A
         // comparison against the configured central token distinguishes an invalid
         // endpoint/WABA from an asset-task assignment missing on the issued token.
-        $wabaAccessDiagnosis = $diagnostics->diagnoseWabaAccess($accessToken, (string) $wabaId);
+        $wabaAccessDiagnosis = $diagnostics->diagnoseWabaAccess($managementToken, (string) $wabaId);
         Log::info('[STEP 2B] WABA access diagnosis', $wabaAccessDiagnosis);
 
         if (! $wabaAccessDiagnosis['success']) {
@@ -130,14 +172,20 @@ class RegisterController extends BaseController
             ]);
         }
 
+        Log::info('[STEP 2B] Token routing selected', [
+            'management_token_source' => $managementTokenSource,
+            'management_token_fingerprint' => $wabaAccessDiagnosis['details']['token_fingerprint'] ?? null,
+            'messaging_token_fingerprint' => $tokenInspection['details']['token_fingerprint'] ?? null,
+        ]);
+
         // 3) Fetch phone number
         Log::info("[STEP 3] Fetching phone number...");
         if (!empty($phoneNumberIdFromUI)) {
             Log::info("[STEP 3] Using phone_number_id from UI: {$phoneNumberIdFromUI}");
-            $phoneNumberResponse = $this->getPhoneNumberById($accessToken, $phoneNumberIdFromUI);
+            $phoneNumberResponse = $this->getPhoneNumberById($managementToken, $phoneNumberIdFromUI);
         } else {
             Log::info("[STEP 3] No phone_number_id from UI — fetching first number from WABA: {$wabaId}");
-            $phoneNumberResponse = $this->getPhoneNumberId($accessToken, $wabaId);
+            $phoneNumberResponse = $this->getPhoneNumberId($managementToken, $wabaId);
         }
 
         Log::info("[STEP 3] getPhoneNumber success: " . ($phoneNumberResponse->success ? 'true' : 'false'));
@@ -156,7 +204,10 @@ class RegisterController extends BaseController
 
         // 4) Phone number status
         Log::info("[STEP 4] Getting phone number status for: {$phoneNumberId}");
-        $phoneNumberStatusResponse = $this->getPhoneNumberStatus($accessToken, $phoneNumberId);
+        // This read intentionally uses the organization token. It proves that the
+        // messaging-only token is assigned to the exact phone selected in Meta,
+        // so a central management token cannot mask a mismatched asset grant.
+        $phoneNumberStatusResponse = $this->getPhoneNumberStatus($messagingToken, $phoneNumberId);
         Log::info("[STEP 4] success: " . ($phoneNumberStatusResponse->success ? 'true' : 'false'));
 
         if (!$phoneNumberStatusResponse->success) {
@@ -172,7 +223,7 @@ class RegisterController extends BaseController
 
         // 5) Account review status
         Log::info("[STEP 5] Getting account review status for WABA: {$wabaId}");
-        $accountReviewStatusResponse = $this->getAccountReviewStatus($accessToken, $wabaId);
+        $accountReviewStatusResponse = $this->getAccountReviewStatus($managementToken, $wabaId);
         Log::info("[STEP 5] success: " . ($accountReviewStatusResponse->success ? 'true' : 'false'));
 
         if (!$accountReviewStatusResponse->success) {
@@ -194,7 +245,7 @@ class RegisterController extends BaseController
                 Log::info("[STEP 6] Skipping registration — number is already CONNECTED");
             } else {
                 Log::info("[STEP 6] Registering phone number: {$phoneNumberId} (current status: {$currentStatus})");
-                $registerNumber = $this->registerNumber($accessToken, $phoneNumberId);
+                $registerNumber = $this->registerNumber($messagingToken, $phoneNumberId);
                 Log::info("[STEP 6] registerNumber success: " . ($registerNumber->success ? 'true' : 'false'));
 
                 if (!$registerNumber->success) {
@@ -213,7 +264,7 @@ class RegisterController extends BaseController
 
         // 7) Business profile
         Log::info("[STEP 7] Getting business profile for phone: {$phoneNumberId}");
-        $businessProfileResponse = $this->getBusinessProfile($accessToken, $phoneNumberId);
+        $businessProfileResponse = $this->getBusinessProfile($managementToken, $phoneNumberId);
         Log::info("[STEP 7] success: " . ($businessProfileResponse->success ? 'true' : 'false'));
 
         if (!$businessProfileResponse->success) {
@@ -230,7 +281,7 @@ class RegisterController extends BaseController
         $token = $organizationConfig->identifier;
 
         Log::info("[STEP 8] Subscribing app to WABA: {$wabaId}");
-        $subscribeToWabaResponse = $this->subscribeToWaba($accessToken, $wabaId);
+        $subscribeToWabaResponse = $this->subscribeToWaba($managementToken, $wabaId);
         Log::info("[STEP 8] subscribeToWaba success: " . ($subscribeToWabaResponse->success ? 'true' : 'false'));
 
         if (!$subscribeToWabaResponse->success) {
@@ -242,7 +293,7 @@ class RegisterController extends BaseController
         }
 
         Log::info("[STEP 8] Overriding WABA callback URL to: {$callbackUrl}");
-        $overridecallbackResponse = $this->overrideWabaCallbackUrl($accessToken, $wabaId, $callbackUrl, $token);
+        $overridecallbackResponse = $this->overrideWabaCallbackUrl($managementToken, $wabaId, $callbackUrl, $token);
         Log::info("[STEP 8] overrideWabaCallbackUrl success: " . ($overridecallbackResponse->success ? 'true' : 'false'));
 
         if (!$overridecallbackResponse->success) {
@@ -256,27 +307,27 @@ class RegisterController extends BaseController
         // Additional setup for coexistence mode
         if ($isCoexistence) {
             Log::info("[STEP 8-CO] Setting phone-level webhook for coexistence...");
-            $overridePhoneCallbackResponse = $this->overridePhoneCallbackUrl($accessToken, $phoneNumberId, $callbackUrl, $token);
+            $overridePhoneCallbackResponse = $this->overridePhoneCallbackUrl($managementToken, $phoneNumberId, $callbackUrl, $token);
             Log::info("[STEP 8-CO] overridePhoneCallbackUrl success: " . ($overridePhoneCallbackResponse->success ? 'true' : 'false'));
             if (!$overridePhoneCallbackResponse->success) {
                 Log::warning('[STEP 8-CO] overridePhoneCallbackUrl FAILED: ' . json_encode($overridePhoneCallbackResponse->data));
             }
 
             Log::info("[STEP 8-CO] Requesting history sync for WABA: {$wabaId}");
-            $historySync = $this->requestHistorySync($accessToken, $wabaId);
+            $historySync = $this->requestHistorySync($messagingToken, $wabaId);
             Log::info("[STEP 8-CO] requestHistorySync success: " . ($historySync->success ? 'true' : 'false'));
             if (!$historySync->success) {
                 Log::warning('[STEP 8-CO] requestHistorySync FAILED: ' . json_encode($historySync->data));
             }
 
             Log::info("[STEP 8-CO] Syncing SMB contacts...");
-            $this->syncSmbAppData($accessToken, $phoneNumberId, "smb_app_state_sync");
+            $this->syncSmbAppData($messagingToken, $phoneNumberId, "smb_app_state_sync");
 
             Log::info("[STEP 8-CO] Syncing SMB message history...");
-            $this->syncSmbAppData($accessToken, $phoneNumberId, "history");
+            $this->syncSmbAppData($messagingToken, $phoneNumberId, "history");
 
-            $this->verifyPhoneNumberConnection($accessToken, $phoneNumberId);
-            $this->getWebhookSubscriptions($accessToken, $wabaId);
+            $this->verifyPhoneNumberConnection($managementToken, $phoneNumberId);
+            $this->getWebhookSubscriptions($managementToken, $wabaId);
         }
 
         // 9) Persist metadata
@@ -286,7 +337,9 @@ class RegisterController extends BaseController
         $metadataArray['whatsapp']['is_coexistence'] = $isCoexistence ? 1 : 0;
         $metadataArray['whatsapp']['sync_contacts'] = 1;
         $metadataArray['whatsapp']['sync_history'] = 1;
-        $metadataArray['whatsapp']['access_token'] = $accessToken;
+        $metadataArray['whatsapp']['access_token'] = $messagingToken;
+        $metadataArray['whatsapp']['management_token_source'] = $managementTokenSource;
+        $metadataArray['whatsapp']['management_fallback'] = $managementTokenSource === 'central_system_token';
         $metadataArray['whatsapp']['app_id'] = $tokenDetails['app_id'];
         $metadataArray['whatsapp']['waba_id'] = $wabaId;
         $metadataArray['whatsapp']['phone_number_id'] = $phoneNumberId;
@@ -313,7 +366,7 @@ class RegisterController extends BaseController
 
         // 10) Sync templates
         Log::info("[STEP 10] Syncing templates for WABA: {$wabaId}");
-        $templateSync = $this->syncTemplates($accessToken, $wabaId);
+        $templateSync = $this->syncTemplates($managementToken, $wabaId);
         if (! $templateSync->success) {
             Log::error('[STEP 10] Template sync failed after access validation', [
                 'waba_id' => $wabaId,

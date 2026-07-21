@@ -22,8 +22,10 @@ class MetaTokenDiagnosticsService
     /**
      * Inspect the token returned by Facebook Login for Business without exposing it.
      */
-    public function inspectToken(string $token): array
+    public function inspectToken(string $token, ?array $requiredScopes = null): array
     {
+        $requiredScopes = $requiredScopes ?? self::REQUIRED_SCOPES;
+
         if (empty($this->appId) || empty($this->appSecret)) {
             return $this->failure(
                 'APP_CREDENTIALS_MISSING',
@@ -66,7 +68,7 @@ class MetaTokenDiagnosticsService
 
         $data = is_array($payload['data'] ?? null) ? $payload['data'] : [];
         $scopes = $this->normaliseScopes($data);
-        $missingScopes = array_values(array_diff(self::REQUIRED_SCOPES, $scopes));
+        $missingScopes = array_values(array_diff($requiredScopes, $scopes));
         $isValid = (bool) ($data['is_valid'] ?? false);
         $actualAppId = isset($data['app_id']) ? (string) $data['app_id'] : null;
         $appMatches = $actualAppId !== null && hash_equals((string) $this->appId, $actualAppId);
@@ -85,7 +87,7 @@ class MetaTokenDiagnosticsService
                 ?? $data['data_access_expiration_time']
                 ?? null,
             'scopes' => $scopes,
-            'required_scopes' => self::REQUIRED_SCOPES,
+            'required_scopes' => $requiredScopes,
             'missing_scopes' => $missingScopes,
             'granular_scopes' => $this->sanitiseGranularScopes($data['granular_scopes'] ?? []),
         ];
@@ -138,6 +140,25 @@ class MetaTokenDiagnosticsService
         }
 
         return null;
+    }
+
+    /**
+     * A messaging-only onboarding token can be paired with a separately validated
+     * central management token. No other missing-scope combination is safe.
+     */
+    public function supportsCentralManagementFallback(array $inspection): bool
+    {
+        if (($inspection['classification'] ?? null) !== 'TOKEN_MISSING_OAUTH_SCOPES') {
+            return false;
+        }
+
+        $scopes = $inspection['details']['scopes'] ?? [];
+        $missingScopes = $inspection['details']['missing_scopes'] ?? [];
+
+        sort($missingScopes);
+
+        return in_array('whatsapp_business_messaging', $scopes, true)
+            && $missingScopes === ['whatsapp_business_management'];
     }
 
     /**
@@ -196,10 +217,18 @@ class MetaTokenDiagnosticsService
             );
         }
 
+        if (! $checks['subscribed_apps']['success']) {
+            return $this->failure(
+                'WABA_SUBSCRIPTION_ACCESS_DENIED',
+                'The token can read the WABA, phone numbers and templates, but it cannot access subscribed_apps. Full onboarding cannot continue because the app webhook subscription could not be verified.',
+                $details
+            );
+        }
+
         return [
             'success' => true,
             'classification' => 'WABA_ACCESS_CONFIRMED',
-            'message' => 'The issued token can access the selected WABA, its phone numbers and message templates.',
+            'message' => 'The issued token can access the selected WABA, its phone numbers, message templates and app subscriptions.',
             'details' => $details,
         ];
     }
