@@ -762,8 +762,25 @@ class FlowExecutionService
             $header = ['type' => 'text', 'text' => clean($fields['headerText'] ?? '')];
         } elseif (($fields['headerType'] ?? '') !== 'none') {
             $type = $fields['headerType'] ?? '';
+            $media = $fields['headerMedia'] ?? [];
             $header['type'] = $type;
-            $header[$type] = ['link' => $fields['headerMedia']['path'] ?? ''];
+            $header[$type] = ['link' => $media['path'] ?? ''];
+
+            // WhatsApp does not infer a document's original name from its URL.
+            // Without filename it displays the interactive header as "untitled".
+            if ($type === 'document') {
+                $metadata = $media['metadata'] ?? [];
+
+                if (is_string($metadata)) {
+                    $metadata = json_decode($metadata, true) ?: [];
+                }
+
+                $filename = trim((string) ($metadata['name'] ?? $media['name'] ?? ''));
+
+                if ($filename !== '') {
+                    $header[$type]['filename'] = $filename;
+                }
+            }
         }
 
         return $header;
