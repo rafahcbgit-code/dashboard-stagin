@@ -93,7 +93,10 @@ class MetaFlowController extends BaseController
         }
 
         if ($request->expectsJson()) {
-            return response()->json(['message' => __('Flow JSON saved successfully.')]);
+            return response()->json([
+                'message'       => __('Flow JSON saved successfully.'),
+                'asset_content' => $result['asset_content'] ?? $request->asset_content,
+            ]);
         }
 
         return Redirect::back()->with(
