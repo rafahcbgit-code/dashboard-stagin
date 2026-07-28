@@ -141,11 +141,20 @@ class MetaFlowService
             'data'              => json_decode(json_encode($response->data ?? null), true),
         ]);
 
-        if (!isset($response->success) || !$response->success) {
-            $message = $response->message ?? 'Failed to update flow asset on Meta.';
+        $validationErrors = $this->extractAssetValidationErrors($response);
+
+        // The assets endpoint can return HTTP 200 and success=true while the
+        // uploaded Flow JSON still contains validation errors. Such an asset
+        // cannot be published and must not be treated as a successful save.
+        if (!isset($response->success) || !$response->success || !empty($validationErrors)) {
+            $message = !empty($validationErrors)
+                ? $this->formatAssetValidationErrors($validationErrors)
+                : ($response->message ?? 'Failed to update flow asset on Meta.');
+
             Log::warning('MetaFlows: asset upload failed', [
-                'meta_flow_id' => $flow->meta_flow_id,
-                'message'      => $message,
+                'meta_flow_id'      => $flow->meta_flow_id,
+                'message'           => $message,
+                'validation_errors' => $validationErrors,
             ]);
 
             return ['success' => false, 'message' => $message];
@@ -156,7 +165,7 @@ class MetaFlowService
 
         Log::info('MetaFlows: flow asset updated', ['meta_flow_id' => $flow->meta_flow_id]);
 
-        return ['success' => true];
+        return ['success' => true, 'asset_content' => $jsonContent];
     }
 
     private function ensureCompleteActionPayload(string $jsonContent): string
@@ -168,8 +177,9 @@ class MetaFlowService
         }
 
         $inputTypes = ['TextInput', 'TextArea', 'Dropdown', 'CheckboxGroup', 'RadioButtonsGroup', 'DatePicker'];
+        $changed = $this->ensureRequiredIdentifiers($flowJson, $inputTypes);
         $flowDataFields = $this->extractNavigatePayloadFields($flowJson);
-        $changed = $this->ensureNavigateTargetDataModels($flowJson);
+        $changed = $this->ensureNavigateTargetDataModels($flowJson) || $changed;
 
         foreach ($flowJson['screens'] ?? [] as $screenIndex => $screen) {
             foreach ($screen['layout']['children'] ?? [] as $childIndex => $child) {
@@ -182,9 +192,136 @@ class MetaFlowService
             return $jsonContent;
         }
 
-        Log::info('MetaFlows: complete action payload auto-filled from form fields');
+        Log::info('MetaFlows: Flow JSON normalized before asset upload');
 
         return json_encode($flowJson, JSON_PRETTY_PRINT | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    }
+
+    /**
+     * Fill only blank identifiers required by Meta's Flow JSON schema.
+     *
+     * Arabic and other non-Latin labels previously produced an empty value in
+     * the browser's ASCII-only slugifier. Index-based fallbacks are stable,
+     * schema-safe, and leave every existing non-blank identifier untouched.
+     */
+    private function ensureRequiredIdentifiers(array &$flowJson, array $inputTypes): bool
+    {
+        $changed = false;
+        $fieldSequence = 0;
+
+        if (!is_array($flowJson['screens'] ?? null)) {
+            return false;
+        }
+
+        foreach ($flowJson['screens'] as $screenIndex => &$screen) {
+            if (!is_array($screen['layout']['children'] ?? null)) {
+                continue;
+            }
+
+            foreach ($screen['layout']['children'] as $layoutIndex => &$layoutChild) {
+                if (($layoutChild['type'] ?? null) !== 'Form') {
+                    continue;
+                }
+
+                if (trim((string) ($layoutChild['name'] ?? '')) === '') {
+                    $layoutChild['name'] = 'screen_' . ($screenIndex + 1) . '_form_' . ($layoutIndex + 1);
+                    $changed = true;
+                }
+
+                if (!is_array($layoutChild['children'] ?? null)) {
+                    continue;
+                }
+
+                $usedFieldNames = array_values(array_filter(array_map(
+                    static fn ($component): string => is_array($component)
+                        ? trim((string) ($component['name'] ?? ''))
+                        : '',
+                    $layoutChild['children']
+                )));
+
+                foreach ($layoutChild['children'] as &$component) {
+                    if (!in_array($component['type'] ?? '', $inputTypes, true)) {
+                        continue;
+                    }
+
+                    $fieldSequence++;
+                    $name = trim((string) ($component['name'] ?? ''));
+
+                    if ($name === '') {
+                        $component['name'] = $this->nextAvailableIdentifier('field_' . $fieldSequence, $usedFieldNames);
+                        $changed = true;
+                    }
+
+                    $usedFieldNames[] = $component['name'];
+
+                    if (!in_array($component['type'] ?? '', ['Dropdown', 'CheckboxGroup', 'RadioButtonsGroup'], true)) {
+                        continue;
+                    }
+
+                    if (!is_array($component['data-source'] ?? null)) {
+                        continue;
+                    }
+
+                    $usedOptionIds = array_values(array_filter(array_map(
+                        static fn ($option): string => is_array($option)
+                            ? trim((string) ($option['id'] ?? ''))
+                            : '',
+                        $component['data-source']
+                    )));
+
+                    foreach ($component['data-source'] as $optionIndex => &$option) {
+                        $optionId = trim((string) ($option['id'] ?? ''));
+
+                        if ($optionId === '') {
+                            $option['id'] = $this->nextAvailableIdentifier('option_' . ($optionIndex + 1), $usedOptionIds);
+                            $changed = true;
+                        }
+
+                        $usedOptionIds[] = $option['id'];
+                    }
+                    unset($option);
+                }
+                unset($component);
+            }
+            unset($layoutChild);
+        }
+        unset($screen);
+
+        return $changed;
+    }
+
+    private function nextAvailableIdentifier(string $base, array $used): string
+    {
+        $candidate = $base;
+        $suffix = 2;
+
+        while (in_array($candidate, $used, true)) {
+            $candidate = $base . '_' . $suffix;
+            $suffix++;
+        }
+
+        return $candidate;
+    }
+
+    private function extractAssetValidationErrors(\stdClass $response): array
+    {
+        $errors = $response->data->validation_errors ?? [];
+
+        return is_array($errors) ? $errors : [];
+    }
+
+    private function formatAssetValidationErrors(array $errors): string
+    {
+        $messages = [];
+
+        foreach ($errors as $error) {
+            $message = trim((string) ($error->message ?? 'Invalid Flow JSON.'));
+            if ($message !== '' && !in_array($message, $messages, true)) {
+                $messages[] = $message;
+            }
+        }
+
+        return 'Meta rejected the Flow JSON: ' . implode(' ', $messages);
     }
 
     private function ensureCompleteActionPayloadForForm(array &$flowJson, string $formPath, array $inputTypes, array $flowDataFields): bool

@@ -776,7 +776,10 @@
         saving.value = true;
         clearFeedback();
         try {
-            await axios.put(`/automation/meta-flows/${props.flow.uuid}`, { asset_content: assetContent.value });
+            const res = await axios.put(`/automation/meta-flows/${props.flow.uuid}`, { asset_content: assetContent.value });
+            if (res.data.asset_content) {
+                assetContent.value = tryPrettyPrint(res.data.asset_content);
+            }
             showFeedback('Flow saved successfully.', false);
         } catch (err) {
             showFeedback(err.response?.data?.message ?? 'Failed to save flow.', true);
@@ -789,7 +792,10 @@
         acting.value = true;
         clearFeedback();
         try {
-            await axios.put(`/automation/meta-flows/${props.flow.uuid}`, { asset_content: assetContent.value });
+            const saveRes = await axios.put(`/automation/meta-flows/${props.flow.uuid}`, { asset_content: assetContent.value });
+            if (saveRes.data.asset_content) {
+                assetContent.value = tryPrettyPrint(saveRes.data.asset_content);
+            }
             const res = await axios.post(`/automation/meta-flows/${props.flow.uuid}/publish`);
             currentStatus.value = res.data.status ?? 'published';
             showFeedback('Flow published successfully!', false);
