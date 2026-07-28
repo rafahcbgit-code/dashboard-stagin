@@ -5,6 +5,7 @@ namespace App\Http\Middleware;
 use Closure;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
+use App\Services\AdminPermissionService;
 
 class RedirectIfAuthenticated
 {
@@ -31,8 +32,8 @@ class RedirectIfAuthenticated
                 continue;
             }
 
-            if ($user->role == 'admin') {
-                return redirect('/admin/dashboard');
+            if ($guard === 'admin') {
+                return redirect(app(AdminPermissionService::class)->landingPath($user));
             }
 
             return redirect('/dashboard');

@@ -18,6 +18,7 @@
     import { toast } from 'vue3-toastify';
     import 'vue3-toastify/dist/index.css';
     import { useRtl } from "@/Composables/useRtl";
+    import { useAdminPermissions } from "@/Composables/useAdminPermissions";
 
     const { rtlClass, isRtl } = useRtl();
 
@@ -26,7 +27,8 @@
     const user = computed(() => usePage().props.auth.user);
     const config = computed(() => usePage().props.config);
     const currentPageTitle = computed(() => usePage().props.title);
-    const displayCreateBtn = computed(() => usePage().props.allowCreate);
+    const { canCurrent } = useAdminPermissions();
+    const displayCreateBtn = computed(() => usePage().props.allowCreate && canCurrent('create'));
 
     watch(() => [usePage().props.flash, { deep: true }], () => {
         if(usePage().props.flash.status != null){

@@ -16,6 +16,7 @@
     import Dropdown from '@/Components/Dropdown.vue';
     import DropdownItemGroup from '@/Components/DropdownItemGroup.vue';
     import DropdownItem from '@/Components/DropdownItem.vue';
+    import { useAdminPermissions } from '@/Composables/useAdminPermissions';
 
     const props = defineProps({
         rows: {
@@ -28,6 +29,7 @@
     });
 
     const { isOpenAlert, openAlert, confirmAlert } = useAlertModal();
+    const { can } = useAdminPermissions();
 
     const form = useForm({'test': null});
 
@@ -176,7 +178,7 @@
                         <template #items>
                             <DropdownItemGroup>
                                 <DropdownItem :href="'/admin/organizations/' + item.uuid">{{ $t('View/edit') }}</DropdownItem>
-                                <DropdownItem :href="'/admin/organizations/' + item.id + '/login-as'">{{ $t('Login as') }}</DropdownItem>
+                                <DropdownItem v-if="can('organizations', 'login_as')" :href="'/admin/organizations/' + item.id + '/login-as'">{{ $t('Login as') }}</DropdownItem>
                                 <DropdownItem as="button" @click="openAlert(item.uuid)">{{ $t('Delete') }}</DropdownItem>
                             </DropdownItemGroup>
                         </template>

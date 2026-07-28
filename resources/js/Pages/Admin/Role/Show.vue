@@ -14,6 +14,7 @@
                 </div>
             </div>
             <form @submit.prevent="submitForm()" class="bg-white md:border py-5 px-5 rounded-[0.5rem]">
+                <fieldset :disabled="!canManage">
                 <div class="sm:flex border-b py-5">
                     <div class="sm:w-[40%] mb-1">
                         <h1 class="text-sm text-gray-500 tracking-[0px]">{{ $t('Name') }}</h1>
@@ -44,7 +45,8 @@
                                                 :id="'permission['+ item.name + '|' + value + ']'" 
                                                 :name="'permission['+ item.name + '|' + value + ']'"
                                                 type="checkbox" 
-                                                class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"
+                                                :disabled="!canManage"
+                                                class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600 disabled:opacity-50"
                                             >
                                         </div>
                                         <div class="text-sm leading-6">
@@ -57,10 +59,11 @@
                     </div>
                 </div>
                 <div class="py-6">
-                    <button type="submit" class="float-right flex items-center space-x-4 rounded-md bg-black px-3 py-2 text-sm text-white shadow-sm hover:bg-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
+                    <button v-if="canManage" type="submit" class="float-right flex items-center space-x-4 rounded-md bg-black px-3 py-2 text-sm text-white shadow-sm hover:bg-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
                         {{ $t('Save') }}
                     </button>
                 </div>
+                </fieldset>
             </form>
         </div>
     </AppLayout>
@@ -70,8 +73,11 @@
     import { onMounted } from 'vue';
     import { Link, useForm, router } from "@inertiajs/vue3";
     import FormInput from '@/Components/FormInput.vue';
+    import { useAdminPermissions } from '@/Composables/useAdminPermissions';
 
     const props = defineProps({ title: String, role: Object, modules: Object, permissions: Object });
+    const { can } = useAdminPermissions();
+    const canManage = props.role ? can('roles', 'edit') : can('roles', 'create');
 
     const form = useForm({
         name: props.role?.name,

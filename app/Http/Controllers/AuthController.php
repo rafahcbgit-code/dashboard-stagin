@@ -42,6 +42,7 @@ use App\Services\WhatsappService;
 use App\Services\ContactService;
 use App\Services\OtpService;
 use App\Services\SubscriptionService;
+use App\Services\AdminPermissionService;
 
 class AuthController extends BaseController
 {
@@ -127,7 +128,9 @@ class AuthController extends BaseController
             }
         }
 
-        return redirect($user->role == 'user' ? '/dashboard' : 'admin/dashboard');
+        return redirect($user->role == 'user'
+            ? '/dashboard'
+            : app(AdminPermissionService::class)->landingPath($user));
     }
 
     public function handleLogin(StoreUser $request)

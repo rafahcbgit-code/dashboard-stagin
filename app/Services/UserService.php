@@ -49,7 +49,7 @@ class UserService
      */
     public function getByUuid($request, $id = NULL)
     {
-        $roles = Role::all();
+        $roles = $this->role === 'user' ? Role::all() : $this->assignableAdminRoles();
     
         if ($id === null) {
             $result = ['user' => null];
@@ -85,6 +85,9 @@ class UserService
     public function store(Object $request)
     {
         $role = $this->role === 'user' ? 'user' : $this->getRoleNameFromUuid($request->input('role'));
+        if ($this->role !== 'user') {
+            $this->assertCanAssignAdminRole($role);
+        }
 
         return DB::transaction(function () use ($request, $role) {
             $avatarPath = null;
@@ -165,8 +168,15 @@ class UserService
         // Retrieve the user by UUID
         $user = User::where('id', $id)->firstOrFail();
 
+        if ($this->role !== 'user' && strtolower($user->role) === 'admin' && ! $this->permissionService()->isSuperAdmin(auth('admin')->user())) {
+            abort(403, 'The admin user can only be managed by an admin.');
+        }
+
         // Determine the role based on the input conditions
         $role = ($user->role === 'user' || $user->role === 'admin') ? $user->role : $this->getRoleNameFromUuid($request->input('role'));
+        if ($this->role !== 'user') {
+            $this->assertCanAssignAdminRole($role);
+        }
         $avatarPath = null;
 
         // Check if the request has an avatar file
@@ -206,6 +216,10 @@ class UserService
         $user = User::where('id', $id)->first();
 
         if ($user) {
+            if ($this->role !== 'user' && strtolower($user->role) === 'admin' && ! $this->permissionService()->isSuperAdmin(auth('admin')->user())) {
+                abort(403, 'The admin user can only be managed by an admin.');
+            }
+
             // Retrieve the organization ID of the user being deleted
             $organizationId = $user->teams()->value('organization_id');
 
@@ -257,10 +271,57 @@ class UserService
     {
         $role = Role::where('uuid', $uuid)->value('name');
 
-        if (!$role) {
-            return 'user';
-        }
+        abort_unless($role, 422, 'The selected role does not exist.');
 
         return $role;
+    }
+
+    private function assignableAdminRoles()
+    {
+        $roles = Role::query()->whereNull('deleted_at')->get();
+        $actor = auth('admin')->user();
+
+        if ($this->permissionService()->isSuperAdmin($actor)) {
+            return $roles;
+        }
+
+        $actorPermissions = $this->permissionService()->permissionKeys($actor);
+
+        return $roles->filter(function (Role $role) use ($actorPermissions) {
+            if (strtolower($role->name) === 'admin') {
+                return false;
+            }
+
+            $rolePermissions = $role->permissions()->get()
+                ->map(fn ($permission) => $permission->module . '.' . $permission->action)
+                ->all();
+
+            return empty(array_diff($rolePermissions, $actorPermissions));
+        })->values();
+    }
+
+    private function assertCanAssignAdminRole(string $roleName): void
+    {
+        $actor = auth('admin')->user();
+        if ($this->permissionService()->isSuperAdmin($actor)) {
+            return;
+        }
+
+        abort_if(strtolower($roleName) === 'admin', 403, 'The admin role can only be assigned by an admin.');
+        $role = Role::where('name', $roleName)->whereNull('deleted_at')->firstOrFail();
+        $rolePermissions = $role->permissions()->get()
+            ->map(fn ($permission) => $permission->module . '.' . $permission->action)
+            ->all();
+
+        abort_unless(
+            empty(array_diff($rolePermissions, $this->permissionService()->permissionKeys($actor))),
+            403,
+            'You cannot assign a role with permissions you do not have.'
+        );
+    }
+
+    private function permissionService(): AdminPermissionService
+    {
+        return app(AdminPermissionService::class);
     }
 }
