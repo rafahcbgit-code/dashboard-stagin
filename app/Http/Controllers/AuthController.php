@@ -34,7 +34,6 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redirect;
 use Inertia\Inertia;
 use Carbon\Carbon;
-use Session;
 use Str;
 use App\Models\Contact;
 use App\Models\OtpConfig;
@@ -712,13 +711,19 @@ public function resendVerificationCode()
         );
     }
 
-    public function logout()
+    public function logout(Request $request)
     {
+        // A session can contain either guard (or both while switching with
+        // "Login as").  Logging out just the default user guard leaves the
+        // admin guard authenticated until the next request.
         Auth::guard('user')->logout();
+        Auth::guard('admin')->logout();
         Cookie::queue(Cookie::forget('last_organization_id'));
-        Session::flush();
+        $request->session()->forget(['current_organization', 'tfa', 'remember']);
+        $request->session()->invalidate();
+        $request->session()->regenerateToken();
 
-        return redirect('login');
+        return redirect()->route('login');
     }
 
     public function loginAs($id)
