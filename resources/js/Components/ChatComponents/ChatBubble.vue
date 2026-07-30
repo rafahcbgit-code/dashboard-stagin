@@ -274,6 +274,68 @@ const getCarouselCards = () => {
     return metadata.cards || [];
 };
 
+// Keep every usable source for a carousel card. New records can provide a
+// durable media_url, while legacy records may only have local_url or Meta's
+// header_handle. The UI tries the next distinct source if one fails.
+const failedCarouselMediaSources = ref({});
+
+const getCarouselMediaCandidates = (card) => {
+    const candidates = [];
+    const add = (value) => {
+        const values = Array.isArray(value) ? value : [value];
+
+        values.forEach((url) => {
+            if (
+                typeof url === 'string'
+                && (url.startsWith('http://') || url.startsWith('https://') || url.startsWith('/'))
+                && !candidates.includes(url)
+            ) {
+                candidates.push(url);
+            }
+        });
+    };
+
+    add(card?.media_url);
+    add(card?.local_url);
+    add(card?.header_handle);
+
+    return candidates;
+};
+
+const getCarouselMediaUrl = (card, index) => {
+    const failed = failedCarouselMediaSources.value[index] || [];
+    return getCarouselMediaCandidates(card).find((url) => !failed.includes(url)) || null;
+};
+
+const handleCarouselMediaError = (event, card, index, type) => {
+    const currentUrl = getCarouselMediaUrl(card, index);
+    const failed = failedCarouselMediaSources.value[index] || [];
+
+    if (currentUrl && !failed.includes(currentUrl)) {
+        failedCarouselMediaSources.value = {
+            ...failedCarouselMediaSources.value,
+            [index]: [...failed, currentUrl],
+        };
+    }
+
+    const nextUrl = getCarouselMediaUrl(card, index);
+    if (nextUrl) {
+        event.target.src = nextUrl;
+        if (type === 'VIDEO') event.target.load();
+        return;
+    }
+
+    if (type === 'VIDEO') {
+        const placeholder = document.createElement('img');
+        placeholder.src = '/images/video-placeholder.png';
+        placeholder.className = event.target.className;
+        event.target.parentNode.replaceChild(placeholder, event.target);
+        return;
+    }
+
+    event.target.src = '/images/image-placeholder.png';
+};
+
 const interactiveType = computed(() => metadata.value?.interactive?.type || null);
 const interactiveBodyText = computed(() => metadata.value?.interactive?.body?.text || '');
 const interactiveButtons = computed(() => metadata.value?.interactive?.action?.buttons || []);
@@ -895,18 +957,31 @@ const viewContactDetails = async (data) => {
                         <!-- Media -->
                         <div class="bg-gray-200 rounded-t-lg overflow-hidden">
                             <img
-                                v-if="card.header_type === 'IMAGE'"
-                                :src="card.local_url || card.header_handle"
+                                v-if="card.header_type === 'IMAGE' && getCarouselMediaUrl(card, index)"
+                                :src="getCarouselMediaUrl(card, index)"
                                 class="w-full h-40 object-cover"
-                                @error="$event.target.src = '/images/image-placeholder.png'"
+                                @error="handleCarouselMediaError($event, card, index, 'IMAGE')"
                             />
                             <video
-                                v-else-if="card.header_type === 'VIDEO'"
-                                :src="card.local_url || card.header_handle"
+                                v-else-if="card.header_type === 'VIDEO' && getCarouselMediaUrl(card, index)"
+                                :src="getCarouselMediaUrl(card, index)"
                                 class="w-full h-40 object-cover"
                                 controls
+                                @error="handleCarouselMediaError($event, card, index, 'VIDEO')"
                             >
                             </video>
+                            <img
+                                v-else-if="card.header_type === 'IMAGE'"
+                                :src="'/images/image-placeholder.png'"
+                                class="w-full h-40 object-cover"
+                                alt=""
+                            />
+                            <img
+                                v-else
+                                :src="'/images/video-placeholder.png'"
+                                class="w-full h-40 object-cover"
+                                alt=""
+                            />
                         </div>
                         
                         <!-- Body text -->
