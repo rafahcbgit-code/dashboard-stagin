@@ -580,10 +580,29 @@ trait TemplateTrait
 
             // Add header if exists
             $headerType = strtolower($card['header_type'] ?? 'image');
-            $headerHandle = $card['local_url'] ?? null;
+            $headerHandle = null;
+            $localPath = $card['local_path'] ?? null;
+            $localUrl = $card['local_url'] ?? null;
 
-            if (!$headerHandle && !empty($card['local_path'] ?? null)) {
-                $headerHandle = rtrim(config('app.url'), '/') . '/media/' . ltrim($card['local_path'], '/');
+            // A local carousel copy is optional. Deployments may not share
+            // storage/app between servers, so never send a stale local URL
+            // when its file is missing; fall back to Meta's template media.
+            if ($localPath && \Storage::disk('local')->exists($localPath)) {
+                $headerHandle = rtrim(config('app.url'), '/') . '/media/' . ltrim($localPath, '/');
+            } elseif ($localUrl) {
+                $parsedLocalUrl = parse_url($localUrl);
+                $localUrlHost = strtolower((string) ($parsedLocalUrl['host'] ?? ''));
+                $appHost = strtolower((string) parse_url(config('app.url'), PHP_URL_HOST));
+                $urlPath = rawurldecode($parsedLocalUrl['path'] ?? '');
+
+                if ($localUrlHost && $localUrlHost !== $appHost) {
+                    $headerHandle = $localUrl;
+                } elseif (str_starts_with($urlPath, '/media/')) {
+                    $relativePath = ltrim(substr($urlPath, strlen('/media/')), '/');
+                    if (\Storage::disk('local')->exists($relativePath)) {
+                        $headerHandle = $localUrl;
+                    }
+                }
             }
 
             $headerHandle = $headerHandle ?? $card['header_handle'] ?? null;

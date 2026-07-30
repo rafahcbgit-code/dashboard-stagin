@@ -4,7 +4,7 @@
         Renders a WhatsApp-style carousel preview in the right panel.
         Receives the cards array and renders each card as a scrollable bubble.
         This component is used on BOTH the Add page and the Edit page.
-        
+
         On Add page: shows placeholders (no media uploaded yet)
         On Edit page: shows actual media from local_url or header_handle
     -->
@@ -23,19 +23,19 @@
                         v-if="card.header_type === 'IMAGE'"
                         :src="getMediaUrl(card, index)"
                         class="w-full h-auto object-cover max-h-64"
-                        @error="handleImageError"
+                        @error="handleImageError($event, index)"
                     />
                     <video
                         v-else-if="card.header_type === 'VIDEO'"
                         :src="getMediaUrl(card, index)"
                         class="w-full h-auto object-cover max-h-64"
                         controls
-                        @error="handleVideoError"
+                        @error="handleVideoError($event, index)"
                     >
                         {{ $t('Your browser does not support the video tag.') }}
                     </video>
                 </template>
-                
+
                 <!-- Fallback placeholders -->
                 <template v-else>
                     <img
@@ -89,13 +89,13 @@ import { computed, onBeforeUnmount } from 'vue';
 const props = defineProps({
     /**
      * Array of card objects.
-     * Each card: { 
-     *   header_type: 'IMAGE'|'VIDEO', 
+     * Each card: {
+     *   header_type: 'IMAGE'|'VIDEO',
      *   header_handle: 'CDN_URL' (on edit),
      *   local_url: 'LOCAL_URL' (on edit),
      *   file: File (on add),
-     *   body_text: string, 
-     *   buttons: [] 
+     *   body_text: string,
+     *   buttons: []
      * }
      */
     cards: {
@@ -150,7 +150,28 @@ function getMediaUrl(card, index) {
 /**
  * Handle image load errors - fallback to placeholder
  */
-function handleImageError(event) {
+function getRemoteFallback(card) {
+    const fallback = Array.isArray(card.header_handle)
+        ? card.header_handle[0]
+        : card.header_handle;
+
+    return typeof fallback === 'string' && fallback.startsWith('http')
+        ? fallback
+        : null;
+}
+
+function handleImageError(event, index) {
+    const card = props.cards[index];
+    const fallback = getRemoteFallback(card || {});
+
+    // A local copy may not have been deployed to production. Try Meta's
+    // template media before showing the placeholder.
+    if (fallback && event.target.dataset.carouselFallback !== '1') {
+        event.target.dataset.carouselFallback = '1';
+        event.target.src = fallback;
+        return;
+    }
+
     event.target.src = '/images/image-placeholder.png';
     console.warn('Failed to load carousel image');
 }
@@ -158,11 +179,20 @@ function handleImageError(event) {
 /**
  * Handle video load errors - fallback to placeholder
  */
-function handleVideoError(event) {
+function handleVideoError(event, index) {
+    const card = props.cards[index];
+    const fallback = getRemoteFallback(card || {});
+
+    if (fallback && event.target.dataset.carouselFallback !== '1') {
+        event.target.dataset.carouselFallback = '1';
+        event.target.src = fallback;
+        return;
+    }
+
     const placeholder = document.createElement('img');
     placeholder.src = '/images/video-placeholder.png';
     placeholder.className = event.target.className;
     event.target.parentNode.replaceChild(placeholder, event.target);
     console.warn('Failed to load carousel video');
 }
-</script>
+</script>
