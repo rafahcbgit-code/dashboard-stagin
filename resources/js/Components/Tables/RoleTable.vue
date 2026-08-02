@@ -2,6 +2,7 @@
     import { ref } from 'vue';
     import debounce from 'lodash/debounce';
     import { router } from '@inertiajs/vue3';
+    import { useAdminPermissions } from '@/Composables/useAdminPermissions';
     import { useForm } from "@inertiajs/vue3";
     import AlertModal from '@/Components/AlertModal.vue';
     import { useAlertModal } from '@/Composables/useAlertModal';
@@ -26,6 +27,8 @@
             type: Object
         }
     });
+
+    const { can } = useAdminPermissions();
 
     const { isOpenAlert, openAlert, confirmAlert } = useAlertModal();
 
@@ -103,8 +106,8 @@
                         </button>
                         <template #items>
                             <DropdownItemGroup>
-                                <DropdownItem :href="'/admin/team/roles/' + item.uuid">{{ $t('View/edit') }}</DropdownItem>
-                                <DropdownItem as="button" @click="openAlert(item.uuid)">{{ $t('Delete') }}</DropdownItem>
+                                <DropdownItem v-if="can('roles', 'view') || can('roles', 'edit')" :href="'/admin/team/roles/' + item.uuid">{{ $t('View/edit') }}</DropdownItem>
+                                <DropdownItem v-if="can('roles', 'delete')" as="button" @click="openAlert(item.uuid)">{{ $t('Delete') }}</DropdownItem>
                             </DropdownItemGroup>
                         </template>
                     </Dropdown>
@@ -121,4 +124,3 @@
         :description = "$t('Are you sure you want to delete this row? This action can not be undone')"
     />
 </template>
-  

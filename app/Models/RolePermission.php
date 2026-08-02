@@ -11,4 +11,8 @@ class RolePermission extends Model {
     protected $guarded = [];
     public $timestamps = false;
 
+    public function role()
+    {
+        return $this->belongsTo(Role::class);
+    }
 }

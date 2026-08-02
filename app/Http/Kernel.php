@@ -79,5 +79,6 @@ class Kernel extends HttpKernel
         'check.organization_selected' => \App\Http\Middleware\CheckSelectedOrganization::class,
         'sanctum.auth' => \App\Http\Middleware\EnsureSanctumAuth::class,
         'isTrial' => \App\Http\Middleware\IsTrial::class,
+        'admin.permission' => \App\Http\Middleware\AuthorizeAdminPermission::class,
     ];
 }

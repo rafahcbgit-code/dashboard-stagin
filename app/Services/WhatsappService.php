@@ -3215,6 +3215,7 @@ class WhatsappService
         foreach ($carouselCards as $card) {
             $cardData = [
                 'header_type'   => $card['header_type'] ?? 'IMAGE',
+                'media_url'     => $card['media_url'] ?? null,
                 'header_handle' => $card['header_handle'] ?? null,
                 'local_url'     => $card['local_url'] ?? null,
                 'body_text'     => $card['body_text'] ?? '',

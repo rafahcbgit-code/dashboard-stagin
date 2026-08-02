@@ -182,11 +182,14 @@ class MediaUploadService
     public function saveLocally(UploadedFile $file, string $identifier): ?array
     {
         try {
-            $originalName = pathinfo($file->getClientOriginalName(), PATHINFO_FILENAME);
             $extension = $file->getClientOriginalExtension();
-            $safeBaseName = preg_replace('/[^A-Za-z0-9._-]/', '_', $originalName ?: 'media');
             $safeIdentifier = preg_replace('/[^A-Za-z0-9._-]/', '_', $identifier ?: 'carousel_card');
-            $fileName = $safeIdentifier . '_' . uniqid() . '_' . $safeBaseName;
+            // Do not include the original filename here. When a template is
+            // copied, the original filename can already contain a generated
+            // carousel prefix; including it again makes the path grow on
+            // every copy and eventually points to a file that does not exist.
+            $safeIdentifier = substr($safeIdentifier ?: 'carousel_card', 0, 80);
+            $fileName = $safeIdentifier . '_' . bin2hex(random_bytes(8));
 
             if ($extension) {
                 $fileName .= '.' . strtolower($extension);

@@ -16,6 +16,7 @@
                 </div>
             </div>
             <form @submit.prevent="submitForm()" class="bg-white md:border py-5 px-5 rounded-[0.5rem]">
+                <fieldset :disabled="!canManage">
                 <div class="sm:flex border-b py-5">
                     <div class="hidden sm:block sm:w-[40%] mb-1">
                         <h1 class="text-sm text-gray-500 tracking-[0px]">{{ $t('Personally identifiable information') }}</h1>
@@ -27,7 +28,7 @@
                             <FormInput v-model="form.last_name" :name="$t('Last name')" :error="form.errors.last_name" :type="'text'" :class="'sm:col-span-3'"/>
                             <FormInput v-model="form.email" :name="$t('Email')" :error="form.errors.email" :type="'text'" :class="'sm:col-span-3'"/>
                             <FormPhoneInput v-model="form.phone" :name="$t('Phone')" :error="form.errors.phone" :type="'text'" :class="'sm:col-span-3'"/>
-                            <FormSelect v-model="form.role" :name="$t('Role')" :error="form.errors.role" :options="roleOptions()" :type="'text'" :class="'sm:col-span-6'"/>
+                            <FormSelect v-model="form.role" :disabled="!canManage" :name="$t('Role')" :error="form.errors.role" :options="roleOptions()" :type="'text'" :class="'sm:col-span-6'"/>
                             <FormInput v-if="!props.user" v-model="form.password" :name="$t('Password')" :error="form.errors.password" :type="'password'" :class="'sm:col-span-3'"/>
                             <FormInput v-if="!props.user" v-model="form.password_confirmation" :name="$t('Confirm password')" :error="form.errors.password_confirmation" :type="'password'" :class="'sm:col-span-3'"/>
                         </div>
@@ -48,10 +49,11 @@
                     </div>
                 </div>
                 <div class="py-6">
-                    <button type="submit" class="float-right flex items-center space-x-4 rounded-md bg-black px-3 py-2 text-sm text-white shadow-sm hover:bg-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
+                    <button v-if="canManage" type="submit" class="float-right flex items-center space-x-4 rounded-md bg-black px-3 py-2 text-sm text-white shadow-sm hover:bg-slate-600 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">
                         {{ $t('Save') }}
                     </button>
                 </div>
+                </fieldset>
             </form>
         </div>
     </AppLayout>
@@ -64,8 +66,11 @@
     import FormInput from '@/Components/FormInput.vue';
     import FormPhoneInput from '@/Components/FormPhoneInput.vue';
     import FormSelect from '@/Components/FormSelect.vue';
+    import { useAdminPermissions } from '@/Composables/useAdminPermissions';
 
     const props = defineProps({ title: String, user: Object, roles: Object });
+    const { can } = useAdminPermissions();
+    const canManage = props.user ? can('team', 'edit') : can('team', 'create');
     const fileUrl = ref(null);
 
     const getAddressDetail = (value, key) => {

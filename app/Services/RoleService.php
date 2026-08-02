@@ -3,149 +3,156 @@
 namespace App\Services;
 
 use App\Http\Resources\RoleResource;
-use App\Models\Module;
 use App\Models\Role;
-use App\Models\RolePermission;
-use DB;
+use App\Models\User;
+use Illuminate\Support\Facades\DB;
 
 class RoleService
 {
-    /**
-     * Get all roles based on the provided request filters.
-     *
-     * @param Request $request
-     * @return mixed
-     */
     public function get(object $request)
     {
-        $roles = (new Role)->listAll($request->query('search'));
+        $roles = Role::query()
+            ->whereNull('deleted_at')
+            ->when(! $this->isSuperAdmin(), fn ($query) => $query->where('name', '!=', 'admin'))
+            ->where('name', 'like', '%' . $request->query('search') . '%')
+            ->latest()
+            ->paginate(10);
 
         return RoleResource::collection($roles);
     }
 
-    /**
-     * Retrieve a role by its UUID.
-     *
-     * @param string $uuid
-     * @return \App\Models\Role
-     *
-     * @throws \Illuminate\Database\Eloquent\ModelNotFoundException
-     */
     public function getByUuid($uuid)
     {
         $role = $uuid ? Role::where('uuid', $uuid)->first() : null;
+        $this->assertManageable($role);
 
-        $modules = Module::all();
-        $permissions = [];
-
-        if ($role) {
-            $permissions = RolePermission::where('role_id', $role->id)->get();
-        }
-
-        return ['role' => $role, 'modules' => $modules, 'permissions' => $permissions];
+        return [
+            'role' => $role,
+            // The form must use the same source of truth as syncPermissions().
+            // Reading every historical row from the modules table can expose
+            // actions which are no longer valid in the RBAC catalogue and
+            // makes a subsequent save fail with "Invalid permission.".
+            'modules' => collect(config('admin_permissions.modules', []))
+                ->map(fn (array $actions, string $name) => (object) [
+                    'name' => $name,
+                    'actions' => implode(',', $actions),
+                ])
+                ->values(),
+            'permissions' => $role ? $role->permissions()->get() : [],
+        ];
     }
 
-    /**
-     * Store a new role based on the provided request data.
-     *
-     * @param Request $request
-     */
-    public function store(Object $request)
+    public function store(object $request)
     {
         return DB::transaction(function () use ($request) {
-            $newRole = Role::create([
-                'name' => $request->input('name'),
-            ]);
+            $this->assertRoleNameManageable($request->input('name'));
+            $role = Role::create(['name' => $request->input('name')]);
+            $this->syncPermissions($role, $request->input('permissions', []));
 
-            // Extract and store permissions in the form permissions[module|action]
-            $permissions = $request->input('permissions', []);
-
-            $test = [];
-            foreach ($permissions as $module => $actions) {
-                // Loop through actions for each module
-                foreach ($actions as $action => $value) {
-                    // If the value is true, store the role permission in the database
-                    if ($value) {
-                        RolePermission::create([
-                            'role_id' => $newRole->id,
-                            'module' => $module,
-                            'action' => $action,
-                        ]);
-                    }
-                }
-            }
-
-            return $newRole;
+            return $role;
         });
     }
 
-    /**
-     * Update an existing role and its associated permissions.
-     *
-     * @param Request $request
-     * @param string $uuid
-     * @return \App\Models\Role
-     */
-    public function update($request, $uuid)
+    public function update(object $request, string $uuid)
     {
         return DB::transaction(function () use ($request, $uuid) {
             $role = Role::where('uuid', $uuid)->firstOrFail();
+            $this->assertManageable($role);
+            $this->assertRoleNameManageable($request->input('name'));
 
-            $role->update([
-                'name' => $request->input('name'),
-            ]);
-
-            // Extract and store permissions in the form permissions[module|action]
-            $permissions = $request->input('permissions', []);
-
-            // Delete existing permissions
-            RolePermission::where('role_id', $role->id)->delete();
-
-            $test = [];
-            foreach ($permissions as $module => $actions) {
-                // Loop through actions for each module
-                foreach ($actions as $action => $value) {
-                    // If the value is true, store the role permission in the database
-                    if ($value) {
-                        RolePermission::create([
-                            'role_id' => $role->id,
-                            'module' => $module,
-                            'action' => $action,
-                        ]);
-                    }
-                }
-            }
-
+            $role->update(['name' => $request->input('name')]);
+            $this->syncPermissions($role, $request->input('permissions', []));
             $role->touch();
 
             return $role;
         });
     }
 
-    /**
-     * Remove the specified role and its associated permissions.
-     *
-     * @param string $uuid
-     * @return \Illuminate\Http\Response
-     * @throws \Exception
-     */
-    public function destroy($request, $uuid)
+    public function destroy(object $request, string $uuid)
     {
-        $role = Role::where('uuid', $uuid)->firstOrFail();
-        $usersToUpdate = User::where('role', $role->name)->get();
-        $newRole = Role::where('uuid', $request->input('new_role'))->firstOrFail();
+        return DB::transaction(function () use ($request, $uuid) {
+            $role = Role::where('uuid', $uuid)->firstOrFail();
+            $replacement = Role::where('uuid', $request->input('new_role'))->firstOrFail();
+            $this->assertManageable($role);
+            $this->assertManageable($replacement);
+            $this->assertAssignable($replacement);
 
-        // Update the role for each user
-        foreach ($usersToUpdate as $user) {
-            $user->update([
-                'role' => $newRole->name, // Specify the new role here
-            ]);
+            User::where('role', $role->name)->update(['role' => $replacement->name]);
+            $role->delete();
+
+            return response()->json(['message' => 'Role and associated permissions deleted successfully']);
+        });
+    }
+
+    private function syncPermissions(Role $role, array $permissions): void
+    {
+        $selected = [];
+        $catalogue = config('admin_permissions.modules', []);
+
+        foreach ($permissions as $module => $actions) {
+            foreach ((array) $actions as $action => $value) {
+                if (! $value) {
+                    continue;
+                }
+
+                abort_unless(isset($catalogue[$module]) && in_array($action, $catalogue[$module], true), 422, 'Invalid permission.');
+                $selected[] = $module . '.' . $action;
+            }
         }
 
-        // Delete the role and its associated permissions
-        $role->delete();
+        if (! $this->isSuperAdmin()) {
+            abort_unless(
+                empty(array_diff($selected, $this->permissions()->permissionKeys(auth('admin')->user()))),
+                403,
+                'You cannot grant permissions you do not have.'
+            );
+        }
 
-        // Return a response indicating successful deletion
-        return response()->json(['message' => 'Role and associated permissions deleted successfully']);
+        $role->permissions()->delete();
+        foreach ($selected as $permission) {
+            [$module, $action] = explode('.', $permission, 2);
+            $role->permissions()->create(compact('module', 'action'));
+        }
+    }
+
+    private function assertManageable(?Role $role): void
+    {
+        if ($role && strtolower($role->name) === 'admin' && ! $this->isSuperAdmin()) {
+            abort(403, 'The admin role can only be managed by an admin.');
+        }
+    }
+
+    private function assertRoleNameManageable(?string $name): void
+    {
+        if (strtolower((string) $name) === 'admin' && ! $this->isSuperAdmin()) {
+            abort(403, 'The admin role can only be managed by an admin.');
+        }
+    }
+
+    private function assertAssignable(Role $role): void
+    {
+        if ($this->isSuperAdmin()) {
+            return;
+        }
+
+        $rolePermissions = $role->permissions()->get()
+            ->map(fn ($permission) => $permission->module . '.' . $permission->action)
+            ->all();
+
+        abort_unless(
+            empty(array_diff($rolePermissions, $this->permissions()->permissionKeys(auth('admin')->user()))),
+            403,
+            'You cannot assign a role with permissions you do not have.'
+        );
+    }
+
+    private function isSuperAdmin(): bool
+    {
+        return $this->permissions()->isSuperAdmin(auth('admin')->user());
+    }
+
+    private function permissions(): AdminPermissionService
+    {
+        return app(AdminPermissionService::class);
     }
 }

@@ -90,6 +90,18 @@ class TemplateService
     {
         if ($request->expectsJson()) {
             $row = Template::where('uuid', $uuid)->where('deleted_at', null)->first();
+
+            if ($row && $row->metadata) {
+                $metadata = json_decode($row->metadata, true);
+                if (is_array($metadata)) {
+                    $metadata = $this->removeUnavailableCarouselLocalUrls($metadata);
+                    $row->metadata = json_encode(
+                        $metadata,
+                        JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+                    );
+                }
+            }
+
             return response()->json($row);
         }
 
@@ -97,6 +109,34 @@ class TemplateService
         $data['template'] = Template::where('uuid', $uuid)->first();
         $data['title'] = 'Edit Template';
         return Inertia::render('User/Templates/Edit', $data);
+    }
+
+    /**
+     * Local carousel files are not guaranteed to be present after a deploy
+     * or when storage is not shared between environments. Do not expose a
+     * dead local URL to the campaign preview; the frontend can then use the
+     * durable Meta media handle instead.
+     */
+    private function removeUnavailableCarouselLocalUrls(array $metadata): array
+    {
+        foreach ($metadata['carousel_cards'] ?? [] as $index => $card) {
+            $localUrl = $card['local_url'] ?? null;
+            if (!$localUrl || !is_string($localUrl)) {
+                continue;
+            }
+
+            $urlPath = rawurldecode(parse_url($localUrl, PHP_URL_PATH) ?? '');
+            if (!str_starts_with($urlPath, '/media/')) {
+                continue;
+            }
+
+            $relativePath = ltrim(substr($urlPath, strlen('/media/')), '/');
+            if (!Storage::disk('local')->exists($relativePath)) {
+                $metadata['carousel_cards'][$index]['local_url'] = null;
+            }
+        }
+
+        return $metadata;
     }
 
     public function createTemplate(Request $request)

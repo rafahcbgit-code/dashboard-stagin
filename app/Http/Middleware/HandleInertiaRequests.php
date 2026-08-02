@@ -10,6 +10,7 @@ use App\Models\Setting;
 use App\Models\Team;
 use App\Models\User;
 use App\Helpers\CustomHelper;
+use App\Services\AdminPermissionService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\App;
 use Illuminate\Support\Facades\Cache;
@@ -49,7 +50,7 @@ class HandleInertiaRequests extends Middleware
     {
         $organization = [];
         $organizations = [];
-        $user = $request->user();
+        $user = $request->user('admin') ?? $request->user('user') ?? $request->user();
         $language = session('locale') ?? 'en';
         $unreadMessages = 0;
         $secret = '';
@@ -138,6 +139,10 @@ class HandleInertiaRequests extends Middleware
             'config' => $config,
             'auth' => [
                 'user' => $user ?: null,
+                'adminPermissions' => fn () => $user && $user->role !== 'user'
+                    ? app(AdminPermissionService::class)->permissionKeys($user)
+                    : [],
+                'isSuperAdmin' => fn () => app(AdminPermissionService::class)->isSuperAdmin($user),
             ],
             'organization' => $organization,
             'organizations' => $organizations,

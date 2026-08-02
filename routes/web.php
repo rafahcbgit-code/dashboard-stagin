@@ -490,7 +490,7 @@ Route::middleware(['auth:user'])->group(function () {
 });
 
 //Admin Panel Routes
-Route::prefix('admin')->middleware(['auth:admin'])->group(function () {
+Route::prefix('admin')->middleware(['auth:admin', 'admin.permission'])->group(function () {
     Route::get('/dashboard', [App\Http\Controllers\Admin\DashboardController::class, 'index']);
     Route::resource('users', App\Http\Controllers\Admin\UserController::class);
     Route::post('/organizations/sync-whatsapp-number-statuses', [App\Http\Controllers\Admin\OrganizationController::class, 'syncWhatsappNumberStatuses'])
