@@ -66,6 +66,11 @@ const showStatusFilter = ref(false);
 const tempSelectedLabels = ref([]);
 const tempSelectedTeamMember = ref(null);
 const tempSelectedStatus = ref(props.status || 'all');
+const tempAwaitingReply = ref(
+    props.filters.awaiting_reply === true
+    || props.filters.awaiting_reply === 1
+    || props.filters.awaiting_reply === '1'
+);
 const hasUnappliedFilters = ref(false);
 
 const emit = defineEmits(['view']);
@@ -189,6 +194,7 @@ const params = ref({
     labels: props.filters.labels,
     assigned_to: props.filters.assigned_to,
     status: props.status,
+    awaiting_reply: props.filters.awaiting_reply,
 });
 
 const search = debounce(() => {
@@ -205,6 +211,7 @@ const runSearch = () => {
     filterStore.labels = params.value.labels;
     filterStore.assigned_to = params.value.assigned_to;
     filterStore.status = params.value.status;
+    filterStore.awaiting_reply = params.value.awaiting_reply;
 
     router.visit(url, {
         method: 'get',
@@ -288,6 +295,11 @@ const selectStatus = (status) => {
     hasUnappliedFilters.value = true;
 };
 
+const toggleAwaitingReply = () => {
+    tempAwaitingReply.value = !tempAwaitingReply.value;
+    hasUnappliedFilters.value = true;
+};
+
 const getStatusLabel = (status) => {
     const statusLabels = {
         'all': 'All',
@@ -309,6 +321,7 @@ const applyFilters = () => {
     params.value.labels = selectedLabels.value.length > 0 ? selectedLabels.value.join(',') : null;
     params.value.assigned_to = tempSelectedTeamMember.value;
     params.value.status = tempSelectedStatus.value;
+    params.value.awaiting_reply = tempAwaitingReply.value ? '1' : null;
 
     hasUnappliedFilters.value = false;
     runSearch();
@@ -318,6 +331,7 @@ const resetFilters = () => {
     tempSelectedLabels.value = [];
     tempSelectedTeamMember.value = null;
     tempSelectedStatus.value = 'all';
+    tempAwaitingReply.value = false;
 
     selectedLabels.value = [];
     selectedTeamMember.value = null;
@@ -325,6 +339,7 @@ const resetFilters = () => {
     params.value.labels = null;
     params.value.assigned_to = null;
     params.value.status = 'all';
+    params.value.awaiting_reply = null;
 
     hasUnappliedFilters.value = false;
     runSearch();
@@ -375,6 +390,7 @@ onMounted(() => {
     filterStore.labels = params.value.labels;
     filterStore.assigned_to = params.value.assigned_to;
     filterStore.status = params.value.status;
+    filterStore.awaiting_reply = params.value.awaiting_reply;
 
     // Add click outside listener
     document.addEventListener('click', handleClickOutside);
@@ -417,6 +433,10 @@ const buildChatUrl = (contactUuid) => {
 
     if (props.status) {
         queryParams.append('status', props.status);
+    }
+
+    if (params.value.awaiting_reply) {
+        queryParams.append('awaiting_reply', '1');
     }
 
     return `/chats/${contactUuid}?${queryParams.toString()}`;
@@ -582,6 +602,14 @@ const buildChatUrl = (contactUuid) => {
                                     class="px-3 py-2 text-sm cursor-pointer rounded">
                                     {{ $t('Unread Only') }}
                                 </div>
+                                <div @click="toggleAwaitingReply"
+                                    :class="tempAwaitingReply ? 'bg-purple-50 text-purple-700' : 'hover:bg-gray-50'"
+                                    class="px-3 py-2 text-sm cursor-pointer rounded flex items-center justify-between">
+                                    <span>{{ $t('Awaiting Reply') }}</span>
+                                    <svg v-if="tempAwaitingReply" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
+                                        <path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19L21 7l-1.41-1.41L9 16.17z" />
+                                    </svg>
+                                </div>
                             </div>
                         </div>
                     </div>
@@ -642,7 +670,7 @@ const buildChatUrl = (contactUuid) => {
             </div>
 
             <!-- Action Buttons -->
-            <div v-if="hasUnappliedFilters || tempSelectedLabels.length > 0 || tempSelectedTeamMember || tempSelectedStatus !== 'all'"
+            <div v-if="hasUnappliedFilters || tempSelectedLabels.length > 0 || tempSelectedTeamMember || tempSelectedStatus !== 'all' || tempAwaitingReply"
                 class="flex items-center gap-2">
                 <button @click="applyFilters" :disabled="!hasUnappliedFilters"
                     :class="hasUnappliedFilters ? 'border border-blue-500 text-blue-600 hover:bg-blue-50' : 'border border-gray-300 text-gray-400 cursor-not-allowed'"
@@ -654,7 +682,7 @@ const buildChatUrl = (contactUuid) => {
                 </button>
 
                 <button @click="resetFilters"
-                    v-if="tempSelectedLabels.length > 0 || tempSelectedTeamMember || tempSelectedStatus !== 'all'"
+                    v-if="tempSelectedLabels.length > 0 || tempSelectedTeamMember || tempSelectedStatus !== 'all' || tempAwaitingReply"
                     class="flex items-center gap-2 px-4 py-2 border border-red-500 text-red-600 hover:bg-red-50 rounded-md text-sm font-medium transition-colors">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
                         <path fill="currentColor"

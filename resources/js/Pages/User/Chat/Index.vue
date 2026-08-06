@@ -287,6 +287,7 @@ const closeThread = () => {
     if (filterStore.assigned_to) url += '&assigned_to=' + filterStore.assigned_to;
     if (filterStore.search) url += '&search=' + encodeURIComponent(filterStore.search);
     if (filterStore.status) url += '&status=' + encodeURIComponent(filterStore.status);
+    if (filterStore.awaiting_reply) url += '&awaiting_reply=1';
     contact.value = null;
     router.visit(url, { replace: true, preserveState: true, preserveScroll: true });
   } catch (e) {
@@ -426,6 +427,7 @@ const performChatUpdate = async () => {
     if (filterStore.labels) params.labels = filterStore.labels;
     if (filterStore.assigned_to) params.assigned_to = filterStore.assigned_to;
     if (filterStore.status) params.status = filterStore.status;
+    if (filterStore.awaiting_reply) params.awaiting_reply = 1;
 
     debugLog("Fetching chats with filters:", params);
 
