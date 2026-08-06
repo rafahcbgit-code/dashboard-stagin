@@ -6,15 +6,12 @@ use App\Helpers\Email;
 use App\Models\Team;
 use App\Models\TeamInvite;
 use App\Models\User;
+use Auth;
+use DB;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Redirect;
-use Illuminate\Support\Facades\URL;
-use Illuminate\Validation\ValidationException;
-use Auth;
-use DB;
 use Str;
-use Validator;
 
 class TeamService
 {
@@ -25,32 +22,38 @@ class TeamService
         }
 
         //check if invite already exists
-        $invite = TeamInvite::where('email', $request->email)->first();
+        $invite = TeamInvite::where('organization_id', session()->get('current_organization'))
+            ->where('email', $request->email)
+            ->first();
 
-        if(!$invite){     
-            $inviteCode = md5(Carbon::now()->timestamp . session()->get('current_organization') . Str::random(32)); 
+        if (! $invite) {
+            $inviteCode = md5(Carbon::now()->timestamp.session()->get('current_organization').Str::random(32));
             $invite = TeamInvite::create([
                 'organization_id' => session()->get('current_organization'),
                 'email' => $request->email,
                 'code' => $inviteCode,
                 'role' => $request->role,
+                'phone' => $request->phone,
                 'invited_by' => auth()->user()->id,
-                'expire_at' => now()->addDay(), 
+                'expire_at' => now()->addDay(),
             ]);
-        } else  {
+        } else {
             $inviteCode = $invite->code;
-            if($invite->expire_at <= now()){
-                $inviteCode = md5(Carbon::now()->timestamp . session()->get('current_organization') . Str::random(32));
+            if ($invite->expire_at <= now()) {
+                $inviteCode = md5(Carbon::now()->timestamp.session()->get('current_organization').Str::random(32));
                 $invite->code = $inviteCode;
                 $invite->expire_at = now()->addDay();
-                $invite->invited_by = auth()->user()->id;
-                $invite->save();
             }
+
+            $invite->invited_by = auth()->user()->id;
+            $invite->role = $request->role;
+            $invite->phone = $request->phone;
+            $invite->save();
         }
 
         //Send invite email
-        $inviter = User::where('id', auth()->user()->id)->first();
-        Email::sendInvite('Invite', $request->email, $inviter, url('/invite/' . $inviteCode));
+        $inviter = auth()->user();
+        Email::sendInvite('Invite', $request->email, $inviter, url('/invite/'.$inviteCode));
 
         return $invite;
     }
@@ -62,7 +65,7 @@ class TeamService
             $email = strtolower(trim($request->email));
             $user = User::withTrashed()->where('email', $email)->first();
 
-            if (!$user) {
+            if (! $user) {
                 $name = trim(str_replace(['.', '_', '-'], ' ', Str::before($email, '@')));
 
                 $user = User::create([
@@ -72,6 +75,7 @@ class TeamService
                     'password' => bcrypt($request->password),
                     'role' => 'user',
                     'code_verified' => 1,
+                    'phone' => $request->phone,
                 ]);
 
                 $user->forceFill([
@@ -86,6 +90,7 @@ class TeamService
                     'password' => bcrypt($request->password),
                     'code_verified' => 1,
                     'email_verified_at' => $user->email_verified_at ?? now(),
+                    'phone' => $request->phone,
                 ])->save();
             }
 
@@ -128,31 +133,34 @@ class TeamService
             ->where('expire_at', '>=', now())
             ->first();
 
-        if(!$invite){
+        if (! $invite) {
             return Redirect::back()->with(
                 'status', [
-                    'type' => 'error', 
-                    'message' => __('This invite code has expired!')
+                    'type' => 'error',
+                    'message' => __('This invite code has expired!'),
                 ]
             );
         }
 
-        try{
+        try {
             $user = User::where('email', $request->email)->first();
 
-            if(!$user){
+            if (! $user) {
                 $user = User::create([
                     'first_name' => $request->first_name,
                     'last_name' => $request->last_name,
                     'email' => $request->email,
                     'password' => bcrypt($request->password),
+                    'phone' => $invite->phone,
                     'created_at' => now(),
-                    'updated_at' => now()
+                    'updated_at' => now(),
                 ]);
 
                 //Send new user registration email
                 Email::send('Registration', $user);
             }
+
+            $user->update(['phone' => $invite->phone]);
 
             $team = Team::updateOrCreate(
                 [
@@ -163,7 +171,7 @@ class TeamService
                     'role' => $invite->role,
                     'status' => 'active',
                     'created_by' => $invite->invited_by,
-                    'updated_at' => now()
+                    'updated_at' => now(),
                 ]
             );
 
@@ -173,7 +181,7 @@ class TeamService
 
             session()->put('current_organization', $invite->organization_id);
         } catch (\Exception $e) {
-            Log::error('Exception: ' . $e->getMessage());
+            Log::error('Exception: '.$e->getMessage());
             //dd($e->getMessage());
             //return response()->view('errors.custom', [], 500); // Customize the error response as needed
         }
@@ -181,23 +189,37 @@ class TeamService
 
     public function update(object $request, $uuid)
     {
-        Team::where('uuid', $uuid)
+        $organizationId = session()->get('current_organization');
+        $team = Team::with('user')
+            ->where('uuid', $uuid)
+            ->where('organization_id', $organizationId)
             ->where('role', '!=', 'owner')
-            ->update([
-                'role' => $request->role,
-                'updated_at' => now()
-            ]);
+            ->firstOrFail();
+
+        $actorRole = Team::where('organization_id', $organizationId)
+            ->where('user_id', auth()->id())
+            ->whereNull('deleted_at')
+            ->value('role');
+
+        $team->user->update(['phone' => $request->phone]);
+
+        if ($actorRole === 'owner' && $request->filled('role')) {
+            $team->role = $request->role;
+        }
+
+        $team->updated_at = now();
+        $team->save();
     }
 
     public function destroy($uuid)
     {
         $team = Team::where('uuid', $uuid)->first();
 
-        if($team->role === 'owner'){
+        if ($team->role === 'owner') {
             return Redirect::back()->with(
                 'status', [
-                    'type' => 'error', 
-                    'message' => __('You can\'t delete the main admin account!')
+                    'type' => 'error',
+                    'message' => __('You can\'t delete the main admin account!'),
                 ]
             );
         } else {
@@ -205,10 +227,10 @@ class TeamService
 
             return Redirect::back()->with(
                 'status', [
-                    'type' => 'success', 
-                    'message' => __('Row deleted successfully!')
+                    'type' => 'success',
+                    'message' => __('Row deleted successfully!'),
                 ]
             );
         }
     }
-};
+}

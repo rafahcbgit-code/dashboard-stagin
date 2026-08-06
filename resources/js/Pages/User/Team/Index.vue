@@ -17,11 +17,12 @@
             <TeamTable :rows="props.rows" @edit="openModal"/>
         </div>
 
-        <Modal :label="label" :isOpen=isOpenFormModal @close="closeFormModal">
+        <Modal :label="label" :isOpen="isOpenFormModal" :closeBtn="true" @close="closeFormModal">
             <div class="mt-5 grid grid-cols-1 gap-x-6 gap-y-4">
                 <form @submit.prevent="submitForm()" class="grid gap-x-6 gap-y-4 sm:grid-cols-6">
                     <FormInput v-model="form.email" :error="form.errors.email" :name="$t('Email')" :type="'email'" :class="'sm:col-span-6'" :disabled="formMethod === 'put' ? true : false"/>
-                    <FormSelect v-model="form.role" :error="form.errors.role" :options="roleOptions" :name="$t('Role')" :class="'sm:col-span-6'" :placeholder="$t('Select Role')"/>
+                    <FormPhoneInput v-model="form.phone" :error="form.errors.phone" :name="$t('Phone')" :class="'sm:col-span-6'" :required="true"/>
+                    <FormSelect v-model="form.role" :error="form.errors.role" :options="roleOptions" :name="$t('Role')" :class="'sm:col-span-6'" :placeholder="$t('Select Role')" :disabled="formMethod === 'put' && !isOwner"/>
                     <label v-if="formMethod === 'post'" class="sm:col-span-6 flex cursor-pointer items-start gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-3 text-sm text-slate-700">
                         <input
                             v-model="form.create_password"
@@ -68,12 +69,14 @@
     import TeamTable from '@/Components/Tables/TeamTable.vue';
     import Modal from '@/Components/Modal.vue';
     import FormInput from '@/Components/FormInput.vue';
+    import FormPhoneInput from '@/Components/FormPhoneInput.vue';
     import FormSelect from '@/Components/FormSelect.vue';
     import { trans } from 'laravel-vue-i18n';
 
     const props = defineProps({ rows: Object, filters: Object });
     const user = computed(() => usePage().props.auth.user);
     const canInviteUsers = computed(() => ['owner', 'manager'].includes(user.value?.teams?.[0]?.role));
+    const isOwner = computed(() => user.value?.teams?.[0]?.role === 'owner');
     const isOpenFormModal = ref(false);
     const formUrl = ref('/team/invite');
     const formMethod = ref('post');
@@ -82,6 +85,7 @@
 
     const form = useForm({
         email: null,
+        phone: null,
         role: null,
         create_password: false,
         password: null,
@@ -162,6 +166,7 @@
             formUrl.value = '/team/' + key.id;
             formMethod.value = 'put';
             form.email = key.email;
+            form.phone = key.phone;
             form.role = key.role
             form.create_password = false;
             form.password = null;
@@ -169,6 +174,7 @@
             isOpenFormModal.value = true;
         } else {
             form.email = null;
+            form.phone = null;
             form.role = null;
             form.create_password = false;
             form.password = null;
@@ -183,20 +189,36 @@
         generatedPassword.value = null;
     }
 
+    const closeAfterSuccessfulSubmit = () => {
+        form.reset();
+        closeFormModal();
+    }
+
     const submitForm = () => {
-        if(formMethod.value === 'post'){
-            form.post(formUrl.value, {
-                onSuccess: () => {
-                    closeFormModal();
-                    form.reset();
+        const options = {
+            preserveScroll: true,
+            onStart: () => {
+                isOpenFormModal.value = false;
+            },
+            onSuccess: closeAfterSuccessfulSubmit,
+            onError: () => {
+                isOpenFormModal.value = true;
+            },
+            onFinish: () => {
+                if (form.recentlySuccessful) {
+                    closeAfterSuccessfulSubmit();
+                    return;
                 }
-            });
-        } else {
-            form.put(formUrl.value, {
-                onSuccess: () => {
-                    closeFormModal();
-                }
-            });
+
+                isOpenFormModal.value = true;
+            },
+        };
+
+        if (formMethod.value === 'post') {
+            form.post(formUrl.value, options);
+            return;
         }
+
+        form.put(formUrl.value, options);
     }
 </script>
