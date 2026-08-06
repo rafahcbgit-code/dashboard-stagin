@@ -95,13 +95,15 @@ class ChatService
         array $labelFilters,
         bool $assignedToMe,
         ?int $assignedToFilter,
-        bool $unreadOnly
+        bool $unreadOnly,
+        bool $awaitingReply
     ): int {
         $hasFilters = filled($searchTerm)
             || $ticketState !== 'all'
             || $assignedToMe
             || $assignedToFilter !== null
             || $unreadOnly
+            || $awaitingReply
             || !empty($labelFilters)
             || ($role === 'agent' && !$allowAgentsToViewAllChats);
 
@@ -129,6 +131,7 @@ class ChatService
             $assignedToMe,
             $assignedToFilter,
             $unreadOnly,
+            $awaitingReply,
             auth()->id(),
         ]));
 
@@ -143,7 +146,8 @@ class ChatService
             $labelFilters,
             $assignedToMe,
             $assignedToFilter,
-            $unreadOnly
+            $unreadOnly,
+            $awaitingReply
         ) {
             return $contact->contactsWithChatsCount(
                 $this->organizationId,
@@ -156,7 +160,8 @@ class ChatService
                 $labelFilters,
                 $assignedToMe,
                 $assignedToFilter,
-                $unreadOnly
+                $unreadOnly,
+                $awaitingReply
             );
         });
     }
@@ -234,8 +239,15 @@ class ChatService
         // Get assigned_to filter from request
         $assignedToFilter = $request->query('assigned_to') ? (int)$request->query('assigned_to') : null;
 
-        // Check if unread filter is active via status
+        // Check status-based filters.
         $unreadOnly = ($ticketState === 'unread');
+        $awaitingReply = $request->boolean('awaiting_reply');
+
+        // Preserve links created before awaiting_reply became an independent filter.
+        if ($ticketState === 'awaiting_reply') {
+            $awaitingReply = true;
+            $ticketState = 'all';
+        }
 
         $assignedToMe = ($ticketState === 'assigned_to_me');
 
@@ -270,7 +282,8 @@ class ChatService
             $labelFilters,
             $assignedToMe,
             $assignedToFilter,
-            $unreadOnly
+            $unreadOnly,
+            $awaitingReply
         );
 
         // Direct query without an expensive COUNT(*) in the paginator.
@@ -286,7 +299,8 @@ class ChatService
             $assignedToMe,
             $assignedToFilter,
             $unreadOnly,
-            $rowCount
+            $rowCount,
+            $awaitingReply
         );
 
         $pusherSettings = Setting::whereIn('key', [

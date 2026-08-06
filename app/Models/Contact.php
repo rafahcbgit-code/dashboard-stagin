@@ -115,7 +115,7 @@ class Contact extends Model
         return $this->hasMany(ChatLog::class);
     }
 
-    public function contactsWithChats($organizationId, $searchTerm = null, $ticketingActive = false, $ticketState = null, $sortDirection = 'asc', $role = 'owner', $allowAgentsViewAllChats = true, $labelFilters = [], $assignedToMe = false, $assignedToFilter = null, $unreadOnly = false, ?int $total = null)
+    public function contactsWithChats($organizationId, $searchTerm = null, $ticketingActive = false, $ticketState = null, $sortDirection = 'asc', $role = 'owner', $allowAgentsViewAllChats = true, $labelFilters = [], $assignedToMe = false, $assignedToFilter = null, $unreadOnly = false, ?int $total = null, bool $awaitingReply = false)
     {
         $needsTicketJoin = $ticketingActive && (
             $assignedToFilter !== null
@@ -150,6 +150,13 @@ class Contact extends Model
                 $q->where('type', 'inbound')
                   ->where('is_read', 0)
                   ->whereNull('deleted_at');
+            });
+        }
+
+        // Only include conversations whose latest message was received from the contact.
+        if ($awaitingReply) {
+            $query->whereHas('lastChat', function ($q) {
+                $q->where('type', 'inbound');
             });
         }
 
@@ -207,7 +214,7 @@ class Contact extends Model
         );
     }
 
-    public function contactsWithChatsCount($organizationId, $searchTerm = null, $ticketingActive = false, $ticketState = null, $sortDirection = 'asc', $role = 'owner', $allowAgentsViewAllChats = true, $labelFilters = [], $assignedToMe = false, $assignedToFilter = null, $unreadOnly = false)
+    public function contactsWithChatsCount($organizationId, $searchTerm = null, $ticketingActive = false, $ticketState = null, $sortDirection = 'asc', $role = 'owner', $allowAgentsViewAllChats = true, $labelFilters = [], $assignedToMe = false, $assignedToFilter = null, $unreadOnly = false, $awaitingReply = false)
     {
         $needsTicketJoin = $ticketingActive && (
             $assignedToFilter !== null
@@ -229,6 +236,12 @@ class Contact extends Model
                 $q->where('type', 'inbound')
                   ->where('is_read', 0)
                   ->whereNull('deleted_at');
+            });
+        }
+
+        if ($awaitingReply) {
+            $query->whereHas('lastChat', function ($q) {
+                $q->where('type', 'inbound');
             });
         }
 
