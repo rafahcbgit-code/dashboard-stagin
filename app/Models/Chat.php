@@ -46,14 +46,19 @@ class Chat extends Model {
 
             $newConversation = Contact::whereKey($chat->contact_id)
                 ->whereNull('latest_chat_created_at')
-                ->update(['latest_chat_created_at' => $createdAt]) > 0;
+                ->update([
+                    'latest_chat_created_at' => $createdAt,
+                    'latest_chat_id' => $chat->id,
+                    'latest_chat_type' => $chat->type,
+                ]) > 0;
 
             if (!$newConversation) {
-                Contact::whereKey($chat->contact_id)
-                ->where(function ($query) use ($createdAt) {
-                    $query->where('latest_chat_created_at', '<', $createdAt);
-                })
-                ->update(['latest_chat_created_at' => $createdAt]);
+                Contact::syncLatestChatState(
+                    (int) $chat->contact_id,
+                    $createdAt,
+                    (int) $chat->id,
+                    $chat->type
+                );
             }
 
             try {
