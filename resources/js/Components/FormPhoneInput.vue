@@ -1,7 +1,7 @@
 <script setup>
     import { ref, watch, computed } from 'vue';
     import 'vue-tel-input/vue-tel-input.css';
-    import { validateBrazilianPhone, formatBrazilianPhone } from '@/lib/brazilPhoneValidation.js';
+    import { validateBrazilianPhone } from '@/lib/brazilPhoneValidation.js';
 
     const props = defineProps({
         modelValue: [String, Number],
@@ -14,13 +14,12 @@
         disabled: Boolean
     })
 
-    const phone = ref(props.modelValue);
+    const phone = ref(props.modelValue ?? '');
     const localError = ref('');
 
     const emit = defineEmits(['update:modelValue']);
 
-    const updateValue = (event) => {
-        const phoneValue = event.target.value;
+    const updateValue = (phoneValue) => {
         phone.value = phoneValue;
         
         // Validate Brazilian numbers
@@ -57,13 +56,22 @@
             <div style="padding:1px" class="outline-none focus-none focus-within-none block w-full rounded-md border-0 text-gray-900 shadow-sm ring-1 ring-gray-300 ring-inset placeholder:text-gray-400 sm:text-sm sm:leading-6">
                 <vue-tel-input 
                     :inputOptions="{
-                        autocomplete: 'off'
+                        autocomplete: 'tel',
+                        inputmode: 'tel',
+                        placeholder: '',
+                        showDialCode: true,
+                        required: props.required
+                    }"
+                    :dropdownOptions="{
+                        showDialCodeInList: true,
+                        showDialCodeInSelection: true,
+                        showSearchBox: true
                     }"
                     v-model="phone"
                     :autoFormat="true"
                     :mode="'international'"
                     :validCharactersOnly="true"
-                    @input="updateValue"
+                    @on-input="updateValue"
                     :disabled="disabled"
                 >
                 </vue-tel-input>

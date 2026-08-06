@@ -3,12 +3,21 @@
 namespace App\Http\Requests;
 
 use App\Models\Team;
+use App\Rules\TeamLimit;
 use Illuminate\Foundation\Http\FormRequest;
 use Illuminate\Validation\Rule;
-use App\Rules\TeamLimit;
 
 class StoreTeam extends FormRequest
 {
+    protected function prepareForValidation(): void
+    {
+        $digits = preg_replace('/\D+/', '', (string) $this->input('phone', ''));
+
+        $this->merge([
+            'phone' => $digits !== '' ? '+'.$digits : null,
+        ]);
+    }
+
     /**
      * Determine if the user is authorized to make this request.
      */
@@ -16,7 +25,7 @@ class StoreTeam extends FormRequest
     {
         $organizationId = session()->get('current_organization');
 
-        if (!$organizationId || !$this->user()) {
+        if (! $organizationId || ! $this->user()) {
             return false;
         }
 
@@ -48,9 +57,10 @@ class StoreTeam extends FormRequest
                             ->where('organization_id', $organizationId);
                     });
                 }),
-                new TeamLimit
+                new TeamLimit,
             ],
             'role' => 'required|in:manager,agent',
+            'phone' => ['required', 'string', 'regex:/^\+[1-9]\d{7,14}$/'],
             'create_password' => ['sometimes', 'boolean'],
             'password' => ['required_if:create_password,true', 'nullable', 'string', 'min:8', 'confirmed'],
         ];
@@ -58,13 +68,12 @@ class StoreTeam extends FormRequest
 
     /**
      * Get custom error messages for validator errors.
-     *
-     * @return array
      */
     public function messages(): array
     {
         return [
             'email.unique' => __('User with this email already exists in your team.'),
+            'phone.regex' => __('Enter a phone number with country code (e.g., +966, +1, +44). Minimum 8 digits required.'),
         ];
     }
 }

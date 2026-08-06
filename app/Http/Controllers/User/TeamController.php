@@ -4,13 +4,14 @@ namespace App\Http\Controllers\User;
 
 use App\Http\Controllers\Controller as BaseController;
 use App\Http\Requests\StoreTeam;
+use App\Http\Requests\UpdateTeam;
 use App\Http\Resources\TeamResource;
 use App\Models\Team;
 use App\Services\TeamService;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Redirect;
 use Inertia\Inertia;
-use Illuminate\Support\Facades\DB;
 
 class TeamController extends BaseController
 {
@@ -21,13 +22,14 @@ class TeamController extends BaseController
         $this->teamService = $teamService;
     }
 
-    public function index(Request $request){
+    public function index(Request $request)
+    {
         $rows = TeamResource::collection(
             Team::with('user')->where('organization_id', session()->get('current_organization'))
                 ->latest()->paginate(10)
         );
 
-        if($request->expectsJson()){
+        if ($request->expectsJson()) {
             $rows = DB::table('users')
                 ->join('teams', 'users.id', '=', 'teams.user_id')
                 ->where('teams.organization_id', '=', session()->get('current_organization'))
@@ -36,7 +38,7 @@ class TeamController extends BaseController
                 ->get();
 
             return response()->json([
-                'rows' => $rows
+                'rows' => $rows,
             ]);
         } else {
             return Inertia::render('User/Team/Index', [
@@ -47,7 +49,8 @@ class TeamController extends BaseController
         }
     }
 
-    public function invite(StoreTeam $request){
+    public function invite(StoreTeam $request)
+    {
         $this->teamService->invite($request);
 
         //response()->json(['success' => true, 'message'=> __('User invited successfully!'), 'data' => $invite])
@@ -57,19 +60,20 @@ class TeamController extends BaseController
 
         return Redirect::back()->with(
             'status', [
-                'type' => 'success', 
-                'message' => $message
+                'type' => 'success',
+                'message' => $message,
             ]
         );
     }
 
-    public function update(Request $request, $uuid){
+    public function update(UpdateTeam $request, $uuid)
+    {
         $this->teamService->update($request, $uuid);
 
         return Redirect::back()->with(
             'status', [
-                'type' => 'success', 
-                'message' => __('User account updated successfully!')
+                'type' => 'success',
+                'message' => __('User account updated successfully!'),
             ]
         );
     }

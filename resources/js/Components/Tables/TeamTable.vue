@@ -26,6 +26,8 @@
     });
 
     const user = computed(() => usePage().props.auth.user);
+    const canEditUsers = computed(() => ['owner', 'manager'].includes(user.value?.teams?.[0]?.role));
+    const canRemoveUsers = computed(() => user.value?.teams?.[0]?.role === 'owner');
     const { isOpenAlert, openAlert, confirmAlert } = useAlertModal();
 
     const form = useForm({'test': null});
@@ -66,8 +68,8 @@
         })
     }
 
-    function edit(id, role, email) {
-        emit('edit', { id: id, role: role, email: email });
+    function edit(id, role, email, phone) {
+        emit('edit', { id: id, role: role, email: email, phone: phone });
     }
 </script>
 <template>
@@ -88,22 +90,24 @@
             <TableHeaderRow>
                 <TableHeaderRowItem :position="'first'">{{ $t('Name') }}</TableHeaderRowItem>
                 <TableHeaderRowItem>{{ $t('Email') }}</TableHeaderRowItem>
+                <TableHeaderRowItem class="hidden sm:table-cell">{{ $t('Phone') }}</TableHeaderRowItem>
                 <TableHeaderRowItem>{{ $t('Role') }}</TableHeaderRowItem>
                 <TableHeaderRowItem>{{ $t('Status') }}</TableHeaderRowItem>
                 <TableHeaderRowItem>{{ $t('Last updated') }}</TableHeaderRowItem>
-                <TableHeaderRowItem v-if="user.teams[0].role === 'owner'" :position="'last'"></TableHeaderRowItem>
+                <TableHeaderRowItem v-if="canEditUsers" :position="'last'"></TableHeaderRowItem>
             </TableHeaderRow>
         </TableHeader>
         <TableBody>
             <TableBodyRow v-for="(item, index) in rows.data" :key="index" :class="!isLastRow(index) ? 'border-b' : ''">
                 <TableBodyRowItem :position="'first'" class="capitalize">{{ item.user.first_name + ' ' + item.user.last_name }}</TableBodyRowItem>
                 <TableBodyRowItem class="hidden sm:table-cell">{{ item.user.email }}</TableBodyRowItem>
+                <TableBodyRowItem class="hidden sm:table-cell">{{ item.user.phone }}</TableBodyRowItem>
                 <TableBodyRowItem class="hidden sm:table-cell">{{ $t(item.role) }}</TableBodyRowItem>
                 <TableBodyRowItem class="capitalize hidden sm:table-cell">
                     <span class="py-1 rounded-[5px] text-xs px-3 bg-[#ddebf7] text-slate-700">{{ $t(item.status) }}</span>
                 </TableBodyRowItem>
                 <TableBodyRowItem class="hidden sm:table-cell">{{ item.updated_at }}</TableBodyRowItem>
-                <TableBodyRowItem v-if="user.teams[0].role === 'owner'" :position="'last'">
+                <TableBodyRowItem v-if="canEditUsers" :position="'last'">
                     <Dropdown v-if="item.role != 'owner'" :align="'right'" class="mt-2">
                         <button class="inline-flex w-full justify-center rounded-md text-sm font-medium text-black hover:bg-opacity-30 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-opacity-75">
                             <span class="hover:bg-[#F6F7F9] hover:rounded-full w-[fit-content] p-2">
@@ -114,8 +118,8 @@
                         </button>
                         <template #items>
                             <DropdownItemGroup>
-                                <DropdownItem as="button" @click="edit(item.uuid, item.role, item.user.email)">{{ $t('Edit') }}</DropdownItem>
-                                <DropdownItem as="button" @click="openAlert(item.uuid)">{{ $t('Remove user') }}</DropdownItem>
+                                <DropdownItem as="button" @click="edit(item.uuid, item.role, item.user.email, item.user.phone)">{{ $t('Edit') }}</DropdownItem>
+                                <DropdownItem v-if="canRemoveUsers" as="button" @click="openAlert(item.uuid)">{{ $t('Remove user') }}</DropdownItem>
                             </DropdownItemGroup>
                         </template>
                     </Dropdown>
@@ -132,4 +136,3 @@
         :description = "$t('Are you sure you want to delete this row? This action can not be undone')"
     />
 </template>
-  

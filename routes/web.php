@@ -422,6 +422,7 @@ Route::middleware(['auth:user'])->group(function () {
 
                 Route::get('/team', [App\Http\Controllers\User\TeamController::class, 'index'])->name('team');
                 Route::post('/team/invite', [App\Http\Controllers\User\TeamController::class, 'invite'])->name('team.store');
+                Route::put('/team/{uuid}', [App\Http\Controllers\User\TeamController::class, 'update'])->name('team.update');
 
                 Route::group(['middleware' => 'check.client.role'], function () {
                     Route::get('/settings', [App\Http\Controllers\User\SettingController::class, 'index']);
@@ -474,7 +475,6 @@ Route::middleware(['auth:user'])->group(function () {
                     Route::resource('contact-fields', App\Http\Controllers\User\ContactFieldController::class);
                     Route::post('/contact-fields/update-positions', [App\Http\Controllers\User\ContactFieldController::class, 'updatePositions']);
 
-                    Route::put('/team/{uuid}', [App\Http\Controllers\User\TeamController::class, 'update'])->name('team.update');
                     Route::delete('/team/{uuid}', [App\Http\Controllers\User\TeamController::class, 'delete'])->name('team.destroy');
 
                     Route::get('/developer-tools/access-tokens', [App\Http\Controllers\User\DeveloperController::class, 'index']);
