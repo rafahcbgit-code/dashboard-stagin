@@ -28,13 +28,27 @@ class BackfillLatestChatState extends Command
         $query = Contact::query()
             ->select(['id', 'organization_id'])
             ->whereNotNull('latest_chat_created_at')
-            ->with('latestChatForState:id,contact_id,type,created_at');
+            // A stopped command resumes cheaply: already-written state rows are
+            // maintained by the Chat model and do not need to be read again.
+            ->whereDoesntHave('latestChatState')
+            ->with(['latestChatForState' => function ($chatQuery) {
+                // latestOfMany joins chats to an aggregate subquery, so every
+                // selected column must be qualified to avoid an ambiguous name.
+                $chatQuery->select([
+                    'chats.id',
+                    'chats.contact_id',
+                    'chats.type',
+                    'chats.created_at',
+                ]);
+            }]);
 
         if ($organizationId !== null) {
             $query->where('organization_id', (int) $organizationId);
         }
 
         $query->chunkById($chunkSize, function ($contacts) use (&$processed, $sleepMilliseconds): void {
+            $states = [];
+
             foreach ($contacts as $contact) {
                 $chat = $contact->latestChatForState;
 
@@ -42,16 +56,17 @@ class BackfillLatestChatState extends Command
                     continue;
                 }
 
-                ContactChatState::syncLatest(
-                    (int) $contact->id,
-                    (int) $contact->organization_id,
-                    $chat->getRawOriginal('created_at') ?? $chat->created_at,
-                    (int) $chat->id,
-                    $chat->type
-                );
-
-                $processed++;
+                $states[] = [
+                    'contact_id' => (int) $contact->id,
+                    'organization_id' => (int) $contact->organization_id,
+                    'latest_chat_id' => (int) $chat->id,
+                    'latest_chat_type' => $chat->type,
+                    'latest_chat_created_at' => $chat->getRawOriginal('created_at') ?? $chat->created_at,
+                ];
             }
+
+            ContactChatState::syncMany($states);
+            $processed += count($states);
 
             if ($sleepMilliseconds > 0) {
                 usleep($sleepMilliseconds * 1000);
