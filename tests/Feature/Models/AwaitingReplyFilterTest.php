@@ -3,10 +3,12 @@
 use App\Models\Chat;
 use App\Models\ChatTicket;
 use App\Models\Contact;
+use App\Models\ContactChatState;
 use App\Models\Label;
 use App\Models\Organization;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Cache;
 
 uses(RefreshDatabase::class);
 
@@ -75,8 +77,8 @@ it('shows only conversations whose latest message is inbound, even when it is re
 
     expect($paginator->total())->toBe(1)
         ->and($paginator->pluck('id')->all())->toBe([$awaitingReply->id])
-        ->and($awaitingReply->fresh()->latest_chat_type)->toBe('inbound')
-        ->and($repliedTo->fresh()->latest_chat_type)->toBe('outbound');
+        ->and(ContactChatState::whereKey($awaitingReply->id)->value('latest_chat_type'))->toBe('inbound')
+        ->and(ContactChatState::whereKey($repliedTo->id)->value('latest_chat_type'))->toBe('outbound');
 });
 
 it('keeps the awaiting-reply filter compatible with the conversation search', function () {
@@ -103,7 +105,7 @@ it('keeps the awaiting-reply filter compatible with the conversation search', fu
         ->and($paginator->pluck('id')->all())->toBe([$matchingContact->id]);
 });
 
-it('uses the legacy latest-message lookup only until a contact is backfilled', function () {
+it('stores latest-message state outside the contacts table', function () {
     $organization = Organization::factory()->create();
     $contact = Contact::factory()->create(['organization_id' => $organization->id]);
 
@@ -114,10 +116,8 @@ it('uses the legacy latest-message lookup only until a contact is backfilled', f
         'created_at' => now()->subMinute(),
     ]);
 
-    Contact::whereKey($contact->id)->update([
-        'latest_chat_id' => null,
-        'latest_chat_type' => null,
-    ]);
+    ContactChatState::whereKey($contact->id)->delete();
+    Cache::forget('awaiting_reply_state_backfill_complete');
 
     $paginator = awaitingReplyContacts(new Contact, $organization->id);
 
