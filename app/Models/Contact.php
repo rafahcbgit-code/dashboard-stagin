@@ -94,6 +94,40 @@ class Contact extends Model
         return $this->hasOne(Chat::class, 'contact_id')->with('media')->latestOfMany('created_at');
     }
 
+    /**
+     * Latest message relation without media eager loading, used by state backfills and
+     * the temporary fallback for contacts that have not yet been backfilled.
+     */
+    public function latestChatForState()
+    {
+        return $this->hasOne(Chat::class, 'contact_id')->latestOfMany('created_at');
+    }
+
+    /**
+     * Persist the latest message state atomically so message list filters do not need
+     * to aggregate the chats table on every request.
+     */
+    public static function syncLatestChatState(int $contactId, $createdAt, int $chatId, ?string $chatType): int
+    {
+        return static::whereKey($contactId)
+            ->where(function ($query) use ($createdAt, $chatId) {
+                $query->whereNull('latest_chat_created_at')
+                    ->orWhere('latest_chat_created_at', '<', $createdAt)
+                    ->orWhere(function ($sameTimestampQuery) use ($createdAt, $chatId) {
+                        $sameTimestampQuery->where('latest_chat_created_at', '=', $createdAt)
+                            ->where(function ($latestChatIdQuery) use ($chatId) {
+                                $latestChatIdQuery->whereNull('latest_chat_id')
+                                    ->orWhere('latest_chat_id', '<', $chatId);
+                            });
+                    });
+            })
+            ->update([
+                'latest_chat_created_at' => $createdAt,
+                'latest_chat_id' => $chatId,
+                'latest_chat_type' => $chatType,
+            ]);
+    }
+
     public function lastInboundChat()
     {
         return $this->hasOne(Chat::class, 'contact_id')
@@ -153,11 +187,10 @@ class Contact extends Model
             });
         }
 
-        // Only include conversations whose latest message was received from the contact.
+        // Query the materialized message state. The fallback keeps legacy contacts
+        // visible until the production backfill has completed.
         if ($awaitingReply) {
-            $query->whereHas('lastChat', function ($q) {
-                $q->where('type', 'inbound');
-            });
+            $this->applyAwaitingReplyFilter($query);
         }
 
         // Apply ticketing conditions only when a ticket filter is needed.
@@ -240,9 +273,7 @@ class Contact extends Model
         }
 
         if ($awaitingReply) {
-            $query->whereHas('lastChat', function ($q) {
-                $q->where('type', 'inbound');
-            });
+            $this->applyAwaitingReplyFilter($query);
         }
 
         if ($needsTicketJoin) {
@@ -300,6 +331,19 @@ class Contact extends Model
         return $needsTicketJoin
             ? $query->distinct()->count('contacts.id')
             : $query->count();
+    }
+
+    private function applyAwaitingReplyFilter($query): void
+    {
+        $query->where(function ($stateQuery) {
+            $stateQuery->where('contacts.latest_chat_type', 'inbound')
+                ->orWhere(function ($legacyQuery) {
+                    $legacyQuery->whereNull('contacts.latest_chat_type')
+                        ->whereHas('latestChatForState', function ($chatQuery) {
+                            $chatQuery->where('type', 'inbound');
+                        });
+                });
+        });
     }
 
     public function getFirstNameAttribute()

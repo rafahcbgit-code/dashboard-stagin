@@ -74,7 +74,9 @@ it('shows only conversations whose latest message is inbound, even when it is re
     $paginator = awaitingReplyContacts(new Contact, $organization->id);
 
     expect($paginator->total())->toBe(1)
-        ->and($paginator->pluck('id')->all())->toBe([$awaitingReply->id]);
+        ->and($paginator->pluck('id')->all())->toBe([$awaitingReply->id])
+        ->and($awaitingReply->fresh()->latest_chat_type)->toBe('inbound')
+        ->and($repliedTo->fresh()->latest_chat_type)->toBe('outbound');
 });
 
 it('keeps the awaiting-reply filter compatible with the conversation search', function () {
@@ -99,6 +101,28 @@ it('keeps the awaiting-reply filter compatible with the conversation search', fu
 
     expect($paginator->total())->toBe(1)
         ->and($paginator->pluck('id')->all())->toBe([$matchingContact->id]);
+});
+
+it('uses the legacy latest-message lookup only until a contact is backfilled', function () {
+    $organization = Organization::factory()->create();
+    $contact = Contact::factory()->create(['organization_id' => $organization->id]);
+
+    Chat::factory()->create([
+        'organization_id' => $organization->id,
+        'contact_id' => $contact->id,
+        'type' => 'inbound',
+        'created_at' => now()->subMinute(),
+    ]);
+
+    Contact::whereKey($contact->id)->update([
+        'latest_chat_id' => null,
+        'latest_chat_type' => null,
+    ]);
+
+    $paginator = awaitingReplyContacts(new Contact, $organization->id);
+
+    expect($paginator->total())->toBe(1)
+        ->and($paginator->pluck('id')->all())->toBe([$contact->id]);
 });
 
 it('combines awaiting reply with ticket, assignment, and label filters', function () {
