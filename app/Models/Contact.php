@@ -10,6 +10,7 @@ use Illuminate\Pagination\LengthAwarePaginator;
 use Propaganistas\LaravelPhone\PhoneNumber;
 use Illuminate\Database\Eloquent\SoftDeletes;
 use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Cache;
 
 class Contact extends Model
 {
@@ -95,37 +96,30 @@ class Contact extends Model
     }
 
     /**
-     * Latest message relation without media eager loading, used by state backfills and
-     * the temporary fallback for contacts that have not yet been backfilled.
+     * Latest message relation without media eager loading, used by the state backfill.
      */
     public function latestChatForState()
     {
         return $this->hasOne(Chat::class, 'contact_id')->latestOfMany('created_at');
     }
 
+    public function latestChatState()
+    {
+        return $this->hasOne(ContactChatState::class, 'contact_id');
+    }
+
     /**
-     * Persist the latest message state atomically so message list filters do not need
-     * to aggregate the chats table on every request.
+     * Keep the existing chat-list sort timestamp in sync without altering the
+     * FULLTEXT-enabled contacts table schema.
      */
-    public static function syncLatestChatState(int $contactId, $createdAt, int $chatId, ?string $chatType): int
+    public static function syncLatestChatTimestamp(int $contactId, $createdAt): int
     {
         return static::whereKey($contactId)
-            ->where(function ($query) use ($createdAt, $chatId) {
+            ->where(function ($query) use ($createdAt) {
                 $query->whereNull('latest_chat_created_at')
-                    ->orWhere('latest_chat_created_at', '<', $createdAt)
-                    ->orWhere(function ($sameTimestampQuery) use ($createdAt, $chatId) {
-                        $sameTimestampQuery->where('latest_chat_created_at', '=', $createdAt)
-                            ->where(function ($latestChatIdQuery) use ($chatId) {
-                                $latestChatIdQuery->whereNull('latest_chat_id')
-                                    ->orWhere('latest_chat_id', '<', $chatId);
-                            });
-                    });
+                    ->orWhere('latest_chat_created_at', '<', $createdAt);
             })
-            ->update([
-                'latest_chat_created_at' => $createdAt,
-                'latest_chat_id' => $chatId,
-                'latest_chat_type' => $chatType,
-            ]);
+            ->update(['latest_chat_created_at' => $createdAt]);
     }
 
     public function lastInboundChat()
@@ -187,10 +181,9 @@ class Contact extends Model
             });
         }
 
-        // Query the materialized message state. The fallback keeps legacy contacts
-        // visible until the production backfill has completed.
+        // Query the materialized message state stored outside the FULLTEXT-enabled contacts table.
         if ($awaitingReply) {
-            $this->applyAwaitingReplyFilter($query);
+            $this->applyAwaitingReplyFilter($query, $organizationId);
         }
 
         // Apply ticketing conditions only when a ticket filter is needed.
@@ -273,7 +266,7 @@ class Contact extends Model
         }
 
         if ($awaitingReply) {
-            $this->applyAwaitingReplyFilter($query);
+            $this->applyAwaitingReplyFilter($query, $organizationId);
         }
 
         if ($needsTicketJoin) {
@@ -333,16 +326,31 @@ class Contact extends Model
             : $query->count();
     }
 
-    private function applyAwaitingReplyFilter($query): void
+    private function applyAwaitingReplyFilter($query, int $organizationId): void
     {
-        $query->where(function ($stateQuery) {
-            $stateQuery->where('contacts.latest_chat_type', 'inbound')
-                ->orWhere(function ($legacyQuery) {
-                    $legacyQuery->whereNull('contacts.latest_chat_type')
-                        ->whereHas('latestChatForState', function ($chatQuery) {
-                            $chatQuery->where('type', 'inbound');
-                        });
-                });
+        if (! $this->awaitingReplyStateIsComplete()) {
+            // During the one-time backfill, preserve correct results rather than
+            // silently omitting older conversations. This path disappears once
+            // every existing conversation has a state row.
+            $query->whereHas('latestChatForState', function ($chatQuery) {
+                $chatQuery->where('type', 'inbound');
+            });
+
+            return;
+        }
+
+        $query->join('contact_chat_states as awaiting_reply_states', 'contacts.id', '=', 'awaiting_reply_states.contact_id')
+            ->where('awaiting_reply_states.organization_id', $organizationId)
+            ->where('awaiting_reply_states.latest_chat_type', 'inbound');
+    }
+
+    private function awaitingReplyStateIsComplete(): bool
+    {
+        return Cache::remember('awaiting_reply_state_backfill_complete', now()->addMinutes(5), function (): bool {
+            return ! static::query()
+                ->whereNotNull('latest_chat_created_at')
+                ->whereDoesntHave('latestChatState')
+                ->exists();
         });
     }
 

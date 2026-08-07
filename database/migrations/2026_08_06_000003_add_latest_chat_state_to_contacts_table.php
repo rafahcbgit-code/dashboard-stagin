@@ -1,65 +1,40 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Database\Schema\Blueprint;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
+    /**
+     * Keep the awaiting-reply state outside contacts.
+     *
+     * contacts has a FULLTEXT index, and altering it can require ALGORITHM=COPY
+     * on some MySQL versions. Creating this small companion table is metadata-only
+     * and therefore safe to deploy even when contacts contains millions of rows.
+     */
     public function up(): void
     {
-        if (! $this->columnExists('contacts', 'latest_chat_id')) {
-            DB::statement(<<<'SQL'
-                ALTER TABLE `contacts`
-                ADD COLUMN `latest_chat_id` BIGINT UNSIGNED NULL AFTER `latest_chat_created_at`,
-                ALGORITHM=INPLACE,
-                LOCK=NONE
-            SQL);
+        if (Schema::hasTable('contact_chat_states')) {
+            return;
         }
 
-        if (! $this->columnExists('contacts', 'latest_chat_type')) {
-            DB::statement(<<<'SQL'
-                ALTER TABLE `contacts`
-                ADD COLUMN `latest_chat_type` VARCHAR(16) NULL AFTER `latest_chat_id`,
-                ALGORITHM=INPLACE,
-                LOCK=NONE
-            SQL);
-        }
+        Schema::create('contact_chat_states', function (Blueprint $table) {
+            $table->unsignedBigInteger('contact_id')->primary();
+            $table->unsignedBigInteger('organization_id');
+            $table->unsignedBigInteger('latest_chat_id');
+            $table->string('latest_chat_type', 16)->nullable();
+            $table->timestamp('latest_chat_created_at')->nullable();
 
-        if (! $this->indexExists('contacts', 'idx_contacts_awaiting_reply')) {
-            DB::statement(<<<'SQL'
-                ALTER TABLE `contacts`
-                ADD INDEX `idx_contacts_awaiting_reply` (`organization_id`, `deleted_at`, `latest_chat_type`, `latest_chat_created_at`),
-                ALGORITHM=INPLACE,
-                LOCK=NONE
-            SQL);
-        }
+            $table->index(
+                ['organization_id', 'latest_chat_type', 'latest_chat_created_at', 'contact_id'],
+                'idx_contact_chat_states_awaiting_reply'
+            );
+        });
     }
 
     public function down(): void
     {
-        if ($this->indexExists('contacts', 'idx_contacts_awaiting_reply')) {
-            DB::statement('ALTER TABLE `contacts` DROP INDEX `idx_contacts_awaiting_reply`, ALGORITHM=INPLACE, LOCK=NONE');
-        }
-
-        if ($this->columnExists('contacts', 'latest_chat_type')) {
-            DB::statement('ALTER TABLE `contacts` DROP COLUMN `latest_chat_type`, ALGORITHM=INPLACE, LOCK=NONE');
-        }
-
-        if ($this->columnExists('contacts', 'latest_chat_id')) {
-            DB::statement('ALTER TABLE `contacts` DROP COLUMN `latest_chat_id`, ALGORITHM=INPLACE, LOCK=NONE');
-        }
-    }
-
-    private function columnExists(string $table, string $column): bool
-    {
-        return count(DB::select(
-            'SELECT 1 FROM information_schema.columns WHERE table_schema = DATABASE() AND table_name = ? AND column_name = ?',
-            [$table, $column]
-        )) > 0;
-    }
-
-    private function indexExists(string $table, string $index): bool
-    {
-        return count(DB::select("SHOW INDEXES FROM `{$table}` WHERE Key_name = ?", [$index])) > 0;
+        Schema::dropIfExists('contact_chat_states');
     }
 };
