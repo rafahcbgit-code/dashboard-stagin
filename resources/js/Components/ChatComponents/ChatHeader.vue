@@ -208,10 +208,47 @@ const saveLabels = async () => {
     }
 }
 
-const handleNotesChanged = (notes) => {
-    if (props.contact) {
-        props.contact.notes = notes;
+const cleanupPageInteractivity = () => {
+    if (typeof window === 'undefined') {
+        return;
     }
+
+    const cleanup = () => {
+        document.querySelectorAll('[inert]').forEach((element) => {
+            element.removeAttribute('inert');
+        });
+
+        document.body.style.removeProperty('overflow');
+        document.body.style.removeProperty('padding-right');
+        document.body.style.removeProperty('pointer-events');
+        document.documentElement.style.removeProperty('overflow');
+        document.documentElement.style.removeProperty('padding-right');
+        document.documentElement.style.removeProperty('pointer-events');
+
+        if (document.activeElement instanceof HTMLElement) {
+            document.activeElement.blur();
+        }
+    };
+
+    cleanup();
+    window.requestAnimationFrame(cleanup);
+    window.setTimeout(cleanup, 50);
+    window.setTimeout(cleanup, 200);
+};
+
+const openNotesModal = () => {
+    cleanupPageInteractivity();
+    isNotesModalOpen.value = true;
+    closeDropdown();
+};
+
+const closeNotesModal = () => {
+    isNotesModalOpen.value = false;
+    cleanupPageInteractivity();
+};
+
+const handleNotesChanged = () => {
+    cleanupPageInteractivity();
 }
 
 const showDropdown = ref(false);
@@ -324,7 +361,7 @@ onUnmounted(() => {
                             $i18n.locale === 'ar' ? 'left-0 origin-top-left' : 'right-0 origin-top-right'
                         ]">
                             <div class="py-1" role="menu">
-                                <button @click="isNotesModalOpen = true; closeDropdown()"
+                                <button @click="openNotesModal"
                                     class="group flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900"
                                     role="menuitem">
                                     {{ $t('View notes') }}
@@ -419,7 +456,7 @@ onUnmounted(() => {
         v-if="contact && isNotesModalOpen"
         :contact="contact"
         :isOpen="true"
-        @close="isNotesModalOpen = false"
+        @close="closeNotesModal"
         @notesChanged="handleNotesChanged"
     />
 
