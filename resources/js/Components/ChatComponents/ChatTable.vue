@@ -2,7 +2,7 @@
 import axios from 'axios';
 import { ref, watch, onMounted } from 'vue';
 import debounce from 'lodash/debounce';
-import { Link, router } from "@inertiajs/vue3";
+import { router } from "@inertiajs/vue3";
 import Pagination from '@/Components/Pagination.vue';
 import SortDirectionToggle from '@/Components/SortDirectionToggle.vue';
 import SendTemplateToPhone from '@/Components/ChatComponents/SendTemplateToPhone.vue';
@@ -442,6 +442,23 @@ const buildChatUrl = (contactUuid) => {
     return `/chats/${contactUuid}?${queryParams.toString()}`;
 };
 
+const cleanupNavigationBlockers = () => {
+    if (typeof window === 'undefined') {
+        return;
+    }
+
+    document.querySelectorAll('[inert]').forEach((element) => {
+        element.removeAttribute('inert');
+    });
+
+    document.body.style.removeProperty('overflow');
+    document.body.style.removeProperty('padding-right');
+    document.body.style.removeProperty('pointer-events');
+    document.documentElement.style.removeProperty('overflow');
+    document.documentElement.style.removeProperty('padding-right');
+    document.documentElement.style.removeProperty('pointer-events');
+};
+
 </script>
 <template>
     <div class="px-4 py-4 border-b">
@@ -723,10 +740,10 @@ const buildChatUrl = (contactUuid) => {
         </div>
     </div>
     <div class="flex-grow overflow-y-auto h-[65vh]" ref="scrollContainer">
-        <Link :href="buildChatUrl(contact.uuid)" class="block border-b group-hover:pr-0" :class="{
+        <a :href="buildChatUrl(contact.uuid)" class="block border-b group-hover:pr-0" :class="{
             'bg-green-50': contact.unread_messages > 0 && selectedContactUuid !== contact.uuid,
             'bg-green-100': selectedContactUuid === contact.uuid
-        }" v-for="(contact, index) in rows.data" :key="index">
+        }" v-for="(contact, index) in rows.data" :key="index" @click="cleanupNavigationBlockers">
             <div class="flex space-x-2 hover:bg-gray-50 cursor-pointer py-3 px-4">
                 <div class="w-[15%]">
                     <img v-if="contact.avatar" class="rounded-full w-10 h-10" :src="contact.avatar">
@@ -880,7 +897,7 @@ const buildChatUrl = (contactUuid) => {
                     </div>
                 </div>
             </div>
-        </Link>
+        </a>
     </div>
     <div class="px-4 pb-4">
         <Pagination class="mt-3" :pagination="rows.meta" />
