@@ -14,7 +14,7 @@ const props = defineProps({
     },
 });
 
-const emit = defineEmits(['close', 'notesChanged']);
+const emit = defineEmits(['close', 'notesChanged', 'noteCreated']);
 
 const notes = ref([]);
 const content = ref('');
@@ -136,6 +136,10 @@ const submitNote = async () => {
             if (createdNote) {
                 notes.value = [createdNote, ...notes.value];
                 emit('notesChanged', notes.value);
+                emit('noteCreated', response.data?.timeline_item || [{
+                    type: 'notes',
+                    value: createdNote,
+                }]);
             }
         }
 

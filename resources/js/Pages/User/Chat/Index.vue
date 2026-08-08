@@ -12,7 +12,8 @@
         <ChatHeader v-if="contact" :ticketingIsEnabled="ticketingIsEnabled" :contact="contact"
           :displayContactInfo="displayContactInfo" :labelColors="labelColors" :ticket="ticket" :addon="addon"
           :teamRole="props.teamRole" :currentPage="rows.meta?.current_page" @toggleView="toggleContactView"
-          @deleteThread="deleteThread" @closeThread="closeThread" @labelsUpdated="handleLabelsUpdated" />
+          @deleteThread="deleteThread" @closeThread="closeThread" @labelsUpdated="handleLabelsUpdated"
+          @noteCreated="handleNoteCreated" />
         <div v-if="contact && !displayTemplate" class="flex-1 overflow-y-auto" ref="scrollContainer2">
           <ChatThread v-if="!displayContactInfo && !loadingThread && !displayTemplate" :contactId="contact.id"
             :initialMessages="chatThread" :hasMoreMessages="hasMoreMessages" :initialNextPage="nextPage" />
@@ -363,6 +364,25 @@ const updateChatThread = (chat) => {
     chatThread.value.splice(existingIndex, 1, chat);
   } else if (chat[0].value.deleted_at == null) {
     chatThread.value.push(chat);
+    setTimeout(scrollToBottom, 100);
+  }
+};
+
+const handleNoteCreated = (timelineItem) => {
+  const item = Array.isArray(timelineItem) ? timelineItem : [timelineItem];
+  const noteUuid = item?.[0]?.value?.uuid;
+
+  if (!noteUuid) {
+    return;
+  }
+
+  const exists = chatThread.value.some((existingChat) => (
+    existingChat?.[0]?.type === 'notes'
+    && existingChat?.[0]?.value?.uuid === noteUuid
+  ));
+
+  if (!exists) {
+    chatThread.value.push(item);
     setTimeout(scrollToBottom, 100);
   }
 };

@@ -41,7 +41,7 @@ watch(
     { immediate: true, deep: true }
 );
 
-const emit = defineEmits(['toggleView', 'deleteThread', 'closeThread', 'labelsUpdated']);
+const emit = defineEmits(['toggleView', 'deleteThread', 'closeThread', 'labelsUpdated', 'noteCreated']);
 
 const closeThread = () => {
     emit('closeThread', true);
@@ -248,6 +248,11 @@ const closeNotesModal = () => {
 };
 
 const handleNotesChanged = () => {
+    cleanupPageInteractivity();
+}
+
+const handleNoteCreated = (timelineItem) => {
+    emit('noteCreated', timelineItem);
     cleanupPageInteractivity();
 }
 
@@ -458,6 +463,7 @@ onUnmounted(() => {
         :isOpen="true"
         @close="closeNotesModal"
         @notesChanged="handleNotesChanged"
+        @noteCreated="handleNoteCreated"
     />
 
     <!-- Manage Labels Modal -->

@@ -46,9 +46,15 @@ class ChatNoteController extends BaseController
         $note->load('creator');
 
         if ($request->expectsJson()) {
+            $noteResource = (new ChatNoteResource($note))->resolve($request);
+
             return response()->json([
                 'message' => __('Note added successfully!'),
-                'note' => (new ChatNoteResource($note))->resolve($request),
+                'note' => $noteResource,
+                'timeline_item' => [[
+                    'type' => 'notes',
+                    'value' => $noteResource,
+                ]],
             ], 201);
         }
 
