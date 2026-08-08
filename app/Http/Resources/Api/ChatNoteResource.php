@@ -15,8 +15,9 @@ class ChatNoteResource extends JsonResource
      */
     public function toArray($request)
     {
-        // Get creator information
-        $creator = \App\Models\User::find($this->created_by);
+        $creator = $this->relationLoaded('creator')
+            ? $this->creator
+            : \App\Models\User::find($this->created_by);
 
         return [
             'uuid' => $this->uuid,

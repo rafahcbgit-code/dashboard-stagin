@@ -22,8 +22,8 @@ class StoreChatNote extends FormRequest
     public function rules(): array
     {
         $rules = [
-            'notes' => 'required',
-            'contact' => 'required',
+            'notes' => 'required|string|max:5000',
+            'contact' => 'required|string',
         ];
 
         return $rules;

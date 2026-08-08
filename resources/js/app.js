@@ -5,7 +5,21 @@ import VueTelInput from 'vue-tel-input';
 import { createI18n } from 'vue-i18n';
 import axios from 'axios';
 
+const cleanupNavigationBlockers = () => {
+  document.querySelectorAll('[inert]').forEach((element) => {
+    element.removeAttribute('inert');
+  });
+
+  document.body.style.removeProperty('overflow');
+  document.body.style.removeProperty('padding-right');
+  document.body.style.removeProperty('pointer-events');
+  document.documentElement.style.removeProperty('overflow');
+  document.documentElement.style.removeProperty('padding-right');
+  document.documentElement.style.removeProperty('pointer-events');
+};
+
 router.on('start', () => {
+  cleanupNavigationBlockers();
   console.debug('Inertia navigation started');
 });
 router.on('finish', () => {

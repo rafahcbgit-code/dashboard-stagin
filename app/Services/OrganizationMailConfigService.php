@@ -41,8 +41,8 @@ class OrganizationMailConfigService
         $contact = \App\Models\Contact::find($contactId);
         $contactName = $contact ? ($contact->name ?? $contact->phone ?? 'Unknown') : 'Unknown';
 
-        $fromName = $emailSettings['from_name'] ?? $org->name ?? 'Chatberry';
-        $fromAddress = $emailSettings['from_address'] ?? $emailSettings['username'] ?? config('mail.from.address');
+        $fromName = $this->resolveFromName($emailSettings, $org);
+        $fromAddress = $this->resolveFromAddress($emailSettings);
 
         $subject = "New conversation assigned to you";
         $body = "A new conversation from {$contactName} has been assigned to you in {$org->name}.\n\nPlease log in to respond.";
@@ -53,7 +53,7 @@ class OrganizationMailConfigService
     /**
      * Send a test email using organization SMTP settings.
      */
-    public function sendTestEmail(int $organizationId, string $testEmail): array
+    public function sendTestEmail(int $organizationId, string $testEmail, ?array $settingsOverride = null): array
     {
         $org = Organization::find($organizationId);
         if (!$org) {
@@ -62,13 +62,14 @@ class OrganizationMailConfigService
 
         $metadata = $org->metadata ? json_decode($org->metadata, true) : [];
         $emailSettings = $metadata['email_settings'] ?? [];
+        $emailSettings = $this->mergeEmailSettings($emailSettings, $settingsOverride);
 
         if (empty($emailSettings['host']) || empty($emailSettings['username'])) {
             return ['success' => false, 'message' => 'SMTP settings are incomplete. Please fill in host and username.'];
         }
 
-        $fromName = $emailSettings['from_name'] ?? $org->name ?? 'Chatberry';
-        $fromAddress = $emailSettings['from_address'] ?? $emailSettings['username'];
+        $fromName = $this->resolveFromName($emailSettings, $org);
+        $fromAddress = $this->resolveFromAddress($emailSettings);
 
         $subject = 'Chatberry - Test Email';
         $body = "This is a test email from your Chatberry notification settings.\n\nIf you received this email, your SMTP configuration is working correctly.";
@@ -105,10 +106,92 @@ class OrganizationMailConfigService
             return false;
         }
 
-        $fromName = $emailSettings['from_name'] ?? $org->name ?? 'Chatberry';
-        $fromAddress = $emailSettings['from_address'] ?? $emailSettings['username'] ?? config('mail.from.address');
+        $fromName = $this->resolveFromName($emailSettings, $org);
+        $fromAddress = $this->resolveFromAddress($emailSettings);
 
         return $this->sendWithOrgConfig($emailSettings, $toEmail, $subject, $body, $fromName, $fromAddress);
+    }
+
+    /**
+     * Send one plain text email to multiple recipients using one org SMTP setup.
+     */
+    public function sendCustomEmailToMany(int $organizationId, array $toEmails, string $subject, string $body): int
+    {
+        $org = Organization::query()
+            ->select(['id', 'name', 'metadata'])
+            ->find($organizationId);
+
+        if (! $org) {
+            Log::warning('OrganizationMailConfigService: Organization not found', ['org_id' => $organizationId]);
+            return 0;
+        }
+
+        $metadata = $org->metadata ? json_decode($org->metadata, true) : [];
+        $emailSettings = $metadata['email_settings'] ?? [];
+
+        if (empty($emailSettings['active'])) {
+            Log::info('OrganizationMailConfigService: Email notifications disabled for org', ['org_id' => $organizationId]);
+            return 0;
+        }
+
+        if (empty($emailSettings['host']) || empty($emailSettings['username'])) {
+            Log::warning('OrganizationMailConfigService: SMTP settings incomplete for org', ['org_id' => $organizationId]);
+            return 0;
+        }
+
+        $emails = collect($toEmails)
+            ->map(fn ($email) => strtolower(trim((string) $email)))
+            ->filter(fn ($email) => filter_var($email, FILTER_VALIDATE_EMAIL))
+            ->unique()
+            ->values();
+
+        if ($emails->isEmpty()) {
+            return 0;
+        }
+
+        $fromName = $this->resolveFromName($emailSettings, $org);
+        $fromAddress = $this->resolveFromAddress($emailSettings);
+        $sentCount = 0;
+
+        try {
+            config([
+                'mail.mailers.org_smtp.host' => $emailSettings['host'],
+                'mail.mailers.org_smtp.port' => $emailSettings['port'] ?? 587,
+                'mail.mailers.org_smtp.username' => $emailSettings['username'],
+                'mail.mailers.org_smtp.password' => $emailSettings['password'] ?? null,
+                'mail.mailers.org_smtp.encryption' => $emailSettings['encryption'] ?? 'tls',
+            ]);
+
+            app('mail.manager')->purge('org_smtp');
+
+            foreach ($emails as $email) {
+                try {
+                    Mail::mailer('org_smtp')->raw($body, function ($message) use ($email, $subject, $fromName, $fromAddress) {
+                        $message->to($email)
+                            ->subject($subject)
+                            ->from($fromAddress, $fromName);
+                    });
+
+                    $sentCount++;
+                } catch (\Throwable $e) {
+                    Log::warning('OrganizationMailConfigService: Bulk email recipient failed', [
+                        'to' => $email,
+                        'subject' => $subject,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            }
+        } finally {
+            app('mail.manager')->purge('org_smtp');
+        }
+
+        Log::info('OrganizationMailConfigService: Bulk email send completed', [
+            'subject' => $subject,
+            'total_recipients' => $emails->count(),
+            'sent_count' => $sentCount,
+        ]);
+
+        return $sentCount;
     }
 
     /**
@@ -157,5 +240,48 @@ class OrganizationMailConfigService
             // No need to restore config — the default 'smtp' mailer was never touched.
             app('mail.manager')->purge('org_smtp');
         }
+    }
+
+    private function mergeEmailSettings(array $savedSettings, ?array $override): array
+    {
+        if ($override === null) {
+            return $savedSettings;
+        }
+
+        $allowedKeys = ['active', 'host', 'port', 'username', 'password', 'encryption', 'from_name', 'from_address'];
+        $settings = $savedSettings;
+
+        foreach ($allowedKeys as $key) {
+            if (array_key_exists($key, $override)) {
+                $settings[$key] = $override[$key];
+            }
+        }
+
+        if (empty($settings['password']) && ! empty($savedSettings['password'])) {
+            $settings['password'] = $savedSettings['password'];
+        }
+
+        return $settings;
+    }
+
+    private function resolveFromName(array $emailSettings, Organization $org): string
+    {
+        return $this->filledString($emailSettings['from_name'] ?? null)
+            ?? $this->filledString($org->name)
+            ?? 'Chatberry';
+    }
+
+    private function resolveFromAddress(array $emailSettings): string
+    {
+        return $this->filledString($emailSettings['from_address'] ?? null)
+            ?? $this->filledString($emailSettings['username'] ?? null)
+            ?? config('mail.from.address');
+    }
+
+    private function filledString(mixed $value): ?string
+    {
+        $value = trim((string) $value);
+
+        return $value !== '' ? $value : null;
     }
 }
