@@ -213,7 +213,8 @@
                 </li>
                 <li v-if="!isAgent" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
                     :class="($page.url.startsWith('/settings') || $page.url.startsWith('/web-widget')) ? 'bg-slate-50 text-black' : ''">
-                    <Link rel="noopener noreferrer" href="/settings"
+                    <a rel="noopener noreferrer" href="/settings"
+                        @click="cleanupNavigationBlockers(); closeSidebar()"
                         class="md:flex items-center p-2 space-s-3 rounded-md hidden">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 16 16">
                             <path fill="currentColor" fill-rule="evenodd"
@@ -221,8 +222,9 @@
                                 clip-rule="evenodd" />
                         </svg>
                         <span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Settings') }}</span>
-                    </Link>
-                    <Link rel="noopener noreferrer" href="/settings/m"
+                    </a>
+                    <a rel="noopener noreferrer" href="/settings/m"
+                        @click="cleanupNavigationBlockers(); closeSidebar()"
                         class="flex items-center p-2 space-s-3 rounded-md md:hidden">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 16 16">
                             <path fill="currentColor" fill-rule="evenodd"
@@ -230,7 +232,7 @@
                                 clip-rule="evenodd" />
                         </svg>
                         <span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Settings') }}</span>
-                    </Link>
+                    </a>
                 </li>
                 <li v-if="!isAgent" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
                     :class="$page.url.startsWith('/billing') || $page.url.startsWith('/subscription') ? 'bg-slate-50 text-black' : ''">
@@ -407,6 +409,23 @@ const getValueByKey = (key) => {
 const closeSidebar = () => {
     emit('closeSidebar', true);
 }
+
+const cleanupNavigationBlockers = () => {
+    if (typeof window === 'undefined') {
+        return;
+    }
+
+    document.querySelectorAll('[inert]').forEach((element) => {
+        element.removeAttribute('inert');
+    });
+
+    document.body.style.removeProperty('overflow');
+    document.body.style.removeProperty('padding-right');
+    document.body.style.removeProperty('pointer-events');
+    document.documentElement.style.removeProperty('overflow');
+    document.documentElement.style.removeProperty('padding-right');
+    document.documentElement.style.removeProperty('pointer-events');
+};
 
 const toggleDropdown = (type) => {
     if (type === 'dropdown1') {

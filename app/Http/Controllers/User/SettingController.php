@@ -232,6 +232,12 @@ class SettingController extends BaseController
             $currentOrganizationId = session()->get('current_organization');
             $organizationConfig = Organization::where('id', $currentOrganizationId)->first();
             $metadataArray = $organizationConfig->metadata ? json_decode($organizationConfig->metadata, true) : [];
+            $metadataArray['tickets'] = $metadataArray['tickets'] ?? [];
+            $noteEmailRecipientScope = $request->input('note_email_notifications_recipient_scope', 'assigned_agent');
+
+            if (! in_array($noteEmailRecipientScope, ['assigned_agent', 'all_team'], true)) {
+                $noteEmailRecipientScope = 'assigned_agent';
+            }
 
             $metadataArray['tickets']['active'] = $request->active;
             $metadataArray['tickets']['auto_assignment'] = $request->auto_assignment ?? false;
@@ -240,6 +246,10 @@ class SettingController extends BaseController
             $metadataArray['tickets']['allow_agents_to_view_all_chats'] = $request->allow_agents_to_view_all_chats;
             $metadataArray['tickets']['mask_agent_phone_numbers'] = $request->mask_agent_phone_numbers ?? false;
             $metadataArray['tickets']['selected_agents'] = $request->selected_agents;
+            $metadataArray['tickets']['note_email_notifications'] = [
+                'enabled' => $request->boolean('note_email_notifications_enabled'),
+                'recipient_scope' => $noteEmailRecipientScope,
+            ];
 
             $updatedMetadataJson = json_encode($metadataArray);
 
@@ -760,11 +770,26 @@ class SettingController extends BaseController
 
     public function testEmailSettings(Request $request)
     {
+        $validated = $request->validate([
+            'email' => ['required', 'email:rfc', 'max:255'],
+            'active' => ['nullable', 'boolean'],
+            'host' => ['nullable', 'string', 'max:255'],
+            'port' => ['nullable', 'integer', 'between:1,65535'],
+            'username' => ['nullable', 'string', 'max:255'],
+            'password' => ['nullable', 'string'],
+            'encryption' => ['nullable', 'in:tls,ssl,none'],
+            'from_name' => ['nullable', 'string', 'max:255'],
+            'from_address' => ['nullable', 'email:rfc', 'max:255'],
+        ]);
+
         $organizationId = session()->get('current_organization');
-        $user = $request->user();
 
         $mailService = new \App\Services\OrganizationMailConfigService();
-        $result = $mailService->sendTestEmail($organizationId, $user->email);
+        $result = $mailService->sendTestEmail(
+            $organizationId,
+            $validated['email'],
+            collect($validated)->except('email')->all()
+        );
 
         return response()->json($result);
     }

@@ -228,6 +228,74 @@
                         </div>
                     </div>
 
+                    <!-- Note email notifications -->
+                    <div v-if="form.active" class="bg-white border border-slate-200 rounded-lg pt-2 text-sm mb-4 px-4">
+                        <div class="w-full py-2 mb-4 mt-2">
+                            <div class="flex w-full items-start gap-4">
+                                <div class="flex-1 text-md">
+                                    <h4 class="text-[16px] leading-relaxed">
+                                        {{ $t('Email notification when a note is added') }}
+                                    </h4>
+                                    <div class="mb-1 text-slate-500 mt-1">
+                                        {{ $t('Send an email after a team member adds a note to a conversation.') }}
+                                    </div>
+                                </div>
+                                <div class="flex-shrink-0">
+                                    <div class="w-12 h-6 flex items-center bg-gray-300 rounded-full p-1 cursor-pointer transition-colors duration-300"
+                                        :class="{ 'bg-primary': form.note_email_notifications_enabled }"
+                                        @click="toggleState5">
+                                        <div class="bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out"
+                                            :class="{ 'ltr:translate-x-6 rtl:translate-x-[-24px]': form.note_email_notifications_enabled }">
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div v-if="form.note_email_notifications_enabled" class="grid grid-cols-2 gap-x-4 mt-4">
+                                <div class="border rounded-xl p-4 cursor-pointer"
+                                    :class="form.note_email_notifications_recipient_scope === 'assigned_agent' ? 'border-primary bg-slate-50' : ''"
+                                    @click="selectNoteEmailRecipientScope('assigned_agent')">
+                                    <div class="flex space-s-2">
+                                        <div class="mt-[1px]">
+                                            <div class="w-4 h-4 border border-gray-400 rounded-md flex items-center justify-center"
+                                                :class="form.note_email_notifications_recipient_scope === 'assigned_agent' ? 'bg-[#000]' : ''">
+                                                <svg v-if="form.note_email_notifications_recipient_scope === 'assigned_agent'"
+                                                    class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                                        stroke-width="2" d="M5 13l4 4L19 7" />
+                                                </svg>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <div>{{ $t('Assigned agent only') }}</div>
+                                            <div class="text-slate-500">{{ $t('Notify only the team member assigned to the conversation.') }}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div class="border rounded-xl p-4 cursor-pointer"
+                                    :class="form.note_email_notifications_recipient_scope === 'all_team' ? 'border-primary bg-slate-50' : ''"
+                                    @click="selectNoteEmailRecipientScope('all_team')">
+                                    <div class="flex space-s-2">
+                                        <div class="mt-[1px]">
+                                            <div class="w-4 h-4 border border-gray-400 rounded-md flex items-center justify-center"
+                                                :class="form.note_email_notifications_recipient_scope === 'all_team' ? 'bg-[#000]' : ''">
+                                                <svg v-if="form.note_email_notifications_recipient_scope === 'all_team'"
+                                                    class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                                    <path stroke-linecap="round" stroke-linejoin="round"
+                                                        stroke-width="2" d="M5 13l4 4L19 7" />
+                                                </svg>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <div>{{ $t('All team members') }}</div>
+                                            <div class="text-slate-500">{{ $t('Notify every active team member in this organization.') }}</div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
             </div>
         </div>
@@ -256,6 +324,8 @@ const form = useForm({
     reassign_reopened_chats: settings.value?.tickets?.reassign_reopened_chats ?? false,
     allow_agents_to_view_all_chats: settings.value?.tickets?.allow_agents_to_view_all_chats ?? false,
     mask_agent_phone_numbers: settings.value?.tickets?.mask_agent_phone_numbers ?? false,
+    note_email_notifications_enabled: settings.value?.tickets?.note_email_notifications?.enabled ?? false,
+    note_email_notifications_recipient_scope: settings.value?.tickets?.note_email_notifications?.recipient_scope ?? 'assigned_agent',
     selected_agents: (() => {
         const agentsArray = Array.isArray(props.agents) ? props.agents : Object.values(props.agents);
         const validAgentIds = agentsArray.map(a => Number(a.id));
@@ -302,6 +372,14 @@ const toggleState2 = () => {
 }
 const toggleState3 = () => { form.allow_agents_to_view_all_chats = !form.allow_agents_to_view_all_chats; submitForm(); }
 const toggleState4 = () => { form.mask_agent_phone_numbers = !form.mask_agent_phone_numbers; submitForm(); }
+const toggleState5 = () => {
+    form.note_email_notifications_enabled = !form.note_email_notifications_enabled;
+    submitForm();
+}
+const selectNoteEmailRecipientScope = (scope) => {
+    form.note_email_notifications_recipient_scope = scope;
+    submitForm();
+}
 
 const submitForm = async () => {
     console.log('SUBMITTING POST TO SERVER:', form.data());

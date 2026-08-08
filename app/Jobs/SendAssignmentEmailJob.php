@@ -26,6 +26,7 @@ class SendAssignmentEmailJob implements ShouldQueue
         $this->organizationId = $organizationId;
         $this->agentId = $agentId;
         $this->contactId = $contactId;
+        $this->onQueue('emails');
     }
 
     public function handle(OrganizationMailConfigService $mailService): void

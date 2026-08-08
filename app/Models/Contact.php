@@ -82,7 +82,9 @@ class Contact extends Model
 
     public function notes()
     {
-        return $this->hasMany(ChatNote::class, 'contact_id')->orderBy('created_at', 'desc');
+        return $this->hasMany(ChatNote::class, 'contact_id')
+            ->whereNull('deleted_at')
+            ->orderBy('created_at', 'desc');
     }
 
     public function chats()

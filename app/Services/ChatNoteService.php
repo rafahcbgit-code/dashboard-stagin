@@ -2,11 +2,12 @@
 
 namespace App\Services;
 
-use App\Http\Resources\ChatNoteResource;
+use App\Http\Resources\Api\ChatNoteResource;
+use App\Jobs\SendChatNoteEmailNotificationJob;
 use App\Models\ChatLog;
 use App\Models\ChatNote;
 use App\Models\Contact;
-use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 
 class ChatNoteService
 {
@@ -52,10 +53,9 @@ class ChatNoteService
      * @param int|null $userId - User ID (for API support)
      * @return ChatNote
      */
-    public function store(object $request, $uuid = null, $userId = null)
+    public function store(object $request, $uuid = null, $userId = null, ?Contact $contact = null)
     {
-        // Get contact
-        $contact = Contact::where('uuid', $request->contact)->first();
+        $contact ??= Contact::where('uuid', $request->contact)->first();
 
         if (!$contact) {
             throw new \Exception('Contact not found');
@@ -66,8 +66,10 @@ class ChatNoteService
             $userId = auth('sanctum')->id() ?? auth()->id();
         }
 
+        $isNewNote = $uuid === null;
+
         // Create or update note
-        $note = $uuid === null 
+        $note = $isNewNote
             ? new ChatNote() 
             : ChatNote::where('uuid', $uuid)->whereNull('deleted_at')->firstOrFail();
 
@@ -84,7 +86,29 @@ class ChatNoteService
             'created_at' => now()
         ]);
 
+        if ($isNewNote && $this->noteEmailNotificationsEnabled((int) $contact->organization_id)) {
+            try {
+                SendChatNoteEmailNotificationJob::dispatch(
+                    (int) $note->id,
+                    (int) $contact->organization_id
+                );
+            } catch (\Throwable $e) {
+                Log::warning('ChatNoteService: note email notification dispatch failed', [
+                    'note_id' => $note->id,
+                    'contact_id' => $contact->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
         return $note;
+    }
+
+    private function noteEmailNotificationsEnabled(int $organizationId): bool
+    {
+        $metadata = OrganizationService::getCachedMetadata($organizationId);
+
+        return ! empty($metadata['tickets']['note_email_notifications']['enabled']);
     }
 
     /**
@@ -124,13 +148,8 @@ class ChatNoteService
         $note->content = $content;
         $note->save();
 
-        // Create chat log entry for update
-        ChatLog::insert([
-            'contact_id' => $note->contact_id,
-            'entity_type' => 'notes',
-            'entity_id' => $note->id,
-            'created_at' => now()
-        ]);
+        // The original ChatLog row is the note's timeline entry. Adding a new
+        // row here would make the timeline render the same note more than once.
 
         return $note;
     }

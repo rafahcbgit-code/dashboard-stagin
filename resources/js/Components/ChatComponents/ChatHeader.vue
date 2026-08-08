@@ -3,14 +3,9 @@ import { ref, watch, watchEffect, computed, onMounted, onUnmounted } from 'vue';
 import axios from 'axios';
 import { router, useForm, usePage } from '@inertiajs/vue3'
 import AlertModal from '@/Components/AlertModal.vue';
-import Dropdown from '@/Components/Dropdown.vue';
-import DropdownItemGroup from '@/Components/DropdownItemGroup.vue';
-import DropdownItem from '@/Components/DropdownItem.vue';
 import FormSelectCombo from '@/Components/FormSelectCombo.vue';
-import FormTextArea from '@/Components/FormTextArea.vue';
-import FormToggleSwitch from '@/Components/FormToggleSwitch.vue';
 import Modal from '@/Components/Modal.vue';
-import { trans } from 'laravel-vue-i18n';
+import ChatNotesModal from '@/Components/ChatComponents/ChatNotesModal.vue';
 import { useI18n } from 'vue-i18n';
 
 const { t } = useI18n();
@@ -20,7 +15,7 @@ const accountUser = computed(() => usePage().props.auth.user);
 const showAlert = ref(false);
 const displayContact = ref(props.displayContactInfo);
 const ticketState = ref(null);
-const isOpenModal = ref(false);
+const isNotesModalOpen = ref(false);
 const isOpenLabelsModal = ref(false);
 const availableLabels = ref([]);
 const selectedLabels = ref([]);
@@ -68,11 +63,6 @@ const deleteThread = () => {
 
 const form = useForm({
     'status': ticketState
-});
-
-const form2 = useForm({
-    'notes': null,
-    'contact': null
 });
 
 const form3 = useForm({
@@ -148,18 +138,6 @@ function loadUsers(query, setOptions) {
         });
 }
 
-const submitForm = () => {
-    form2.contact = props.contact.uuid;
-
-    form2.post('/notes', {
-        preserveState: false,
-        onSuccess: () => {
-            form2.reset();
-            isOpenModal.value = false;
-        }
-    });
-}
-
 const submitForm3 = () => {
     form3.ai_assistant = !form3.ai_assistant;
 
@@ -227,6 +205,12 @@ const saveLabels = async () => {
         console.error('Error saving labels:', error);
     } finally {
         isSavingLabels.value = false;
+    }
+}
+
+const handleNotesChanged = (notes) => {
+    if (props.contact) {
+        props.contact.notes = notes;
     }
 }
 
@@ -340,10 +324,10 @@ onUnmounted(() => {
                             $i18n.locale === 'ar' ? 'left-0 origin-top-left' : 'right-0 origin-top-right'
                         ]">
                             <div class="py-1" role="menu">
-                                <button @click="isOpenModal = true; closeDropdown()"
+                                <button @click="isNotesModalOpen = true; closeDropdown()"
                                     class="group flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900"
                                     role="menuitem">
-                                    {{ $t('Add notes') }}
+                                    {{ $t('View notes') }}
                                 </button>
 
                                 <button @click="openLabelsModal(); closeDropdown()"
@@ -431,34 +415,13 @@ onUnmounted(() => {
         </div>
     </div>
 
-    <!-- Add Note Modal -->
-    <Modal :label="'Add Note'" :isOpen="isOpenModal" @close="isOpenModal = false">
-        <div class="mt-5 grid grid-cols-1 gap-x-6 gap-y-4">
-            <form @submit.prevent="submitForm()" class="">
-                <FormTextArea v-model="form2.notes" :error="form2.errors.note" :name="''" :class="'col-span-2'" />
-                <div class="mt-4 flex">
-                    <button type="button" @click.self="isOpenModal = false"
-                        class="inline-flex justify-center rounded-md border border-transparent bg-slate-50 px-4 py-2 text-sm text-slate-500 hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 mr-4">{{
-                            $t('Cancel') }}</button>
-                    <button
-                        :class="['inline-flex justify-center rounded-md border border-transparent bg-primary px-4 py-2 text-sm text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2', { 'opacity-50': form2.processing }]"
-                        :disabled="form2.processing">
-                        <svg v-if="form2.processing" xmlns="http://www.w3.org/2000/svg" width="20" height="20"
-                            viewBox="0 0 24 24">
-                            <path fill="currentColor"
-                                d="M12 2A10 10 0 1 0 22 12A10 10 0 0 0 12 2Zm0 18a8 8 0 1 1 8-8A8 8 0 0 1 12 20Z"
-                                opacity=".5" />
-                            <path fill="currentColor" d="M20 12h2A10 10 0 0 0 12 2V4A8 8 0 0 1 20 12Z">
-                                <animateTransform attributeName="transform" dur="1s" from="0 12 12"
-                                    repeatCount="indefinite" to="360 12 12" type="rotate" />
-                            </path>
-                        </svg>
-                        <span v-else>{{ $t('Save') }}</span>
-                    </button>
-                </div>
-            </form>
-        </div>
-    </Modal>
+    <ChatNotesModal
+        v-if="contact && isNotesModalOpen"
+        :contact="contact"
+        :isOpen="true"
+        @close="isNotesModalOpen = false"
+        @notesChanged="handleNotesChanged"
+    />
 
     <!-- Manage Labels Modal -->
     <Modal :label="$t('Manage labels')" :isOpen="isOpenLabelsModal" @close="isOpenLabelsModal = false">
