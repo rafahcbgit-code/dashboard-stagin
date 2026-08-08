@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\ChatNote;
 use App\Models\Organization;
 use App\Services\OrganizationMailConfigService;
+use App\Services\OrganizationService;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -25,20 +26,22 @@ class SendChatNoteEmailNotificationJob implements ShouldQueue
         private readonly int $noteId,
         private readonly int $organizationId,
     ) {
-        $this->onQueue('default');
+        $this->onQueue('emails');
     }
 
     public function handle(OrganizationMailConfigService $mailService): void
     {
+        $startedAt = hrtime(true);
+
         $organization = Organization::query()
-            ->select(['id', 'name', 'metadata'])
+            ->select(['id', 'name'])
             ->find($this->organizationId);
 
         if (! $organization) {
             return;
         }
 
-        $metadata = $organization->metadata ? json_decode($organization->metadata, true) : [];
+        $metadata = OrganizationService::getCachedMetadata($this->organizationId);
         $config = $metadata['tickets']['note_email_notifications'] ?? [];
 
         if (empty($config['enabled'])) {
@@ -88,7 +91,15 @@ class SendChatNoteEmailNotificationJob implements ShouldQueue
             url('/chats/' . $note->contact->uuid),
         ]);
 
-        $sent = $mailService->sendCustomEmailToMany($this->organizationId, $emails, $subject, $body);
+        $mailStartedAt = hrtime(true);
+        $sent = $mailService->sendCustomEmailToMany(
+            $this->organizationId,
+            $emails,
+            $subject,
+            $body,
+            $organization,
+            $metadata['email_settings'] ?? []
+        );
 
         Log::info('SendChatNoteEmailNotificationJob: completed', [
             'note_id' => $this->noteId,
@@ -96,6 +107,8 @@ class SendChatNoteEmailNotificationJob implements ShouldQueue
             'recipient_scope' => $config['recipient_scope'] ?? 'assigned_agent',
             'recipient_count' => count($emails),
             'sent_count' => $sent,
+            'preparation_ms' => round(($mailStartedAt - $startedAt) / 1_000_000, 2),
+            'mail_ms' => round((hrtime(true) - $mailStartedAt) / 1_000_000, 2),
         ]);
     }
 
@@ -123,7 +136,7 @@ class SendChatNoteEmailNotificationJob implements ShouldQueue
             ->where('chat_tickets.organization_id', $this->organizationId)
             ->whereNotNull('chat_tickets.assigned_to')
             ->whereNull('users.deleted_at')
-            ->orderByDesc('chat_tickets.id')
+            ->latest('chat_tickets.id')
             ->value('users.email');
 
         return filter_var($assignedAgent, FILTER_VALIDATE_EMAIL) ? [$assignedAgent] : [];

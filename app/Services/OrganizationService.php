@@ -53,7 +53,7 @@ class OrganizationService
             self::CACHE_KEY_PREFIX.$organizationId,
             self::CACHE_TTL,
             fn () => json_decode(
-                Organization::find($organizationId)?->metadata ?? '{}',
+                Organization::query()->whereKey($organizationId)->value('metadata') ?? '{}',
                 true
             ) ?? []
         );

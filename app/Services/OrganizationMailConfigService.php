@@ -15,13 +15,15 @@ class OrganizationMailConfigService
      */
     public function sendAssignmentEmail(int $organizationId, int $agentId, int $contactId): bool
     {
-        $org = Organization::find($organizationId);
+        $org = Organization::query()
+            ->select(['id', 'name'])
+            ->find($organizationId);
         if (!$org) {
             Log::warning('OrganizationMailConfigService: Organization not found', ['org_id' => $organizationId]);
             return false;
         }
 
-        $metadata = $org->metadata ? json_decode($org->metadata, true) : [];
+        $metadata = OrganizationService::getCachedMetadata($organizationId);
         $emailSettings = $metadata['email_settings'] ?? [];
 
         // Check if email notifications are enabled for this org
@@ -31,15 +33,19 @@ class OrganizationMailConfigService
         }
 
         // Load the agent
-        $agent = \App\Models\User::find($agentId);
+        $agent = \App\Models\User::query()
+            ->select(['id', 'email'])
+            ->find($agentId);
         if (!$agent || empty($agent->email)) {
             Log::warning('OrganizationMailConfigService: Agent not found or no email', ['agent_id' => $agentId]);
             return false;
         }
 
         // Load the contact
-        $contact = \App\Models\Contact::find($contactId);
-        $contactName = $contact ? ($contact->name ?? $contact->phone ?? 'Unknown') : 'Unknown';
+        $contact = \App\Models\Contact::query()
+            ->select(['id', 'first_name', 'last_name', 'phone'])
+            ->find($contactId);
+        $contactName = $contact ? ($contact->full_name ?: $contact->phone ?: 'Unknown') : 'Unknown';
 
         $fromName = $this->resolveFromName($emailSettings, $org);
         $fromAddress = $this->resolveFromAddress($emailSettings);
@@ -55,12 +61,14 @@ class OrganizationMailConfigService
      */
     public function sendTestEmail(int $organizationId, string $testEmail, ?array $settingsOverride = null): array
     {
-        $org = Organization::find($organizationId);
+        $org = Organization::query()
+            ->select(['id', 'name'])
+            ->find($organizationId);
         if (!$org) {
             return ['success' => false, 'message' => 'Organization not found'];
         }
 
-        $metadata = $org->metadata ? json_decode($org->metadata, true) : [];
+        $metadata = OrganizationService::getCachedMetadata($organizationId);
         $emailSettings = $metadata['email_settings'] ?? [];
         $emailSettings = $this->mergeEmailSettings($emailSettings, $settingsOverride);
 
@@ -115,10 +123,17 @@ class OrganizationMailConfigService
     /**
      * Send one plain text email to multiple recipients using one org SMTP setup.
      */
-    public function sendCustomEmailToMany(int $organizationId, array $toEmails, string $subject, string $body): int
+    public function sendCustomEmailToMany(
+        int $organizationId,
+        array $toEmails,
+        string $subject,
+        string $body,
+        ?Organization $organization = null,
+        ?array $emailSettings = null
+    ): int
     {
-        $org = Organization::query()
-            ->select(['id', 'name', 'metadata'])
+        $org = $organization ?? Organization::query()
+            ->select(['id', 'name'])
             ->find($organizationId);
 
         if (! $org) {
@@ -126,8 +141,7 @@ class OrganizationMailConfigService
             return 0;
         }
 
-        $metadata = $org->metadata ? json_decode($org->metadata, true) : [];
-        $emailSettings = $metadata['email_settings'] ?? [];
+        $emailSettings ??= OrganizationService::getCachedMetadata($organizationId)['email_settings'] ?? [];
 
         if (empty($emailSettings['active'])) {
             Log::info('OrganizationMailConfigService: Email notifications disabled for org', ['org_id' => $organizationId]);
@@ -164,21 +178,46 @@ class OrganizationMailConfigService
 
             app('mail.manager')->purge('org_smtp');
 
-            foreach ($emails as $email) {
+            // A single SMTP transaction can deliver to multiple BCC recipients.
+            // Chunking keeps a rejected address isolated without paying a network
+            // round trip for every recipient in the common case.
+            foreach ($emails->chunk(50) as $recipientChunk) {
+                $recipients = $recipientChunk->all();
+
                 try {
-                    Mail::mailer('org_smtp')->raw($body, function ($message) use ($email, $subject, $fromName, $fromAddress) {
-                        $message->to($email)
+                    Mail::mailer('org_smtp')->raw($body, function ($message) use ($recipients, $subject, $fromName, $fromAddress) {
+                        $message->bcc($recipients)
                             ->subject($subject)
                             ->from($fromAddress, $fromName);
                     });
 
-                    $sentCount++;
+                    $sentCount += count($recipients);
                 } catch (\Throwable $e) {
-                    Log::warning('OrganizationMailConfigService: Bulk email recipient failed', [
-                        'to' => $email,
+                    Log::warning('OrganizationMailConfigService: Bulk email chunk failed', [
+                        'recipient_count' => count($recipients),
                         'subject' => $subject,
                         'error' => $e->getMessage(),
                     ]);
+
+                    // Preserve the previous per-recipient failure isolation only
+                    // for a failed chunk, which is an exceptional path.
+                    foreach ($recipients as $email) {
+                        try {
+                            Mail::mailer('org_smtp')->raw($body, function ($message) use ($email, $subject, $fromName, $fromAddress) {
+                                $message->to($email)
+                                    ->subject($subject)
+                                    ->from($fromAddress, $fromName);
+                            });
+
+                            $sentCount++;
+                        } catch (\Throwable $recipientException) {
+                            Log::warning('OrganizationMailConfigService: Bulk email recipient failed', [
+                                'to' => $email,
+                                'subject' => $subject,
+                                'error' => $recipientException->getMessage(),
+                            ]);
+                        }
+                    }
                 }
             }
         } finally {

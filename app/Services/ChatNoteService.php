@@ -148,13 +148,8 @@ class ChatNoteService
         $note->content = $content;
         $note->save();
 
-        // Create chat log entry for update
-        ChatLog::insert([
-            'contact_id' => $note->contact_id,
-            'entity_type' => 'notes',
-            'entity_id' => $note->id,
-            'created_at' => now()
-        ]);
+        // The original ChatLog row is the note's timeline entry. Adding a new
+        // row here would make the timeline render the same note more than once.
 
         return $note;
     }
