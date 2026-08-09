@@ -3239,12 +3239,31 @@ class WhatsappService
         $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->wabaId}/message_templates";
         $headers = $this->setHeaders();
 
-        $template = Template::where('uuid', $uuid)->first();
+        $template = Template::where('uuid', $uuid)
+            ->where('organization_id', $this->organizationId)
+            ->whereNull('deleted_at')
+            ->first();
 
-        $requestData['hsm_id'] = $template->meta_id;
-        $requestData['name'] = $template->name;
+        if (!$template) {
+            $responseObject = new \stdClass();
+            $responseObject->success = false;
+            $responseObject->message = __('Template not found.');
+            $responseObject->data = new \stdClass();
+            $responseObject->data->error = new \stdClass();
+            $responseObject->data->error->message = $responseObject->message;
 
-        $responseObject = $this->sendHttpRequest('DELETE', $url, $requestData, $headers);
+            return $responseObject;
+        }
+
+        // Meta expects these DELETE parameters in the query string, not in a
+        // JSON request body. Sending them in the body causes Meta to reject
+        // the deletion request as if no template identifier was supplied.
+        $url .= '?' . http_build_query([
+            'hsm_id' => $template->meta_id,
+            'name' => $template->name,
+        ], '', '&', PHP_QUERY_RFC3986);
+
+        $responseObject = $this->sendHttpRequest('DELETE', $url, null, $headers);
 
         if($responseObject->success){
             $template->deleted_at = now();
@@ -3813,7 +3832,7 @@ class WhatsappService
                 'headers' => $headers,
             ];
 
-            if (isset($data) && $method === 'POST' || $method === 'PUT' || $method === 'DELETE') {
+            if (isset($data) && in_array($method, ['POST', 'PUT', 'DELETE'], true)) {
                 $requestOptions['json'] = $data;
             }
 
