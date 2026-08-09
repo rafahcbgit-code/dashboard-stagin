@@ -221,13 +221,16 @@ class Contact extends Model
             });
         }
 
-        if ($usesAwaitingReplyState) {
+        if ($usesAwaitingReplyState && ! $needsTicketJoin) {
             // This ordering matches idx_contact_chat_states_awaiting_reply, so
             // MySQL can read the filtered state rows in page order instead of
             // sorting every matching contact.
             $query->orderBy('awaiting_reply_states.latest_chat_created_at', $sortDirection)
                 ->orderBy('awaiting_reply_states.contact_id', $sortDirection);
         } else {
+            // Ticket filters add DISTINCT to prevent duplicate contacts. MySQL
+            // requires ORDER BY columns to be selected in DISTINCT queries, so
+            // keep the selected contacts column as the ordering source here.
             $query->orderBy('contacts.latest_chat_created_at', $sortDirection);
         }
 

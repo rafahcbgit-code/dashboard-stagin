@@ -197,6 +197,47 @@ it('combines awaiting reply with ticket, assignment, and label filters', functio
         ->and($paginator->pluck('id')->all())->toBe([$matchingContact->id]);
 });
 
+it('uses a DISTINCT-compatible ordering when awaiting reply is combined with a ticket filter', function () {
+    $organization = Organization::factory()->create();
+    $contact = Contact::factory()->create(['organization_id' => $organization->id]);
+
+    ChatTicket::create([
+        'contact_id' => $contact->id,
+        'status' => 'closed',
+    ]);
+    Chat::factory()->create([
+        'organization_id' => $organization->id,
+        'contact_id' => $contact->id,
+        'type' => 'inbound',
+        'created_at' => now()->subMinute(),
+    ]);
+
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+
+    $paginator = (new Contact)->contactsWithChats(
+        $organization->id,
+        null,
+        true,
+        'closed',
+        'desc',
+        'owner',
+        true,
+        [],
+        false,
+        null,
+        false,
+        null,
+        true
+    );
+    $queries = collect(DB::getQueryLog())->pluck('query')->implode("\n");
+
+    expect($paginator->pluck('id')->all())->toBe([$contact->id])
+        ->and($queries)->toContain('select distinct `contacts`.*')
+        ->and($queries)->toContain('order by `contacts`.`latest_chat_created_at` desc')
+        ->and($queries)->not->toContain('order by `awaiting_reply_states`.`latest_chat_created_at` desc');
+});
+
 it('uses the indexed state path when another organization still needs a backfill', function () {
     $completeOrganization = Organization::factory()->create();
     $incompleteOrganization = Organization::factory()->create();
