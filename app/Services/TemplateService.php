@@ -251,7 +251,7 @@ class TemplateService
 
         $query = $this->whatsappService->deleteTemplate($uuid);
 
-        if($query->success === true){
+        if(($query->success ?? false) === true){
             return response()->json([
                 'success' => true,
                 'message'=> __('Template deleted successfully')
@@ -259,7 +259,10 @@ class TemplateService
         } else {
             return response()->json([
                 'success' => false,
-                'message'=> __('something went wrong. Refresh the page and try again')
+                'message' => $query->message
+                    ?? data_get($query, 'data.error.error_user_msg')
+                    ?? data_get($query, 'data.error.message')
+                    ?? __('Something went wrong. Refresh the page and try again'),
             ]);
         }
     }
