@@ -2,7 +2,7 @@
 import axios from 'axios';
 import { ref, watch, onMounted } from 'vue';
 import debounce from 'lodash/debounce';
-import { router } from "@inertiajs/vue3";
+import { Link, router } from "@inertiajs/vue3";
 import Pagination from '@/Components/Pagination.vue';
 import SortDirectionToggle from '@/Components/SortDirectionToggle.vue';
 import SendTemplateToPhone from '@/Components/ChatComponents/SendTemplateToPhone.vue';
@@ -740,7 +740,7 @@ const cleanupNavigationBlockers = () => {
         </div>
     </div>
     <div class="flex-grow overflow-y-auto h-[65vh]" ref="scrollContainer">
-        <a :href="buildChatUrl(contact.uuid)" class="block border-b group-hover:pr-0" :class="{
+        <Link :href="buildChatUrl(contact.uuid)" preserve-scroll class="block border-b group-hover:pr-0" :class="{
             'bg-green-50': contact.unread_messages > 0 && selectedContactUuid !== contact.uuid,
             'bg-green-100': selectedContactUuid === contact.uuid
         }" v-for="(contact, index) in rows.data" :key="index" @click="cleanupNavigationBlockers">
@@ -897,7 +897,7 @@ const cleanupNavigationBlockers = () => {
                     </div>
                 </div>
             </div>
-        </a>
+        </Link>
     </div>
     <div class="px-4 pb-4">
         <Pagination class="mt-3" :pagination="rows.meta" />
