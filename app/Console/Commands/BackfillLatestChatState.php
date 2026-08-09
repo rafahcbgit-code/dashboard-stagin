@@ -18,16 +18,24 @@ class BackfillLatestChatState extends Command
 
     public function handle(): int
     {
-        Cache::forget('awaiting_reply_state_backfill_complete');
-
         $chunkSize = max(1, min((int) $this->option('chunk'), 1000));
         $sleepMilliseconds = max(0, (int) $this->option('sleep'));
         $organizationId = $this->option('organization-id');
         $processed = 0;
+        $touchedOrganizationIds = [];
+
+        if ($organizationId !== null) {
+            Cache::forget(Contact::awaitingReplyStateCompletenessCacheKey((int) $organizationId));
+        }
 
         $query = Contact::query()
             ->select(['id', 'organization_id'])
             ->whereNotNull('latest_chat_created_at')
+            // Match the awaiting-reply filter semantics: chats that have been
+            // completely archived are not visible through latestChatForState.
+            // Skipping them keeps the command resumable and lets an otherwise
+            // complete organization use the indexed state path.
+            ->whereHas('chats')
             // A stopped command resumes cheaply: already-written state rows are
             // maintained by the Chat model and do not need to be read again.
             ->whereDoesntHave('latestChatState')
@@ -46,10 +54,11 @@ class BackfillLatestChatState extends Command
             $query->where('organization_id', (int) $organizationId);
         }
 
-        $query->chunkById($chunkSize, function ($contacts) use (&$processed, $sleepMilliseconds): void {
+        $query->chunkById($chunkSize, function ($contacts) use (&$processed, &$touchedOrganizationIds, $sleepMilliseconds): void {
             $states = [];
 
             foreach ($contacts as $contact) {
+                $touchedOrganizationIds[(int) $contact->organization_id] = true;
                 $chat = $contact->latestChatForState;
 
                 if (! $chat) {
@@ -73,8 +82,11 @@ class BackfillLatestChatState extends Command
             }
         });
 
-        // Re-evaluate the marker on the next filter request after this run.
-        Cache::forget('awaiting_reply_state_backfill_complete');
+        // Re-evaluate the per-organization markers on the next filter request.
+        // No global cache must make a complete organization use the fallback.
+        foreach (array_keys($touchedOrganizationIds) as $touchedOrganizationId) {
+            Cache::forget(Contact::awaitingReplyStateCompletenessCacheKey((int) $touchedOrganizationId));
+        }
 
         $this->info("Latest chat state backfilled for {$processed} contacts.");
 

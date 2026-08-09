@@ -183,9 +183,11 @@ class Contact extends Model
             });
         }
 
+        $usesAwaitingReplyState = false;
+
         // Query the materialized message state stored outside the FULLTEXT-enabled contacts table.
         if ($awaitingReply) {
-            $this->applyAwaitingReplyFilter($query, $organizationId);
+            $usesAwaitingReplyState = $this->applyAwaitingReplyFilter($query, $organizationId);
         }
 
         // Apply ticketing conditions only when a ticket filter is needed.
@@ -219,7 +221,15 @@ class Contact extends Model
             });
         }
 
-        $query->orderBy('contacts.latest_chat_created_at', $sortDirection);
+        if ($usesAwaitingReplyState) {
+            // This ordering matches idx_contact_chat_states_awaiting_reply, so
+            // MySQL can read the filtered state rows in page order instead of
+            // sorting every matching contact.
+            $query->orderBy('awaiting_reply_states.latest_chat_created_at', $sortDirection)
+                ->orderBy('awaiting_reply_states.contact_id', $sortDirection);
+        } else {
+            $query->orderBy('contacts.latest_chat_created_at', $sortDirection);
+        }
 
         $perPage = 10;
         $page = LengthAwarePaginator::resolveCurrentPage();
@@ -328,32 +338,53 @@ class Contact extends Model
             : $query->count();
     }
 
-    private function applyAwaitingReplyFilter($query, int $organizationId): void
+    /**
+     * Apply the fast materialized-state path whenever the current organization
+     * is complete. Other organizations must never force this organization back
+     * to the expensive latestOfMany fallback.
+     *
+     * @return bool True when the materialized-state join was applied.
+     */
+    private function applyAwaitingReplyFilter($query, int $organizationId): bool
     {
-        if (! $this->awaitingReplyStateIsComplete()) {
+        if (! $this->awaitingReplyStateIsComplete($organizationId)) {
             // During the one-time backfill, preserve correct results rather than
             // silently omitting older conversations. This path disappears once
-            // every existing conversation has a state row.
+            // every active conversation in this organization has a state row.
             $query->whereHas('latestChatForState', function ($chatQuery) {
                 $chatQuery->where('type', 'inbound');
             });
 
-            return;
+            return false;
         }
 
         $query->join('contact_chat_states as awaiting_reply_states', 'contacts.id', '=', 'awaiting_reply_states.contact_id')
             ->where('awaiting_reply_states.organization_id', $organizationId)
             ->where('awaiting_reply_states.latest_chat_type', 'inbound');
+
+        return true;
     }
 
-    private function awaitingReplyStateIsComplete(): bool
+    private function awaitingReplyStateIsComplete(int $organizationId): bool
     {
-        return Cache::remember('awaiting_reply_state_backfill_complete', now()->addMinutes(5), function (): bool {
+        $cacheKey = static::awaitingReplyStateCompletenessCacheKey($organizationId);
+
+        return Cache::remember($cacheKey, now()->addMinutes(5), function () use ($organizationId): bool {
             return ! static::query()
+                ->where('organization_id', $organizationId)
                 ->whereNotNull('latest_chat_created_at')
+                // contacts whose messages were fully archived are not returned
+                // by latestChatForState either, so they must not keep this
+                // organization on the fallback path forever.
+                ->whereHas('chats')
                 ->whereDoesntHave('latestChatState')
                 ->exists();
         });
+    }
+
+    public static function awaitingReplyStateCompletenessCacheKey(int $organizationId): string
+    {
+        return "awaiting_reply_state_backfill_complete:org:{$organizationId}";
     }
 
     public function getFirstNameAttribute()

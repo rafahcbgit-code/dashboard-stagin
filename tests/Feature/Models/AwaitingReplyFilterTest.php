@@ -9,6 +9,7 @@ use App\Models\Organization;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 uses(RefreshDatabase::class);
 
@@ -117,7 +118,7 @@ it('stores latest-message state outside the contacts table', function () {
     ]);
 
     ContactChatState::whereKey($contact->id)->delete();
-    Cache::forget('awaiting_reply_state_backfill_complete');
+    Cache::forget("awaiting_reply_state_backfill_complete:org:{$organization->id}");
 
     $paginator = awaitingReplyContacts(new Contact, $organization->id);
 
@@ -194,4 +195,43 @@ it('combines awaiting reply with ticket, assignment, and label filters', functio
     expect($paginator->total())->toBe(1)
         ->and($count)->toBe($paginator->total())
         ->and($paginator->pluck('id')->all())->toBe([$matchingContact->id]);
+});
+
+it('uses the indexed state path when another organization still needs a backfill', function () {
+    $completeOrganization = Organization::factory()->create();
+    $incompleteOrganization = Organization::factory()->create();
+
+    $completeContact = Contact::factory()->create([
+        'organization_id' => $completeOrganization->id,
+    ]);
+    $incompleteContact = Contact::factory()->create([
+        'organization_id' => $incompleteOrganization->id,
+    ]);
+
+    Chat::factory()->create([
+        'organization_id' => $completeOrganization->id,
+        'contact_id' => $completeContact->id,
+        'type' => 'inbound',
+        'created_at' => now()->subMinute(),
+    ]);
+    Chat::factory()->create([
+        'organization_id' => $incompleteOrganization->id,
+        'contact_id' => $incompleteContact->id,
+        'type' => 'inbound',
+        'created_at' => now()->subMinute(),
+    ]);
+
+    ContactChatState::whereKey($incompleteContact->id)->delete();
+    Cache::forget("awaiting_reply_state_backfill_complete:org:{$completeOrganization->id}");
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+
+    $paginator = awaitingReplyContacts(new Contact, $completeOrganization->id);
+    $queries = collect(DB::getQueryLog())->pluck('query')->implode("\n");
+
+    expect($paginator->total())->toBe(1)
+        ->and($paginator->pluck('id')->all())->toBe([$completeContact->id])
+        ->and($queries)->toContain('contact_chat_states')
+        ->and($queries)->toContain('order by `awaiting_reply_states`.`latest_chat_created_at` desc')
+        ->and($queries)->not->toContain('latestOfMany');
 });
