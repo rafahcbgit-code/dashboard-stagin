@@ -463,15 +463,6 @@ Route::middleware(['auth:user'])->group(function () {
                     Route::get('/settings/notifications', [App\Http\Controllers\User\SettingController::class, 'emailSettings']);
                     Route::post('/settings/notifications/email', [App\Http\Controllers\User\SettingController::class, 'updateEmailSettings']);
                     Route::post('/settings/notifications/email/test', [App\Http\Controllers\User\SettingController::class, 'testEmailSettings']);
-                    Route::get('/notifications', [App\Http\Controllers\User\NotificationController::class, 'index']);
-                    Route::get('/notifications/unread-count', [App\Http\Controllers\User\NotificationController::class, 'unreadCount'])
-                        ->withoutMiddleware([
-                            \App\Http\Middleware\HandleInertiaRequests::class,
-                            \App\Http\Middleware\Localization::class,
-                            \App\Http\Middleware\IsTrial::class,
-                        ]);
-                    Route::post('/notifications/{id}/click', [App\Http\Controllers\User\NotificationController::class, 'markClicked']);
-                    Route::post('/notifications/mark-all-read', [App\Http\Controllers\User\NotificationController::class, 'markAllRead']);
                     Route::resource('contact-fields', App\Http\Controllers\User\ContactFieldController::class);
                     Route::post('/contact-fields/update-positions', [App\Http\Controllers\User\ContactFieldController::class, 'updatePositions']);
 
@@ -481,6 +472,18 @@ Route::middleware(['auth:user'])->group(function () {
                     Route::post('/developer-tools/access-tokens', [App\Http\Controllers\User\DeveloperController::class, 'store']);
                     Route::delete('/developer-tools/access-tokens/{uuid}', [App\Http\Controllers\User\DeveloperController::class, 'delete']);
                 });
+
+                // Notifications are available to every active team role. Each action
+                // remains scoped to the authenticated user's own organization records.
+                Route::get('/notifications', [App\Http\Controllers\User\NotificationController::class, 'index']);
+                Route::get('/notifications/unread-count', [App\Http\Controllers\User\NotificationController::class, 'unreadCount'])
+                    ->withoutMiddleware([
+                        \App\Http\Middleware\HandleInertiaRequests::class,
+                        \App\Http\Middleware\Localization::class,
+                        \App\Http\Middleware\IsTrial::class,
+                    ]);
+                Route::post('/notifications/{id}/click', [App\Http\Controllers\User\NotificationController::class, 'markClicked']);
+                Route::post('/notifications/mark-all-read', [App\Http\Controllers\User\NotificationController::class, 'markAllRead']);
 
                 //Route::get('/whatsapp/message', [App\Http\Controllers\User\WhatsappController::class, 'sendMessage']);
                 Route::resource('notes', App\Http\Controllers\User\ChatNoteController::class);

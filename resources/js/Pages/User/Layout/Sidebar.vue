@@ -18,7 +18,7 @@
 </template>
 <script setup>
 import { Link, useForm } from "@inertiajs/vue3";
-import { defineProps, ref, onMounted } from "vue";
+import { defineProps, ref, onMounted, onUnmounted } from "vue";
 import axios from "axios";
 import Menu from "./Menu.vue";
 
@@ -34,6 +34,13 @@ onMounted(async () => {
         // Silently fail — notification count is non-critical
     }
 });
+
+const incrementUnreadNotifications = () => {
+    unreadNotifications.value = Number(unreadNotifications.value || 0) + 1;
+};
+
+onMounted(() => window.addEventListener('notification:received', incrementUnreadNotifications));
+onUnmounted(() => window.removeEventListener('notification:received', incrementUnreadNotifications));
 
 const menuIconsOnly = ref(localStorage.getItem('MenuOpen') === 'true' ?? false);
 

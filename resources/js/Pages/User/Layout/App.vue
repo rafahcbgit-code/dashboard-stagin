@@ -118,6 +118,23 @@
         }
     };
 
+    const showChatNoteNotification = (event) => {
+        const notification = event?.notification;
+        if (!notification?.payload?.message) return;
+
+        playSound();
+        toast(notification.payload.message, {
+            autoClose: false,
+            closeButton: true,
+            onClick: () => {
+                if (notification.payload.contact_uuid) {
+                    window.location.assign(`/chats/${notification.payload.contact_uuid}`);
+                }
+            },
+        });
+        window.dispatchEvent(new CustomEvent('notification:received'));
+    };
+
     onMounted(() => {
         setupSound();
         const pusherKey = getValueByKey('pusher_app_key');
@@ -133,6 +150,9 @@
                     unreadMessages.value = Number(unreadMessages.value || 0) + 1;
                 }
             });
+
+            echo.private('App.Models.User.' + user.value.id)
+                .listen('.chat-note.notification', showChatNoteNotification);
         }
     });
 </script>
