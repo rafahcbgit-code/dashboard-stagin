@@ -213,7 +213,7 @@
                 </li>
                 <li v-if="!isAgent" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
                     :class="($page.url.startsWith('/settings') || $page.url.startsWith('/web-widget')) ? 'bg-slate-50 text-black' : ''">
-                    <a rel="noopener noreferrer" href="/settings"
+                    <Link href="/settings"
                         @click="cleanupNavigationBlockers(); closeSidebar()"
                         class="md:flex items-center p-2 space-s-3 rounded-md hidden">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 16 16">
@@ -222,8 +222,8 @@
                                 clip-rule="evenodd" />
                         </svg>
                         <span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Settings') }}</span>
-                    </a>
-                    <a rel="noopener noreferrer" href="/settings/m"
+                    </Link>
+                    <Link href="/settings/m"
                         @click="cleanupNavigationBlockers(); closeSidebar()"
                         class="flex items-center p-2 space-s-3 rounded-md md:hidden">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 16 16">
@@ -232,7 +232,7 @@
                                 clip-rule="evenodd" />
                         </svg>
                         <span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Settings') }}</span>
-                    </a>
+                    </Link>
                 </li>
                 <li v-if="!isAgent" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
                     :class="$page.url.startsWith('/billing') || $page.url.startsWith('/subscription') ? 'bg-slate-50 text-black' : ''">
