@@ -153,11 +153,11 @@ class TemplateService
 
             $this->hydrateCopiedTemplateMedia($request);
 
-            $validator = Validator::make($request->all(),[
+            $validator = Validator::make($request->all(), array_merge([
                 'name' => 'required',
                 'category' => 'required',
                 'language' => 'required',
-            ]);
+            ], $this->authenticationTemplateValidationRules($request)));
 
             if ($validator->fails()) {
                 return response()->json(['success' => false,'message'=>'Some required fields have not been filled','errors'=>$validator->messages()->get('*')]);
@@ -211,11 +211,11 @@ class TemplateService
             return $response;
         }
 
-        $validator = Validator::make($request->all(),[
+        $validator = Validator::make($request->all(), array_merge([
             'name' => 'required',
             'category' => 'required',
             'language' => 'required',
-        ]);
+        ], $this->authenticationTemplateValidationRules($request)));
 
         if ($validator->fails()) {
             return response()->json(['success' => false,'message'=>'Some required fields have not been filled','errors'=>$validator->messages()->get('*')]);
@@ -287,6 +287,30 @@ class TemplateService
         }
 
         return null;
+    }
+
+    /**
+     * Authentication templates have a stricter payload than standard templates.
+     * Validate their nested button before WhatsappService builds Meta's request so
+     * malformed client payloads become a useful 422 response instead of a 500.
+     */
+    private function authenticationTemplateValidationRules(Request $request): array
+    {
+        if ($request->input('category') !== 'AUTHENTICATION') {
+            return [];
+        }
+
+        return [
+            'authentication_button' => ['required', 'array'],
+            'authentication_button.type' => ['required', 'in:OTP'],
+            'authentication_button.otp_type' => ['required', 'in:copy_code,one_tap,zero_tap'],
+            'authentication_button.text' => ['required', 'string', 'max:20'],
+            'authentication_button.autofill_text' => ['required_unless:authentication_button.otp_type,copy_code', 'nullable', 'string', 'max:20'],
+            'authentication_button.supported_apps' => ['required_unless:authentication_button.otp_type,copy_code', 'array', 'max:5'],
+            'authentication_button.supported_apps.*.package_name' => ['required_unless:authentication_button.otp_type,copy_code', 'string'],
+            'authentication_button.supported_apps.*.signature_hash' => ['required_unless:authentication_button.otp_type,copy_code', 'string'],
+            'authentication_button.zero_tap_terms_accepted' => ['required_if:authentication_button.otp_type,zero_tap', 'accepted'],
+        ];
     }
 
     private function validateTemplateMediaUploads(Request $request)
