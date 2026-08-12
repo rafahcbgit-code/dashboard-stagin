@@ -250,6 +250,16 @@ class SettingController extends BaseController
                 'enabled' => $request->boolean('note_email_notifications_enabled'),
                 'recipient_scope' => $noteEmailRecipientScope,
             ];
+            $notePlatformRecipientScope = $request->input('note_platform_notifications_recipient_scope', 'assigned_agent');
+
+            if (! in_array($notePlatformRecipientScope, ['assigned_agent', 'all_team'], true)) {
+                $notePlatformRecipientScope = 'assigned_agent';
+            }
+
+            $metadataArray['tickets']['note_platform_notifications'] = [
+                'enabled' => $request->boolean('note_platform_notifications_enabled'),
+                'recipient_scope' => $notePlatformRecipientScope,
+            ];
 
             $updatedMetadataJson = json_encode($metadataArray);
 

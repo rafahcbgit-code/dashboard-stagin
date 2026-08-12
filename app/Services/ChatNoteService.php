@@ -4,6 +4,7 @@ namespace App\Services;
 
 use App\Http\Resources\Api\ChatNoteResource;
 use App\Jobs\SendChatNoteEmailNotificationJob;
+use App\Jobs\SendChatNotePlatformNotificationJob;
 use App\Models\ChatLog;
 use App\Models\ChatNote;
 use App\Models\Contact;
@@ -101,6 +102,21 @@ class ChatNoteService
             }
         }
 
+        if ($isNewNote && $this->notePlatformNotificationsEnabled((int) $contact->organization_id)) {
+            try {
+                SendChatNotePlatformNotificationJob::dispatch(
+                    (int) $note->id,
+                    (int) $contact->organization_id
+                );
+            } catch (\Throwable $e) {
+                Log::warning('ChatNoteService: note platform notification dispatch failed', [
+                    'note_id' => $note->id,
+                    'contact_id' => $contact->id,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
         return $note;
     }
 
@@ -109,6 +125,13 @@ class ChatNoteService
         $metadata = OrganizationService::getCachedMetadata($organizationId);
 
         return ! empty($metadata['tickets']['note_email_notifications']['enabled']);
+    }
+
+    private function notePlatformNotificationsEnabled(int $organizationId): bool
+    {
+        $metadata = OrganizationService::getCachedMetadata($organizationId);
+
+        return ! empty($metadata['tickets']['note_platform_notifications']['enabled']);
     }
 
     /**

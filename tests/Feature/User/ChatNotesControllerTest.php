@@ -1,6 +1,7 @@
 <?php
 
 use App\Jobs\SendChatNoteEmailNotificationJob;
+use App\Jobs\SendChatNotePlatformNotificationJob;
 use App\Models\ChatLog;
 use App\Models\ChatNote;
 use App\Models\Contact;
@@ -63,6 +64,10 @@ it('creates updates and soft deletes a note for the current organization convers
                     'enabled' => true,
                     'recipient_scope' => 'assigned_agent',
                 ],
+                'note_platform_notifications' => [
+                    'enabled' => true,
+                    'recipient_scope' => 'assigned_agent',
+                ],
             ],
         ]),
     ]);
@@ -84,6 +89,7 @@ it('creates updates and soft deletes a note for the current organization convers
     $note = ChatNote::where('contact_id', $contact->id)->firstOrFail();
 
     Queue::assertPushed(SendChatNoteEmailNotificationJob::class);
+    Queue::assertPushed(SendChatNotePlatformNotificationJob::class);
     expect(ChatLog::query()
         ->where('contact_id', $contact->id)
         ->where('entity_type', 'notes')

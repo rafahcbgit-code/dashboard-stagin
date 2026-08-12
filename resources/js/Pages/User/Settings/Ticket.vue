@@ -296,6 +296,43 @@
                         </div>
                     </div>
 
+                    <!-- Note platform notifications -->
+                    <div v-if="form.active" class="bg-white border border-slate-200 rounded-lg pt-2 text-sm mb-4 px-4">
+                        <div class="w-full py-2 mb-4 mt-2">
+                            <div class="flex w-full items-start gap-4">
+                                <div class="flex-1 text-md">
+                                    <h4 class="text-[16px] leading-relaxed">{{ $t('Platform notification when a note is added') }}</h4>
+                                    <div class="mb-1 text-slate-500 mt-1">{{ $t('Show an in-app notification with sound after a team member adds a note.') }}</div>
+                                </div>
+                                <div class="flex-shrink-0">
+                                    <div class="w-12 h-6 flex items-center bg-gray-300 rounded-full p-1 cursor-pointer transition-colors duration-300"
+                                        :class="{ 'bg-primary': form.note_platform_notifications_enabled }" @click="toggleState6">
+                                        <div class="bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out"
+                                            :class="{ 'ltr:translate-x-6 rtl:translate-x-[-24px]': form.note_platform_notifications_enabled }"></div>
+                                    </div>
+                                </div>
+                            </div>
+                            <div v-if="form.note_platform_notifications_enabled" class="grid grid-cols-2 gap-x-4 mt-4">
+                                <div class="border rounded-xl p-4 cursor-pointer"
+                                    :class="form.note_platform_notifications_recipient_scope === 'assigned_agent' ? 'border-primary bg-slate-50' : ''"
+                                    @click="selectNotePlatformRecipientScope('assigned_agent')">
+                                    <div class="flex space-s-2">
+                                        <div class="mt-[1px]"><div class="w-4 h-4 border border-gray-400 rounded-md flex items-center justify-center" :class="form.note_platform_notifications_recipient_scope === 'assigned_agent' ? 'bg-[#000]' : ''"><svg v-if="form.note_platform_notifications_recipient_scope === 'assigned_agent'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg></div></div>
+                                        <div><div>{{ $t('Assigned agent only') }}</div><div class="text-slate-500">{{ $t('Notify only the team member assigned to the conversation.') }}</div></div>
+                                    </div>
+                                </div>
+                                <div class="border rounded-xl p-4 cursor-pointer"
+                                    :class="form.note_platform_notifications_recipient_scope === 'all_team' ? 'border-primary bg-slate-50' : ''"
+                                    @click="selectNotePlatformRecipientScope('all_team')">
+                                    <div class="flex space-s-2">
+                                        <div class="mt-[1px]"><div class="w-4 h-4 border border-gray-400 rounded-md flex items-center justify-center" :class="form.note_platform_notifications_recipient_scope === 'all_team' ? 'bg-[#000]' : ''"><svg v-if="form.note_platform_notifications_recipient_scope === 'all_team'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg></div></div>
+                                        <div><div>{{ $t('All team members') }}</div><div class="text-slate-500">{{ $t('Notify every active team member in this organization.') }}</div></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
                 </div>
             </div>
         </div>
@@ -326,6 +363,8 @@ const form = useForm({
     mask_agent_phone_numbers: settings.value?.tickets?.mask_agent_phone_numbers ?? false,
     note_email_notifications_enabled: settings.value?.tickets?.note_email_notifications?.enabled ?? false,
     note_email_notifications_recipient_scope: settings.value?.tickets?.note_email_notifications?.recipient_scope ?? 'assigned_agent',
+    note_platform_notifications_enabled: settings.value?.tickets?.note_platform_notifications?.enabled ?? false,
+    note_platform_notifications_recipient_scope: settings.value?.tickets?.note_platform_notifications?.recipient_scope ?? 'assigned_agent',
     selected_agents: (() => {
         const agentsArray = Array.isArray(props.agents) ? props.agents : Object.values(props.agents);
         const validAgentIds = agentsArray.map(a => Number(a.id));
@@ -378,6 +417,14 @@ const toggleState5 = () => {
 }
 const selectNoteEmailRecipientScope = (scope) => {
     form.note_email_notifications_recipient_scope = scope;
+    submitForm();
+}
+const toggleState6 = () => {
+    form.note_platform_notifications_enabled = !form.note_platform_notifications_enabled;
+    submitForm();
+}
+const selectNotePlatformRecipientScope = (scope) => {
+    form.note_platform_notifications_recipient_scope = scope;
     submitForm();
 }
 

@@ -28,7 +28,7 @@
 <script setup>
     import axios from "axios";
     import { Link, useForm } from "@inertiajs/vue3";
-    import { defineProps, ref, onMounted } from "vue";
+    import { defineProps, ref, onMounted, onUnmounted } from "vue";
     import Menu from "./Menu.vue";
     import ProfileModal from '@/Components/ProfileModal.vue';
 
@@ -73,6 +73,13 @@
             // Silently fail
         }
     });
+
+    const incrementUnreadNotifications = () => {
+        unreadNotifications.value = Number(unreadNotifications.value || 0) + 1;
+    };
+
+    onMounted(() => window.addEventListener('notification:received', incrementUnreadNotifications));
+    onUnmounted(() => window.removeEventListener('notification:received', incrementUnreadNotifications));
 
     const closeSidebar = () => {
         isSidebarOpen.value = false;

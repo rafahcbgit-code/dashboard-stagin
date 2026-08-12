@@ -17,7 +17,7 @@ class NotificationController extends BaseController
 
         $notifications = NotificationLog::where('user_id', $userId)
             ->where('organization_id', $organizationId)
-            ->where('notification_type', 'chat_assigned')
+            ->whereIn('notification_type', ['chat_assigned', 'chat_note_added'])
             ->orderBy('sent_at', 'desc')
             ->paginate(20);
 
@@ -36,7 +36,7 @@ class NotificationController extends BaseController
         $count = NotificationLog::query()
             ->where('user_id', $userId)
             ->where('organization_id', $organizationId)
-            ->where('notification_type', 'chat_assigned')
+            ->whereIn('notification_type', ['chat_assigned', 'chat_note_added'])
             ->where('clicked', false)
             ->count();
 
@@ -68,7 +68,7 @@ class NotificationController extends BaseController
 
         NotificationLog::where('user_id', $userId)
             ->where('organization_id', $organizationId)
-            ->where('notification_type', 'chat_assigned')
+            ->whereIn('notification_type', ['chat_assigned', 'chat_note_added'])
             ->where('clicked', false)
             ->update([
                 'clicked' => true,
