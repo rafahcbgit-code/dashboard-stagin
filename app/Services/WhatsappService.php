@@ -2192,19 +2192,27 @@ class WhatsappService
                 }
             }
         } else {
+            $authenticationButton = $request->input('authentication_button', []);
+            // The UI uses lowercase values for its internal state, while the
+            // WhatsApp Cloud API requires the OTP type enum in uppercase.
+            $otpType = strtoupper((string) $authenticationButton['otp_type']);
             $button = [
-                'type' => $request->authentication_button['type'],
-                'otp_type' => $request->authentication_button['otp_type'],
-                'text' => $request->authentication_button['text'],
+                'type' => $authenticationButton['type'],
+                'otp_type' => $otpType,
             ];
 
-            if($request->authentication_button['otp_type'] != 'copy_code'){
-                $button['autofill_text'] = $request->authentication_button['autofill_text'];
-                $button['supported_apps'] = $request->authentication_button['supported_apps'];
+            if($otpType !== 'COPY_CODE'){
+                $button['text'] = $authenticationButton['text'];
+                $button['autofill_text'] = $authenticationButton['autofill_text'];
+                $button['supported_apps'] = $authenticationButton['supported_apps'];
             }
 
-            if ($request->authentication_button['otp_type'] === 'zero_tap') {
-                $button['zero_tap_terms_accepted'] = $request->authentication_button['zero_tap_terms_accepted'];
+            // Meta now only accepts its approved, localized Copy Code label.
+            // Omitting the optional text field makes Meta select that label for
+            // the template language and avoids error 2388060.
+
+            if ($otpType === 'ZERO_TAP') {
+                $button['zero_tap_terms_accepted'] = $authenticationButton['zero_tap_terms_accepted'];
             }
 
             $requestData['components'][] = [
@@ -2623,19 +2631,27 @@ class WhatsappService
                 }
             }
         } else {
+            $authenticationButton = $request->input('authentication_button', []);
+            // The UI uses lowercase values for its internal state, while the
+            // WhatsApp Cloud API requires the OTP type enum in uppercase.
+            $otpType = strtoupper((string) $authenticationButton['otp_type']);
             $button = [
-                'type' => $request->authentication_button['type'],
-                'otp_type' => $request->authentication_button['otp_type'],
-                'text' => $request->authentication_button['text'],
+                'type' => $authenticationButton['type'],
+                'otp_type' => $otpType,
             ];
 
-            if($request->authentication_button['otp_type'] != 'copy_code'){
-                $button['autofill_text'] = $request->authentication_button['autofill_text'];
-                $button['supported_apps'] = $request->authentication_button['supported_apps'];
+            if($otpType !== 'COPY_CODE'){
+                $button['text'] = $authenticationButton['text'];
+                $button['autofill_text'] = $authenticationButton['autofill_text'];
+                $button['supported_apps'] = $authenticationButton['supported_apps'];
             }
 
-            if ($request->authentication_button['otp_type'] === 'zero_tap') {
-                $button['zero_tap_terms_accepted'] = $request->authentication_button['zero_tap_terms_accepted'];
+            // Meta now only accepts its approved, localized Copy Code label.
+            // Omitting the optional text field makes Meta select that label for
+            // the template language and avoids error 2388060.
+
+            if ($otpType === 'ZERO_TAP') {
+                $button['zero_tap_terms_accepted'] = $authenticationButton['zero_tap_terms_accepted'];
             }
 
             $requestData['components'][] = [

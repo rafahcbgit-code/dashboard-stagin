@@ -373,7 +373,9 @@
                                 <p class="text-slate-600 leading-tight text-xs mb-4">{{ $t('You can customise the button text for both auto-fill and copy code. Even when zero-tap is turned on, buttons are still needed for the backup code delivery method.') }}</p>
 
                                 <div v-if="form.authentication_button.otp_type == 'copy_code'">
-                                    <FormInput v-model="form.authentication_button.text" :name="$t('Copy code')" :type="'text'" :class="''" :labelClass="'mb-0'"/>
+                                    <div class="rounded-md border border-blue-100 bg-blue-50 px-3 py-2 text-xs text-blue-800">
+                                        {{ $t('WhatsApp automatically uses its approved, localized Copy Code label for the selected template language.') }}
+                                    </div>
                                 </div>
                                 <div v-else class="flex gap-x-2">
                                     <FormInput v-model="form.authentication_button.autofill_text" :name="$t('Auto-fill')" :type="'text'" :class="'w-1/2'" :labelClass="'mb-0'"/>
@@ -460,7 +462,7 @@
                         <div class="flex justify-center items-center space-s-2 rounded-lg bg-white h-10 my-[0.1em]">
                             <span v-if="form.authentication_button.otp_type == 'copy_code'" class="flex gap-x-1">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"><path fill="currentColor" d="M19 21H8V7h11m0-2H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2m-3-4H4a2 2 0 0 0-2 2v14h2V3h12V1Z"/></svg>
-                                {{ form.authentication_button.text }}
+                                {{ $t('Copy code') }}
                             </span>
                             <span v-if="form.authentication_button.otp_type == 'one_tap'">{{ form.authentication_button.autofill_text }}</span>
                         </div>
@@ -546,9 +548,11 @@
     import { router } from '@inertiajs/vue3';
 
     const createAuthenticationButton = () => ({
+        type: 'OTP',
         otp_type: 'zero_tap',
         text: 'Copy Code',
         autofill_text: 'Autofill',
+        zero_tap_terms_accepted: true,
         supported_apps: [
             {
                 package_name: null,
@@ -1199,6 +1203,7 @@
     const submitForm = () => {
         isLoading.value = true;
         isModalOpen.value = true;
+        error.value = null;
 
         // ── CAROUSEL: multipart FormData with one file per card ──
         if (templateType.value === 'carousel') {
@@ -1237,13 +1242,19 @@
             .then(response => {
                 if (response.data.success === false) {
                     isLoading.value = false;
-                    error.value = response.data.data?.error || { message: 'Something went wrong' };
+                    error.value = response.data.data?.error
+                        || response.data.error
+                        || { message: response.data.message || 'Something went wrong' };
                 } else {
                     router.visit('/templates', { method: 'get' });
                 }
             })
             .catch(error => {
                 console.error('Carousel template submission failed', error);
+                isLoading.value = false;
+                error.value = error.response?.data?.data?.error
+                    || error.response?.data?.error
+                    || { message: error.response?.data?.message || 'Something went wrong. Please try again.' };
             });
 
             return;
@@ -1258,7 +1269,9 @@
         .then(response => {
             if(response.data.success === false){
                 isLoading.value = false;
-                error.value = response.data.data.error;
+                error.value = response.data.data?.error
+                    || response.data.error
+                    || { message: response.data.message || 'Something went wrong' };
             } else {
                 router.visit('/templates', {
                     method: 'get',
@@ -1267,6 +1280,10 @@
         })
         .catch(error => {
             console.error('Template submission failed', error);
+            isLoading.value = false;
+            error.value = error.response?.data?.data?.error
+                || error.response?.data?.error
+                || { message: error.response?.data?.message || 'Something went wrong. Please try again.' };
         });
     }
 
