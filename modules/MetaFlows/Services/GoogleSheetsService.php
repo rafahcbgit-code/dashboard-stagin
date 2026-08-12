@@ -67,7 +67,12 @@ class GoogleSheetsService
 
         $values = $response['values'][0] ?? [];
 
-        return array_values(array_filter($values, fn($v) => $v !== ''));
+        // A header entered with accidental surrounding spaces (for example
+        // " email") must behave as the same column as "email" everywhere:
+        // in the mapping form and when values are appended to the sheet.
+        $headers = array_map(fn($value) => trim((string) $value), $values);
+
+        return array_values(array_filter($headers, fn($header) => $header !== ''));
     }
 
     // Append a single row to the given tab in the spreadsheet.

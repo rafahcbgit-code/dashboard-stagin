@@ -627,6 +627,19 @@
     const loadingHeaders   = ref(false);
     const mappingFor       = ref({});
 
+    // Keep saved mappings independent from the asynchronous field/header loads.
+    // Without this, a mapping can be persisted successfully but look blank until
+    // the fields are fetched again or the section is reopened.
+    const applySheetMapping = (mapping) => {
+        const restored = {};
+
+        (mapping ?? []).forEach(({ flow_field: field, sheet_column: column }) => {
+            if (field && column) restored[field] = column;
+        });
+
+        mappingFor.value = restored;
+    };
+
     // ── Reply Message state ──────────────────────────────────────────────────
     const replyEnabled      = ref(props.flow.reply_message_enabled ?? false);
     const replyTemplate     = ref(props.flow.reply_message_template ?? '');
@@ -857,12 +870,7 @@
             // Non-critical
         }
 
-        // Restore mapping from saved config
-        if (sheetMapping.value?.length) {
-            sheetMapping.value.forEach(m => {
-                if (m.flow_field) mappingFor.value[m.flow_field] = m.sheet_column ?? '';
-            });
-        }
+        applySheetMapping(sheetMapping.value);
     });
 
     const onUrlBlur = () => {
@@ -881,6 +889,9 @@
                 },
             });
             sheetHeaders.value = res.data.headers ?? [];
+
+            // Re-apply persisted selections after the option list is available.
+            applySheetMapping(sheetMapping.value);
 
             allFlowFields.value.forEach(field => {
                 if (!mappingFor.value[field.name]) {
@@ -918,13 +929,14 @@
             }));
 
         try {
-            await axios.put(`/automation/meta-flows/${props.flow.uuid}/sheet-config`, {
+            const res = await axios.put(`/automation/meta-flows/${props.flow.uuid}/sheet-config`, {
                 google_sheet_url:     sheetUrl.value,
                 google_sheet_tab:     sheetTab.value,
                 google_sheet_mapping: mapping,
                 google_sheet_enabled: sheetEnabled.value,
             });
-            sheetMapping.value = mapping;
+            sheetMapping.value = res.data.google_sheet_mapping ?? mapping;
+            applySheetMapping(sheetMapping.value);
             if (!silent) showFeedback('Google Sheets configuration saved.', false);
         } catch (err) {
             if (!silent) showFeedback(err.response?.data?.message ?? 'Failed to save sheet config.', true);

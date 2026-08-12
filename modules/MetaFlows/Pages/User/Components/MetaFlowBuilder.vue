@@ -479,18 +479,63 @@ const parseFromJson = (jsonStr) => {
     }
 };
 
-const buildCompletePayload = (components) => {
-    const inputTypes = new Set(['TextInput', 'TextArea', 'Dropdown', 'CheckboxGroup', 'RadioButtonsGroup']);
-    return components.reduce((payload, item) => {
-        if (inputTypes.has(item.type) && item.name) {
-            payload[item.name] = `\${form.${item.name}}`;
+const INPUT_TYPES = new Set(['TextInput', 'TextArea', 'Dropdown', 'CheckboxGroup', 'RadioButtonsGroup', 'DatePicker']);
+
+const inputNamesFor = (screen) => screen.components
+    .filter(component => INPUT_TYPES.has(component.type) && component.name)
+    .map(component => component.name);
+
+// Values from a screen are not returned automatically by Meta. Work out which
+// values arrive at each screen, then include them in every navigation and final
+// completion payload. This keeps multi-screen flows from losing early answers.
+const buildScreenContexts = (screensArr) => {
+    const screenById = new Map(screensArr.map(screen => [screen.id, screen]));
+    const incoming = new Map(screensArr.map(screen => [screen.id, new Set()]));
+
+    for (let pass = 0; pass < Math.max(screensArr.length, 1); pass++) {
+        let changed = false;
+
+        for (const screen of screensArr) {
+            const available = new Set([
+                ...(incoming.get(screen.id) || []),
+                ...inputNamesFor(screen),
+            ]);
+
+            for (const footer of screen.components.filter(component => component.type === 'Footer' && component.action === 'navigate')) {
+                if (!screenById.has(footer.nextScreen)) continue;
+
+                const targetIncoming = incoming.get(footer.nextScreen);
+                for (const fieldName of available) {
+                    if (!targetIncoming.has(fieldName)) {
+                        targetIncoming.add(fieldName);
+                        changed = true;
+                    }
+                }
+            }
         }
 
-        return payload;
-    }, {});
+        if (!changed) break;
+    }
+
+    return screensArr.reduce((contexts, screen) => {
+        const local = new Set(inputNamesFor(screen));
+        contexts.set(screen.id, {
+            local,
+            incoming: incoming.get(screen.id) || new Set(),
+            available: new Set([...(incoming.get(screen.id) || []), ...local]),
+        });
+        return contexts;
+    }, new Map());
 };
 
-const compToJson = (comp, components = []) => {
+const buildActionPayload = (context) => Array.from(context.available).reduce((payload, fieldName) => {
+    payload[fieldName] = context.local.has(fieldName)
+        ? `\${form.${fieldName}}`
+        : `\${data.${fieldName}}`;
+    return payload;
+}, {});
+
+const compToJson = (comp, actionPayload = {}) => {
     switch (comp.type) {
         case 'TextHeading':
         case 'TextSubheading':
@@ -506,8 +551,8 @@ const compToJson = (comp, components = []) => {
             return { type: comp.type, label: comp.label, name: comp.name, required: comp.required, 'data-source': comp.options };
         case 'Footer': {
             const action = comp.action === 'navigate'
-                ? { name: 'navigate', next: { type: 'screen', name: comp.nextScreen }, payload: {} }
-                : { name: 'complete', payload: buildCompletePayload(components) };
+                ? { name: 'navigate', next: { type: 'screen', name: comp.nextScreen }, payload: actionPayload }
+                : { name: 'complete', payload: actionPayload };
             return { type: 'Footer', label: comp.label, 'on-click-action': action };
         }
         default:
@@ -516,12 +561,17 @@ const compToJson = (comp, components = []) => {
 };
 
 // These component types must be children of a Form element in the Flow JSON spec.
-const FORM_TYPES = new Set(['TextInput', 'TextArea', 'Dropdown', 'CheckboxGroup', 'RadioButtonsGroup', 'Footer']);
+const FORM_TYPES = new Set(['TextInput', 'TextArea', 'Dropdown', 'CheckboxGroup', 'RadioButtonsGroup', 'DatePicker', 'Footer']);
 
-const toFlowJson = (screensArr) => JSON.stringify({
-    version: '6.3',
-    screens: screensArr.map(screen => {
-        const jsonComps = screen.components.map(comp => compToJson(comp, screen.components)).filter(Boolean);
+const toFlowJson = (screensArr) => {
+    const contexts = buildScreenContexts(screensArr);
+
+    return JSON.stringify({
+        version: '6.3',
+        screens: screensArr.map(screen => {
+        const context = contexts.get(screen.id);
+        const actionPayload = buildActionPayload(context);
+        const jsonComps = screen.components.map(comp => compToJson(comp, actionPayload)).filter(Boolean);
 
         // Split at the first form-capable component:
         //   • text before it → direct layout children
@@ -538,14 +588,24 @@ const toFlowJson = (screensArr) => JSON.stringify({
             layoutChildren = [...preFormText, { type: 'Form', name: formName, children: formChildren }];
         }
 
-        return {
+        const screenJson = {
             id: sanitizeScreenId(screen.id),
             title: screen.title || '',
             terminal: screen.terminal || false,
             layout: { type: 'SingleColumnLayout', children: layoutChildren },
         };
-    }),
-}, null, 2);
+
+        if (context.incoming.size) {
+            screenJson.data = Array.from(context.incoming).reduce((data, fieldName) => {
+                data[fieldName] = { type: 'string', '__example__': 'example' };
+                return data;
+            }, {});
+        }
+
+        return screenJson;
+        }),
+    }, null, 2);
+};
 
 const defaultForType = (type) => {
     switch (type) {

@@ -178,13 +178,17 @@ class MetaFlowService
 
         $inputTypes = ['TextInput', 'TextArea', 'Dropdown', 'CheckboxGroup', 'RadioButtonsGroup', 'DatePicker'];
         $changed = $this->ensureRequiredIdentifiers($flowJson, $inputTypes);
-        $flowDataFields = $this->extractNavigatePayloadFields($flowJson);
-        $changed = $this->ensureNavigateTargetDataModels($flowJson) || $changed;
+        // A Flow response only contains values included in its final complete
+        // action. Carry values through every navigation action so fields entered
+        // on an earlier screen are available as ${data.*} on later screens.
+        $changed = $this->ensureNavigatePayloadsAndDataModels($flowJson, $inputTypes) || $changed;
 
         foreach ($flowJson['screens'] ?? [] as $screenIndex => $screen) {
+            $screenDataFields = array_keys(is_array($screen['data'] ?? null) ? $screen['data'] : []);
+
             foreach ($screen['layout']['children'] ?? [] as $childIndex => $child) {
                 $formPath = "screens.{$screenIndex}.layout.children.{$childIndex}";
-                $changed = $this->ensureCompleteActionPayloadForForm($flowJson, $formPath, $inputTypes, $flowDataFields) || $changed;
+                $changed = $this->ensureCompleteActionPayloadForForm($flowJson, $formPath, $inputTypes, $screenDataFields) || $changed;
             }
         }
 
@@ -324,7 +328,7 @@ class MetaFlowService
         return 'Meta rejected the Flow JSON: ' . implode(' ', $messages);
     }
 
-    private function ensureCompleteActionPayloadForForm(array &$flowJson, string $formPath, array $inputTypes, array $flowDataFields): bool
+    private function ensureCompleteActionPayloadForForm(array &$flowJson, string $formPath, array $inputTypes, array $screenDataFields): bool
     {
         $form = data_get($flowJson, $formPath);
 
@@ -364,7 +368,7 @@ class MetaFlowService
                 }
             }
 
-            foreach ($flowDataFields as $fieldName) {
+            foreach ($screenDataFields as $fieldName) {
                 if (!array_key_exists($fieldName, $payload)) {
                     $payload[$fieldName] = '${data.' . $fieldName . '}';
                     $changed = true;
@@ -380,38 +384,13 @@ class MetaFlowService
         return $changed;
     }
 
-    private function extractNavigatePayloadFields(array $flowJson): array
-    {
-        $fields = [];
-
-        foreach ($flowJson['screens'] ?? [] as $screen) {
-            foreach ($screen['layout']['children'] ?? [] as $child) {
-                if (($child['type'] ?? null) !== 'Form' || !is_array($child['children'] ?? null)) {
-                    continue;
-                }
-
-                foreach ($child['children'] as $item) {
-                    if (($item['type'] ?? null) !== 'Footer') {
-                        continue;
-                    }
-
-                    if (($item['on-click-action']['name'] ?? null) !== 'navigate') {
-                        continue;
-                    }
-
-                    $payload = $this->normalizePayloadObject($item['on-click-action']['payload'] ?? []);
-
-                    foreach (array_keys($payload) as $fieldName) {
-                        $fields[$fieldName] = true;
-                    }
-                }
-            }
-        }
-
-        return array_keys($fields);
-    }
-
-    private function ensureNavigateTargetDataModels(array &$flowJson): bool
+    /**
+     * Ensure every navigation carries all values available on its source screen.
+     *
+     * The loop is intentional: a value can travel through more than one screen,
+     * so a later pass forwards data models added to an intermediate screen.
+     */
+    private function ensureNavigatePayloadsAndDataModels(array &$flowJson, array $inputTypes): bool
     {
         $changed = false;
         $screenIndexesById = [];
@@ -422,41 +401,79 @@ class MetaFlowService
             }
         }
 
-        foreach ($flowJson['screens'] ?? [] as $screen) {
-            foreach ($screen['layout']['children'] ?? [] as $child) {
-                if (($child['type'] ?? null) !== 'Form' || !is_array($child['children'] ?? null)) {
-                    continue;
-                }
+        $maxPasses = max(count($screenIndexesById), 1);
 
-                foreach ($child['children'] as $item) {
-                    if (
-                        ($item['type'] ?? null) !== 'Footer'
-                        || (($item['on-click-action']['name'] ?? null) !== 'navigate')
-                    ) {
+        for ($pass = 0; $pass < $maxPasses; $pass++) {
+            $passChanged = false;
+
+            foreach ($flowJson['screens'] ?? [] as $screenIndex => $screen) {
+                $screenDataFields = array_keys(is_array($screen['data'] ?? null) ? $screen['data'] : []);
+
+                foreach ($screen['layout']['children'] ?? [] as $childIndex => $child) {
+                    if (($child['type'] ?? null) !== 'Form' || !is_array($child['children'] ?? null)) {
                         continue;
                     }
 
-                    $targetScreen = $item['on-click-action']['next']['name'] ?? null;
-                    $targetIndex = $targetScreen !== null ? ($screenIndexesById[$targetScreen] ?? null) : null;
-
-                    if ($targetIndex === null) {
-                        continue;
+                    $formFields = [];
+                    foreach ($child['children'] as $component) {
+                        if (in_array($component['type'] ?? '', $inputTypes, true) && !empty($component['name'])) {
+                            $formFields[] = $component['name'];
+                        }
                     }
 
-                    $payload = $this->normalizePayloadObject($item['on-click-action']['payload'] ?? []);
+                    foreach ($child['children'] as $itemIndex => $item) {
+                        if (
+                            ($item['type'] ?? null) !== 'Footer'
+                            || (($item['on-click-action']['name'] ?? null) !== 'navigate')
+                        ) {
+                            continue;
+                        }
 
-                    foreach (array_keys($payload) as $fieldName) {
-                        $dataPath = "screens.{$targetIndex}.data.{$fieldName}";
+                        $targetScreen = $item['on-click-action']['next']['name'] ?? null;
+                        $targetIndex = $targetScreen !== null ? ($screenIndexesById[$targetScreen] ?? null) : null;
 
-                        if (data_get($flowJson, $dataPath) === null) {
-                            data_set($flowJson, $dataPath, [
-                                'type'        => 'string',
-                                '__example__' => 'example',
-                            ]);
-                            $changed = true;
+                        if ($targetIndex === null) {
+                            continue;
+                        }
+
+                        $payload = $this->normalizePayloadObject($item['on-click-action']['payload'] ?? []);
+
+                        foreach ($formFields as $fieldName) {
+                            if (!array_key_exists($fieldName, $payload)) {
+                                $payload[$fieldName] = '${form.' . $fieldName . '}';
+                            }
+                        }
+
+                        foreach ($screenDataFields as $fieldName) {
+                            if (!array_key_exists($fieldName, $payload) && !in_array($fieldName, $formFields, true)) {
+                                $payload[$fieldName] = '${data.' . $fieldName . '}';
+                            }
+                        }
+
+                        if ($payload !== ($item['on-click-action']['payload'] ?? [])) {
+                            data_set($flowJson, "screens.{$screenIndex}.layout.children.{$childIndex}.children.{$itemIndex}.on-click-action.payload", $payload);
+                            $passChanged = true;
+                        }
+
+                        foreach (array_keys($payload) as $fieldName) {
+                            $dataPath = "screens.{$targetIndex}.data.{$fieldName}";
+
+                            if (data_get($flowJson, $dataPath) === null) {
+                                data_set($flowJson, $dataPath, [
+                                    'type'        => 'string',
+                                    '__example__' => 'example',
+                                ]);
+                                $passChanged = true;
+                            }
                         }
                     }
                 }
+            }
+
+            $changed = $changed || $passChanged;
+
+            if (!$passChanged) {
+                break;
             }
         }
 
