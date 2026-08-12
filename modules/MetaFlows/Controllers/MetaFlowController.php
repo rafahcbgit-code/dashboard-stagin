@@ -331,14 +331,29 @@ class MetaFlowController extends BaseController
             ->where('organization_id', session()->get('current_organization'))
             ->firstOrFail();
 
+        $mapping = collect($request->input('google_sheet_mapping', []))
+            ->filter(fn($map) => is_array($map)
+                && filled($map['flow_field'] ?? null)
+                && filled($map['sheet_column'] ?? null)
+            )
+            ->map(fn($map) => [
+                'flow_field'   => (string) $map['flow_field'],
+                'sheet_column' => (string) $map['sheet_column'],
+            ])
+            ->values()
+            ->all();
+
         $flow->update([
             'google_sheet_url'     => $request->google_sheet_url,
             'google_sheet_tab'     => $request->google_sheet_tab,
-            'google_sheet_mapping' => $request->google_sheet_mapping,
+            'google_sheet_mapping' => $mapping,
             'google_sheet_enabled' => $request->boolean('google_sheet_enabled'),
         ]);
 
-        return response()->json(['message' => 'Google Sheets configuration saved.']);
+        return response()->json([
+            'message'              => 'Google Sheets configuration saved.',
+            'google_sheet_mapping' => $flow->fresh()->google_sheet_mapping ?? [],
+        ]);
     }
 
     // Save post-submission settings (reply message, interactive reply, email notification)
