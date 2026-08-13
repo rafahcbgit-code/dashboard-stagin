@@ -250,6 +250,32 @@ describe('AC-1.2.2: Chat Creation', function () {
         expect($chatLog->contact_id)->toBe($chat->contact_id);
     });
 
+    it('stores an image URL supplied with a click-to-WhatsApp referral', function () {
+        $organization = createOrganizationWithSubscription();
+        $wamId = 'wamid_referral_image_'.uniqid();
+        $imageUrl = 'https://instagram.example.com/referral-image.jpg?token=abc123';
+        $payload = createMessagePayload('text', $wamId, '1234567890', 'Referral User');
+        $payload['value']['messages'][0]['referral'] = [
+            'source_type' => 'ad',
+            'source_id' => '120250333575320095',
+            'headline' => 'Chat with us',
+            'media_type' => 'image',
+            'image_url' => $imageUrl,
+        ];
+
+        (new ProcessWebhookJob($payload, $organization->id, 'messages'))->handle();
+
+        $chat = Chat::where('organization_id', $organization->id)
+            ->where('wam_id', $wamId)
+            ->sole();
+        $metadata = json_decode($chat->metadata, true);
+
+        expect($metadata['referral']['media_type'])->toBe('image')
+            ->and($metadata['referral']['image_url'])->toBe($imageUrl)
+            ->and($metadata['referral']['video_url'])->toBeNull()
+            ->and($metadata['referral']['thumbnail_url'])->toBeNull();
+    });
+
     it('does not create an inbound duplicate when a business-number echo matches an outbound chat', function () {
         $organization = createOrganizationWithSubscription();
         $customerPhone = '966555409609';

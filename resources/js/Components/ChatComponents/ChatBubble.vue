@@ -421,8 +421,8 @@ const viewContactDetails = async (data) => {
 
 <!-- Referral Section -->
 <div v-if="metadata.referral" class="mt-3 p-3 bg-gray-50 rounded-lg border border-gray-200">
-    <!-- Referral Media (Video or Thumbnail) -->
-    <div v-if="metadata.referral.video_url || metadata.referral.thumbnail_url" class="mb-2">
+    <!-- Referral Media (Image, Video or Thumbnail) -->
+    <div v-if="metadata.referral.image_url || metadata.referral.video_url || metadata.referral.thumbnail_url" class="mb-2">
         <!-- If content.media exists and type is referral_video, show the downloaded media -->
         <div v-if="content.media && content.media.type === 'referral_video'">
             <video v-if="metadata.referral.media_type && metadata.referral.media_type.startsWith('video')" 
@@ -431,6 +431,10 @@ const viewContactDetails = async (data) => {
                 {{ $t('Your browser does not support the video element') }}
             </video>
             <img v-else :src="content.media.path" alt="Referral Media" class="max-w-[250px] rounded" />
+        </div>
+        <!-- Referral images are delivered as a direct URL in the webhook. -->
+        <div v-else-if="metadata.referral.image_url">
+            <img :src="metadata.referral.image_url" alt="Referral Image" class="max-w-[250px] rounded" />
         </div>
         <!-- Fallback: show thumbnail if available -->
         <div v-else-if="metadata.referral.thumbnail_url">

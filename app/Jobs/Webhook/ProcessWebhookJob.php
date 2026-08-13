@@ -832,6 +832,7 @@ class ProcessWebhookJob implements ShouldQueue
                         'source_type'     => $message['referral']['source_type'] ?? null,
                         'source_id'     => $message['referral']['source_id'] ?? null,
                         'media_type'     => $message['referral']['media_type'] ?? null,
+                        'image_url'     => $message['referral']['image_url'] ?? null,
                         'video_url'     => $message['referral']['video_url'] ?? null,
                         'thumbnail_url'     => $message['referral']['thumbnail_url'] ?? null,
                         'ctwa_clid'     => $message['referral']['ctwa_clid'] ?? null,
