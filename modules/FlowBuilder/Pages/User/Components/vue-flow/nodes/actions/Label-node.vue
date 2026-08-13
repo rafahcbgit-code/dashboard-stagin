@@ -177,7 +177,7 @@
 </template>
 
 <script setup>
-import { ref, reactive, computed, onMounted, inject } from 'vue'
+import { ref, reactive, computed, onMounted, inject, unref } from 'vue'
 import { Handle, Position, useVueFlow, useNode } from '@vue-flow/core'
 import FormCheckbox from '../../../../../../../../resources/js/Components/FormCheckbox.vue'
 
@@ -192,6 +192,7 @@ const node = useNode()
 
 // Inject labels from parent component
 const availableLabels = inject('labels', [])
+const labels = computed(() => unref(availableLabels) || [])
 
 const config = computed(() => props.data?.config || {})
 const isActive = computed(() => props.data?.is_active !== false)
@@ -202,7 +203,7 @@ const selectedLabelNames = computed(() => {
   const ids = config.value.label_ids || []
   if (ids.length === 0) return 'No labels selected'
   const names = ids.map(id => {
-    const label = availableLabels.value.find ? availableLabels.value.find(l => l.value == id) : availableLabels.find(l => l.value == id)
+    const label = labels.value.find(l => l.value == id)
     return label ? label.label : `ID: ${id}`
   })
   return names.join(', ')
