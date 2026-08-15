@@ -16,13 +16,24 @@ class FirebaseService
     public function __construct()
     {
         try {
-            // Check if credentials file exists
-            if (env('FIREBASE_CREDENTIALS') && file_exists(env('FIREBASE_CREDENTIALS'))) {
-                $factory = (new Factory)->withServiceAccount(env('FIREBASE_CREDENTIALS'));
-            } 
-            // Or use JSON string from env
-            elseif (env('FIREBASE_CREDENTIALS_JSON')) {
-                $credentials = json_decode(env('FIREBASE_CREDENTIALS_JSON'), true);
+            $credentialsPath = config('firebase.credentials');
+            $credentialsJson = config('firebase.credentials_json');
+
+            // Prefer a service-account file when it exists and is readable.
+            if (is_string($credentialsPath)
+                && $credentialsPath !== ''
+                && is_file($credentialsPath)
+                && is_readable($credentialsPath)) {
+                $factory = (new Factory)->withServiceAccount($credentialsPath);
+            }
+            // Fall back to a JSON service-account value when configured.
+            elseif (is_string($credentialsJson) && trim($credentialsJson) !== '') {
+                $credentials = json_decode($credentialsJson, true);
+
+                if (! is_array($credentials)) {
+                    throw new \InvalidArgumentException('FIREBASE_CREDENTIALS_JSON must contain valid JSON.');
+                }
+
                 $factory = (new Factory)->withServiceAccount($credentials);
             } else {
                 Log::warning('Firebase credentials not configured');
