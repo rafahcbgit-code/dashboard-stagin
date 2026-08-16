@@ -461,7 +461,8 @@ const cleanupNavigationBlockers = () => {
 
 </script>
 <template>
-    <div class="px-4 py-4 border-b">
+    <div class="flex h-full min-h-0 flex-col">
+        <div class="shrink-0 px-4 py-4 border-b">
         <div class="flex items-center justify-between space-x-1 text-xl">
             <div class="flex items-center space-x-3">
                 <h2>{{ $t('Chats') }}</h2>
@@ -738,8 +739,8 @@ const cleanupNavigationBlockers = () => {
                 <SortDirectionToggle :direction="props.chatSortDirection" :url="'/chats/update-sort-direction'" />
             </div>
         </div>
-    </div>
-    <div class="flex-grow overflow-y-auto h-[65vh]" ref="scrollContainer">
+        </div>
+        <div class="min-h-0 flex-1 overflow-y-auto" ref="scrollContainer">
         <Link :href="buildChatUrl(contact.uuid)" preserve-scroll class="block border-b group-hover:pr-0" :class="{
             'bg-green-50': contact.unread_messages > 0 && selectedContactUuid !== contact.uuid,
             'bg-green-100': selectedContactUuid === contact.uuid
@@ -898,8 +899,9 @@ const cleanupNavigationBlockers = () => {
                 </div>
             </div>
         </Link>
-    </div>
-    <div class="px-4 pb-4">
-        <Pagination class="mt-3" :pagination="rows.meta" />
+        </div>
+        <div class="shrink-0 px-4 pb-4">
+            <Pagination class="mt-3" :pagination="rows.meta" :compact="true" />
+        </div>
     </div>
 </template>

@@ -1,14 +1,16 @@
 <template>
-    <div class="inline-flex justify-center items-center">
-      <div v-if="pagination.last_page > 1" class="hidden mr-2 text-sm text-gray-600 lg:block">{{ pagination.total }} items</div>
-  
-      <div class="flex space-x-1 items-center" v-if="pagination.last_page > 1">
+    <div class="flex w-full min-w-0 justify-center">
+      <div class="flex max-w-full min-w-0 items-center gap-2">
+      <div v-if="pagination.last_page > 1" class="shrink-0 whitespace-nowrap text-xs text-gray-600 sm:text-sm">{{ pagination.total }} items</div>
+
+      <div class="flex min-w-0 shrink flex-nowrap items-center gap-1" v-if="pagination.last_page > 1">
         <!-- First Page Button -->
-        <button
+        <button v-if="!compact"
             :disabled="noPreviousPage"
             :class="{'opacity-50': noPreviousPage}"
             @click="loadPage(1)"
-            class="inline-flex justify-center items-center w-11 h-11 text-gray-700 bg-white rounded border border-gray-200 shadow-sm outline-none hover:bg-gray-50 lg:h-9 lg:w-9 lg:text-sm focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+            aria-label="First page"
+            class="hidden shrink-0 justify-center items-center h-9 w-9 text-gray-700 bg-white rounded border border-gray-200 shadow-sm outline-none hover:bg-gray-50 sm:inline-flex focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
           <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 lg:h-3 lg:w-3" fill="none" viewBox="0 0 24 24"
                stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/>
@@ -20,7 +22,8 @@
             :disabled="noPreviousPage"
             :class="{'opacity-50': noPreviousPage}"
             @click="loadPage(pagination.current_page - 1)"
-            class="inline-flex justify-center items-center w-11 h-11 text-gray-700 bg-white rounded border border-gray-200 shadow-sm outline-none hover:bg-gray-50 lg:h-9 lg:w-9 focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+            aria-label="Previous page"
+            class="inline-flex shrink-0 justify-center items-center h-9 w-9 text-gray-700 bg-white rounded border border-gray-200 shadow-sm outline-none hover:bg-gray-50 focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
           <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 lg:h-3 lg:w-3" fill="none" viewBox="0 0 24 24"
                stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
@@ -28,7 +31,7 @@
         </button>
   
         <!-- Jump to Page Input Section -->
-        <div class="flex flex-row items-center space-x-2 mx-2 px-2 border-l border-r border-gray-200">
+        <div :class="compact ? 'shrink-0' : 'shrink'" class="flex min-w-0 items-center gap-1 border-l border-r border-gray-200 px-1 sm:mx-1 sm:px-2">
           <div class="flex items-center space-x-1">
             <input
                 type="number"
@@ -37,14 +40,16 @@
                 :min="1"
                 :max="pagination.last_page"
                 placeholder="Go"
-                class="w-20 px-2 py-1 text-sm text-center rounded border-2 shadow-sm outline-none hover:bg-gray-50 focus:ring-1 lg:w-16"
+                aria-label="Page number"
+                class="w-14 px-1 py-1 text-xs text-center rounded border-2 shadow-sm outline-none hover:bg-gray-50 focus:ring-1 sm:w-16 sm:px-2 sm:text-sm"
                 style="border-color: #008000 ; color: #008000 ; font-weight: 500;"
             />
             <button
                 @click="goToPage"
                 :disabled="!goToPageInput"
                 :class="{'opacity-50': !goToPageInput}"
-                class="px-2 py-1 text-xs text-white rounded focus:ring-1 lg:text-xs"
+                aria-label="Go to page"
+                class="shrink-0 px-2 py-1 text-xs text-white rounded focus:ring-1"
                 style="background-color: #008000;"
                 @mouseover="$event.target.style.backgroundColor = '#008000'"
                 @mouseout="$event.target.style.backgroundColor = '#008000'"
@@ -52,7 +57,7 @@
               Go
             </button>
           </div>
-          <div class="text-gray-600 text-xs lg:text-sm whitespace-nowrap">{{ page }} / {{ pagination.last_page }}</div>
+          <div class="shrink-0 text-gray-600 text-xs whitespace-nowrap">{{ page }} / {{ pagination.last_page }}</div>
         </div>
   
         <!-- Next Page Button -->
@@ -60,7 +65,8 @@
             :disabled="noNextPage"
             :class="{'opacity-50': noNextPage}"
             @click="loadPage(pagination.current_page + 1)"
-            class="inline-flex justify-center items-center w-11 h-11 text-gray-700 bg-white rounded border border-gray-300 shadow-sm outline-none hover:bg-gray-50 lg:h-9 lg:w-9 focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+            aria-label="Next page"
+            class="inline-flex shrink-0 justify-center items-center h-9 w-9 text-gray-700 bg-white rounded border border-gray-300 shadow-sm outline-none hover:bg-gray-50 focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
           <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 lg:h-3 lg:w-3" fill="none" viewBox="0 0 24 24"
                stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
@@ -68,17 +74,19 @@
         </button>
   
         <!-- Last Page Button -->
-        <button
+        <button v-if="!compact"
             :disabled="noNextPage"
             :class="{'opacity-50': noNextPage}"
             @click="loadPage(pagination.last_page)"
-            class="inline-flex justify-center items-center w-11 h-11 text-gray-700 bg-white rounded border border-gray-300 shadow-sm outline-none hover:bg-gray-50 lg:h-9 lg:w-9 focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
+            aria-label="Last page"
+            class="hidden shrink-0 justify-center items-center h-9 w-9 text-gray-700 bg-white rounded border border-gray-300 shadow-sm outline-none hover:bg-gray-50 sm:inline-flex focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
           <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 lg:h-3 lg:w-3" fill="none" viewBox="0 0 24 24"
                stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"/>
           </svg>
         </button>
       </div>
+    </div>
     </div>
   </template>
   
@@ -87,6 +95,10 @@
     name: 'Pagination',
     props: {
       pagination: Object,
+      compact: {
+        type: Boolean,
+        default: false,
+      },
     },
     data() {
       return {

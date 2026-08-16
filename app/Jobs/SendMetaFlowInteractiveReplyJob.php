@@ -10,6 +10,7 @@ use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use Modules\MetaFlows\Models\MetaFlow;
 use Modules\MetaFlows\Models\MetaFlowResponse;
@@ -31,16 +32,34 @@ class SendMetaFlowInteractiveReplyJob implements ShouldQueue
 
     public function handle(): void
     {
-        $response = MetaFlowResponse::find($this->metaFlowResponseId);
+        $lock = Cache::lock('meta-flow-interactive-reply:' . $this->metaFlowResponseId, 600);
 
-        if (!$response || !$response->response_json) {
-            Log::warning('SendMetaFlowInteractiveReplyJob: response not found or empty', [
+        if (! $lock->get()) {
+            Log::info('SendMetaFlowInteractiveReplyJob: duplicate execution skipped', [
                 'response_id' => $this->metaFlowResponseId,
             ]);
+
             return;
         }
 
-        $flow = MetaFlow::find($response->meta_flow_id);
+        try {
+            $response = MetaFlowResponse::find($this->metaFlowResponseId);
+
+            if (!$response || !$response->response_json) {
+                Log::warning('SendMetaFlowInteractiveReplyJob: response not found or empty', [
+                    'response_id' => $this->metaFlowResponseId,
+                ]);
+                return;
+            }
+
+            if ($response->interactive_reply_sent_at) {
+                Log::info('SendMetaFlowInteractiveReplyJob: reply already sent, skipping', [
+                    'response_id' => $this->metaFlowResponseId,
+                ]);
+                return;
+            }
+
+            $flow = MetaFlow::find($response->meta_flow_id);
 
         if (!$flow || !$flow->interactive_reply_enabled || !$flow->interactive_reply_config) {
             return;
@@ -113,11 +132,20 @@ class SendMetaFlowInteractiveReplyJob implements ShouldQueue
             array_values($buttons),
         );
 
-        Log::info('SendMetaFlowInteractiveReplyJob: interactive reply sent', [
-            'response_id' => $this->metaFlowResponseId,
-            'contact_id'  => $response->contact_id,
-            'buttons_count' => count($buttons),
-        ]);
+            if (!($result->success ?? false)) {
+                throw new \RuntimeException('WhatsApp rejected the Meta Flow interactive reply.');
+            }
+
+            $response->forceFill(['interactive_reply_sent_at' => now()])->save();
+
+            Log::info('SendMetaFlowInteractiveReplyJob: interactive reply sent', [
+                'response_id' => $this->metaFlowResponseId,
+                'contact_id'  => $response->contact_id,
+                'buttons_count' => count($buttons),
+            ]);
+        } finally {
+            $lock->release();
+        }
     }
 
     public function failed(\Throwable $exception): void

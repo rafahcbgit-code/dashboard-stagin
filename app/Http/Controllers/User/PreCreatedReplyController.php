@@ -14,18 +14,47 @@ class PreCreatedReplyController extends Controller
     public function index(Request $request)
     {
         $organizationId = session()->get('current_organization');
-        
-        $rows = PreCreatedReply::where('organization_id', $organizationId)
-            ->orderBy('created_at', 'desc')
-            ->paginate(10);
+        $wantsJson = $request->wantsJson();
 
-        if ($request->wantsJson()) {
+        $query = PreCreatedReply::where('organization_id', $organizationId);
+        $search = trim((string) $request->input('search', ''));
+
+        if ($search !== '') {
+            $terms = preg_split('/[^\p{L}\p{N}_]+/u', $search, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+            $fullTextTerms = collect($terms)
+                ->filter(fn (string $term) => mb_strlen($term) >= 4)
+                ->values();
+
+            if ($fullTextTerms->count() === count($terms) && $fullTextTerms->isNotEmpty()) {
+                $fullTextSearch = $fullTextTerms
+                    ->map(fn (string $term) => '+' . $term . '*')
+                    ->implode(' ');
+                $query->whereFullText('title', $fullTextSearch, ['mode' => 'boolean']);
+            } else {
+                // MySQL full-text indexes ignore very short words.
+                $query->where('title', 'like', '%' . $search . '%');
+            }
+        }
+
+        $rows = $query
+            ->select($wantsJson
+                ? ['id', 'uuid', 'title', 'type', 'content', 'created_at']
+                : ['id', 'uuid', 'title', 'type', 'created_at'])
+            ->orderBy('created_at', 'desc')
+            ->orderBy('id', 'desc')
+            ->paginate(10)
+            ->withQueryString();
+
+        if ($wantsJson) {
             return \App\Http\Resources\PreCreatedReplyResource::collection($rows);
         }
 
         return Inertia::render('User/PreCreatedReplies/Index', [
             'title' => __('Pre-created Replies'),
             'rows' => \App\Http\Resources\PreCreatedReplyResource::collection($rows),
+            'filters' => [
+                'search' => $search,
+            ],
         ]);
     }
 
