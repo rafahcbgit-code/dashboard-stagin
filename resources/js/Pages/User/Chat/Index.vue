@@ -1,20 +1,19 @@
 <template>
   <AppLayout v-slot:default="slotProps">
-    <div class="md:flex md:flex-grow md:overflow-visible">
-      <div class="md:w-[30%] md:flex flex-col h-full bg-white border-r border-l" :class="contact ? 'hidden' : ''">
+    <div class="md:flex md:flex-grow md:min-h-0 md:h-full md:overflow-hidden">
+      <div class="md:w-[30%] md:flex md:min-h-0 flex-col h-full bg-white border-r border-l" :class="contact ? 'hidden' : ''">
         <ChatTable :rows="rows" :filters="props.filters" :rowCount="props.rowCount"
           :ticketingIsEnabled="ticketingIsEnabled" :status="props?.status"
           :chatSortDirection="props.chat_sort_direction" :teamRole="props.teamRole"
                     :selectedContactUuid="contact?.uuid" :templates="templates" :contactFields="contactFields" />
       </div>
-      <div class="min-w-0 bg-cover flex flex-col chat-bg"
-        :class="contact ? 'h-screen md:w-[70%]' : 'md:h-screen md:w-[70%]'">
-        <ChatHeader v-if="contact" :ticketingIsEnabled="ticketingIsEnabled" :contact="contact"
+      <div class="min-w-0 min-h-0 bg-cover flex flex-col chat-bg md:h-full md:w-[70%]">
+        <ChatHeader v-if="contact" class="shrink-0" :ticketingIsEnabled="ticketingIsEnabled" :contact="contact"
           :displayContactInfo="displayContactInfo" :labelColors="labelColors" :ticket="ticket" :addon="addon"
           :teamRole="props.teamRole" :currentPage="rows.meta?.current_page" @toggleView="toggleContactView"
           @deleteThread="deleteThread" @closeThread="closeThread" @labelsUpdated="handleLabelsUpdated"
           @noteCreated="handleNoteCreated" />
-        <div v-if="contact && !displayTemplate" class="flex-1 overflow-y-auto" ref="scrollContainer2">
+        <div v-if="contact && !displayTemplate" class="flex-1 min-h-0 overflow-y-auto" ref="scrollContainer2">
           <ChatThread v-if="!displayContactInfo && !loadingThread && !displayTemplate" :contactId="contact.id"
             :initialMessages="chatThread" :hasMoreMessages="hasMoreMessages" :initialNextPage="nextPage" />
           <Contact v-if="displayContactInfo && !displayTemplate" class="bg-white h-full" :fields="props.fields"
@@ -22,7 +21,7 @@
         </div>
         <div v-if="
           contact && !displayContactInfo && !formLoading && !displayTemplate
-        " class="w-full py-4">
+        " class="w-full shrink-0 py-4">
           <ChatForm :contact="contact" :chatThread="chatThread" :simpleForm="simpleForm" :chatLimitReached="isChatLimitReached"
             @viewTemplate="displayTemplate = true" />
         </div>
