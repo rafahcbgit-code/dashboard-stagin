@@ -4,7 +4,9 @@ namespace Modules\FlowBuilder\Services;
 
 use App\Helpers\CustomHelper;
 use App\Models\Chat;
+use App\Models\ChatLog;
 use App\Models\Contact;
+use App\Events\NewChatEvent;
 use App\Models\Organization;
 use App\Models\Template;
 use App\Services\BotSettingsService;
@@ -953,7 +955,7 @@ class FlowExecutionService
                 ],
             ];
 
-            Chat::create([
+            $chat = Chat::create([
                 'organization_id' => $this->organizationId,
                 'wam_id'          => $sendResult['data']->messages[0]->id ?? null,
                 'contact_id'      => $contact->id,
@@ -963,6 +965,31 @@ class FlowExecutionService
                 'status'          => 'delivered',
                 'created_at'      => now(),
             ]);
+
+            // Chat threads are rendered from chat_logs, not directly from chats.
+            // Keep the automated Meta Flow path consistent with the regular
+            // outbound message path so the flow is visible in the conversation.
+            $chatLog = ChatLog::create([
+                'contact_id'  => $contact->id,
+                'entity_type' => 'chat',
+                'entity_id'   => $chat->id,
+                'created_at'  => now(),
+            ]);
+
+            // Notify an already-open chat window immediately. The ChatLog above
+            // also makes the message available after a page reload.
+            try {
+                event(new NewChatEvent(
+                    [['type' => 'chat', 'value' => $chatLog->relatedEntities]],
+                    $contact->organization_id
+                ));
+            } catch (\Throwable $broadcastException) {
+                Log::warning('FlowExecution: Meta Flow chat broadcast failed', [
+                    'chat_id' => $chat->id,
+                    'contact_id' => $contact->id,
+                    'error' => $broadcastException->getMessage(),
+                ]);
+            }
 
             return true;
         } catch (\Throwable $e) {
