@@ -14,6 +14,19 @@
                 </div>
             </div>
 
+            <div class="bg-slate-100 md:bg-slate-50 flex items-center border border-primary md:border-none md:shadow-sm h-10 w-full md:w-80 rounded-[0.5rem] mb-6 text-sm">
+                <span class="pl-3">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m15 15l6 6m-11-4a7 7 0 1 1 0 14a7 7 0 0 1 0-14Z"/></svg>
+                </span>
+                <input v-model="params.search" @input="search" type="text" class="outline-none px-4 w-full bg-slate-100 md:bg-slate-50" :placeholder="$t('Search by title')" />
+                <button v-if="!isSearching && params.search" @click="clearSearch" type="button" class="pr-2" :aria-label="$t('Clear search')">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10s10-4.5 10-10S17.5 2 12 2m3.7 12.3c.4.4.4 1 0 1.4c-.4.4-1 0-1.4 0L12 13.4l-2.3 2.3c-.4.4-1 0-1.4 0c-.4-.4 0-1 0-1.4l2.3-2.3l-2.3-2.3c-.4-.4 0-1.4 0-1.4c.4 0 1 0 1.4 0L12 10.6l2.3-2.3c.4-.4 1 0 1.4 0c.4 0 1 1 0 1.4L13.4 12z"/></svg>
+                </button>
+                <span v-if="isSearching" class="pr-2">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" class="animate-spin"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="42 14"/></svg>
+                </span>
+            </div>
+
             <Table :rows="rows">
                 <TableHeader>
                     <TableHeaderRow>
@@ -67,6 +80,8 @@
 <script setup>
     import AppLayout from "../Layout/App.vue";
     import { Link, router } from "@inertiajs/vue3";
+    import { ref } from 'vue';
+    import debounce from 'lodash/debounce';
     import Table from '@/Components/Table.vue';
     import TableHeader from '@/Components/TableHeader.vue';
     import TableHeaderRow from '@/Components/TableHeaderRow.vue';
@@ -78,7 +93,35 @@
     import DropdownItemGroup from '@/Components/DropdownItemGroup.vue';
     import DropdownItem from '@/Components/DropdownItem.vue';
     
-    const props = defineProps(['rows']);
+    const props = defineProps(['rows', 'filters']);
+
+    const params = ref({
+        search: props.filters?.search || '',
+    });
+    const isSearching = ref(false);
+
+    const runSearch = () => {
+        router.get('/pre-created-replies', params.value, {
+            preserveState: true,
+            preserveScroll: true,
+            replace: true,
+            onFinish: () => {
+                isSearching.value = false;
+            },
+        });
+    };
+
+    const search = debounce(() => {
+        isSearching.value = true;
+        runSearch();
+    }, 500);
+
+    const clearSearch = () => {
+        search.cancel();
+        params.value.search = '';
+        isSearching.value = true;
+        runSearch();
+    };
 
     const isLastRow = (index) => {
         return index === props.rows.data.length - 1;

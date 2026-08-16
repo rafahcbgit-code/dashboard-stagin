@@ -218,11 +218,12 @@ const latestInboundChatTimeFromThread = () => {
             return;
         }
 
-        const metadata = parseMetadata(chat.metadata);
-        const timestamp = Number(metadata?.timestamp || metadata?.raw?.timestamp);
-        const candidate = Number.isFinite(timestamp) && timestamp > 0
-            ? new Date(timestamp * 1000)
-            : new Date(chat.created_at);
+        // `metadata.timestamp` comes from the WhatsApp payload and can be
+        // stale when a webhook is replayed or when the provider payload is
+        // reused. The Chat record's created_at is the timestamp assigned by
+        // this application when the inbound message is actually stored, so it
+        // is the authoritative value for the local 24-hour window.
+        const candidate = new Date(chat.created_at);
 
         if (!Number.isNaN(candidate.getTime()) && (!latestTime || candidate > latestTime)) {
             latestTime = candidate;
@@ -230,22 +231,6 @@ const latestInboundChatTimeFromThread = () => {
     });
 
     return latestTime;
-};
-
-const parseMetadata = (metadata) => {
-    if (!metadata) {
-        return {};
-    }
-
-    if (typeof metadata === 'object') {
-        return metadata;
-    }
-
-    try {
-        return JSON.parse(metadata);
-    } catch (error) {
-        return {};
-    }
 };
 
 const handleFileUpload = (event) => {
