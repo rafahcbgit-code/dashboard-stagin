@@ -391,8 +391,12 @@ class ProcessWebhookJob implements ShouldQueue
         ]);
 
         // When the user submits a Meta Flow, Meta sends an interactive message with
-        // type nfm_reply. Store the response so it can be reviewed in the dashboard.
-        if ($messageType === 'interactive') {
+        // type nfm_reply. This is a completed Flow submission, not a normal
+        // interactive button click and must not be evaluated by AutoReply.
+        $isMetaFlowSubmission = $messageType === 'interactive'
+            && (($message['interactive']['type'] ?? '') === 'nfm_reply');
+
+        if ($isMetaFlowSubmission) {
             $this->processMetaFlowResponse($message, $contact->id);
         }
 
@@ -465,6 +469,19 @@ class ProcessWebhookJob implements ShouldQueue
             'chat_id' => $chat->id,
             'contact_id' => $contact->id,
         ]);
+
+        // A Meta Flow submission has already been handled by MetaFlowService.
+        // Do not send it through the normal trigger pipeline: nfm_reply has no
+        // regular message text and could incorrectly fire Greeting/Fallback.
+        if ($isMetaFlowSubmission) {
+            Log::channel('webhook')->info('Auto-reply skipped - Meta Flow submission', [
+                'organization_id' => $this->organizationId,
+                'chat_id' => $chat->id,
+                'contact_id' => $contact->id,
+            ]);
+
+            return;
+        }
 
         // Handle ticket assignment (moved to notification job to avoid blocking)
         // The ChatService::handleTicketAssignment will be called by notification job

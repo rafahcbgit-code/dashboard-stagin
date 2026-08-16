@@ -824,11 +824,28 @@ class MetaFlowService
             return null;
         }
 
-        // Fill in the submitted data on the existing stub record
-        $flowResponse->update([
+        // Claim the response atomically. Meta can retry the same webhook, and
+        // two workers may process those deliveries concurrently. Only the first
+        // worker is allowed to persist the submission and dispatch follow-up jobs.
+        $updated = MetaFlowResponse::whereKey($flowResponse->id)
+            ->whereNull('response_json')
+            ->update([
             'contact_id'    => $contactId,
             'response_json' => $responseJson,
+            'processed_at'  => now(),
         ]);
+
+        if ($updated !== 1) {
+            Log::info('MetaFlows: duplicate nfm_reply ignored', [
+                'response_id'  => $flowResponse->id,
+                'meta_flow_id' => $flowResponse->meta_flow_id,
+                'contact_id'   => $contactId,
+            ]);
+
+            return null;
+        }
+
+        $flowResponse->refresh();
 
         Log::info('MetaFlows: nfm_reply response stored', [
             'response_id'  => $flowResponse->id,

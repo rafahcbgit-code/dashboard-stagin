@@ -14,6 +14,13 @@ class MetaFlowResponse extends Model
 
     protected $guarded = [];
 
+    protected $casts = [
+        'processed_at' => 'datetime',
+        'reply_sent_at' => 'datetime',
+        'interactive_reply_sent_at' => 'datetime',
+        'email_notification_sent_at' => 'datetime',
+    ];
+
     // The flow this response belongs to
     public function metaFlow()
     {

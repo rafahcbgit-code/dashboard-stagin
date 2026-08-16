@@ -14,15 +14,15 @@
                 </div>
             </div>
 
-            <div class="bg-slate-100 md:bg-slate-50 flex items-center border border-primary md:border-none md:shadow-sm h-10 w-full md:w-80 rounded-[0.5rem] mb-6 text-sm">
-                <span class="pl-3">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m15 15l6 6m-11-4a7 7 0 1 1 0 14a7 7 0 0 1 0-14Z"/></svg>
+            <div class="relative flex h-11 w-full items-center rounded-xl border border-slate-200 bg-slate-50 text-sm shadow-sm transition focus-within:border-indigo-400 focus-within:bg-white focus-within:ring-4 focus-within:ring-indigo-500/10 md:w-80">
+                <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 rtl:right-3 rtl:left-auto">
+                    <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
                 </span>
-                <input v-model="params.search" @input="search" type="text" class="outline-none px-4 w-full bg-slate-100 md:bg-slate-50" :placeholder="$t('Search by title')" />
-                <button v-if="!isSearching && params.search" @click="clearSearch" type="button" class="pr-2" :aria-label="$t('Clear search')">
+                <input v-model="params.search" @input="search" type="text" class="w-full bg-transparent py-2.5 pl-10 pr-10 text-sm text-slate-800 outline-none placeholder:text-slate-400 rtl:pl-10 rtl:pr-10" :placeholder="$t('Search by title')" />
+                <button v-if="!isSearching && params.search" @click="clearSearch" type="button" class="absolute right-2 inline-flex h-7 w-7 items-center justify-center rounded-md text-slate-400 transition hover:bg-slate-200 hover:text-slate-700 rtl:right-auto rtl:left-2" :aria-label="$t('Clear search')">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10s10-4.5 10-10S17.5 2 12 2m3.7 12.3c.4.4.4 1 0 1.4c-.4.4-1 0-1.4 0L12 13.4l-2.3 2.3c-.4.4-1 0-1.4 0c-.4-.4 0-1 0-1.4l2.3-2.3l-2.3-2.3c-.4-.4 0-1.4 0-1.4c.4 0 1 0 1.4 0L12 10.6l2.3-2.3c.4-.4 1 0 1.4 0c.4 0 1 1 0 1.4L13.4 12z"/></svg>
                 </button>
-                <span v-if="isSearching" class="pr-2">
+                <span v-if="isSearching" class="absolute right-3 text-slate-400 rtl:right-auto rtl:left-3">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" class="animate-spin"><circle cx="12" cy="12" r="9" fill="none" stroke="currentColor" stroke-width="3" stroke-dasharray="42 14"/></svg>
                 </span>
             </div>

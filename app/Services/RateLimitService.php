@@ -53,7 +53,10 @@ class RateLimitService
                 if (!$rateLimit->last_triggered_at) {
                     return true;
                 }
-                return $rateLimit->last_triggered_at->diffInHours(now()) >= 24;
+                return $rateLimit->last_triggered_at
+                    ->copy()
+                    ->addHours(24)
+                    ->lessThanOrEqualTo(now());
 
             default:
                 return true;
@@ -142,7 +145,8 @@ class RateLimitService
         }
 
         // Auto-expire: if last fallback was >24h ago, reset counter and don't escalate
-        if ($rateLimit->last_triggered_at && $rateLimit->last_triggered_at->diffInHours(now()) >= 24) {
+        if ($rateLimit->last_triggered_at
+            && $rateLimit->last_triggered_at->copy()->addHours(24)->lessThanOrEqualTo(now())) {
             $rateLimit->delete();
             return false;
         }
