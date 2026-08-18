@@ -143,6 +143,49 @@ const mediaCaption = computed(() => {
         || '';
 });
 
+const linkifiedText = computed(() => {
+    const text = String(metadata.value?.text?.body || '');
+    const urlPattern = /((?:https?:\/\/|www\.)[^\s<]+)/gi;
+    const segments = [];
+    let cursor = 0;
+
+    text.replace(urlPattern, (matchedUrl, _group, offset) => {
+        let url = matchedUrl;
+        let trailingText = '';
+
+        // Keep punctuation outside the clickable URL.
+        while (/[.,!?;:)}\]\u00bb،؛؟]$/u.test(url)) {
+            trailingText = url.slice(-1) + trailingText;
+            url = url.slice(0, -1);
+        }
+
+        if (!url) return matchedUrl;
+
+        if (offset > cursor) {
+            segments.push({ text: text.slice(cursor, offset), isLink: false });
+        }
+
+        segments.push({
+            text: url,
+            href: url.toLowerCase().startsWith('www.') ? `https://${url}` : url,
+            isLink: true,
+        });
+
+        if (trailingText) {
+            segments.push({ text: trailingText, isLink: false });
+        }
+
+        cursor = offset + matchedUrl.length;
+        return matchedUrl;
+    });
+
+    if (cursor < text.length) {
+        segments.push({ text: text.slice(cursor), isLink: false });
+    }
+
+    return segments.length ? segments : [{ text, isLink: false }];
+});
+
 // Check if it's a contact type
 const isRevokeEvent = computed(() => metadata.value?.type === 'revoke')
 const isRevokedOriginal = computed(() => Boolean(metadata.value?.revoked?.is_revoked))
@@ -401,7 +444,7 @@ const viewContactDetails = async (data) => {
 }
 </script>
 <template>
-    <div class="rounded-lg my-1 p-2 text-sm flex flex-col relative"
+    <div class="min-w-0 rounded-lg my-1 p-2 text-sm flex flex-col relative [overflow-wrap:anywhere]"
         :class="props.type === 'outbound' ? 'ml-auto rounded-tr-none bg-[#d8fad4] speech-bubble-right' : 'mr-auto rounded-tl-none bg-white speech-bubble-left'">
         <button
             v-if="props.replyTo"
@@ -429,15 +472,24 @@ const viewContactDetails = async (data) => {
             </div>
             <template v-else>
             <!--Text message formatting-->
-            <div v-if="JSON.parse(content.metadata).type === 'text'" class="max-w-[300px]">
+            <div v-if="JSON.parse(content.metadata).type === 'text'" class="w-full min-w-0 max-w-[300px]">
                 <!-- Header -->
-                <div v-if="JSON.parse(content.metadata).header?.text">
+                <div v-if="JSON.parse(content.metadata).header?.text" class="min-w-0 break-words [overflow-wrap:anywhere]">
                     <p class="text-sm font-medium text-gray-900">{{ JSON.parse(content.metadata).header.text }}</p>
                 </div>
                 
                 <!-- Body -->
-<p class="normal-case whitespace-pre-wrap">
-    {{ metadata.text?.body }}
+<p class="normal-case whitespace-pre-wrap break-words [overflow-wrap:anywhere]">
+    <template v-for="(segment, index) in linkifiedText" :key="`message-segment-${index}`">
+        <a
+            v-if="segment.isLink"
+            :href="segment.href"
+            target="_blank"
+            rel="noopener noreferrer"
+            class="text-black underline decoration-black underline-offset-2 hover:text-slate-700"
+        >{{ segment.text }}</a>
+        <span v-else>{{ segment.text }}</span>
+    </template>
 </p>
 
 <!-- Referral Section -->
