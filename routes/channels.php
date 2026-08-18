@@ -1,6 +1,9 @@
 <?php
 
 use Illuminate\Support\Facades\Broadcast;
+use App\Models\Contact;
+use App\Models\User;
+use App\Services\ConversationAccessService;
 
 /*
 |--------------------------------------------------------------------------
@@ -19,6 +22,23 @@ Broadcast::channel('App.Models.User.{id}', function ($user, $id) {
 
 Broadcast::channel('chats', function ($user) {
     return true; // Adjust authentication logic if needed
+});
+
+Broadcast::channel('conversation.{contactUuid}', function (User $user, string $contactUuid) {
+    $contact = Contact::query()
+        ->where('uuid', $contactUuid)
+        ->whereNull('deleted_at')
+        ->first();
+
+    if (! $contact) {
+        return false;
+    }
+
+    $access = app(ConversationAccessService::class);
+
+    return $access->canAccess($user, $contact)
+        ? $access->presenceData($user)
+        : false;
 });
 
 /*

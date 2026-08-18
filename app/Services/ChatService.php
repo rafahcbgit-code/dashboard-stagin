@@ -21,6 +21,7 @@ use App\Models\Template;
 use App\Models\ChatTicketLog;
 use App\Traits\TemplateTrait;
 use App\Services\WhatsappService;
+use App\Services\ConversationAccessService;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Http;
@@ -322,7 +323,15 @@ class ChatService
         if ($uuid !== null) {
             $contact = Contact::with(['lastChat', 'lastInboundChat', 'notes', 'contactGroups', 'labels'])
                 ->where('uuid', $uuid)
+                ->where('organization_id', $this->organizationId)
+                ->whereNull('deleted_at')
                 ->first();
+
+            abort_unless($contact, 404);
+            abort_unless(
+                app(ConversationAccessService::class)->canAccess(auth()->user(), $contact),
+                403
+            );
 
             $ticket = ChatTicket::with('user')
                 ->where('contact_id', $contact->id)

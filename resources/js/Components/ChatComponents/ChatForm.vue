@@ -1,7 +1,8 @@
 <script setup>
 import axios from 'axios';
-import { ref, watchEffect, computed, onMounted, onBeforeUnmount } from 'vue';
+import { ref, watch, watchEffect, computed, onMounted, onBeforeUnmount } from 'vue';
 import { usePage } from '@inertiajs/vue3';
+import { getEchoInstance } from '../../echo';
 import EmojiPicker from 'vue3-emoji-picker';
 import 'vue3-emoji-picker/css';
 import MicRecorder from 'mic-recorder-to-mp3-fixed';
@@ -9,7 +10,13 @@ import PreCreatedRepliesModal from './PreCreatedRepliesModal.vue';
 import MetaFlowPickerModal from './MetaFlowPickerModal.vue';
 
 const recorder = ref(null);
-const props = defineProps(['contact', 'chatThread', 'chatLimitReached', 'simpleForm']);
+const props = defineProps([
+    'contact',
+    'chatThread',
+    'chatLimitReached',
+    'simpleForm',
+    'pusherSettings',
+]);
 const isContactBlocked = computed(() => Boolean(props.contact?.is_blocked));
 
 const showMetaFlowModal = ref(false);
@@ -47,6 +54,57 @@ const form2 = ref({
 const emojiPicker = ref(false);
 const emojiPickerRef = ref(null);
 
+const typingChannel = ref(null);
+const typingChannelName = ref(null);
+const typingEntries = ref(new Map());
+const presenceMembers = ref(new Map());
+const typingExpiryTimers = new Map();
+const typingStopTimer = ref(null);
+const typingHeartbeatTimer = ref(null);
+const isTyping = ref(false);
+const typingTabId = typeof crypto !== 'undefined' && crypto.randomUUID
+    ? crypto.randomUUID()
+    : Math.random().toString(36).slice(2);
+const typingExpiryMs = 4500;
+const typingIdleMs = 2500;
+const typingHeartbeatMs = 2000;
+
+const currentUser = computed(() => usePage().props.auth?.user);
+const currentUserId = computed(() => Number(currentUser.value?.id || 0));
+const typingAgentNames = computed(() => {
+    const namesByUser = new Map();
+
+    typingEntries.value.forEach((entry) => {
+        const userId = Number(entry.userId || 0);
+
+        if (!userId || userId === currentUserId.value || namesByUser.has(userId)) {
+            return;
+        }
+
+        namesByUser.set(userId, entry.userName || 'An agent');
+    });
+
+    return Array.from(namesByUser.values());
+});
+
+const typingIndicatorText = computed(() => {
+    const names = typingAgentNames.value;
+
+    if (names.length === 0) {
+        return '';
+    }
+
+    if (names.length === 1) {
+        return `${names[0]} is typing...`;
+    }
+
+    if (names.length === 2) {
+        return `${names[0]} and ${names[1]} are typing...`;
+    }
+
+    return `${names.slice(0, -1).join(', ')} and ${names[names.length - 1]} are typing...`;
+});
+
 watchEffect(() => {
     form.value.uuid = props.contact.uuid;
 });
@@ -68,7 +126,247 @@ const viewTemplate = () => {
     emit('viewTemplate', true);
 }
 
+const replaceTypingEntries = (entries) => {
+    typingEntries.value = new Map(entries);
+};
+
+const clearTypingExpiry = (entryKey) => {
+    const timer = typingExpiryTimers.get(entryKey);
+
+    if (timer) {
+        clearTimeout(timer);
+        typingExpiryTimers.delete(entryKey);
+    }
+};
+
+const removeTypingEntry = (entryKey) => {
+    clearTypingExpiry(entryKey);
+
+    if (!typingEntries.value.has(entryKey)) {
+        return;
+    }
+
+    const entries = new Map(typingEntries.value);
+    entries.delete(entryKey);
+    replaceTypingEntries(entries);
+};
+
+const removeTypingEntriesForUser = (userId) => {
+    const entries = new Map(typingEntries.value);
+    let changed = false;
+
+    entries.forEach((entry, entryKey) => {
+        if (Number(entry.userId || 0) === Number(userId)) {
+            clearTypingExpiry(entryKey);
+            entries.delete(entryKey);
+            changed = true;
+        }
+    });
+
+    if (changed) {
+        replaceTypingEntries(entries);
+    }
+};
+
+const scheduleTypingExpiry = (entryKey) => {
+    clearTypingExpiry(entryKey);
+
+    typingExpiryTimers.set(entryKey, setTimeout(() => {
+        removeTypingEntry(entryKey);
+    }, typingExpiryMs));
+};
+
+const handleTypingWhisper = (payload = {}) => {
+    const userId = Number(payload.userId || 0);
+
+    if (!userId || userId === currentUserId.value) {
+        return;
+    }
+
+    const tabId = payload.tabId || 'unknown-tab';
+    const entryKey = `${userId}:${tabId}`;
+
+    if (payload.action === 'stop') {
+        removeTypingEntry(entryKey);
+        return;
+    }
+
+    const entries = new Map(typingEntries.value);
+    entries.set(entryKey, {
+        userId,
+        userName: presenceMembers.value.get(userId) || 'An agent',
+    });
+    replaceTypingEntries(entries);
+    scheduleTypingExpiry(entryKey);
+};
+
+const sendTypingWhisper = (action) => {
+    if (!typingChannel.value) {
+        return;
+    }
+
+    typingChannel.value.whisper('typing', {
+        action,
+        userId: currentUserId.value,
+        tabId: typingTabId,
+    });
+};
+
+const clearTypingTimers = () => {
+    if (typingStopTimer.value) {
+        clearTimeout(typingStopTimer.value);
+        typingStopTimer.value = null;
+    }
+
+    if (typingHeartbeatTimer.value) {
+        clearInterval(typingHeartbeatTimer.value);
+        typingHeartbeatTimer.value = null;
+    }
+};
+
+const stopTyping = () => {
+    clearTypingTimers();
+
+    if (isTyping.value) {
+        sendTypingWhisper('stop');
+    }
+
+    isTyping.value = false;
+};
+
+const startTyping = () => {
+    if (!typingChannel.value || !currentUserId.value) {
+        return;
+    }
+
+    if (!isTyping.value) {
+        isTyping.value = true;
+        sendTypingWhisper('start');
+    }
+
+    if (!typingHeartbeatTimer.value) {
+        typingHeartbeatTimer.value = setInterval(() => {
+            if (isTyping.value) {
+                sendTypingWhisper('start');
+            }
+        }, typingHeartbeatMs);
+    }
+
+    if (typingStopTimer.value) {
+        clearTimeout(typingStopTimer.value);
+    }
+
+    typingStopTimer.value = setTimeout(stopTyping, typingIdleMs);
+};
+
+const handleComposerInput = (event) => {
+    adjustTextareaHeight();
+
+    if (event.target.value && event.target.value.trim() !== '') {
+        startTyping();
+    } else {
+        stopTyping();
+    }
+};
+
+const leaveTypingChannel = () => {
+    stopTyping();
+
+    if (typingChannel.value) {
+        typingChannel.value.stopListeningForWhisper('typing');
+    }
+
+    if (typingChannelName.value) {
+        const echo = getEchoInstance(
+            props.pusherSettings?.pusher_app_key,
+            props.pusherSettings?.pusher_app_cluster
+        );
+        echo.leave(typingChannelName.value);
+    }
+
+    typingChannel.value = null;
+    typingChannelName.value = null;
+    typingExpiryTimers.forEach((timer) => clearTimeout(timer));
+    typingExpiryTimers.clear();
+    replaceTypingEntries([]);
+    presenceMembers.value = new Map();
+};
+
+const normalizePresenceMember = (member) => ({
+    id: Number(member?.id || member?.user_id || member?.userId || member?.info?.id || 0),
+    name: member?.name || member?.info?.name || 'An agent',
+});
+
+const joinTypingChannel = () => {
+    const pusherKey = props.pusherSettings?.pusher_app_key;
+    const pusherCluster = props.pusherSettings?.pusher_app_cluster;
+    const contactUuid = props.contact?.uuid;
+
+    if (!pusherKey || !pusherCluster || !contactUuid || !currentUserId.value) {
+        return;
+    }
+
+    const echo = getEchoInstance(pusherKey, pusherCluster);
+    const channelName = `conversation.${contactUuid}`;
+    const channel = echo.join(channelName);
+
+    typingChannel.value = channel;
+    typingChannelName.value = channelName;
+
+    channel.listenForWhisper('typing', handleTypingWhisper);
+    channel.here((members) => {
+        const nextMembers = new Map();
+
+        members.forEach((member) => {
+            const normalizedMember = normalizePresenceMember(member);
+
+            if (normalizedMember.id) {
+                nextMembers.set(normalizedMember.id, normalizedMember.name);
+            }
+        });
+
+        presenceMembers.value = nextMembers;
+
+        if (formTextInput.value && formTextInput.value.trim() !== '') {
+            startTyping();
+        }
+    });
+    channel.joining((member) => {
+        const normalizedMember = normalizePresenceMember(member);
+
+        if (normalizedMember.id) {
+            const members = new Map(presenceMembers.value);
+            members.set(normalizedMember.id, normalizedMember.name);
+            presenceMembers.value = members;
+        }
+    });
+    channel.leaving((member) => {
+        const normalizedMember = normalizePresenceMember(member);
+
+        if (normalizedMember.id) {
+            const members = new Map(presenceMembers.value);
+            members.delete(normalizedMember.id);
+            presenceMembers.value = members;
+            removeTypingEntriesForUser(normalizedMember.id);
+        }
+    });
+};
+
+watch(
+    () => props.contact?.uuid,
+    (newUuid, oldUuid) => {
+        if (!newUuid || newUuid === oldUuid) {
+            return;
+        }
+
+        leaveTypingChannel();
+        joinTypingChannel();
+    }
+);
+
 const sendMessage = async () => {
+    stopTyping();
+
     if (isContactBlocked.value) {
         processingForm.value = false;
         return;
@@ -115,6 +413,8 @@ const sendMessage = async () => {
 }
 
 const sendPreCreatedReply = async (payload) => {
+    stopTyping();
+
     if (isContactBlocked.value) {
         processingForm.value = false;
         return;
@@ -134,6 +434,8 @@ const sendPreCreatedReply = async (payload) => {
 }
 
 const sendAudioMessage = async () => {
+    stopTyping();
+
     if (isContactBlocked.value) {
         return;
     }
@@ -437,9 +739,11 @@ onMounted(() => {
     recorder.value = new MicRecorder({
         bitRate: 128
     });
+    joinTypingChannel();
 });
 
 onBeforeUnmount(() => {
+    leaveTypingChannel();
     document.removeEventListener('click', handleClickOutside);
     stopTimer();
     stopPlaybackTimer();
@@ -516,6 +820,10 @@ onBeforeUnmount(() => {
                 }}</button>
         </div>
     </div>
+    <div v-if="typingIndicatorText" class="flex items-center gap-2 px-6 md:px-4 mb-2 text-xs text-slate-500">
+        <span class="inline-flex h-2 w-2 rounded-full bg-primary animate-pulse"></span>
+        <span>{{ typingIndicatorText }}</span>
+    </div>
     <form v-if="!isContactBlocked && isInboundChatWithin24Hours && !props.chatLimitReached" @submit.prevent="sendMessage()"
         class="flex items-center px-2 md:px-10 space-x-2">
         <div class="bg-white rounded-md w-full p-4">
@@ -523,7 +831,7 @@ onBeforeUnmount(() => {
                 <textarea ref="textInputRef" @focus="form.type = 'text'" @keydown.enter.exact.prevent="handleEnterKey"
                     class="w-full outline-none resize-none text-sm rounded-md p-2"
                     :class="processingForm ? 'bg-gray-100' : 'bg-white'" v-model="formTextInput"
-                    @input="adjustTextareaHeight" type="text" rows="3" :placeholder="$t('Type your message...')"
+                    @input="handleComposerInput" @blur="stopTyping" type="text" rows="3" :placeholder="$t('Type your message...')"
                     :disabled="processingForm">
                 </textarea>
                 <input type="file" class="sr-only" :accept="getAcceptedFileTypes()" id="file-upload"
