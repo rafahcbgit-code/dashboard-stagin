@@ -8,7 +8,13 @@ import axios from "axios";
 const props = defineProps({
     content: Object,
     type: String,
+    replyTo: {
+        type: Object,
+        default: null,
+    },
 })
+
+const emit = defineEmits(['reply-click']);
 
 const metadata = computed(() => {
     try {
@@ -397,6 +403,21 @@ const viewContactDetails = async (data) => {
 <template>
     <div class="rounded-lg my-1 p-2 text-sm flex flex-col relative"
         :class="props.type === 'outbound' ? 'ml-auto rounded-tr-none bg-[#d8fad4] speech-bubble-right' : 'mr-auto rounded-tl-none bg-white speech-bubble-left'">
+        <button
+            v-if="props.replyTo"
+            type="button"
+            class="mb-2 w-full max-w-[300px] rounded-md border-l-4 border-[#00a884] bg-black/5 px-2 py-1 text-left"
+            @click="emit('reply-click', props.replyTo.wam_id)"
+        >
+            <span class="block text-[11px] font-semibold text-[#008f72]">
+                {{ props.replyTo.found
+                    ? (props.replyTo.type === 'outbound' ? $t('Your message') : $t('Customer message'))
+                    : $t('Previous message') }}
+            </span>
+            <span class="block truncate text-xs text-slate-600">
+                {{ props.replyTo.text || $t('Message') }}
+            </span>
+        </button>
         <div>
             <div v-if="isRevokedOriginal || isRevokeEvent" class="max-w-[300px]">
                 <div class="flex items-center gap-2 text-slate-500 italic">
