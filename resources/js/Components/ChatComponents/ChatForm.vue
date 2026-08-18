@@ -820,10 +820,6 @@ onBeforeUnmount(() => {
                 }}</button>
         </div>
     </div>
-    <div v-if="typingIndicatorText" class="flex items-center gap-2 px-6 md:px-4 mb-2 text-xs text-slate-500">
-        <span class="inline-flex h-2 w-2 rounded-full bg-primary animate-pulse"></span>
-        <span>{{ typingIndicatorText }}</span>
-    </div>
     <form v-if="!isContactBlocked && isInboundChatWithin24Hours && !props.chatLimitReached" @submit.prevent="sendMessage()"
         class="flex items-center px-2 md:px-10 space-x-2">
         <div class="bg-white rounded-md w-full p-4">
@@ -888,6 +884,10 @@ onBeforeUnmount(() => {
                     </div>
                 </div>
                 <audio ref="audioPlayer" :src="audioPreviewUrl" @ended="isPlaying = false" class="hidden" />
+            </div>
+            <div v-if="typingIndicatorText" class="flex items-center gap-2 px-2 pb-2 text-xs text-slate-500">
+                <span class="inline-flex h-2 w-2 rounded-full bg-primary animate-pulse"></span>
+                <span>{{ typingIndicatorText }}</span>
             </div>
             <div class="flex flex-wrap gap-x-2 gap-y-2 md:gap-x-4 items-center text-gray-600">
                 <div @click="viewTemplate()" class="flex gap-x-1 text-sm items-center cursor-pointer">
