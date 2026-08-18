@@ -1,5 +1,5 @@
 <script setup>
-import { ref, watch } from 'vue';
+import { nextTick, ref, watch } from 'vue';
 import { default as axios } from 'axios';
 import ChatBubble from '@/Components/ChatComponents/ChatBubble.vue';
 
@@ -26,6 +26,126 @@ const messages = ref(props.initialMessages);
 const loading = ref(false);
 const nextPage = ref(props.initialNextPage);
 const hasMore = ref(props.hasMoreMessages);
+const messageElements = ref({});
+const highlightedWamId = ref(null);
+let highlightTimer = null;
+
+const parseMetadata = (metadata) => {
+    try {
+        if (!metadata) return {};
+        return typeof metadata === 'string' ? JSON.parse(metadata) : metadata;
+    } catch {
+        return {};
+    }
+};
+
+const messagePreview = (chat) => {
+    if (!chat) return '';
+
+    const metadata = parseMetadata(chat.metadata);
+    const type = metadata.type || '';
+
+    return metadata.text?.body
+        || metadata.body?.text
+        || metadata.image?.caption
+        || metadata.video?.caption
+        || metadata.document?.caption
+        || metadata.audio?.caption
+        || metadata.button?.text
+        || metadata.interactive?.body?.text
+        || metadata.interactive?.button_reply?.title
+        || metadata.interactive?.list_reply?.title
+        || (type === 'location' ? 'Location' : '')
+        || (type === 'contacts' ? 'Contact' : '')
+        || (type === 'image' ? 'Image' : '')
+        || (type === 'video' ? 'Video' : '')
+        || (type === 'audio' ? 'Audio' : '')
+        || (type === 'document' ? 'Document' : '')
+        || (type === 'sticker' ? 'Sticker' : '')
+        || (type ? type.charAt(0).toUpperCase() + type.slice(1) : 'Message');
+};
+
+const getReplyTarget = (chat) => {
+    const value = chat?.[0]?.value;
+    const replyWamId = parseMetadata(value?.metadata)?.context?.id;
+
+    if (!replyWamId) return null;
+
+    const original = messages.value.find((item) => (
+        item?.[0]?.type === 'chat'
+        && item?.[0]?.value?.wam_id === replyWamId
+    ))?.[0]?.value;
+
+    return {
+        wam_id: replyWamId,
+        type: original?.type || 'inbound',
+        text: messagePreview(original),
+        found: Boolean(original),
+    };
+};
+
+const messageKey = (chat, index) => {
+    const value = chat?.[0]?.value;
+    const stableId = value?.wam_id || value?.id;
+
+    return stableId ? `message-${stableId}` : `row-${index}`;
+};
+
+const setMessageElement = (key, element) => {
+    if (element) {
+        messageElements.value[key] = element;
+    } else {
+        delete messageElements.value[key];
+    }
+};
+
+const findMessageByWamId = (wamId) => messages.value.find((item) => (
+    item?.[0]?.type === 'chat'
+    && item?.[0]?.value?.wam_id === wamId
+));
+
+const highlightMessage = (wamId) => {
+    highlightedWamId.value = wamId;
+
+    if (highlightTimer) {
+        clearTimeout(highlightTimer);
+    }
+
+    highlightTimer = setTimeout(() => {
+        highlightedWamId.value = null;
+        highlightTimer = null;
+    }, 2200);
+};
+
+const scrollToReply = async (wamId) => {
+    let target = findMessageByWamId(wamId);
+
+    // The original message may be on an older page. Load pages lazily only
+    // when the user asks to open that reply, keeping the initial UI fast.
+    while (!target && hasMore.value) {
+        const previousCount = messages.value.length;
+        const previousPage = nextPage.value;
+        const loaded = await loadMoreMessages();
+
+        target = findMessageByWamId(wamId);
+
+        if (!loaded || (previousCount === messages.value.length && previousPage === nextPage.value)) {
+            break;
+        }
+    }
+
+    if (!target) return;
+
+    await nextTick();
+
+    const key = messageKey(target, messages.value.indexOf(target));
+    const element = messageElements.value[key];
+
+    if (!element) return;
+
+    element.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    highlightMessage(wamId);
+};
 
 watch(
     () => props.initialMessages,
@@ -50,7 +170,7 @@ watch(
 );
 
 const loadMoreMessages = async () => {
-    if (loading.value || !hasMore.value) return;
+    if (loading.value || !hasMore.value) return false;
     
     loading.value = true;
     try {
@@ -58,8 +178,10 @@ const loadMoreMessages = async () => {
         messages.value = [...response.data.messages, ...messages.value];
         hasMore.value = response.data.hasMoreMessages;
         nextPage.value = response.data.nextPage;
+        return true;
     } catch (error) {
         console.error('Error loading messages:', error);
+        return false;
     } finally {
         loading.value = false;
     }
@@ -88,14 +210,22 @@ const loadMoreMessages = async () => {
             </button>
         </div>
         
-        <div v-for="(chat, index) in messages" 
-             :key="index" 
+        <div v-for="(chat, index) in messages"
+             :key="messageKey(chat, index)"
+             :ref="(element) => setMessageElement(messageKey(chat, index), element)"
              class="flex flex-grow flex-col"
-             :class="chat[0].type === 'ticket' ? 'justify-center' : 'justify-end'">
+             :class="[
+                 chat[0].type === 'ticket' ? 'justify-center' : 'justify-end',
+                 highlightedWamId === chat?.[0]?.value?.wam_id
+                     ? 'rounded-lg bg-[#e9fff7] ring-2 ring-[#00a884] transition duration-300'
+                     : ''
+             ]">
             <ChatBubble 
-                v-if="chat[0].type === 'chat'" 
-                :content="chat[0].value" 
-                :type="chat[0].value.type" />
+               v-if="chat[0].type === 'chat'"
+               :content="chat[0].value"
+                :type="chat[0].value.type"
+                :reply-to="getReplyTarget(chat)"
+                @reply-click="scrollToReply" />
             <div v-if="chat[0].type === 'ticket'" class="py-2">
                 <div class="text-center font-light text-sm border-b border-t py-2 border-dashed border-black">
                     <div>{{ chat[0].value.description }} </div>
