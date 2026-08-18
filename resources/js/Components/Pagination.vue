@@ -1,13 +1,13 @@
 <template>
-    <div class="flex w-full min-w-0 justify-center">
-      <div class="flex max-w-full min-w-0 items-center gap-2">
+    <div :aria-busy="isNavigating" class="flex w-full min-w-0 items-center justify-center">
+      <div :class="compact ? 'flex-col gap-2' : 'flex-wrap gap-2'" class="flex w-full min-w-0 items-center justify-center">
       <div v-if="pagination.last_page > 1" class="shrink-0 whitespace-nowrap text-xs text-gray-600 sm:text-sm">{{ pagination.total }} items</div>
 
-      <div class="flex min-w-0 shrink flex-nowrap items-center gap-1" v-if="pagination.last_page > 1">
+      <div class="flex max-w-full min-w-0 flex-none flex-wrap items-center justify-center gap-1" v-if="pagination.last_page > 1">
         <!-- First Page Button -->
         <button v-if="!compact"
-            :disabled="noPreviousPage"
-            :class="{'opacity-50': noPreviousPage}"
+            :disabled="noPreviousPage || isNavigating"
+            :class="{'opacity-50': noPreviousPage || isNavigating}"
             @click="loadPage(1)"
             aria-label="First page"
             class="hidden shrink-0 justify-center items-center h-9 w-9 text-gray-700 bg-white rounded border border-gray-200 shadow-sm outline-none hover:bg-gray-50 sm:inline-flex focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
@@ -19,8 +19,8 @@
 
         <!-- Previous Page Button -->
         <button
-            :disabled="noPreviousPage"
-            :class="{'opacity-50': noPreviousPage}"
+            :disabled="noPreviousPage || isNavigating"
+            :class="{'opacity-50': noPreviousPage || isNavigating}"
             @click="loadPage(pagination.current_page - 1)"
             aria-label="Previous page"
             class="inline-flex shrink-0 justify-center items-center h-9 w-9 text-gray-700 bg-white rounded border border-gray-200 shadow-sm outline-none hover:bg-gray-50 focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
@@ -31,39 +31,46 @@
         </button>
   
         <!-- Jump to Page Input Section -->
-        <div :class="compact ? 'shrink-0' : 'shrink'" class="flex min-w-0 items-center gap-1 border-l border-r border-gray-200 px-1 sm:mx-1 sm:px-2">
+        <div class="relative flex shrink-0 items-center gap-1 border-l border-r border-gray-200 px-1 sm:mx-1 sm:px-2">
           <div class="flex items-center space-x-1">
             <input
                 type="number"
                 v-model.number="goToPageInput"
+                @input="validationError = null"
+                :disabled="isNavigating"
+                :aria-invalid="Boolean(validationError)"
                 @keydown.enter="goToPage"
                 :min="1"
                 :max="pagination.last_page"
                 placeholder="Go"
                 aria-label="Page number"
+                :class="validationError ? 'bg-red-50' : 'bg-white'"
                 class="w-14 px-1 py-1 text-xs text-center rounded border-2 shadow-sm outline-none hover:bg-gray-50 focus:ring-1 sm:w-16 sm:px-2 sm:text-sm"
-                style="border-color: #008000 ; color: #008000 ; font-weight: 500;"
+                :style="{ borderColor: validationError ? '#dc2626' : '#008000', color: validationError ? '#dc2626' : '#008000', fontWeight: 500 }"
+                :title="validationError || 'Enter page number'"
             />
             <button
                 @click="goToPage"
-                :disabled="!goToPageInput"
-                :class="{'opacity-50': !goToPageInput}"
+                :disabled="!goToPageInput || isNavigating"
+                :class="{'opacity-50': !goToPageInput || isNavigating}"
                 aria-label="Go to page"
                 class="shrink-0 px-2 py-1 text-xs text-white rounded focus:ring-1"
                 style="background-color: #008000;"
                 @mouseover="$event.target.style.backgroundColor = '#008000'"
                 @mouseout="$event.target.style.backgroundColor = '#008000'"
             >
-              Go
+              <span v-if="isNavigating" class="inline-block h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" aria-hidden="true"></span>
+              <span v-else>Go</span>
             </button>
           </div>
-          <div class="shrink-0 text-gray-600 text-xs whitespace-nowrap">{{ page }} / {{ pagination.last_page }}</div>
+          <div class="pagination-page-indicator shrink-0 text-gray-600 text-xs whitespace-nowrap max-[260px]:hidden">{{ page }} / {{ pagination.last_page }}</div>
+          <span v-if="validationError" role="alert" class="absolute top-full z-10 mt-1 whitespace-nowrap rounded bg-red-50 px-2 py-1 text-[10px] text-red-600 shadow-sm ltr:left-0 rtl:right-0">{{ validationError }}</span>
         </div>
   
         <!-- Next Page Button -->
         <button
-            :disabled="noNextPage"
-            :class="{'opacity-50': noNextPage}"
+            :disabled="noNextPage || isNavigating"
+            :class="{'opacity-50': noNextPage || isNavigating}"
             @click="loadPage(pagination.current_page + 1)"
             aria-label="Next page"
             class="inline-flex shrink-0 justify-center items-center h-9 w-9 text-gray-700 bg-white rounded border border-gray-300 shadow-sm outline-none hover:bg-gray-50 focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
@@ -75,8 +82,8 @@
   
         <!-- Last Page Button -->
         <button v-if="!compact"
-            :disabled="noNextPage"
-            :class="{'opacity-50': noNextPage}"
+            :disabled="noNextPage || isNavigating"
+            :class="{'opacity-50': noNextPage || isNavigating}"
             @click="loadPage(pagination.last_page)"
             aria-label="Last page"
             class="hidden shrink-0 justify-center items-center h-9 w-9 text-gray-700 bg-white rounded border border-gray-300 shadow-sm outline-none hover:bg-gray-50 sm:inline-flex focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
@@ -86,7 +93,7 @@
           </svg>
         </button>
       </div>
-    </div>
+      </div>
     </div>
   </template>
   
@@ -103,7 +110,9 @@
     data() {
       return {
         page: this.pagination.current_page,
-        goToPageInput: null
+        goToPageInput: null,
+        isNavigating: false,
+        validationError: null,
       }
     },
     watch: {
@@ -114,26 +123,44 @@
     },
     methods: {
       loadPage(page) {
+        const targetPage = Number(page);
+
+        if (!Number.isInteger(targetPage)
+          || targetPage < 1
+          || targetPage > this.pagination.last_page
+          || targetPage === this.pagination.current_page
+          || this.isNavigating) {
+          return;
+        }
+
+        this.validationError = null;
+        this.isNavigating = true;
         const url = new URL(window.location.href);
-        url.searchParams.set('page', page);
+        url.searchParams.set('page', targetPage);
         this.$inertia.get(url.pathname, Object.fromEntries(url.searchParams), {
-          preserveState: true
+          preserveState: true,
+          preserveScroll: true,
+          replace: true,
+          onFinish: () => {
+            this.isNavigating = false;
+          },
         });
       },
       goToPage() {
-        // Validate input
-        if (!this.goToPageInput || this.goToPageInput < 1) {
-          alert('Please enter a valid page number');
+        const targetPage = Number(this.goToPageInput);
+
+        if (!Number.isInteger(targetPage) || targetPage < 1) {
+          this.validationError = 'Enter a valid page number';
           return;
         }
 
-        if (this.goToPageInput > this.pagination.last_page) {
-          alert(`Page number cannot exceed ${this.pagination.last_page}`);
+        if (targetPage > this.pagination.last_page) {
+          this.validationError = `Maximum page is ${this.pagination.last_page}`;
           return;
         }
 
-        // Load the requested page
-        this.loadPage(this.goToPageInput);
+        this.validationError = null;
+        this.loadPage(targetPage);
       }
     },
     computed: {
