@@ -36,44 +36,45 @@ class ContactService
      * @param  string|null  $name The contact's display name from WhatsApp profile
      * @return array{contact: Contact, isNew: bool}
      */
-    public function findOrCreateFromWebhook(string $phone, string $name = null): array
+    public function findOrCreateFromWebhook(string $phone, ?string $name = null): array
     {
-        // Normalize phone: WhatsApp sends without + prefix, add it for E.164 format
-        $normalizedPhone = PhoneService::getE164Format($phone);
+        return $this->findOrCreateByPhone($phone, $name, 'whatsapp', true);
+    }
 
-        // If E.164 validation fails, try with + prefix
-        if ($normalizedPhone === null) {
-            $normalizedPhone = PhoneService::getE164Format('+'.$phone);
-        }
+    /**
+     * Resolve a contact shared inside a chat without creating a duplicate.
+     *
+     * This intentionally uses the same idempotent path as webhook contact
+     * creation. The chat UI can receive a formatted phone number while an
+     * older contact may have been stored with spaces, punctuation, or without
+     * the leading plus sign.
+     */
+    public function findOrCreateFromChatView(string $phone, ?string $name = null): Contact
+    {
+        return $this->findOrCreateByPhone($phone, $name, 'platform', false)['contact'];
+    }
 
-        // If still null, use normalized format (+ prefix)
-        if ($normalizedPhone === null) {
-            $normalizedPhone = PhoneService::normalize($phone);
-        }
-
-        // Look for existing contact - try multiple formats for compatibility
-        $contact = Contact::withTrashed()->where('organization_id', $this->organizationId)
-            ->where(function ($query) use ($normalizedPhone, $phone) {
-                $query->where('phone', $normalizedPhone)
-                    ->orWhere('phone', '+'.$phone)
-                    ->orWhere('phone', $phone);
-            })
-            ->first();
+    /**
+     * Find or create one contact for a phone number in this organization.
+     * The unique database index is the final guard for concurrent requests;
+     * duplicate-key errors are reconciled back to the contact that won.
+     *
+     * @return array{contact: Contact, isNew: bool}
+     */
+    private function findOrCreateByPhone(string $phone, ?string $name, string $source, bool $triggerWebhookEvent): array
+    {
+        $normalizedPhone = $this->normalizePhone($phone);
+        $contact = $this->findExistingByPhone($normalizedPhone, $phone);
 
         if ($contact) {
-            if ($contact->trashed()) {
-                $contact->restore();
-            }
+            $contact = $this->restoreAndCanonicalize($contact, $normalizedPhone);
 
             return ['contact' => $contact, 'isNew' => false];
         }
 
-        // Parse name into first/last name
-        $nameParts = $name ? explode(' ', $name, 2) : [];
+        $nameParts = $name ? explode(' ', trim($name), 2) : [];
         $firstName = $nameParts[0] ?? $normalizedPhone;
         $lastName = $nameParts[1] ?? '';
-
-        $isNew = true;
 
         try {
             $contact = Contact::create([
@@ -81,7 +82,7 @@ class ContactService
                 'phone' => $normalizedPhone,
                 'first_name' => $firstName,
                 'last_name' => $lastName,
-                'contact_source' => 'whatsapp',
+                'contact_source' => $source,
                 'is_subscribed' => 1,
                 'bot_enable' => 1,
                 'created_by' => 0, // System created
@@ -89,21 +90,104 @@ class ContactService
                 'updated_at' => now(),
             ]);
         } catch (QueryException $exception) {
+            // Two View clicks/webhook jobs can pass the lookup together. The
+            // unique organization+phone index makes one insert win; return it
+            // instead of surfacing an error or inserting another contact.
             $contact = $this->reconcileDuplicateContact($exception, $normalizedPhone, $phone);
 
             if (! $contact) {
                 throw $exception;
             }
 
-            $isNew = false;
+            return ['contact' => $contact, 'isNew' => false];
         }
 
-        if ($isNew) {
+        if ($triggerWebhookEvent) {
             $cleanContact = $contact->makeHidden(['id', 'organization_id', 'created_by']);
             WebhookHelper::triggerWebhookEvent('contact.created', $cleanContact, $this->organizationId);
         }
 
-        return ['contact' => $contact, 'isNew' => $isNew];
+        return ['contact' => $contact, 'isNew' => true];
+    }
+
+    private function normalizePhone(string $phone): string
+    {
+        $normalizedPhone = PhoneService::getE164Format($phone);
+
+        if ($normalizedPhone === null) {
+            $digits = preg_replace('/\D+/u', '', trim($phone)) ?: '';
+            $candidate = str_starts_with($digits, '00')
+                ? '+'.substr($digits, 2)
+                : '+'.$digits;
+
+            $normalizedPhone = PhoneService::getE164Format($candidate);
+        }
+
+        return $normalizedPhone ?? PhoneService::normalize(
+            preg_replace('/\D+/u', '', trim($phone)) ?: trim($phone)
+        );
+    }
+
+    private function findExistingByPhone(string $normalizedPhone, string $rawPhone): ?Contact
+    {
+        $rawCandidates = array_values(array_unique(array_filter([
+            $normalizedPhone,
+            trim($rawPhone),
+            preg_replace('/\s+/', '', trim($rawPhone)),
+            '+'.ltrim(trim($rawPhone), '+'),
+        ])));
+
+        $normalizedDigits = preg_replace('/\D+/u', '', $normalizedPhone) ?: '';
+        $digitCandidates = array_values(array_unique(array_filter([
+            $normalizedDigits,
+            '00'.$normalizedDigits,
+        ])));
+
+        $phoneDigitsExpression = "REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(REPLACE(phone, '+', ''), ' ', ''), '-', ''), '(', ''), ')', ''), '.', ''), '/', '')";
+
+        return Contact::withTrashed()
+            ->where('organization_id', $this->organizationId)
+            ->where(function ($query) use ($rawCandidates, $digitCandidates, $phoneDigitsExpression) {
+                $query->whereIn('phone', $rawCandidates);
+
+                if ($digitCandidates) {
+                    $query->orWhereRaw($phoneDigitsExpression.' IN ('.implode(',', array_fill(0, count($digitCandidates), '?')).')', $digitCandidates);
+                }
+            })
+            // Prefer an already canonical record if both legacy and canonical
+            // representations exist.
+            ->orderByRaw('CASE WHEN phone = ? THEN 0 ELSE 1 END', [$normalizedPhone])
+            ->orderBy('id')
+            ->first();
+    }
+
+    private function restoreAndCanonicalize(Contact $contact, string $normalizedPhone): Contact
+    {
+        if ($contact->trashed()) {
+            $contact->restore();
+        }
+
+        if ((string) $contact->phone !== $normalizedPhone) {
+            try {
+                $contact->phone = $normalizedPhone;
+                $contact->save();
+            } catch (QueryException $exception) {
+                // A canonical record may have been inserted concurrently while
+                // this legacy record was being repaired. Reuse that record.
+                $canonical = Contact::withTrashed()
+                    ->where('organization_id', $this->organizationId)
+                    ->where('phone', $normalizedPhone)
+                    ->first();
+
+                if (! $canonical) {
+                    throw $exception;
+                }
+
+                return $this->restoreAndCanonicalize($canonical, $normalizedPhone);
+            }
+        }
+
+        return $contact;
     }
 
     protected function reconcileDuplicateContact(QueryException $exception, ?string $normalizedPhone, string $rawPhone): ?Contact
@@ -112,17 +196,7 @@ class ContactService
             return null;
         }
 
-        $candidates = array_filter([
-            $normalizedPhone,
-            '+'.$rawPhone,
-            $rawPhone,
-        ]);
-
-        $contact = Contact::withTrashed()
-            ->where('organization_id', $this->organizationId)
-            ->whereIn('phone', $candidates)
-            ->orderBy('id')
-            ->first();
+        $contact = $this->findExistingByPhone($normalizedPhone ?? $this->normalizePhone($rawPhone), $rawPhone);
 
         if (! $contact) {
             Log::channel('webhook')->error('Duplicate contact constraint hit without recovery', [
@@ -135,10 +209,6 @@ class ContactService
             return null;
         }
 
-        if ($contact->trashed()) {
-            $contact->restore();
-        }
-
         Log::channel('webhook')->warning('Recovered contact after duplicate phone constraint', [
             'organization_id' => $this->organizationId,
             'contact_id' => $contact->id,
@@ -147,7 +217,7 @@ class ContactService
             'exception' => $exception->getMessage(),
         ]);
 
-        return $contact;
+        return $this->restoreAndCanonicalize($contact, $normalizedPhone ?? $this->normalizePhone($rawPhone));
     }
 
     protected function isDuplicatePhoneConstraint(QueryException $exception): bool
