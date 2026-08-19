@@ -114,6 +114,25 @@ class FlowExecutionService
             return false;
         }
 
+        // A flow can be waiting for a textual answer or an interactive
+        // selection. Media messages such as voice notes do not contain a
+        // value that the flow can route or validate. Do not pass an empty
+        // value to processFlow: an interactive node would treat it as a
+        // first visit and send its buttons again on every voice note.
+        if ($this->shouldIgnoreUnprocessableInput($chat, $message)) {
+            Log::info('FlowExecution: ignoring inbound message without flow input', [
+                'contact_id' => $chat->contact_id,
+                'flow_id' => $flowData->flow_id,
+                'message_type' => $this->getInboundMessageType($chat),
+                'current_step' => $flowData->current_step,
+            ]);
+
+            // The active flow remains paused and owns the conversation. This
+            // prevents the normal trigger/AI pipeline from replaying another
+            // response for the same unsupported message.
+            return true;
+        }
+
         // Check if resuming on a question node — validate before continuing
         $questionConfig = $flowData->getVariable('_question_config');
         if ($questionConfig && is_array($questionConfig)) {
@@ -123,6 +142,40 @@ class FlowExecutionService
         $result = $this->processFlow($chat, $flowData, strtolower(trim($message)));
 
         return $result !== false;
+    }
+
+    /**
+     * Determine whether an inbound message has no value that a flow can use.
+     *
+     * Audio and other media messages are still stored and processed by the
+     * webhook pipeline, but they must not be converted to an empty string and
+     * fed into a paused flow. Audio transcription can be added later by
+     * supplying the transcript as $message before reaching this guard.
+     */
+    private function shouldIgnoreUnprocessableInput($chat, string $message): bool
+    {
+        if (trim($message) !== '') {
+            return false;
+        }
+
+        return in_array($this->getInboundMessageType($chat), [
+            'audio',
+            'image',
+            'video',
+            'document',
+            'sticker',
+            'location',
+            'contacts',
+        ], true);
+    }
+
+    private function getInboundMessageType($chat): ?string
+    {
+        $metadata = json_decode((string) ($chat->metadata ?? ''), true);
+
+        return is_array($metadata) && isset($metadata['type'])
+            ? (string) $metadata['type']
+            : null;
     }
 
     /**

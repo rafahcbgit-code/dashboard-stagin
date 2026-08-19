@@ -1734,6 +1734,128 @@ describe('AC-1.9.4: Error Isolation', function () {
     });
 });
 
+describe('Inbound WhatsApp message edits', function () {
+    it('updates the original chat text without creating a new chat', function () {
+        $organization = createOrganizationWithSubscription();
+        $from = '97333338614';
+        $originalMessageId = 'wamid_original_edit_test';
+        $editMessageId = 'wamid_edit_test';
+
+        $originalPayload = createMessagePayload(
+            'text',
+            $originalMessageId,
+            $from,
+            'Test User',
+            ['body' => 'النص قبل التعديل']
+        );
+
+        (new ProcessWebhookJob($originalPayload, $organization->id, 'messages'))->handle();
+
+        $originalChat = Chat::where('organization_id', $organization->id)
+            ->where('wam_id', $originalMessageId)
+            ->firstOrFail();
+
+        $editPayload = [
+            'field' => 'messages',
+            'value' => [
+                'messaging_product' => 'whatsapp',
+                'metadata' => [
+                    'display_phone_number' => '966542922948',
+                    'phone_number_id' => '736931499502134',
+                ],
+                'contacts' => [
+                    ['wa_id' => $from, 'user_id' => 'BH.test'],
+                ],
+                'messages' => [[
+                    'from' => $from,
+                    'id' => $editMessageId,
+                    'timestamp' => (string) time(),
+                    'type' => 'edit',
+                    'edit' => [
+                        'original_message_id' => $originalMessageId,
+                        'message' => [
+                            'type' => 'text',
+                            'text' => ['body' => 'النص بعد التعديل'],
+                        ],
+                    ],
+                ]],
+            ],
+        ];
+
+        (new ProcessWebhookJob($editPayload, $organization->id, 'messages'))->handle();
+
+        expect(Chat::where('organization_id', $organization->id)->count())->toBe(1);
+        expect(Chat::where('organization_id', $organization->id)
+            ->where('wam_id', $editMessageId)
+            ->exists())->toBeFalse();
+
+        $originalChat->refresh();
+        $metadata = json_decode($originalChat->metadata, true);
+
+        expect($originalChat->wam_id)->toBe($originalMessageId)
+            ->and($metadata['text']['body'])->toBe('النص بعد التعديل')
+            ->and($metadata['edited']['is_edited'])->toBeTrue()
+            ->and($metadata['edited']['edit_wam_id'])->toBe($editMessageId)
+            ->and($metadata['edited']['original_message_id'])->toBe($originalMessageId);
+    });
+
+    it('ignores an edit when the original chat does not exist', function () {
+        $organization = createOrganizationWithSubscription();
+
+        $payload = [
+            'field' => 'messages',
+            'value' => [
+                'messages' => [[
+                    'from' => '97333338614',
+                    'id' => 'wamid_edit_without_original',
+                    'timestamp' => (string) time(),
+                    'type' => 'edit',
+                    'edit' => [
+                        'original_message_id' => 'wamid_missing_original',
+                        'message' => [
+                            'type' => 'text',
+                            'text' => ['body' => 'لن يتم إنشاء رسالة'],
+                        ],
+                    ],
+                ]],
+            ],
+        ];
+
+        expect(fn () => (new ProcessWebhookJob($payload, $organization->id, 'messages'))->handle())
+            ->not->toThrow(\Exception::class);
+
+        expect(Chat::where('organization_id', $organization->id)->count())->toBe(0);
+    });
+
+    it('does not create a fallback chat for an SMB edit without the original', function () {
+        $organization = createOrganizationWithSubscription();
+
+        $payload = [
+            'field' => 'smb_message_echoes',
+            'value' => [
+                'message_echoes' => [[
+                    'from' => '966542922948',
+                    'to' => '97333338614',
+                    'id' => 'wamid_smb_edit_without_original',
+                    'timestamp' => (string) time(),
+                    'type' => 'edit',
+                    'edit' => [
+                        'original_message_id' => 'wamid_missing_smb_original',
+                        'message' => [
+                            'type' => 'text',
+                            'text' => ['body' => 'لن يتم إنشاء رسالة بديلة'],
+                        ],
+                    ],
+                ]],
+            ],
+        ];
+
+        (new ProcessWebhookJob($payload, $organization->id, 'smb_message_echoes'))->handle();
+
+        expect(Chat::where('organization_id', $organization->id)->count())->toBe(0);
+    });
+});
+
 /**
  * Helper to create a valid SMB message echo webhook payload.
  */

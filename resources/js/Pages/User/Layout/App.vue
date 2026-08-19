@@ -55,7 +55,7 @@
 <script setup>
     import { usePage } from "@inertiajs/vue3";
     import Sidebar from "./Sidebar.vue";
-    import { ref, computed, watch, onMounted } from 'vue'; 
+    import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
     import { toast } from 'vue3-toastify';
     import MobileSidebar from "./MobileSidebar.vue";
     import 'vue3-toastify/dist/index.css';
@@ -118,6 +118,16 @@
         }
     };
 
+    const adjustUnreadMessages = (event) => {
+        const delta = Number(event?.detail?.delta || 0);
+
+        if (delta > 0) {
+            unreadMessages.value += delta;
+        } else if (delta < 0) {
+            unreadMessages.value = Math.max(0, unreadMessages.value + delta);
+        }
+    };
+
     const showChatNoteNotification = (event) => {
         const notification = event?.notification;
         if (!notification?.payload?.message) return;
@@ -136,6 +146,7 @@
     };
 
     onMounted(() => {
+        window.addEventListener('chat:unread-adjusted', adjustUnreadMessages);
         setupSound();
         const pusherKey = getValueByKey('pusher_app_key');
         const pusherCluster = getValueByKey('pusher_app_cluster');
@@ -154,5 +165,9 @@
             echo.private('App.Models.User.' + user.value.id)
                 .listen('.chat-note.notification', showChatNoteNotification);
         }
+    });
+
+    onUnmounted(() => {
+        window.removeEventListener('chat:unread-adjusted', adjustUnreadMessages);
     });
 </script>

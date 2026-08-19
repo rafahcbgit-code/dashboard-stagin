@@ -294,6 +294,16 @@ class ProcessWebhookJob implements ShouldQueue
             return;
         }
 
+        // Meta delivers an edited customer message in the normal `messages`
+        // collection with type=edit. It is an update event, not a new chat.
+        // Handle it before the normal duplicate/business-message branches so
+        // an edit can never create a second Chat row.
+        if ($messageType === 'edit') {
+            $this->processIncomingMessageEdit($message);
+
+            return;
+        }
+
         // AC-1.2.5: Idempotency check - prevent duplicate chat creation
         // Uses idx_chats_wam_org index for efficient lookup
         if ($this->isDuplicateMessage($wamId)) {
@@ -579,6 +589,76 @@ class ProcessWebhookJob implements ShouldQueue
                 ]);
             }
         }
+    }
+
+    /**
+     * Apply an inbound WhatsApp text edit to the existing chat row.
+     *
+     * An edit webhook must never be persisted as a new Chat. If the original
+     * message is not available yet, leave the payload for diagnostics and stop
+     * without creating a fallback row.
+     */
+    protected function processIncomingMessageEdit(array $message): void
+    {
+        $editWamId = $message['id'] ?? null;
+        $editedAt = $message['timestamp'] ?? time();
+        $originalMessageId = $message['edit']['original_message_id'] ?? null;
+        $editedMessage = $message['edit']['message'] ?? [];
+        $editedMessageType = $editedMessage['type'] ?? null;
+        $editedTextBody = $editedMessage['text']['body'] ?? null;
+
+        if (
+            ! is_string($editWamId)
+            || $editWamId === ''
+            || ! is_string($originalMessageId)
+            || $originalMessageId === ''
+            || $editedMessageType !== 'text'
+            || ! is_string($editedTextBody)
+        ) {
+            Log::channel('webhook')->warning('Invalid inbound edit message data', [
+                'organization_id' => $this->organizationId,
+                'message' => $message,
+            ]);
+
+            return;
+        }
+
+        $chat = Chat::where('organization_id', $this->organizationId)
+            ->where('wam_id', $originalMessageId)
+            ->first();
+
+        if (! $chat) {
+            Log::channel('webhook')->warning('Inbound edit ignored because original chat was not found', [
+                'organization_id' => $this->organizationId,
+                'original_message_id' => $originalMessageId,
+                'edit_wam_id' => $editWamId,
+            ]);
+
+            return;
+        }
+
+        $metadata = $this->decodeChatMetadata($chat->metadata);
+        $metadata['text'] = is_array($metadata['text'] ?? null) ? $metadata['text'] : [];
+        $metadata['text']['body'] = $editedTextBody;
+        $metadata['edited'] = [
+            'is_edited' => true,
+            'edit_wam_id' => $editWamId,
+            'edited_at' => $editedAt,
+            'original_message_id' => $originalMessageId,
+        ];
+
+        // Keep the original Chat id, wam_id, direction, status and timestamps.
+        $chat->metadata = $this->encodeChatMetadata($metadata);
+        $chat->save();
+
+        Log::channel('webhook')->info('Inbound edit applied to existing chat', [
+            'organization_id' => $this->organizationId,
+            'chat_id' => $chat->id,
+            'original_message_id' => $originalMessageId,
+            'edit_wam_id' => $editWamId,
+        ]);
+
+        $this->broadcastUpdatedChat($chat);
     }
 
     /**
@@ -1500,55 +1580,16 @@ class ProcessWebhookJob implements ShouldQueue
                 'edit_wam_id' => $editWamId,
             ]);
 
-            $this->broadcastUpdatedSmbEchoChat($chat);
+            $this->broadcastUpdatedChat($chat);
 
             return;
         }
 
-        $contactService = new ContactService($this->organizationId);
-        $result = $contactService->findOrCreateFromWebhook($recipientPhone, null);
-        $contact = $result['contact'];
-        $isNewContact = $result['isNew'];
-
-        $metadata = $this->buildMessageMetadata([
-            'id' => $originalMessageId,
-            'timestamp' => $editedAt,
-            'type' => 'text',
-            'text' => ['body' => $editedTextBody],
-        ], 'text');
-        $metadata['edited'] = $this->buildSmbEditMetadata($editWamId, $editedAt, $originalMessageId);
-
-        $chat = Chat::create([
+        // An edit is never a new message. If the original chat is unavailable,
+        // do not create a fallback row with the original wam_id either.
+        Log::channel('webhook')->warning('SMB edit ignored because original chat was not found', [
             'organization_id' => $this->organizationId,
-            'contact_id' => $contact->id,
-            'wam_id' => $originalMessageId,
-            'type' => 'outbound',
-            'metadata' => $this->encodeChatMetadata($metadata),
-            'status' => 'sent',
-            'is_read' => 1,
-            'created_at' => now(),
-        ]);
-
-        ChatLog::create([
-            'contact_id' => $contact->id,
-            'entity_type' => 'chat',
-            'entity_id' => $chat->id,
-            'created_at' => now(),
-        ]);
-
-        ProcessWebhookNotificationsJob::dispatch(
-            $chat->id,
-            $contact->id,
-            $this->organizationId,
-            $isNewContact,
-            $this->payload
-        )->onQueue('webhook-notifications');
-
-        Log::channel('webhook')->info('SMB edit created chat using original wam_id', [
-            'organization_id' => $this->organizationId,
-            'chat_id' => $chat->id,
-            'contact_id' => $contact->id,
-            'wam_id' => $originalMessageId,
+            'original_message_id' => $originalMessageId,
             'edit_wam_id' => $editWamId,
         ]);
     }
@@ -1570,7 +1611,7 @@ class ProcessWebhookJob implements ShouldQueue
         return is_array($decoded) ? $decoded : [];
     }
 
-    protected function broadcastUpdatedSmbEchoChat(Chat $chat): void
+    protected function broadcastUpdatedChat(Chat $chat): void
     {
         try {
             $chatLog = ChatLog::where('entity_type', 'chat')
@@ -1578,7 +1619,7 @@ class ProcessWebhookJob implements ShouldQueue
                 ->first();
 
             if (! $chatLog) {
-                Log::channel('webhook')->warning('SMB edit broadcast skipped - ChatLog not found', [
+                Log::channel('webhook')->warning('Edit broadcast skipped - ChatLog not found', [
                     'organization_id' => $this->organizationId,
                     'chat_id' => $chat->id,
                 ]);
@@ -1592,7 +1633,7 @@ class ProcessWebhookJob implements ShouldQueue
                 'value' => $chatLog->relatedEntities,
             ]], $this->organizationId, $chat->contact?->uuid));
         } catch (\Throwable $exception) {
-            Log::channel('webhook')->warning('SMB edit broadcast failed (non-blocking)', [
+            Log::channel('webhook')->warning('Edit broadcast failed (non-blocking)', [
                 'organization_id' => $this->organizationId,
                 'chat_id' => $chat->id,
                 'error' => $exception->getMessage(),

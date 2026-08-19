@@ -10,7 +10,9 @@ use App\Models\Contact;
 use App\Models\Organization;
 use Illuminate\Http\Request;
 use App\Services\ChatService;
+use App\Services\ConversationAccessService;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Cache;
 use App\Http\Controllers\Controller as BaseController;
 use App\Models\Team;
 use App\Models\Template;
@@ -83,6 +85,63 @@ class ChatController extends BaseController
             'success' => true,
             'message' => __('All messages marked as read'),
             'updated_count' => $updated
+        ]);
+    }
+
+    /**
+     * Mark the latest inbound message for a conversation as unread.
+     */
+    public function markLatestInboundAsUnread(Request $request, string $contactUuid)
+    {
+        $organizationId = (int) session()->get('current_organization');
+
+        $contact = Contact::query()
+            ->where('uuid', $contactUuid)
+            ->where('organization_id', $organizationId)
+            ->whereNull('deleted_at')
+            ->firstOrFail();
+
+        abort_unless(
+            app(ConversationAccessService::class)->canAccess($request->user(), $contact),
+            403
+        );
+
+        $latestInbound = Chat::query()
+            ->where('contact_id', $contact->id)
+            ->where('organization_id', $organizationId)
+            ->where('type', 'inbound')
+            ->whereNull('deleted_at')
+            ->orderByDesc('created_at')
+            ->orderByDesc('id')
+            ->first();
+
+        if (!$latestInbound) {
+            return response()->json([
+                'success' => false,
+                'message' => __('No inbound message found'),
+            ], 422);
+        }
+
+        $updated = $latestInbound->is_read ? $latestInbound->update(['is_read' => 0]) : 0;
+
+        if ($updated > 0) {
+            Cache::forget("org_{$organizationId}_global_unread");
+        }
+
+        $unreadCount = Chat::query()
+            ->where('contact_id', $contact->id)
+            ->where('organization_id', $organizationId)
+            ->where('type', 'inbound')
+            ->whereNull('deleted_at')
+            ->where('is_read', 0)
+            ->count();
+
+        return response()->json([
+            'success' => true,
+            'message' => __('Chat marked as unread'),
+            'updated_count' => $updated,
+            'unread_count' => $unreadCount,
+            'chat_id' => $latestInbound->id,
         ]);
     }
 
