@@ -7,6 +7,7 @@ import FormSelectCombo from '@/Components/FormSelectCombo.vue';
 import Modal from '@/Components/Modal.vue';
 import ChatNotesModal from '@/Components/ChatComponents/ChatNotesModal.vue';
 import { useI18n } from 'vue-i18n';
+import { toast } from 'vue3-toastify';
 
 const { t } = useI18n();
 const props = defineProps(['contact', 'displayContactInfo', 'ticketingIsEnabled', 'ticket', 'addon', 'teamRole', 'labelColors', 'currentPage']);
@@ -21,6 +22,7 @@ const availableLabels = ref([]);
 const selectedLabels = ref([]);
 const loadingLabels = ref(false);
 const isSavingLabels = ref(false);
+const isMarkingLatestUnread = ref(false);
 const ticketUserOption = (ticket) => ({
     label: ticket?.user ? ticket.user.full_name : t('Unassigned'),
     value: ticket?.user ? ticket.user.id : 0,
@@ -41,7 +43,7 @@ watch(
     { immediate: true, deep: true }
 );
 
-const emit = defineEmits(['toggleView', 'deleteThread', 'closeThread', 'labelsUpdated', 'noteCreated']);
+const emit = defineEmits(['toggleView', 'deleteThread', 'closeThread', 'labelsUpdated', 'noteCreated', 'messageMarkedUnread']);
 
 const closeThread = () => {
     emit('closeThread', true);
@@ -59,6 +61,37 @@ const deleteThread = () => {
             showAlert.value = false
         }
     });
+}
+
+const markLatestInboundAsUnread = async () => {
+    if (isMarkingLatestUnread.value || !props.contact?.uuid) {
+        return;
+    }
+
+    isMarkingLatestUnread.value = true;
+    closeDropdown();
+
+    try {
+        const response = await axios.post(`/chats/${props.contact.uuid}/mark-latest-unread`);
+        const updatedCount = Number(response?.data?.updated_count || 0);
+
+        emit('messageMarkedUnread', {
+            contactUuid: props.contact.uuid,
+            unreadCount: Number(response?.data?.unread_count || 0),
+            updated: updatedCount > 0,
+        });
+
+        toast(response?.data?.message || t('Chat marked as unread'), {
+            autoClose: 3000,
+        });
+    } catch (error) {
+        toast(error?.response?.data?.message || t('Failed to mark latest message as unread'), {
+            type: 'error',
+            autoClose: 3000,
+        });
+    } finally {
+        isMarkingLatestUnread.value = false;
+    }
 }
 
 const form = useForm({
@@ -376,6 +409,13 @@ onUnmounted(() => {
                                     class="group flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900"
                                     role="menuitem">
                                     {{ $t('Manage labels') }}
+                                </button>
+
+                                <button @click="markLatestInboundAsUnread"
+                                    :disabled="isMarkingLatestUnread"
+                                    class="group flex w-full items-center px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 hover:text-gray-900 disabled:opacity-50 disabled:cursor-not-allowed"
+                                    role="menuitem">
+                                    {{ $t('Mark as unread') }}
                                 </button>
 
                                 <button v-if="ticketState === 'open' && ticketingIsEnabled"

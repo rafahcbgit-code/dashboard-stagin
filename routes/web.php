@@ -220,6 +220,7 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::get('/chats/labels/filter-data', [App\Http\Controllers\User\ChatController::class, 'getLabelsForFilter']);
                 Route::get('/chats/team-members/filter-data', [App\Http\Controllers\User\ChatController::class, 'getTeamMembersForFilter']);
                 Route::post('/chats/mark-all-read', [App\Http\Controllers\User\ChatController::class, 'markAllAsRead']);
+                Route::post('/chats/{contactUuid}/mark-latest-unread', [App\Http\Controllers\User\ChatController::class, 'markLatestInboundAsUnread']);
 
                 // Salla Integration Routes
                 Route::get('/settings/salla', [App\Http\Controllers\User\SallaController::class, 'index'])->name('salla.index');

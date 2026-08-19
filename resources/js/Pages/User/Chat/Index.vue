@@ -12,7 +12,7 @@
           :displayContactInfo="displayContactInfo" :labelColors="labelColors" :ticket="ticket" :addon="addon"
           :teamRole="props.teamRole" :currentPage="rows.meta?.current_page" @toggleView="toggleContactView"
           @deleteThread="deleteThread" @closeThread="closeThread" @labelsUpdated="handleLabelsUpdated"
-          @noteCreated="handleNoteCreated" />
+          @noteCreated="handleNoteCreated" @messageMarkedUnread="handleMessageMarkedUnread" />
         <div v-if="contact && !displayTemplate" class="flex-1 min-h-0 overflow-y-auto" ref="scrollContainer2">
           <ChatThread v-if="!displayContactInfo && !loadingThread && !displayTemplate" :contactId="contact.id"
             :initialMessages="chatThread" :hasMoreMessages="hasMoreMessages" :initialNextPage="nextPage" />
@@ -415,6 +415,38 @@ const handleLabelsUpdated = (updatedLabels) => {
       ...rows.value,
       data: updatedData,
     };
+  }
+};
+
+const handleMessageMarkedUnread = ({ contactUuid, unreadCount, updated }) => {
+  if (!contactUuid) {
+    return;
+  }
+
+  const nextUnreadCount = Number(unreadCount || 0);
+
+  if (contact.value?.uuid === contactUuid) {
+    contact.value = {
+      ...contact.value,
+      unread_messages: nextUnreadCount,
+    };
+  }
+
+  if (rows.value && Array.isArray(rows.value.data)) {
+    rows.value = {
+      ...rows.value,
+      data: rows.value.data.map((row) => (
+        row.uuid === contactUuid
+          ? { ...row, unread_messages: nextUnreadCount }
+          : row
+      )),
+    };
+  }
+
+  if (updated) {
+    window.dispatchEvent(new CustomEvent('chat:unread-adjusted', {
+      detail: { delta: 1 },
+    }));
   }
 };
 
