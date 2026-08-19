@@ -924,40 +924,15 @@ class ContactController extends BaseController
 
     public function chatViewDetails(Request $request)
     {
-        $organizationId = $this->getCurrentOrganizationId();
-
         $validated = $request->validate([
             'phone' => 'required|string',
             'name' => 'nullable|string',
         ]);
 
-        $phone = preg_replace('/\s+/', '', $validated['phone']); // remove all whitespace
-        $phone = trim($phone);
-
-        $contact = Contact::withTrashed()->where('organization_id', $organizationId)
-            ->where('phone', $phone)
-            ->whereNull('deleted_at')
-            ->first();
-
-        if ($contact) {
-            if ($contact->trashed()) {
-                $contact->restore();
-            }
-        } else {
-            $contact = Contact::create([
-                'organization_id' => $organizationId,
-                'phone' => $phone,
-                'first_name' => $validated['name'] ?? 'Unknown Contact',
-                'contact_source' => 'platform',
-                'is_subscribed' => 1,
-                'last_name' => null,
-                'email' => null,
-                'created_by' => 0,
-                'created_at' => now(),
-                'updated_at' => now(),
-                'bot_enable' => 1,
-            ]);
-        }
+        $contact = $this->contactService()->findOrCreateFromChatView(
+            $validated['phone'],
+            $validated['name'] ?? null
+        );
 
         return response()->json([
             'redirect' => '/contacts?id='.$contact->uuid,
