@@ -39,6 +39,8 @@ const audioDuration = ref(0);
 const audioPreviewUrl = ref(null);
 const isPlaying = ref(false);
 const audioPlayer = ref(null);
+const fileInputRef = ref(null);
+const pendingMediaPreviewUrl = ref(null);
 const isAudioRecording = ref(false);
 const form = ref({
     'uuid': props.contact.uuid,
@@ -374,13 +376,22 @@ const sendMessage = async () => {
     }
 
     form.value.message = formTextInput.value;
+
+    const hasText = Boolean(form.value.message?.trim());
+    const hasMedia = Boolean(form.value.file || form2.value.file);
+
+    if (!hasText && !hasMedia) {
+        processingForm.value = false;
+        return;
+    }
+
     processingForm.value = true;
     outboundError.value = null;
 
-    if (form.value.message != null || form.value.file != null) {
+    if (hasText || form.value.file) {
         const formData = new FormData();
 
-        formData.append('message', form.value.message);
+        formData.append('message', form.value.message ?? '');
         formData.append('type', form.value.type);
         formData.append('uuid', form.value.uuid);
 
@@ -395,13 +406,13 @@ const sendMessage = async () => {
         try {
             const response = await axios.post('/chats', formData);
 
-            if (isAudioRecording.value == true) {
+            if (form2.value.file) {
                 await sendAudioMessage();
             }
 
             form.value.message = null;
             formTextInput.value = null;
-            form.value.file = null;
+            clearSelectedFile();
             emit('reply-cleared');
 
             processingForm.value = false;
@@ -410,7 +421,7 @@ const sendMessage = async () => {
             processingForm.value = false;
         }
     } else {
-        if (isAudioRecording.value == true) {
+        if (form2.value.file) {
             await sendAudioMessage();
         }
 
@@ -446,6 +457,10 @@ const sendAudioMessage = async () => {
         return;
     }
 
+    if (!form2.value.file) {
+        return;
+    }
+
     const formData = new FormData();
     formData.append('type', form2.value.type);
     formData.append('uuid', form2.value.uuid);
@@ -457,9 +472,7 @@ const sendAudioMessage = async () => {
     try {
         const response = await axios.post('/chats', formData);
 
-        if (isAudioRecording.value == true) {
-            deleteRecording();
-        }
+        deleteRecording();
     } catch (error) {
         outboundError.value = messageFromError(error);
     }
@@ -547,13 +560,68 @@ const handleFileUpload = (event) => {
     }
 
     const file = event.target.files[0];
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        form.value.file = file;
-        sendMessage();
-    };
-    reader.readAsDataURL(file);
-}
+    if (!file) {
+        return;
+    }
+
+    // Selecting a file only prepares it in the composer. The form is sent
+    // explicitly by the user through the Send button.
+    form.value.file = file;
+    updatePendingMediaPreview(file);
+};
+
+const updatePendingMediaPreview = (file) => {
+    clearPendingMediaPreview();
+
+    if (file?.type?.startsWith('image/') || file?.type?.startsWith('video/')) {
+        pendingMediaPreviewUrl.value = URL.createObjectURL(file);
+    }
+};
+
+const clearPendingMediaPreview = () => {
+    if (pendingMediaPreviewUrl.value) {
+        URL.revokeObjectURL(pendingMediaPreviewUrl.value);
+        pendingMediaPreviewUrl.value = null;
+    }
+};
+
+const formatFileSize = (bytes) => {
+    if (!Number.isFinite(bytes) || bytes <= 0) {
+        return '';
+    }
+
+    const units = ['B', 'KB', 'MB', 'GB'];
+    const unitIndex = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+    const size = bytes / (1024 ** unitIndex);
+
+    return `${size >= 10 || unitIndex === 0 ? Math.round(size) : size.toFixed(1)} ${units[unitIndex]}`;
+};
+
+const selectMediaType = (type) => {
+    form.value.type = type;
+    form.value.file = null;
+    clearPendingMediaPreview();
+
+    if (fileInputRef.value) {
+        fileInputRef.value.value = '';
+    }
+};
+
+const clearSelectedFile = () => {
+    form.value.file = null;
+    form.value.type = null;
+    clearPendingMediaPreview();
+
+    if (fileInputRef.value) {
+        fileInputRef.value.value = '';
+    }
+};
+
+const hasPendingContent = computed(() => Boolean(
+    formTextInput.value?.trim()
+    || form.value.file
+    || form2.value.file
+));
 
 const getAcceptedFileTypes = () => {
     switch (form.value.type) {
@@ -656,6 +724,7 @@ const deleteRecording = () => {
     audioChunks.value = [];
     form2.value.type = null;
     form2.value.file = null;
+    isAudioRecording.value = false;
     stopPlaybackTimer();
 };
 
@@ -756,6 +825,7 @@ onBeforeUnmount(() => {
     if (audioPreviewUrl.value) {
         URL.revokeObjectURL(audioPreviewUrl.value);
     }
+    clearPendingMediaPreview();
 });
 </script>
 <template>
@@ -847,8 +917,37 @@ onBeforeUnmount(() => {
                     @input="handleComposerInput" @blur="stopTyping" type="text" rows="3" :placeholder="$t('Type your message...')"
                     :disabled="processingForm">
                 </textarea>
-                <input type="file" class="sr-only" :accept="getAcceptedFileTypes()" id="file-upload"
+                <input ref="fileInputRef" type="file" class="sr-only" :accept="getAcceptedFileTypes()" id="file-upload"
                     @change="handleFileUpload($event)" />
+            </div>
+            <div v-if="form.file" class="mb-2 flex items-center gap-3 rounded-md border bg-slate-50 px-3 py-2 text-sm">
+                <img
+                    v-if="pendingMediaPreviewUrl && form.file.type.startsWith('image/')"
+                    :src="pendingMediaPreviewUrl"
+                    :alt="form.file.name"
+                    class="h-12 w-12 shrink-0 rounded object-cover"
+                />
+                <video
+                    v-else-if="pendingMediaPreviewUrl && form.file.type.startsWith('video/')"
+                    :src="pendingMediaPreviewUrl"
+                    controls
+                    class="h-12 w-20 shrink-0 rounded object-cover"
+                />
+                <div v-else class="flex h-12 w-12 shrink-0 items-center justify-center rounded bg-white text-slate-500">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
+                        <path fill="currentColor" d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6Zm1 7V3.5L18.5 9H15ZM6 4h7v6h5v10H6V4Z" />
+                    </svg>
+                </div>
+                <div class="min-w-0 flex-1">
+                    <div class="truncate text-slate-700">{{ form.file.name }}</div>
+                    <div v-if="formatFileSize(form.file.size)" class="text-xs text-slate-500">{{ formatFileSize(form.file.size) }}</div>
+                    <div class="text-xs text-[#008f72]">{{ $t('Ready to send') }}</div>
+                </div>
+                <button type="button" class="shrink-0 text-slate-500 hover:text-red-600" @click="clearSelectedFile" :title="$t('Cancel')" :aria-label="$t('Cancel')">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24">
+                        <path fill="currentColor" d="m12 10.586l4.95-4.95l1.414 1.414l-4.95 4.95l4.95 4.95l-1.414 1.414l-4.95-4.95l-4.95 4.95l-1.414-1.414l4.95-4.95l-4.95-4.95L7.05 5.636z" />
+                    </svg>
+                </button>
             </div>
             <!-- Recording Interface -->
             <div v-if="isRecording || audioPreviewUrl" class="bg-slate-50 rounded-lg border px-2 mb-2">
@@ -952,7 +1051,7 @@ onBeforeUnmount(() => {
                         </div>
                     </div>
                     <div>
-                        <label class="py-1 cursor-pointer" @click="form.type = 'document'" for="file-upload">
+                        <label class="py-1 cursor-pointer" @click="selectMediaType('document')" for="file-upload">
                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 56 56">
                                 <path fill="currentColor"
                                     d="M44.09 28.867L26.863 46.094c-4.476 4.5-10.5 4.054-14.343.164c-3.867-3.844-4.313-9.82.187-14.32L36.191 8.453c2.696-2.695 6.657-3.07 9.235-.515c2.555 2.601 2.18 6.539-.492 9.234L21.988 40.14c-1.171 1.195-2.554.843-3.375.047c-.796-.82-1.125-2.18.047-3.376l16.031-16.007c.704-.727.75-1.758.07-2.438c-.679-.656-1.71-.61-2.413.094L16.246 34.563c-2.39 2.39-2.297 6.046-.187 8.156c2.297 2.297 5.789 2.25 8.18-.164l23.085-23.063c4.383-4.383 4.172-10.148.375-13.969c-3.75-3.726-9.586-4.007-13.992.375L10.082 29.547c-5.789 5.789-5.344 14.062-.117 19.289c5.227 5.203 13.5 5.648 19.289-.117l17.344-17.344c.703-.68.68-1.922-.024-2.555c-.68-.726-1.78-.633-2.484.047" />
@@ -960,7 +1059,7 @@ onBeforeUnmount(() => {
                         </label>
                     </div>
                     <div>
-                        <label @click="form.type = 'audio'" class="py-1 cursor-pointer" for="file-upload">
+                        <label @click="selectMediaType('audio')" class="py-1 cursor-pointer" for="file-upload">
                             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24">
                                 <g fill="none" stroke="currentColor" stroke-width="1.5">
                                     <path
@@ -972,7 +1071,7 @@ onBeforeUnmount(() => {
                         </label>
                     </div>
                     <div>
-                        <label @click="form.type = 'video'" class="py-1 cursor-pointer" for="file-upload">
+                        <label @click="selectMediaType('video')" class="py-1 cursor-pointer" for="file-upload">
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 32 32">
                                 <path fill="currentColor"
                                     d="M6.5 5.5A4.5 4.5 0 0 0 2 10v12a4.5 4.5 0 0 0 4.5 4.5h12A4.5 4.5 0 0 0 23 22v-1.5l4.2 3.15c1.153.865 2.8.042 2.8-1.4V9.75c0-1.442-1.647-2.265-2.8-1.4L23 11.5V10a4.5 4.5 0 0 0-4.5-4.5zM23 14l5-3.75v11.5L23 18zm-2-4v12a2.5 2.5 0 0 1-2.5 2.5h-12A2.5 2.5 0 0 1 4 22V10a2.5 2.5 0 0 1 2.5-2.5h12A2.5 2.5 0 0 1 21 10" />
@@ -980,7 +1079,7 @@ onBeforeUnmount(() => {
                         </label>
                     </div>
                     <div>
-                        <label class="py-1 cursor-pointer" @click="form.type = 'image'" for="file-upload">
+                        <label class="py-1 cursor-pointer" @click="selectMediaType('image')" for="file-upload">
                             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24">
                                 <g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
                                     stroke-width="1.5">
@@ -1046,12 +1145,12 @@ onBeforeUnmount(() => {
                 <div class="ml-auto">
                     <button
                         class="flex items-center gap-x-1 md:gap-x-2 p-1 px-2 rounded-md border border-gray-400 text-xs md:text-sm"
-                        :disabled="(formTextInput === null || formTextInput.trim() === '') && !form2.file">
+                        :disabled="!hasPendingContent || processingForm">
                         <span
-                            :class="(formTextInput === null || formTextInput.trim() === '') && !form2.file ? 'text-slate-400' : 'text-black'">Send</span>
+                            :class="!hasPendingContent || processingForm ? 'text-slate-400' : 'text-black'">Send</span>
                         <div>
                             <svg v-if="!processingForm"
-                                :class="(formTextInput === null || formTextInput.trim() === '') && !form2.file ? 'text-slate-300' : 'text-black'"
+                                :class="!hasPendingContent ? 'text-slate-300' : 'text-black'"
                                 xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 16 16">
                                 <path fill="currentColor"
                                     d="M1.724 1.053a.5.5 0 0 0-.714.545l1.403 4.85a.5.5 0 0 0 .397.354l5.69.953c.268.053.268.437 0 .49l-5.69.953a.5.5 0 0 0-.397.354l-1.403 4.85a.5.5 0 0 0 .714.545l13-6.5a.5.5 0 0 0 0-.894l-13-6.5Z" />
