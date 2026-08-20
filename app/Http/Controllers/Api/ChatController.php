@@ -4,8 +4,11 @@ namespace App\Http\Controllers\Api;
 
 use App\Http\Controllers\Controller;
 use App\Models\Chat;
+use App\Models\ChatArchive;
 use App\Models\Contact;
 use App\Models\ChatLog;
+use App\Models\ChatNote;
+use App\Models\ChatTicketLog;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\DB;
@@ -440,9 +443,10 @@ class ChatController extends Controller
             $chatLogs = $query->paginate($perPage);
 
             // Format messages
+            $relatedEntities = $this->loadTimelineEntities($chatLogs->getCollection());
             $messages = [];
             foreach ($chatLogs as $chatLog) {
-                $item = $this->formatTimelineItem($chatLog);
+                $item = $this->formatTimelineItem($chatLog, $relatedEntities);
                 if ($item) {
                     $messages[] = $item;
                 }
@@ -489,14 +493,14 @@ class ChatController extends Controller
     /**
      * Format timeline item based on entity type
      */
-    private function formatTimelineItem($chatLog)
+    private function formatTimelineItem($chatLog, array $relatedEntities = [])
     {
         $entityType = $chatLog->entity_type;
 
         try {
             // Type 1: Message
             if ($entityType === 'chat') {
-                $chat = $chatLog->relatedEntities;
+                $chat = $relatedEntities['chat'][$chatLog->entity_id] ?? $chatLog->relatedEntities;
                 if (!$chat) return null;
 
                 $formattedMessage = $this->formatMessage($chat);
@@ -507,10 +511,10 @@ class ChatController extends Controller
 
             // Type 2: Note
             elseif ($entityType === 'notes') {
-                $note = $chatLog->relatedEntities;
+                $note = $relatedEntities['notes'][$chatLog->entity_id] ?? $chatLog->relatedEntities;
                 if (!$note) return null;
 
-                $creator = \App\Models\User::find($note->created_by);
+                $creator = $note->creator ?? null;
 
                 return [
                     'entity' => 'note',
@@ -531,7 +535,7 @@ class ChatController extends Controller
 
             // Type 3: Ticket Event
             elseif ($entityType === 'ticket') {
-                $ticketLog = $chatLog->relatedEntities;
+                $ticketLog = $relatedEntities['ticket'][$chatLog->entity_id] ?? $chatLog->relatedEntities;
                 if (!$ticketLog) return null;
 
                 return [
@@ -552,6 +556,56 @@ class ChatController extends Controller
         }
     }
 
+    private function loadTimelineEntities($chatLogs): array
+    {
+        $idsByType = $chatLogs
+            ->groupBy('entity_type')
+            ->map(fn ($logs) => $logs->pluck('entity_id')->filter()->unique()->values());
+
+        $entities = [
+            'chat' => collect(),
+            'notes' => collect(),
+            'ticket' => collect(),
+        ];
+
+        $chatIds = $idsByType->get('chat', collect());
+        if ($chatIds->isNotEmpty()) {
+            $chats = Chat::with('media', 'user', 'logs', 'replyTo.media')
+                ->whereIn('id', $chatIds)
+                ->get()
+                ->keyBy('id');
+
+            $missingChatIds = $chatIds->diff($chats->keys());
+            if ($missingChatIds->isNotEmpty()) {
+                $archives = ChatArchive::with('media', 'user', 'logs')
+                    ->whereIn('id', $missingChatIds)
+                    ->get()
+                    ->keyBy('id');
+
+                $chats = $chats->union($archives);
+            }
+
+            $entities['chat'] = $chats;
+        }
+
+        $noteIds = $idsByType->get('notes', collect());
+        if ($noteIds->isNotEmpty()) {
+            $entities['notes'] = ChatNote::with('creator')
+                ->whereIn('id', $noteIds)
+                ->get()
+                ->keyBy('id');
+        }
+
+        $ticketIds = $idsByType->get('ticket', collect());
+        if ($ticketIds->isNotEmpty()) {
+            $entities['ticket'] = ChatTicketLog::whereIn('id', $ticketIds)
+                ->get()
+                ->keyBy('id');
+        }
+
+        return $entities;
+    }
+
     /**
      * Format message for API response
      */
@@ -562,6 +616,7 @@ class ChatController extends Controller
         $messageType = $metadata['type'] ?? 'text';
 
         $message = [
+            'id' => $chat->id,
             'uuid' => $chat->uuid,
             'type' => $chat->type,
             'message_type' => $messageType,
@@ -570,6 +625,7 @@ class ChatController extends Controller
             'created_at' => $chat->created_at,
             'wam_id' => $chat->wam_id,
             'metadata' => $metadata,
+            'reply_to' => $this->formatReplyToMessage($chat->replyTo),
         ];
 
         // Text message
@@ -708,6 +764,50 @@ class ChatController extends Controller
         }
 
         return $message;
+    }
+
+    private function formatReplyToMessage($chat): ?array
+    {
+        if (! $chat) {
+            return null;
+        }
+
+        $metadata = $this->withLegacyMediaMetadata(json_decode($chat->metadata, true));
+        $messageType = $metadata['type'] ?? 'text';
+
+        return [
+            'id' => $chat->id,
+            'uuid' => $chat->uuid,
+            'type' => $chat->type,
+            'message_type' => $messageType,
+            'wam_id' => $chat->wam_id,
+            'text' => $this->replyPreviewText($metadata),
+        ];
+    }
+
+    private function replyPreviewText(array $metadata): string
+    {
+        $type = $metadata['type'] ?? '';
+
+        return $metadata['text']['body']
+            ?? $metadata['body']['text']
+            ?? $metadata['image']['caption']
+            ?? $metadata['video']['caption']
+            ?? $metadata['document']['caption']
+            ?? $metadata['button']['text']
+            ?? $metadata['interactive']['body']['text']
+            ?? $metadata['interactive']['button_reply']['title']
+            ?? $metadata['interactive']['list_reply']['title']
+            ?? match ($type) {
+                'image' => 'Image',
+                'video' => 'Video',
+                'audio' => 'Audio',
+                'document' => 'Document: '.($metadata['document']['filename'] ?? $metadata['media']['filename'] ?? 'Document'),
+                'location' => 'Location',
+                'contacts' => 'Contact',
+                'sticker' => 'Sticker',
+                default => 'Message',
+            };
     }
 
     /**

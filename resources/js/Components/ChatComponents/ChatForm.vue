@@ -16,6 +16,7 @@ const props = defineProps([
     'chatLimitReached',
     'simpleForm',
     'pusherSettings',
+    'replyingTo',
 ]);
 const isContactBlocked = computed(() => Boolean(props.contact?.is_blocked));
 
@@ -109,7 +110,7 @@ watchEffect(() => {
     form.value.uuid = props.contact.uuid;
 });
 
-const emit = defineEmits(['response', 'viewTemplate']);
+const emit = defineEmits(['response', 'viewTemplate', 'reply-cleared']);
 
 const messageFromError = (error) => {
     return error?.response?.data?.message
@@ -387,6 +388,10 @@ const sendMessage = async () => {
             formData.append('file', form.value.file);
         }
 
+        if (props.replyingTo?.id && form.value.type === 'text') {
+            formData.append('reply_to_message_id', props.replyingTo.id);
+        }
+
         try {
             const response = await axios.post('/chats', formData);
 
@@ -397,6 +402,7 @@ const sendMessage = async () => {
             form.value.message = null;
             formTextInput.value = null;
             form.value.file = null;
+            emit('reply-cleared');
 
             processingForm.value = false;
         } catch (error) {
@@ -823,6 +829,17 @@ onBeforeUnmount(() => {
     <form v-if="!isContactBlocked && isInboundChatWithin24Hours && !props.chatLimitReached" @submit.prevent="sendMessage()"
         class="flex items-center px-2 md:px-10 space-x-2">
         <div class="bg-white rounded-md w-full p-4">
+            <div v-if="props.replyingTo" class="mb-3 flex items-start gap-3 rounded-md border-l-4 border-[#00a884] bg-slate-50 px-3 py-2">
+                <div class="min-w-0 flex-1">
+                    <div class="text-xs font-semibold text-[#008f72]">{{ $t('Replying to') }}</div>
+                    <div class="truncate text-sm text-slate-600">{{ props.replyingTo.text || $t('Message') }}</div>
+                </div>
+                <button type="button" class="shrink-0 text-slate-500 hover:text-slate-900" :title="$t('Cancel')" @click="emit('reply-cleared')">
+                    <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24">
+                        <path fill="currentColor" d="m12 10.586l4.95-4.95l1.414 1.414l-4.95 4.95l4.95 4.95l-1.414 1.414l-4.95-4.95l-4.95 4.95l-1.414-1.414l4.95-4.95l-4.95-4.95L7.05 5.636z" />
+                    </svg>
+                </button>
+            </div>
             <div>
                 <textarea ref="textInputRef" @focus="form.type = 'text'" @keydown.enter.exact.prevent="handleEnterKey"
                     class="w-full outline-none resize-none text-sm rounded-md p-2"

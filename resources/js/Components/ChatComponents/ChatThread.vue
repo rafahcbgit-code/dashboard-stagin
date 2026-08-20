@@ -22,6 +22,8 @@ const props = defineProps({
     }
 });
 
+const emit = defineEmits(['reply-selected']);
+
 const messages = ref(props.initialMessages);
 const loading = ref(false);
 const nextPage = ref(props.initialNextPage);
@@ -67,6 +69,18 @@ const messagePreview = (chat) => {
 
 const getReplyTarget = (chat) => {
     const value = chat?.[0]?.value;
+    const relatedReply = value?.reply_to;
+
+    if (relatedReply) {
+        return {
+            id: relatedReply.id,
+            wam_id: relatedReply.wam_id,
+            type: relatedReply.type || 'inbound',
+            text: relatedReply.text || messagePreview(relatedReply),
+            found: true,
+        };
+    }
+
     const replyWamId = parseMetadata(value?.metadata)?.context?.id;
 
     if (!replyWamId) return null;
@@ -82,6 +96,15 @@ const getReplyTarget = (chat) => {
         text: messagePreview(original),
         found: Boolean(original),
     };
+};
+
+const selectReplyMessage = (chat) => {
+    emit('reply-selected', {
+        id: chat.id,
+        type: chat.type,
+        message_type: parseMetadata(chat.metadata).type || 'text',
+        text: messagePreview(chat),
+    });
 };
 
 const messageKey = (chat, index) => {
@@ -225,7 +248,8 @@ const loadMoreMessages = async () => {
                :content="chat[0].value"
                 :type="chat[0].value.type"
                 :reply-to="getReplyTarget(chat)"
-                @reply-click="scrollToReply" />
+                @reply-click="scrollToReply"
+                @reply-select="selectReplyMessage" />
             <div v-if="chat[0].type === 'ticket'" class="py-2">
                 <div class="text-center font-light text-sm border-b border-t py-2 border-dashed border-black">
                     <div>{{ chat[0].value.description }} </div>

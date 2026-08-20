@@ -48,7 +48,7 @@ class ChatLog extends Model
 
         switch ($entityType) {
             case 'chat':
-                $relatedEntity = Chat::with('media', 'user', 'logs')->find($entityId);
+                $relatedEntity = Chat::with('media', 'user', 'logs', 'replyTo.media')->find($entityId);
 
                 if (!$relatedEntity) {
                     $relatedEntity = ChatArchive::with('media', 'user', 'logs')->find($entityId);

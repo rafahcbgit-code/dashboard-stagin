@@ -10,6 +10,7 @@ use App\Models\Addon;
 use App\Models\ChatLog;
 use App\Models\Contact;
 use App\Models\ChatMedia;
+use App\Models\ChatNote;
 use App\Models\ChatTicket;
 use App\Events\NewChatEvent;
 use App\Models\ContactField;
@@ -715,9 +716,25 @@ class ChatService
     public function sendMessage(object $request)
     {
         $userId = $request->user_id ?? $this->getUserId();
+        $replyToMessageId = $request->reply_to_message_id ?? null;
+        $replyToMessage = $replyToMessageId ? $this->resolveReplyToMessage($request->uuid, $replyToMessageId) : null;
+
+        if ($replyToMessage instanceof \stdClass && ($replyToMessage->success ?? true) === false) {
+            return $replyToMessage;
+        }
 
         if ($request->type === 'text') {
-            return $this->getWhatsappService()->sendMessage($request->uuid, $request->message, $userId);
+            return $this->getWhatsappService()->sendMessage(
+                $request->uuid,
+                $request->message,
+                $userId,
+                'text',
+                [],
+                [],
+                null,
+                null,
+                $replyToMessage
+            );
         } elseif (in_array($request->type, ['interactive buttons', 'interactive call to action url', 'interactive list'])) {
             $buttons = $request->buttons ?? [];
             $header = $request->header ?? [];
@@ -732,7 +749,8 @@ class ChatService
                 $buttons,
                 $header,
                 $footer,
-                $buttonLabel
+                $buttonLabel,
+                $replyToMessage
             );
         } else {
             $storage = Setting::where('key', 'storage_system')->first()->value;
@@ -755,6 +773,61 @@ class ChatService
 
             $this->getWhatsappService()->sendMedia($request->uuid, $request->type, $fileName, $mediaFilePath, $mediaUrl, $location);
         }
+    }
+
+    private function resolveReplyToMessage(string $contactUuid, $replyToMessageId): Chat|\stdClass
+    {
+        if (! is_numeric($replyToMessageId)) {
+            return $this->buildSendMessageError('The selected reply message is invalid.', 422, 'INVALID_REPLY_MESSAGE');
+        }
+
+        $contact = Contact::where('uuid', $contactUuid)
+            ->select(['id', 'organization_id'])
+            ->where('organization_id', $this->organizationId)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (! $contact) {
+            return $this->buildSendMessageError('Contact not found.', 404, 'CONTACT_NOT_FOUND');
+        }
+
+        if (auth()->check()) {
+            if (! app(ConversationAccessService::class)->canAccess(auth()->user(), $contact)) {
+                return $this->buildSendMessageError('You are not authorized to access this conversation.', 403, 'CONVERSATION_FORBIDDEN');
+            }
+        }
+
+        $replyToMessage = Chat::whereKey((int) $replyToMessageId)
+            ->select(['id', 'organization_id', 'contact_id', 'wam_id'])
+            ->where('organization_id', $this->organizationId)
+            ->where('contact_id', $contact->id)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (! $replyToMessage) {
+            return $this->buildSendMessageError('The selected reply message was not found in this conversation.', 422, 'REPLY_MESSAGE_NOT_FOUND');
+        }
+
+        if (! is_string($replyToMessage->wam_id) || trim($replyToMessage->wam_id) === '') {
+            return $this->buildSendMessageError('The selected message cannot be replied to because it has no WhatsApp message ID.', 422, 'REPLY_MESSAGE_MISSING_WAM_ID');
+        }
+
+        return $replyToMessage;
+    }
+
+    private function buildSendMessageError(string $message, int $statusCode, string $code): \stdClass
+    {
+        $response = new \stdClass();
+        $response->success = false;
+        $response->message = $message;
+        $response->status_code = $statusCode;
+        $response->data = new \stdClass();
+        $response->data->error = [
+            'code' => $code,
+            'message' => $message,
+        ];
+
+        return $response;
     }
 
     // Send a Meta WhatsApp Flow to a contact from the chat window
@@ -1477,13 +1550,16 @@ class ChatService
             ->orderBy('created_at', 'desc')
             ->paginate($perPage, ['*'], 'page', $page);
 
+        $relatedEntities = $this->loadRelatedEntitiesForChatLogs($chatLogs->getCollection());
         $chats = [];
         foreach ($chatLogs as $chatLog) {
-            // Only add if relatedEntities exists
-            if ($chatLog->relatedEntities !== null) {
+            $relatedEntity = $relatedEntities[$chatLog->entity_type][$chatLog->entity_id] ?? null;
+
+            // Only add if related entity exists
+            if ($relatedEntity !== null) {
                 $chats[] = array([
                     'type' => $chatLog->entity_type,
-                    'value' => $chatLog->relatedEntities
+                    'value' => $relatedEntity
                 ]);
             }
         }
@@ -1493,6 +1569,56 @@ class ChatService
             'hasMoreMessages' => $chatLogs->hasMorePages(),
             'nextPage' => $chatLogs->currentPage() + 1
         ];
+    }
+
+    private function loadRelatedEntitiesForChatLogs($chatLogs): array
+    {
+        $idsByType = $chatLogs
+            ->groupBy('entity_type')
+            ->map(fn ($logs) => $logs->pluck('entity_id')->filter()->unique()->values());
+
+        $entities = [
+            'chat' => collect(),
+            'notes' => collect(),
+            'ticket' => collect(),
+        ];
+
+        $chatIds = $idsByType->get('chat', collect());
+        if ($chatIds->isNotEmpty()) {
+            $chats = Chat::with('media', 'user', 'logs', 'replyTo.media')
+                ->whereIn('id', $chatIds)
+                ->get()
+                ->keyBy('id');
+
+            $missingChatIds = $chatIds->diff($chats->keys());
+            if ($missingChatIds->isNotEmpty()) {
+                $archives = ChatArchive::with('media', 'user', 'logs')
+                    ->whereIn('id', $missingChatIds)
+                    ->get()
+                    ->keyBy('id');
+
+                $chats = $chats->union($archives);
+            }
+
+            $entities['chat'] = $chats;
+        }
+
+        $noteIds = $idsByType->get('notes', collect());
+        if ($noteIds->isNotEmpty()) {
+            $entities['notes'] = ChatNote::with('creator')
+                ->whereIn('id', $noteIds)
+                ->get()
+                ->keyBy('id');
+        }
+
+        $ticketIds = $idsByType->get('ticket', collect());
+        if ($ticketIds->isNotEmpty()) {
+            $entities['ticket'] = ChatTicketLog::whereIn('id', $ticketIds)
+                ->get()
+                ->keyBy('id');
+        }
+
+        return $entities;
     }
 
     private function markRevokedMessagesForDisplay(array $chats, int $contactId): array

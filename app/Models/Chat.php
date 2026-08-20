@@ -27,6 +27,7 @@ class Chat extends Model {
         'user_id',
         'type',
         'wam_id',
+        'reply_to_message_id',
         'organization_id',
         'status',
         'media_id',
@@ -102,6 +103,11 @@ class Chat extends Model {
     public function user()
     {
         return $this->belongsTo(User::class, 'user_id', 'id');
+    }
+
+    public function replyTo()
+    {
+        return $this->belongsTo(Chat::class, 'reply_to_message_id', 'id');
     }
 
     public static function updateStatusIfProgressed(int $chatId, string $status): int

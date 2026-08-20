@@ -53,6 +53,7 @@ class MessageController extends Controller
                 'message' => 'required_if:type,text,interactive',
                 'file' => 'required_if:type,image,video,audio,document|file',
                 'caption' => 'nullable|string|max:1024',
+                'reply_to_message_id' => 'nullable|integer',
             ]);
 
             if ($validator->fails()) {
@@ -161,13 +162,14 @@ class MessageController extends Controller
             'uuid' => $contact->uuid,
             'message' => $message,
             'type' => 'text',
-            'user_id' => $userId
+            'user_id' => $userId,
+            'reply_to_message_id' => $request->input('reply_to_message_id'),
         ]);
 
         // Check if WhatsappService returned success
         if (isset($response->success) && $response->success === true) {
             // Get the sent message from database with media relationship
-            $sentMessage = \App\Models\Chat::with('media')
+            $sentMessage = \App\Models\Chat::with('media', 'replyTo.media')
                 ->where('uuid', $response->data->chat->uuid ?? null)
                 ->first();
 
@@ -1128,6 +1130,7 @@ class MessageController extends Controller
         $messageType = $metadata['type'] ?? 'text';
 
         $message = [
+            'id' => $chat->id,
             'uuid' => $chat->uuid,
             'type' => $chat->type, // inbound or outbound
             'message_type' => $messageType,
@@ -1136,6 +1139,7 @@ class MessageController extends Controller
             'created_at' => $chat->created_at,
             'wam_id' => $chat->wam_id,
             'metadata' => $metadata,
+            'reply_to' => $this->formatReplyToMessage($chat->replyTo),
         ];
 
         // Text message
@@ -1220,6 +1224,50 @@ class MessageController extends Controller
         }
 
         return $message;
+    }
+
+    private function formatReplyToMessage($chat): ?array
+    {
+        if (! $chat) {
+            return null;
+        }
+
+        $metadata = $this->withLegacyMediaMetadata(json_decode($chat->metadata, true));
+        $messageType = $metadata['type'] ?? 'text';
+
+        return [
+            'id' => $chat->id,
+            'uuid' => $chat->uuid,
+            'type' => $chat->type,
+            'message_type' => $messageType,
+            'wam_id' => $chat->wam_id,
+            'text' => $this->replyPreviewText($metadata),
+        ];
+    }
+
+    private function replyPreviewText(array $metadata): string
+    {
+        $type = $metadata['type'] ?? '';
+
+        return $metadata['text']['body']
+            ?? $metadata['body']['text']
+            ?? $metadata['image']['caption']
+            ?? $metadata['video']['caption']
+            ?? $metadata['document']['caption']
+            ?? $metadata['button']['text']
+            ?? $metadata['interactive']['body']['text']
+            ?? $metadata['interactive']['button_reply']['title']
+            ?? $metadata['interactive']['list_reply']['title']
+            ?? match ($type) {
+                'image' => 'Image',
+                'video' => 'Video',
+                'audio' => 'Audio',
+                'document' => 'Document: '.($metadata['document']['filename'] ?? $metadata['media']['filename'] ?? 'Document'),
+                'location' => 'Location',
+                'contacts' => 'Contact',
+                'sticker' => 'Sticker',
+                default => 'Message',
+            };
     }
 
     /**

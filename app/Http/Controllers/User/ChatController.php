@@ -38,7 +38,21 @@ class ChatController extends BaseController
 
     public function sendMessage(Request $request)
     {
-        return $this->chatService()->sendMessage($request);
+        $request->validate([
+            'reply_to_message_id' => 'nullable|integer',
+        ]);
+
+        $response = $this->chatService()->sendMessage($request);
+
+        if (($response->success ?? false) === false) {
+            return response()->json([
+                'success' => false,
+                'message' => $response->message ?? __('Failed to send message'),
+                'error' => $response->data->error ?? null,
+            ], $response->status_code ?? 422);
+        }
+
+        return $response;
     }
 
     /**

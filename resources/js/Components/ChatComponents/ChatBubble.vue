@@ -14,7 +14,7 @@ const props = defineProps({
     },
 })
 
-const emit = defineEmits(['reply-click']);
+const emit = defineEmits(['reply-click', 'reply-select']);
 
 const metadata = computed(() => {
     try {
@@ -444,8 +444,19 @@ const viewContactDetails = async (data) => {
 }
 </script>
 <template>
-    <div class="min-w-0 rounded-lg my-1 p-2 text-sm flex flex-col relative [overflow-wrap:anywhere]"
+    <div class="group min-w-0 rounded-lg my-1 p-2 text-sm flex flex-col relative [overflow-wrap:anywhere]"
         :class="props.type === 'outbound' ? 'ml-auto rounded-tr-none bg-[#d8fad4] speech-bubble-right' : 'mr-auto rounded-tl-none bg-white speech-bubble-left'">
+        <button
+            type="button"
+            class="absolute top-1 rounded p-1 text-slate-500 opacity-0 transition hover:bg-white/70 hover:text-slate-900 focus:opacity-100 group-hover:opacity-100"
+            :class="props.type === 'outbound' ? 'left-1' : 'right-1'"
+            :title="$t('Reply')"
+            @click.stop="emit('reply-select', props.content)"
+        >
+            <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24">
+                <path fill="currentColor" d="M10 9V5l-7 7l7 7v-4.1c5 0 8.5 1.6 11 5.1c-1-5-4-10-11-11Z" />
+            </svg>
+        </button>
         <button
             v-if="props.replyTo"
             type="button"
