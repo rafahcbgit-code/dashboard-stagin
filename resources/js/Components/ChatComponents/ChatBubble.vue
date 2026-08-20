@@ -351,6 +351,8 @@ const getCarouselMediaCandidates = (card) => {
     return candidates;
 };
 
+const canReply = computed(() => Boolean(props.content?.id && props.content?.wam_id));
+
 const getCarouselMediaUrl = (card, index) => {
     const failed = failedCarouselMediaSources.value[index] || [];
     return getCarouselMediaCandidates(card).find((url) => !failed.includes(url)) || null;
@@ -447,8 +449,9 @@ const viewContactDetails = async (data) => {
     <div class="group min-w-0 rounded-lg my-1 p-2 text-sm flex flex-col relative [overflow-wrap:anywhere]"
         :class="props.type === 'outbound' ? 'ml-auto rounded-tr-none bg-[#d8fad4] speech-bubble-right' : 'mr-auto rounded-tl-none bg-white speech-bubble-left'">
         <button
+            v-if="canReply"
             type="button"
-            class="absolute top-1 rounded p-1 text-slate-500 opacity-0 transition hover:bg-white/70 hover:text-slate-900 focus:opacity-100 group-hover:opacity-100"
+            class="absolute top-1 z-10 inline-flex h-7 w-7 items-center justify-center rounded text-slate-500 opacity-0 transition hover:bg-white/70 hover:text-slate-900 focus:opacity-100 group-hover:opacity-100"
             :class="props.type === 'outbound' ? 'left-1' : 'right-1'"
             :title="$t('Reply')"
             @click.stop="emit('reply-select', props.content)"
@@ -1109,11 +1112,11 @@ const viewContactDetails = async (data) => {
                 <p class="text-gray-500 text-xs text-right leading-none">
                     <span v-if="isEditedMessage">{{ $t('Edited') }} · </span>{{ content.created_at }}
                 </p>
-                <span class="relative group cursor-pointer"
+                <span class="status-tooltip-trigger relative inline-flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center"
                     :class="chatStatus(content.logs) === 'read' ? 'text-blue-500' : 'text-gray-500'">
                     <!-- Tooltip text -->
                     <div
-                        class="absolute capitalize hidden group-hover:block bg-white text-gray-600 text-xs rounded-sm py-1 px-2 bottom-full mb-1 whitespace-no-wrap">
+                        class="status-tooltip absolute bottom-full mb-1 hidden min-w-max whitespace-nowrap rounded-sm bg-white px-2 py-1 text-xs capitalize text-gray-600 shadow-sm">
                         {{ chatStatus(content.logs) }}
                     </div>
                     <svg v-if="chatStatus(content.logs) === 'sent'" xmlns="http://www.w3.org/2000/svg" width="16"
@@ -1179,3 +1182,10 @@ const viewContactDetails = async (data) => {
         </div>
     </Modal>
 </template>
+
+<style scoped>
+.status-tooltip-trigger:hover .status-tooltip,
+.status-tooltip-trigger:focus-within .status-tooltip {
+    display: block;
+}
+</style>
