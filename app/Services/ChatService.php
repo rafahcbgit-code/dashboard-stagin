@@ -771,7 +771,14 @@ class ChatService
                 $mediaUrl = $mediaFilePath;
             }
 
-            $this->getWhatsappService()->sendMedia($request->uuid, $request->type, $fileName, $mediaFilePath, $mediaUrl, $location);
+            return $this->getWhatsappService()->sendMedia(
+                $request->uuid,
+                $request->type,
+                $fileName,
+                $mediaFilePath,
+                $mediaUrl,
+                $location
+            );
         }
     }
 
