@@ -15,7 +15,8 @@
           @noteCreated="handleNoteCreated" @messageMarkedUnread="handleMessageMarkedUnread" />
         <div v-if="contact && !displayTemplate" class="flex-1 min-h-0 overflow-y-auto" ref="scrollContainer2">
           <ChatThread v-if="!displayContactInfo && !loadingThread && !displayTemplate" :contactId="contact.id"
-            :initialMessages="chatThread" :hasMoreMessages="hasMoreMessages" :initialNextPage="nextPage" />
+            :initialMessages="chatThread" :hasMoreMessages="hasMoreMessages" :initialNextPage="nextPage"
+            @reply-selected="replyingTo = $event" />
           <Contact v-if="displayContactInfo && !displayTemplate" class="bg-white h-full" :fields="props.fields"
             :contact="contact" :locationSettings="props.locationSettings" />
         </div>
@@ -25,6 +26,8 @@
           <ChatForm :key="contact.uuid" :contact="contact" :chatThread="chatThread" :simpleForm="simpleForm"
             :pusherSettings="props.pusherSettings"
             :chatLimitReached="isChatLimitReached"
+            :replyingTo="replyingTo"
+            @reply-cleared="replyingTo = null"
             @viewTemplate="displayTemplate = true" />
         </div>
         <div v-if="displayTemplate" class="flex-1 overflow-y-hidden">
@@ -108,6 +111,7 @@ const settings = ref(config.value ? JSON.parse(config.value) : null);
 const ticketingIsEnabled = ref(settings.value?.tickets?.active ?? false);
 const chatThread = ref(props.chatThread);
 const contact = ref(props.contact);
+const replyingTo = ref(null);
 const contactFields = ref(props.contactFields);
 const labelColors = ref(props.labelColors);
 const isContactBlocked = computed(() => Boolean(contact.value?.is_blocked));
@@ -249,6 +253,10 @@ watch(
 watch(
   () => props.contact,
   (newContact) => {
+    if (newContact?.uuid !== contact.value?.uuid) {
+      replyingTo.value = null;
+    }
+
     contact.value = newContact;
 
     if (newContact?.is_blocked && displayTemplate.value) {

@@ -75,6 +75,11 @@ class WhatsappService
         self::$sharedClient = null;
     }
 
+    public static function setSharedClientForTesting(Client $client): void
+    {
+        self::$sharedClient = $client;
+    }
+
     public function getApiVersion(): string
     {
         return $this->apiVersion;
@@ -120,7 +125,7 @@ class WhatsappService
      * @param string $messageContent The content of the message to be sent.
      * @return mixed Returns the response from the HTTP request.
      */
-    public function sendMessage($contactUuId, $messageContent, $userId = NULL, $type="text", $buttons = [], $header = [], $footer = null, $buttonLabel = null)
+    public function sendMessage($contactUuId, $messageContent, $userId = NULL, $type="text", $buttons = [], $header = [], $footer = null, $buttonLabel = null, ?Chat $replyToMessage = null)
     {
         $contact = Contact::where('uuid', $contactUuId)->first();
 
@@ -149,6 +154,11 @@ class WhatsappService
         $requestData['messaging_product'] = 'whatsapp';
         $requestData['recipient_type'] = 'individual';
         $requestData['to'] = $contact->phone;
+        if ($replyToMessage) {
+            $requestData['context'] = [
+                'message_id' => $replyToMessage->wam_id,
+            ];
+        }
         if($type == "text"){
             $requestData['type'] = 'text';
             $requestData['text']['preview_url'] = true; //If you have added url either http or https a preview will be displayed
@@ -208,9 +218,17 @@ class WhatsappService
                 $response['text']['body'] = clean($messageContent);
             }
 
+            if ($replyToMessage) {
+                $response['context'] = [
+                    'id' => $replyToMessage->wam_id,
+                    'message_id' => $replyToMessage->wam_id,
+                ];
+            }
+
             $chat = Chat::create([
                 'organization_id' => $contact->organization_id,
                 'wam_id' => $responseObject->data->messages[0]->id,
+                'reply_to_message_id' => $replyToMessage?->id,
                 'contact_id' => $contact->id,
                 'type' => 'outbound',
                 'user_id' => $userId,
@@ -221,7 +239,7 @@ class WhatsappService
 
             $this->recordConversationWindowForOutbound($chat, $contact);
 
-            $chat = Chat::with('contact','media')->where('id', $chat->id)->first();
+            $chat = Chat::with('contact','media', 'replyTo')->where('id', $chat->id)->first();
             $responseObject->data->chat = $chat;
 
             $chatlogId = ChatLog::insertGetId([
