@@ -29,6 +29,7 @@ class SignupRequest extends FormRequest
         $rules = [
             'first_name' => 'required',
             'last_name' => 'required',
+            'terms_accepted' => ['required', 'accepted'],
         ];
 
         if ($this->isMethod('put')) {
