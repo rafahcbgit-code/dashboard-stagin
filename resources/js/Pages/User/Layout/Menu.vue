@@ -348,7 +348,7 @@
                         </svg>
                     </span>
                 </div>
-                <div @click="isOpenOrganizationModal = true"
+                <div @click="openOrganizationModal"
                     class="flex gap-x-8 bg-slate-50 hover:bg-slate-200 rounded-lg py-1 justify-between items-center w-full cursor-pointer border border-slate-100 pl-1 pr-2 py-3">
                     <div class="w-full">
                         <h3 class="text-center">Create Organization</h3>
@@ -449,6 +449,13 @@ const switchTeams = () => {
     emit('closeSidebar', true);
 }
 
+const openOrganizationModal = () => {
+    isLocationSwitchModalOpen.value = false;
+    setTimeout(() => {
+        isOpenOrganizationModal.value = true;
+    }, 250);
+}
+
 const selectOrganization = (uuid) => {
     form.uuid = uuid;
     submitForm();
@@ -457,7 +464,9 @@ const selectOrganization = (uuid) => {
 const submitForm = async () => {
     form.post('/select-organization', {
         preserveScroll: true,
-        onFinish: isLocationSwitchModalOpen.value = false,
+        onFinish: () => {
+            isLocationSwitchModalOpen.value = false;
+        },
     })
 };
 </script>
