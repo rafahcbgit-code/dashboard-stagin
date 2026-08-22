@@ -505,7 +505,10 @@
                 </div>
 
                 <div v-else>
-                <h2 class="text-xl capitalize mt-6">Your template is being uploaded!</h2>
+                <h2 class="text-xl capitalize mt-6">{{ $t('Your template is being uploaded!') }}</h2>
+                <p class="mx-auto mt-3 max-w-sm rounded-md bg-blue-50 px-3 py-2 text-sm leading-5 text-blue-700" role="status">
+                    {{ $t("Meta's template review and approval may take between 2 minutes and 24 hours.") }}
+                </p>
                 <div class="flex justify-center mt-4">
                     <svg xmlns="http://www.w3.org/2000/svg" width="36" height="36" viewBox="0 0 24 24">
                     <path fill="none" stroke="currentColor" stroke-dasharray="15" stroke-dashoffset="15"
