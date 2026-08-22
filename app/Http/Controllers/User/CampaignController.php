@@ -297,7 +297,9 @@ class CampaignController extends BaseController
             $data['templates'] = Template::where('organization_id', $organizationId)
                 ->where('deleted_at', null)
                 ->where('status', 'APPROVED')
-                ->get();
+                ->latest('created_at')
+                ->latest('id')
+                ->get(['uuid', 'name', 'language']);
 
             $contactFieldService = new ContactFieldService(session()->get('current_organization'));
             $data['contactFields'] = $contactFieldService->get($request);
@@ -305,7 +307,9 @@ class CampaignController extends BaseController
             $data['contactGroups'] = ContactGroup::where('organization_id', $organizationId)
                 ->whereNull('deleted_at')
                 ->where('contacts_count', '>', 0)
-                ->get();
+                ->latest('created_at')
+                ->latest('id')
+                ->get(['uuid', 'name', 'contacts_count']);
 
             $usageService = new SubscriptionUsageService();
             $data['resourceUsage'] = [

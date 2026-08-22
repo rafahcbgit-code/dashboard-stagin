@@ -3299,9 +3299,28 @@ class WhatsappService
 
         $responseObject = $this->sendHttpRequest('DELETE', $url, null, $headers);
 
-        if($responseObject->success){
+        // Deleting a template is idempotent from the application's point of
+        // view. If Meta no longer knows this hsm_id, the template was already
+        // deleted remotely and should be removed from the local list too.
+        $errorCode = data_get($responseObject, 'data.error.code');
+        $errorMessage = strtolower((string) (
+            data_get($responseObject, 'data.error.message')
+            ?? data_get($responseObject, 'data.error.error_user_msg')
+            ?? ($responseObject->message ?? '')
+        ));
+
+        $templateAlreadyDeleted = (int) $errorCode === 100
+            && str_contains($errorMessage, 'hsm_id')
+            && str_contains($errorMessage, 'not a valid whatsapp business hsm id');
+
+        if (($responseObject->success ?? false) || $templateAlreadyDeleted) {
             $template->deleted_at = now();
             $template->save();
+
+            if ($templateAlreadyDeleted) {
+                $responseObject->success = true;
+                $responseObject->message = __('Template deleted successfully');
+            }
         }
 
         return $responseObject;
