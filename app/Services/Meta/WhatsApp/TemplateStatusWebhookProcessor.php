@@ -24,7 +24,10 @@ class TemplateStatusWebhookProcessor
         $templateId = isset($value['message_template_id']) ? (string) $value['message_template_id'] : null;
         $templateName = $value['message_template_name'] ?? null;
         $templateLanguage = $value['message_template_language'] ?? null;
+        $templateCategory = $this->extractTemplateCategory($value);
         $requestId = $context['request_id'] ?? null;
+        $hasKnownStatus = $mapping['normalized_status'] !== TemplateStatusMapper::UNKNOWN_INTERNAL_STATUS;
+        $isCategoryUpdate = ($change['field'] ?? null) === 'template_category_update';
         $organization = $organizationId > 0
             ? Organization::find($organizationId)
             : $this->findOrganizationByWabaId($wabaId);
@@ -35,6 +38,7 @@ class TemplateStatusWebhookProcessor
             'template_id' => $templateId,
             'template_name' => $templateName,
             'template_language' => $templateLanguage,
+            'template_category' => $templateCategory,
             'event_type' => $mapping['event'],
             'request_id' => $requestId,
             'raw_payload' => $context['raw_payload'] ?? $change,
@@ -50,6 +54,7 @@ class TemplateStatusWebhookProcessor
                     'template_id' => $templateId,
                     'template_name' => $templateName,
                     'template_language' => $templateLanguage,
+                    'template_category' => $templateCategory,
                     'event_type' => $mapping['event'],
                     'reason' => ! $organization ? 'Organization not found for WABA ID' : 'Template not found',
                     'request_id' => $requestId,
@@ -58,55 +63,67 @@ class TemplateStatusWebhookProcessor
                 return;
             }
 
-            if ($mapping['normalized_status'] === TemplateStatusMapper::UNKNOWN_INTERNAL_STATUS) {
+            if (! $hasKnownStatus && ! $isCategoryUpdate) {
                 $this->log()->warning('Unknown template status event received', [
                     'organization_id' => $organization->id,
                     'template_id' => $templateId,
                     'template_name' => $templateName,
                     'template_language' => $templateLanguage,
+                    'template_category' => $templateCategory,
                     'event_type' => $mapping['event'],
                     'request_id' => $requestId,
                 ]);
 
-                return;
+                if (! $templateCategory) {
+                    return;
+                }
             }
 
-            DB::transaction(function () use ($template, $mapping, $value) {
-                $template->status = $mapping['template_status'] ?? $template->status;
-                $template->last_status_change_at = now();
-
-                if (($mapping['event'] ?? null) === 'REJECTED') {
-                    $template->last_rejection_reason = $value['reason'] ?? null;
-                } elseif ($mapping['clears_rejection']) {
-                    $template->last_rejection_reason = null;
+            DB::transaction(function () use ($template, $mapping, $value, $templateCategory, $hasKnownStatus) {
+                if ($templateCategory) {
+                    $template->category = $templateCategory;
                 }
 
-                if ($mapping['quality_state'] !== null) {
-                    $template->quality_state = $mapping['quality_state'];
-                } elseif ($mapping['clears_disabled_at']) {
-                    $template->quality_state = null;
-                }
+                if ($hasKnownStatus) {
+                    $template->status = $mapping['template_status'] ?? $template->status;
+                    $template->last_status_change_at = now();
 
-                if (($mapping['event'] ?? null) === 'DISABLED') {
-                    $disableDate = $value['disable_info']['disable_date'] ?? null;
-                    $template->disabled_at = is_numeric($disableDate)
-                        ? Carbon::createFromTimestamp((int) $disableDate)
-                        : now();
-                } elseif ($mapping['clears_disabled_at']) {
-                    $template->disabled_at = null;
+                    if (($mapping['event'] ?? null) === 'REJECTED') {
+                        $template->last_rejection_reason = $value['reason'] ?? null;
+                    } elseif ($mapping['clears_rejection']) {
+                        $template->last_rejection_reason = null;
+                    }
+
+                    if ($mapping['quality_state'] !== null) {
+                        $template->quality_state = $mapping['quality_state'];
+                    } elseif ($mapping['clears_disabled_at']) {
+                        $template->quality_state = null;
+                    }
+
+                    if (($mapping['event'] ?? null) === 'DISABLED') {
+                        $disableDate = $value['disable_info']['disable_date'] ?? null;
+                        $template->disabled_at = is_numeric($disableDate)
+                            ? Carbon::createFromTimestamp((int) $disableDate)
+                            : now();
+                    } elseif ($mapping['clears_disabled_at']) {
+                        $template->disabled_at = null;
+                    }
                 }
 
                 $template->updated_at = now();
                 $template->save();
             });
 
-            $this->sendStatusChangeEmail($organization, $template, $mapping['event'], $requestId);
+            if ($hasKnownStatus) {
+                $this->sendStatusChangeEmail($organization, $template, $mapping['event'], $requestId);
+            }
 
             $this->log()->info('Template status webhook processed', [
                 'organization_id' => $organization->id,
                 'template_id' => $templateId,
                 'template_name' => $templateName,
                 'template_language' => $templateLanguage,
+                'template_category' => $templateCategory,
                 'event_type' => $mapping['event'],
                 'request_id' => $requestId,
             ]);
@@ -116,6 +133,7 @@ class TemplateStatusWebhookProcessor
                 'template_id' => $templateId,
                 'template_name' => $templateName,
                 'template_language' => $templateLanguage,
+                'template_category' => $templateCategory,
                 'event_type' => $mapping['event'],
                 'error' => $e->getMessage(),
                 'request_id' => $requestId,
@@ -208,6 +226,24 @@ class TemplateStatusWebhookProcessor
             ->where('name', $name)
             ->where('language', $language)
             ->first();
+    }
+
+    private function extractTemplateCategory(array $value): ?string
+    {
+        foreach ([
+            'message_template_category',
+            'new_category',
+            'category',
+            'template_category',
+        ] as $key) {
+            $category = $value[$key] ?? null;
+
+            if (is_string($category) && trim($category) !== '') {
+                return strtoupper(trim($category));
+            }
+        }
+
+        return null;
     }
 
     private function findOrganizationByWabaId(?string $wabaId): ?Organization

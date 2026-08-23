@@ -62,7 +62,7 @@ class ProcessWebhookJob implements ShouldQueue
     /**
      * The type of webhook being processed.
      * Possible values: messages, smb_message_echoes, smb_app_state_sync,
-     * history, message_template_status_update, account_review_update,
+     * history, message_template_status_update, template_category_update, account_review_update,
      * phone_number_name_update, phone_number_quality_update, business_capability_update
      */
     public string $webhookType;
@@ -178,7 +178,8 @@ class ProcessWebhookJob implements ShouldQueue
                 'smb_message_echoes' => $this->processSmbMessageEchoes(),
                 'smb_app_state_sync' => $this->processSmbAppStateSync(),
                 'history' => $this->processHistory(),
-                'message_template_status_update' => $this->processTemplateStatusUpdate(),
+                'message_template_status_update',
+                'template_category_update' => $this->processTemplateStatusUpdate(),
                 'account_review_update',
                 'phone_number_name_update',
                 'phone_number_quality_update',
