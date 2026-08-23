@@ -42,7 +42,7 @@
                         <TableBodyRowItem class="capitalize">{{ row.type.replace('_', ' ') }}</TableBodyRowItem>
                         <TableBodyRowItem>{{ new Date(row.created_at).toLocaleDateString() }}</TableBodyRowItem>
                         <TableBodyRowItem :position="'last'">
-                            <Dropdown :align="'right'" class="mt-2">
+                            <Dropdown :align="'right'" :portal="true" class="mt-2">
                                 <button class="inline-flex w-full justify-center rounded-md text-sm font-medium text-black hover:bg-opacity-30 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-opacity-75">
                                     <span class="hover:bg-[#F6F7F9] hover:rounded-full w-[fit-content] p-2">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24">
