@@ -25,3 +25,78 @@ test('it does not ignore a flow message that contains usable text', function () 
 
     expect($method->invoke($service, $chat, 'transcribed answer'))->toBeFalse();
 });
+
+test('it extracts a list reply id title and message context from chat metadata', function () {
+    $service = (new ReflectionClass(FlowExecutionService::class))->newInstanceWithoutConstructor();
+    $method = flowExecutionInputMethod('extractInteractiveReply');
+    $chat = (object) [
+        'metadata' => json_encode([
+            'type' => 'interactive',
+            'interactive' => [
+                'type' => 'list_reply',
+                'list_reply' => [
+                    'id' => '1',
+                    'title' => 'خدمة في الصالون',
+                ],
+            ],
+            'context' => ['id' => 'wamid.MENU'],
+        ]),
+    ];
+
+    expect($method->invoke($service, $chat))->toBe([
+        'type' => 'list_reply',
+        'id' => '1',
+        'title' => 'خدمة في الصالون',
+        'context_wam_id' => 'wamid.MENU',
+    ]);
+});
+
+test('it does not classify free text as an interactive reply', function () {
+    $service = (new ReflectionClass(FlowExecutionService::class))->newInstanceWithoutConstructor();
+    $method = flowExecutionInputMethod('extractInteractiveReply');
+    $chat = (object) [
+        'metadata' => json_encode([
+            'type' => 'text',
+            'text' => ['body' => 'بكم اسعار تركيب الرموش'],
+        ]),
+    ];
+
+    expect($method->invoke($service, $chat))->toBeNull();
+});
+
+test('list and button nodes require their matching interactive reply types', function () {
+    $service = (new ReflectionClass(FlowExecutionService::class))->newInstanceWithoutConstructor();
+    $method = flowExecutionInputMethod('expectedInteractiveReplyType');
+
+    expect($method->invoke($service, ['type' => 'interactive list']))->toBe('list_reply')
+        ->and($method->invoke($service, [
+            'type' => 'interactive buttons',
+            'buttonType' => 'buttons',
+        ]))->toBe('button_reply')
+        ->and($method->invoke($service, [
+            'type' => 'interactive buttons',
+            'buttonType' => 'ctaUrl',
+        ]))->toBeNull();
+});
+
+test('it preserves legacy button webhook payloads as button replies', function () {
+    $service = (new ReflectionClass(FlowExecutionService::class))->newInstanceWithoutConstructor();
+    $method = flowExecutionInputMethod('extractInteractiveReply');
+    $chat = (object) [
+        'metadata' => json_encode([
+            'type' => 'button',
+            'button' => [
+                'payload' => 'button1',
+                'text' => 'نعم',
+            ],
+            'context' => ['id' => 'wamid.BUTTONS'],
+        ]),
+    ];
+
+    expect($method->invoke($service, $chat))->toBe([
+        'type' => 'button_reply',
+        'id' => 'button1',
+        'title' => 'نعم',
+        'context_wam_id' => 'wamid.BUTTONS',
+    ]);
+});
