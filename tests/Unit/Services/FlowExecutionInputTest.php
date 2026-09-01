@@ -64,7 +64,7 @@ test('it does not classify free text as an interactive reply', function () {
     expect($method->invoke($service, $chat))->toBeNull();
 });
 
-test('list and button nodes require their matching interactive reply types', function () {
+test('only list and reply button nodes wait for inbound interaction', function () {
     $service = (new ReflectionClass(FlowExecutionService::class))->newInstanceWithoutConstructor();
     $method = flowExecutionInputMethod('expectedInteractiveReplyType');
 
@@ -76,6 +76,12 @@ test('list and button nodes require their matching interactive reply types', fun
         ->and($method->invoke($service, [
             'type' => 'interactive buttons',
             'buttonType' => 'ctaUrl',
+        ]))->toBeNull()
+        ->and($method->invoke($service, [
+            'type' => 'interactive call to action url',
+        ]))->toBeNull()
+        ->and($method->invoke($service, [
+            'type' => 'interactive buttons',
         ]))->toBeNull();
 });
 

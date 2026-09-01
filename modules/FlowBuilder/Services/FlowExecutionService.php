@@ -594,17 +594,17 @@ class FlowExecutionService
                 return $this->startFlow($targetFlow->id, $chat);
             }
 
-            // Message node: if this is an interactive node (buttons/list/CTA) and we're
-            // resuming with user input, route to the correct branch instead of resending.
+            // Reply buttons and lists pause until WhatsApp sends a matching reply.
+            // CTA URL buttons only open a link and never produce a reply webhook,
+            // so they must be sent and then advance like any non-waiting message.
             $fields = \Arr::get($node, 'data.metadata.fields', []);
             $msgType = $fields['type'] ?? null;
-            $needsUserInput = in_array($msgType, ['interactive buttons', 'interactive list', 'interactive call to action url'], true);
+            $expectedReplyType = $this->expectedInteractiveReplyType($fields);
+            $needsUserInput = $expectedReplyType !== null;
 
             $hasResumeInput = trim($message) !== '' || $interactiveReply !== null;
 
             if ($needsUserInput && $hasResumeInput) {
-                $expectedReplyType = $this->expectedInteractiveReplyType($fields);
-
                 if ($interactiveReply === null || ($interactiveReply['type'] ?? null) !== $expectedReplyType) {
                     Log::info('FlowExecution: non-matching input ignored while waiting for interaction', [
                         'flow_id' => $flow->id,
@@ -704,7 +704,7 @@ class FlowExecutionService
                 return true;
             }
 
-            // Plain text/media: send and advance to next node
+            // Non-waiting messages (including CTA URL): send and advance.
             $this->advanceToNextStep($parser, $currentNodeId, $chat->contact_id);
             $flowData = $this->refreshFlowData($chat->contact_id);
             if (! $flowData) {
@@ -928,7 +928,9 @@ class FlowExecutionService
             return 'list_reply';
         }
 
-        if ($type === 'interactive buttons' && ($fields['buttonType'] ?? 'buttons') === 'buttons') {
+        // Keep this discriminator identical to sendNodeMessage(): anything
+        // other than the explicit "buttons" value is sent as a CTA URL.
+        if ($type === 'interactive buttons' && ($fields['buttonType'] ?? '') === 'buttons') {
             return 'button_reply';
         }
 
