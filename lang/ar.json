@@ -1523,5 +1523,19 @@
     "All team members": "كل أعضاء الفريق",
     "Notify every active team member in this organization.": "إشعار كل عضو فريق نشط في هذه المنظمة.",
     "Test Email": "اختبار البريد الإلكتروني",
-    "Test recipient email": "البريد المستقبل للتجربة"
+    "Test recipient email": "البريد المستقبل للتجربة",
+    "Shared organization resources": "موارد المنظمات المشتركة",
+    "These organizations use the same organization limit from the main resource account.": "تستخدم المنظمات التالية حد المنظمات نفسه الخاص بالحساب الأساسي للموارد.",
+    "The plan limit is shared. Usage below is shown separately for each organization.": "حدود الباقة مشتركة، بينما يظهر الاستهلاك أدناه بشكل منفصل لكل منظمة.",
+    "Organizations used": "المنظمات المستخدمة",
+    "Organizations remaining": "المنظمات المتبقية",
+    "Role in resource pool": "الدور في مجموعة الموارد",
+    "Counts toward organization limit": "الاحتساب ضمن حد المنظمات",
+    "Main resource account": "الحساب الأساسي للموارد",
+    "Uses shared resources": "يستخدم الموارد المشتركة",
+    "organization": "منظمة",
+    "Total used in pool": "إجمالي الاستخدام في المجموعة المشتركة",
+    "Used by this organization": "استخدام هذه المنظمة",
+    "Used": "المستخدم",
+    "Shared pool remaining": "المتبقي في المجموعة المشتركة"
 }

@@ -77,16 +77,14 @@
                     <div v-for="item in usageItems" :key="item.key" class="border rounded-md p-3">
                         <div class="text-xs text-gray-500">{{ item.label }}</div>
                         <div class="text-lg">{{ item.used }} / {{ item.limit }}</div>
+                        <div class="text-xs text-gray-500">{{ item.usedLabel }}: {{ item.used }}</div>
                         <div v-if="item.isSharedPool && item.billingOrganizationName" class="text-xs text-gray-500">
                             {{ $t('Resource account') }}: {{ item.billingOrganizationName }}
                         </div>
                         <div v-if="item.addonQuantity > 0" class="text-xs text-gray-500">
                             {{ $t('Plan') }}: {{ item.baseLimit }} + {{ $t('Add-ons') }}: {{ item.addonQuantity }}
                         </div>
-                        <div v-if="item.key === 'template_messages'" class="text-xs text-gray-500">
-                            {{ $t('Delivered template messages') }}: {{ item.used }}
-                        </div>
-                        <div class="text-xs text-gray-500">{{ $t('Remaining') }}: {{ item.remaining }}</div>
+                        <div class="text-xs text-gray-500">{{ item.remainingLabel }}: {{ item.remaining }}</div>
                     </div>
                 </div>
                 <div class="mt-4 border rounded-md p-3">
@@ -98,29 +96,50 @@
                         </div>
                     </div>
                 </div>
-                <div v-if="showOrganizationPoolBreakdown" class="mt-4 border rounded-md p-3">
-                    <div class="mb-3 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
-                        <h3 class="text-xs text-gray-500">{{ $t('Organizations in this shared pool') }}</h3>
-                        <div class="text-xs text-gray-500">
-                            {{ $t('Total organizations in pool') }}: {{ organizationPoolTotal }}
+                <div v-if="showOrganizationPoolBreakdown" class="mt-5 border-t pt-5">
+                    <div class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+                        <div>
+                            <h3 class="text-sm font-medium text-gray-900">{{ $t('Shared organization resources') }}</h3>
+                            <p class="mt-1 max-w-2xl text-xs leading-5 text-gray-500">
+                                {{ $t('The plan limit is shared. Usage below is shown separately for each organization.') }}
+                            </p>
+                        </div>
+                        <div class="grid grid-cols-2 gap-2 text-center sm:min-w-[260px]">
+                            <div class="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                                <div class="text-[11px] text-gray-500">{{ $t('Organizations used') }}</div>
+                                <div class="mt-1 text-sm font-semibold text-gray-900">{{ organizationPoolTotal }} / {{ organizationPoolLimit }}</div>
+                            </div>
+                            <div class="rounded-md border border-slate-200 bg-slate-50 px-3 py-2">
+                                <div class="text-[11px] text-gray-500">{{ $t('Organizations remaining') }}</div>
+                                <div class="mt-1 text-sm font-semibold text-gray-900">{{ organizationPoolRemaining }}</div>
+                            </div>
                         </div>
                     </div>
-                    <div class="overflow-x-auto">
-                        <table class="min-w-full text-left text-sm">
-                            <thead class="text-xs text-gray-500">
+                    <div class="mt-4 overflow-x-auto rounded-md border border-slate-200">
+                        <table class="min-w-[820px] w-full text-left text-sm">
+                            <thead class="bg-slate-50 text-xs text-gray-500">
                                 <tr>
-                                    <th class="whitespace-nowrap border-b px-3 py-2 font-normal">{{ $t('Organization') }}</th>
-                                    <th class="whitespace-nowrap border-b px-3 py-2 font-normal">{{ $t('Resource role') }}</th>
-                                    <th class="whitespace-nowrap border-b px-3 py-2 font-normal">{{ $t('Included in limit') }}</th>
-                                    <th class="whitespace-nowrap border-b px-3 py-2 font-normal">{{ $t('Counts as') }}</th>
+                                    <th class="whitespace-nowrap border-b px-3 py-2 font-medium">{{ $t('Organization') }}</th>
+                                    <th class="whitespace-nowrap border-b px-3 py-2 font-medium">{{ $t('Role in resource pool') }}</th>
+                                    <th class="whitespace-nowrap border-b px-3 py-2 text-right font-medium">{{ $t('Template messages') }}</th>
+                                    <th class="whitespace-nowrap border-b px-3 py-2 text-right font-medium">{{ $t('Conversations') }}</th>
+                                    <th class="whitespace-nowrap border-b px-3 py-2 text-right font-medium">{{ $t('Contacts') }}</th>
+                                    <th class="whitespace-nowrap border-b px-3 py-2 text-right font-medium">{{ $t('Team members') }}</th>
+                                    <th class="whitespace-nowrap border-b px-3 py-2 text-right font-medium">{{ $t('Counts toward organization limit') }}</th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <tr v-for="organization in organizationPoolBreakdown" :key="organization.organization_id">
-                                    <td class="whitespace-nowrap border-b px-3 py-2">{{ organization.organization_name }}</td>
-                                    <td class="whitespace-nowrap border-b px-3 py-2 text-gray-600">{{ organization.roleLabel }}</td>
-                                    <td class="whitespace-nowrap border-b px-3 py-2 text-gray-600">{{ $t('Yes') }}</td>
-                                    <td class="whitespace-nowrap border-b px-3 py-2 text-gray-600">{{ organization.counts_as }}</td>
+                                    <td class="border-b px-3 py-3">
+                                        <div class="font-medium text-gray-900">{{ organization.displayName }}</div>
+                                        <div class="mt-0.5 text-xs text-gray-500">#{{ organization.organization_id }}</div>
+                                    </td>
+                                    <td class="border-b px-3 py-3 text-gray-600">{{ organization.roleLabel }}</td>
+                                    <td class="border-b px-3 py-3 text-right text-gray-600">{{ organization.template_messages_used }}</td>
+                                    <td class="border-b px-3 py-3 text-right text-gray-600">{{ organization.conversations_used }}</td>
+                                    <td class="border-b px-3 py-3 text-right text-gray-600">{{ organization.contacts_used }}</td>
+                                    <td class="border-b px-3 py-3 text-right text-gray-600">{{ organization.team_members_used }}</td>
+                                    <td class="border-b px-3 py-3 text-right font-medium text-gray-900">{{ organization.counts_as }}</td>
                                 </tr>
                             </tbody>
                         </table>
@@ -274,20 +293,32 @@
             addonQuantity: Number(usage.addon_quantity ?? 0),
             remaining: formatLimit(usage.remaining ?? -1),
             isSharedPool: Boolean(usage.is_shared_pool),
+            isResourceAccount: Boolean(usage.is_resource_account),
+            usedLabel: usage.is_shared_pool
+                ? (usage.is_resource_account ? trans('Total used in pool') : trans('Used by this organization'))
+                : trans('Used'),
+            remainingLabel: usage.is_shared_pool && !usage.is_resource_account
+                ? trans('Shared pool remaining')
+                : trans('Remaining'),
             billingOrganizationName: usage.billing_organization_name || null,
         };
     });
     const organizationRoleLabels = {
-        resource_account: 'Resource Account',
-        shared_account: 'Shared Account',
+        resource_account: 'Main resource account',
+        shared_account: 'Uses shared resources',
     };
     const organizationPoolBreakdown = (props.resourceUsage?.organizations?.organization_breakdown || []).map((organization) => ({
         ...organization,
+        displayName: organization.organization_name || organization.name || `${trans('Organization')} #${organization.organization_id}`,
         roleLabel: trans(organizationRoleLabels[organization.role] || organization.role || 'Shared Account'),
         counts_as: Number(organization.counts_as ?? 1),
     }));
-    const showOrganizationPoolBreakdown = Boolean(props.resourceUsage?.organizations?.is_shared_pool) && organizationPoolBreakdown.length > 0;
+    const showOrganizationPoolBreakdown = Boolean(props.resourceUsage?.organizations?.is_shared_pool)
+        && Boolean(props.resourceUsage?.organizations?.is_resource_account)
+        && organizationPoolBreakdown.length > 0;
     const organizationPoolTotal = organizationPoolBreakdown.reduce((total, organization) => total + organization.counts_as, 0);
+    const organizationPoolLimit = formatLimit(props.resourceUsage?.organizations?.limit ?? -1);
+    const organizationPoolRemaining = formatLimit(props.resourceUsage?.organizations?.remaining ?? -1);
 
     const selectPayment = (method) => {
         form.method = method;

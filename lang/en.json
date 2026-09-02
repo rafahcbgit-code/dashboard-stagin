@@ -1089,5 +1089,19 @@
   "All team members": "All team members",
   "Notify every active team member in this organization.": "Notify every active team member in this organization.",
   "Test Email": "Test Email",
-  "Test recipient email": "Test recipient email"
+  "Test recipient email": "Test recipient email",
+  "Shared organization resources": "Shared organization resources",
+  "These organizations use the same organization limit from the main resource account.": "These organizations use the same organization limit from the main resource account.",
+  "The plan limit is shared. Usage below is shown separately for each organization.": "The plan limit is shared. Usage below is shown separately for each organization.",
+  "Organizations used": "Organizations used",
+  "Organizations remaining": "Organizations remaining",
+  "Role in resource pool": "Role in resource pool",
+  "Counts toward organization limit": "Counts toward organization limit",
+  "Main resource account": "Main resource account",
+  "Uses shared resources": "Uses shared resources",
+  "organization": "organization",
+  "Total used in pool": "Total used in shared pool",
+  "Used by this organization": "Used by this organization",
+  "Used": "Used",
+  "Shared pool remaining": "Shared pool remaining"
 }
