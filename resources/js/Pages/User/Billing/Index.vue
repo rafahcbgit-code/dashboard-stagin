@@ -132,7 +132,6 @@
                                 <tr v-for="organization in organizationPoolBreakdown" :key="organization.organization_id">
                                     <td class="border-b px-3 py-3">
                                         <div class="font-medium text-gray-900">{{ organization.displayName }}</div>
-                                        <div class="mt-0.5 text-xs text-gray-500">#{{ organization.organization_id }}</div>
                                     </td>
                                     <td class="border-b px-3 py-3 text-gray-600">{{ organization.roleLabel }}</td>
                                     <td class="border-b px-3 py-3 text-right text-gray-600">{{ organization.template_messages_used }}</td>
@@ -309,7 +308,7 @@
     };
     const organizationPoolBreakdown = (props.resourceUsage?.organizations?.organization_breakdown || []).map((organization) => ({
         ...organization,
-        displayName: organization.organization_name || organization.name || `${trans('Organization')} #${organization.organization_id}`,
+        displayName: organization.organization_name || organization.name || trans('Unnamed organization'),
         roleLabel: trans(organizationRoleLabels[organization.role] || organization.role || 'Shared Account'),
         counts_as: Number(organization.counts_as ?? 1),
     }));
