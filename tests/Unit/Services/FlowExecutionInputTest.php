@@ -106,3 +106,77 @@ test('it preserves legacy button webhook payloads as button replies', function (
         'context_wam_id' => 'wamid.BUTTONS',
     ]);
 });
+
+test('historical portal routing requires an exact reply type id and portal option', function () {
+    $service = (new ReflectionClass(FlowExecutionService::class))->newInstanceWithoutConstructor();
+    $method = flowExecutionInputMethod('resolveHistoricalPortalTargetId');
+    $options = [
+        '2' => ['is_portal' => true, 'target_flow_id' => 1695],
+        '3' => ['is_portal' => false, 'target_flow_id' => null],
+    ];
+
+    expect($method->invoke($service, 'list_reply', $options, [
+        'type' => 'list_reply',
+        'id' => '2',
+    ]))->toBe(1695)
+        ->and($method->invoke($service, 'list_reply', $options, [
+            'type' => 'button_reply',
+            'id' => '2',
+        ]))->toBeNull()
+        ->and($method->invoke($service, 'list_reply', $options, [
+            'type' => 'list_reply',
+            'id' => '3',
+        ]))->toBeNull()
+        ->and($method->invoke($service, 'list_reply', $options, [
+            'type' => 'list_reply',
+            'id' => 'unknown',
+            'title' => 'Same visible title',
+        ]))->toBeNull();
+});
+
+test('interactive trigger fallback receives the visible title and exact reply metadata', function () {
+    $service = (new ReflectionClass(FlowExecutionService::class))->newInstanceWithoutConstructor();
+    $method = flowExecutionInputMethod('runInteractiveTriggerFallback');
+    $received = null;
+    $reply = [
+        'type' => 'list_reply',
+        'id' => '5',
+        'title' => 'خدمة العملاء',
+        'context_wam_id' => 'wamid.MENU',
+    ];
+
+    $handled = $method->invoke(
+        $service,
+        function (string $title, array $metadata) use (&$received): bool {
+            $received = compact('title', 'metadata');
+
+            return true;
+        },
+        $reply
+    );
+
+    expect($handled)->toBeTrue()
+        ->and($received)->toBe([
+            'title' => 'خدمة العملاء',
+            'metadata' => $reply,
+        ]);
+});
+
+test('interactive trigger fallback does nothing when the reply has no title', function () {
+    $service = (new ReflectionClass(FlowExecutionService::class))->newInstanceWithoutConstructor();
+    $method = flowExecutionInputMethod('runInteractiveTriggerFallback');
+    $called = false;
+
+    $handled = $method->invoke(
+        $service,
+        function () use (&$called): bool {
+            $called = true;
+
+            return true;
+        },
+        ['type' => 'button_reply', 'id' => 'button1', 'title' => '']
+    );
+
+    expect($handled)->toBeFalse()
+        ->and($called)->toBeFalse();
+});

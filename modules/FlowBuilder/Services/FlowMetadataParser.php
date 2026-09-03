@@ -159,6 +159,53 @@ class FlowMetadataParser
             : $this->getNextNode($sourceId, '', $handle);
     }
 
+    /**
+     * Return only stable payload IDs. A historical reply must never be routed
+     * by its visible title because titles are editable and are not unique.
+     */
+    public function getInteractiveChoiceIds(string $sourceId): array
+    {
+        $sourceNode = $this->nodeMap[$sourceId] ?? null;
+        if ($sourceNode === null) {
+            return [];
+        }
+
+        $ids = [];
+        $buttons = Arr::get($sourceNode, 'data.metadata.fields.buttons', []);
+        if (is_array($buttons)) {
+            foreach ($buttons as $id => $label) {
+                if (trim((string) $id) !== '' && trim((string) $label) !== '') {
+                    $ids[] = (string) $id;
+                }
+            }
+        }
+
+        $sections = Arr::get($sourceNode, 'data.metadata.fields.sections', []);
+        if (is_array($sections)) {
+            foreach ($sections as $section) {
+                foreach ($section['rows'] ?? [] as $row) {
+                    if (trim((string) ($row['id'] ?? '')) !== '') {
+                        $ids[] = (string) $row['id'];
+                    }
+                }
+            }
+        }
+
+        return array_values(array_unique($ids));
+    }
+
+    public function getDirectPortalTargetUuid(string $sourceId, string $replyId): ?string
+    {
+        $nextNode = $this->getNextNodeForInteractiveReply($sourceId, $replyId);
+        if (($nextNode['type'] ?? null) !== 'portal') {
+            return null;
+        }
+
+        $uuid = trim((string) Arr::get($nextNode, 'data.metadata.fields.target_flow_uuid', ''));
+
+        return $uuid !== '' ? $uuid : null;
+    }
+
     private function isInteractiveChoiceNode(?array $sourceNode): bool
     {
         if ($sourceNode === null) {

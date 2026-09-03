@@ -130,6 +130,43 @@ class TriggerEvaluationService
     }
 
     /**
+     * Evaluate only explicit new_message triggers. Interactive fallback must
+     * never activate greeting, away, new-contact, or catch-all fallback rules.
+     */
+    public function evaluateKeywordTriggers(int $organizationId, $contact, string $message): ?TriggerMatchResult
+    {
+        $keywordTriggers = TriggerGroup::forOrganization($organizationId)
+            ->enabled()
+            ->where('type', 'new_message')
+            ->orderedByPriority()
+            ->get();
+
+        foreach ($keywordTriggers as $triggerGroup) {
+            $match = $this->matchesTrigger($triggerGroup, $message, false, $organizationId, $contact);
+            if ($match === null) {
+                continue;
+            }
+
+            Log::info('TriggerEvaluationService: Interactive keyword trigger matched', [
+                'trigger_group_id' => $triggerGroup->id,
+                'trigger_name' => $triggerGroup->name,
+                'match_mode' => $match->matchMode,
+                'contact_id' => $contact->id ?? null,
+            ]);
+
+            return new TriggerMatchResult(
+                triggerGroup: $triggerGroup,
+                flow: $triggerGroup->flow,
+                matchMode: $match->matchMode,
+                matchedKeyword: $match->matchedKeyword,
+                confidence: $match->confidence
+            );
+        }
+
+        return null;
+    }
+
+    /**
      * Check if a single trigger group matches the incoming message/context.
      *
      * @return TriggerTypeMatchResult|null

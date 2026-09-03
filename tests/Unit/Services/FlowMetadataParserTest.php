@@ -214,3 +214,65 @@ test('interactive button replies route by button payload id', function () {
     expect($parser->getNextNodeForInteractiveReply('3', 'button1', 'عنوان متغير')['id'])->toBe('4')
         ->and($parser->getNextNodeForInteractiveReply('3', 'button2', '')['id'])->toBe('5');
 });
+
+test('it exposes only stable interactive choice ids for historical routing', function () {
+    $parser = new FlowMetadataParser(json_encode([
+        'nodes' => [
+            [
+                'id' => '3',
+                'type' => 'buttons',
+                'data' => ['metadata' => ['fields' => [
+                    'buttons' => ['button1' => 'Main menu', 'button2' => ''],
+                ]]],
+            ],
+            [
+                'id' => '4',
+                'type' => 'list',
+                'data' => ['metadata' => ['fields' => [
+                    'sections' => [[
+                        'rows' => [
+                            ['id' => 'shipping', 'title' => 'Shipping'],
+                            ['title' => 'Legacy title only'],
+                        ],
+                    ]],
+                ]]],
+            ],
+        ],
+        'edges' => [],
+    ]));
+
+    expect($parser->getInteractiveChoiceIds('3'))->toBe(['button1'])
+        ->and($parser->getInteractiveChoiceIds('4'))->toBe(['shipping'])
+        ->and($parser->getInteractiveChoiceIds('missing'))->toBe([]);
+});
+
+test('it snapshots only a direct portal destination for a stable choice', function () {
+    $parser = new FlowMetadataParser(json_encode([
+        'nodes' => [
+            [
+                'id' => '3',
+                'type' => 'list',
+                'data' => ['metadata' => ['fields' => [
+                    'sections' => [['rows' => [
+                        ['id' => 'portal', 'title' => 'Portal'],
+                        ['id' => 'local', 'title' => 'Local'],
+                    ]]],
+                ]]],
+            ],
+            [
+                'id' => '4',
+                'type' => 'portal',
+                'data' => ['metadata' => ['fields' => ['target_flow_uuid' => 'target-uuid']]],
+            ],
+            ['id' => '5', 'type' => 'text'],
+        ],
+        'edges' => [
+            ['source' => '3', 'sourceHandle' => 'a00', 'target' => '4'],
+            ['source' => '3', 'sourceHandle' => 'a01', 'target' => '5'],
+        ],
+    ]));
+
+    expect($parser->getDirectPortalTargetUuid('3', 'portal'))->toBe('target-uuid')
+        ->and($parser->getDirectPortalTargetUuid('3', 'local'))->toBeNull()
+        ->and($parser->getDirectPortalTargetUuid('3', 'unknown'))->toBeNull();
+});
