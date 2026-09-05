@@ -2,36 +2,43 @@
 
 namespace Modules\FlowBuilder\Services;
 
+use App\Events\NewChatEvent;
 use App\Helpers\CustomHelper;
 use App\Models\Chat;
 use App\Models\ChatLog;
 use App\Models\Contact;
-use App\Events\NewChatEvent;
 use App\Models\Organization;
 use App\Models\Template;
 use App\Services\BotSettingsService;
 use App\Services\WhatsappService;
 use App\Traits\TemplateTrait;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 use Modules\FlowBuilder\Models\Flow;
+use Modules\FlowBuilder\Models\FlowInteractiveMessage;
 use Modules\FlowBuilder\Models\FlowLog;
-use Modules\FlowBuilder\Models\FlowMedia;
+use Modules\FlowBuilder\Models\FlowPortalReplyTransition;
 use Modules\FlowBuilder\Models\FlowSubmission;
 use Modules\FlowBuilder\Models\FlowUserData;
-use Modules\FlowBuilder\Services\ActionExecutionService;
 use Modules\MetaFlows\Models\MetaFlow;
 use Modules\MetaFlows\Services\MetaFlowService;
 
 class FlowExecutionService
 {
     use TemplateTrait;
+
     private WhatsappService $whatsappService;
+
     private int $organizationId;
+
     private $metaPayload;
 
     private int $logNodesProcessed = 0;
+
     private array $flowCache = [];
+
+    private ?string $lastSentInteractiveWamId = null;
 
     public function __construct(int $organizationId, $metaPayload = null)
     {
@@ -57,7 +64,7 @@ class FlowExecutionService
 
     private function findFlow(int $flowId): ?Flow
     {
-        if (!array_key_exists($flowId, $this->flowCache)) {
+        if (! array_key_exists($flowId, $this->flowCache)) {
             $this->flowCache[$flowId] = Flow::find($flowId);
         }
 
@@ -68,23 +75,28 @@ class FlowExecutionService
      * Resume an active flow for a contact, or return false if none active.
      * Called by AutoReplyService when no trigger matched — only resumes existing flows.
      */
-    public function resumeActiveFlow($chat, string $message): bool
+    public function resumeActiveFlow(
+        $chat,
+        string $message,
+        ?callable $interactiveTriggerFallback = null
+    ): bool
     {
-        if (!CustomHelper::isModuleEnabled('Flow builder', $chat->organization_id)) {
+        if (! CustomHelper::isModuleEnabled('Flow builder', $chat->organization_id)) {
             return false;
         }
 
         $flowData = FlowUserData::where('contact_id', $chat->contact_id)->first();
 
-        if (!$flowData) {
+        if (! $flowData) {
             return false;
         }
 
         // Check if the flow still exists
         $flow = $this->findFlow((int) $flowData->flow_id);
-        if (!$flow) {
+        if (! $flow) {
             Log::info("FlowExecution: flow {$flowData->flow_id} deleted, clearing state for contact {$chat->contact_id}");
             $flowData->delete();
+
             return false;
         }
 
@@ -111,6 +123,7 @@ class FlowExecutionService
             }
 
             $flowData->delete();
+
             return false;
         }
 
@@ -139,7 +152,13 @@ class FlowExecutionService
             return $this->handleQuestionResponse($chat, $flowData, $message, $questionConfig);
         }
 
-        $result = $this->processFlow($chat, $flowData, strtolower(trim($message)));
+        $result = $this->processFlow(
+            $chat,
+            $flowData,
+            strtolower(trim($message)),
+            $this->extractInteractiveReply($chat),
+            $interactiveTriggerFallback
+        );
 
         return $result !== false;
     }
@@ -181,7 +200,7 @@ class FlowExecutionService
     /**
      * Start a specific flow by ID. Called by TriggerEvaluationService after a trigger match.
      */
-    public function startFlow(int $flowId, $chat): bool
+    public function startFlow(int $flowId, $chat, string $replacementReason = 'superseded_by_start'): bool
     {
         try {
             Log::info('FlowExecution::startFlow called', [
@@ -196,7 +215,7 @@ class FlowExecutionService
                 ->where('status', 'active')
                 ->first();
 
-            if (!$flow) {
+            if (! $flow) {
                 Log::warning('FlowExecution::startFlow - flow not found or inactive', [
                     'flow_id' => $flowId,
                     'org_id' => $chat->organization_id,
@@ -217,9 +236,6 @@ class FlowExecutionService
                 }
             }
 
-            // Clear any existing flow state for this contact
-            FlowUserData::where('contact_id', $chat->contact_id)->delete();
-
             $parser = new FlowMetadataParser($flow->metadata);
             $startNodeId = $parser->getStartNodeId();
 
@@ -228,32 +244,12 @@ class FlowExecutionService
                 'start_node_id' => $startNodeId ?? 'NULL',
             ]);
 
-            $flowData = FlowUserData::create([
-                'contact_id' => $chat->contact_id,
-                'flow_id' => $flow->id,
-                'current_step' => $startNodeId ?? '1',
-                'variables' => [
-                    '_flow_run_uuid' => (string) Str::uuid(),
-                ],
-            ]);
-
-            // Log the flow run so it's counted in the Runs column
-            try {
-                FlowLog::create([
-                    'flow_id' => $flow->id,
-                    'contact_id' => $chat->contact_id,
-                    'organization_id' => $this->organizationId,
-                    'chat_id' => $chat->id,
-                    'status' => 'started',
-                    'nodes_processed' => 0,
-                ]);
-            } catch (\Throwable $e) {
-                Log::error('FlowExecution: failed to create FlowLog on start, continuing', [
-                    'flow_id' => $flow->id,
-                    'contact_id' => $chat->contact_id,
-                    'error' => $e->getMessage(),
-                ]);
-            }
+            $flowData = $this->replaceActiveFlowState(
+                $flow,
+                $chat,
+                $startNodeId ?? '1',
+                $replacementReason
+            );
 
             Log::info('FlowExecution::startFlow - FlowUserData created', [
                 'flow_data_id' => $flowData->id,
@@ -300,6 +296,7 @@ class FlowExecutionService
 
             // Clean up stale flow state to prevent resumeActiveFlow from re-processing
             FlowUserData::where('contact_id', $chat->contact_id ?? 0)->delete();
+
             return false;
         }
     }
@@ -311,7 +308,7 @@ class FlowExecutionService
     {
         $activeFlow = FlowUserData::where('contact_id', $chat->contact_id)->first();
 
-        if (!$activeFlow) {
+        if (! $activeFlow) {
             return false;
         }
 
@@ -336,6 +333,7 @@ class FlowExecutionService
 
             $activeFlow->delete();
             Log::info("FlowExecution: flow timed out for contact {$chat->contact_id}");
+
             return false;
         }
 
@@ -351,8 +349,9 @@ class FlowExecutionService
             ->where('flow_id', $flowId)
             ->first();
 
-        if (!$flowData) {
+        if (! $flowData) {
             Log::warning("FlowExecution: no FlowUserData for delayed contact {$contactId}");
+
             return false;
         }
 
@@ -362,7 +361,7 @@ class FlowExecutionService
         }
 
         $contact = Contact::find($contactId);
-        if (!$contact) {
+        if (! $contact) {
             return false;
         }
 
@@ -380,21 +379,28 @@ class FlowExecutionService
      * Walk the flow from current_step, processing action nodes automatically
      * and stopping at message nodes. Prevents infinite loops with visited tracking.
      */
-    private function processFlow($chat, FlowUserData $flowData, string $message)
-    {
+    private function processFlow(
+        $chat,
+        FlowUserData $flowData,
+        string $message,
+        array $interactiveReply = null,
+        ?callable $interactiveTriggerFallback = null
+    ) {
         $flow = $this->findFlow((int) $flowData->flow_id);
-        if (!$flow || empty($flow->metadata)) {
+        if (! $flow || empty($flow->metadata)) {
             Log::warning('FlowExecution::processFlow - flow not found or empty metadata', [
                 'flow_id' => $flowData->flow_id,
             ]);
+
             return false;
         }
 
         $contact = Contact::find($chat->contact_id);
-        if (!$contact) {
+        if (! $contact) {
             Log::warning('FlowExecution::processFlow - contact not found', [
                 'contact_id' => $chat->contact_id,
             ]);
+
             return false;
         }
 
@@ -418,22 +424,24 @@ class FlowExecutionService
             if (isset($visited[$currentNodeId])) {
                 Log::warning("FlowExecution: cycle detected at node {$currentNodeId}, ending flow");
                 $this->endFlow($chat->contact_id, 'completed', $chat->id);
+
                 return false;
             }
             $visited[$currentNodeId] = true;
 
             $node = $parser->getNodeById($currentNodeId);
-            if (!$node) {
+            if (! $node) {
                 Log::info("FlowExecution: node {$currentNodeId} not found in flow, ending flow", [
                     'available_nodes' => array_keys($parser->nodeMap ?? []),
                 ]);
                 $this->endFlow($chat->contact_id, 'completed', $chat->id);
+
                 return false;
             }
 
             $nodeType = $node['type'] ?? null;
             $this->logNodesProcessed++;
-            Log::info("FlowExecution: processing node", [
+            Log::info('FlowExecution: processing node', [
                 'step' => $i,
                 'node_id' => $currentNodeId,
                 'node_type' => $nodeType,
@@ -442,16 +450,18 @@ class FlowExecutionService
             // Start node: skip over it to the first real node
             if ($nodeType === 'start') {
                 $nextNode = $parser->getNextNode($currentNodeId);
-                if (!$nextNode) {
+                if (! $nextNode) {
                     Log::warning('FlowExecution: start node has no outgoing edge', [
                         'node_id' => $currentNodeId,
                     ]);
                     $this->endFlow($chat->contact_id, 'completed', $chat->id);
+
                     return false;
                 }
                 $currentNodeId = (string) $nextNode['id'];
                 $this->updateStep($chat->contact_id, $currentNodeId);
                 Log::info('FlowExecution: start node → next node', ['next_id' => $currentNodeId]);
+
                 continue;
             }
 
@@ -470,17 +480,20 @@ class FlowExecutionService
                 if ($result === 'conditional_routed') {
                     $flowData = $this->refreshFlowData($chat->contact_id);
                     $currentNodeId = (string) $flowData->current_step;
+
                     continue;
                 }
 
                 // Move to next node
                 $nextNode = $parser->getNextNode($currentNodeId);
-                if (!$nextNode) {
+                if (! $nextNode) {
                     $this->endFlow($chat->contact_id, 'completed', $chat->id);
+
                     return false;
                 }
                 $currentNodeId = (string) $nextNode['id'];
                 $this->updateStep($chat->contact_id, $currentNodeId);
+
                 continue;
             }
 
@@ -495,6 +508,7 @@ class FlowExecutionService
                         'node_id' => $currentNodeId,
                     ]);
                     $this->endFlow($chat->contact_id, 'completed', $chat->id);
+
                     return false;
                 }
 
@@ -521,6 +535,7 @@ class FlowExecutionService
                     'node_id' => $currentNodeId,
                     'variable_name' => $variableName,
                 ]);
+
                 return true;
             }
 
@@ -529,11 +544,12 @@ class FlowExecutionService
                 $fields = \Arr::get($node, 'data.metadata.fields', []);
                 $targetFlowUuid = $fields['target_flow_uuid'] ?? null;
 
-                if (!$targetFlowUuid) {
+                if (! $targetFlowUuid) {
                     Log::warning('FlowExecution: portal node missing target_flow_uuid', [
                         'node_id' => $currentNodeId,
                     ]);
                     $this->endFlow($chat->contact_id, 'completed', $chat->id);
+
                     return false;
                 }
 
@@ -542,12 +558,13 @@ class FlowExecutionService
                     ->where('status', 'active')
                     ->first();
 
-                if (!$targetFlow) {
+                if (! $targetFlow) {
                     Log::warning('FlowExecution: portal target flow not found or inactive', [
                         'target_flow_uuid' => $targetFlowUuid,
                         'node_id' => $currentNodeId,
                     ]);
                     $this->endFlow($chat->contact_id, 'completed', $chat->id);
+
                     return false;
                 }
 
@@ -558,43 +575,126 @@ class FlowExecutionService
                     'node_id' => $currentNodeId,
                 ]);
 
-                $this->endFlow($chat->contact_id, 'portal_redirect', $chat->id);
-
-                return $this->startFlow($targetFlow->id, $chat);
+                return $this->startFlow($targetFlow->id, $chat, 'portal_redirect');
             }
 
-            // Message node: if this is an interactive node (buttons/list/CTA) and we're
-            // resuming with user input, route to the correct branch instead of resending.
+            // Reply buttons and lists pause until WhatsApp sends a matching reply.
+            // CTA URL buttons only open a link and never produce a reply webhook,
+            // so they must be sent and then advance like any non-waiting message.
             $fields = \Arr::get($node, 'data.metadata.fields', []);
             $msgType = $fields['type'] ?? null;
-            $needsUserInput = in_array($msgType, ['interactive buttons', 'interactive list', 'interactive call to action url']);
+            $expectedReplyType = $this->expectedInteractiveReplyType($fields);
+            $needsUserInput = $expectedReplyType !== null;
 
-            if ($needsUserInput && !empty($message)) {
-                // User clicked a button/list item — route to the matching branch
-                $nextNode = $parser->getNextNode($currentNodeId, $message);
+            $hasResumeInput = trim($message) !== '' || $interactiveReply !== null;
+
+            if ($needsUserInput && $hasResumeInput) {
+                if ($interactiveReply === null || ($interactiveReply['type'] ?? null) !== $expectedReplyType) {
+                    if ($interactiveReply !== null
+                        && $this->runInteractiveTriggerFallback($interactiveTriggerFallback, $interactiveReply)) {
+                        return true;
+                    }
+
+                    if ($interactiveReply !== null
+                        && $this->handleHistoricalPortalReply($chat, $interactiveReply, false)) {
+                        return true;
+                    }
+
+                    Log::info('FlowExecution: non-matching input ignored while waiting for interaction', [
+                        'flow_id' => $flow->id,
+                        'contact_id' => $chat->contact_id,
+                        'chat_id' => $chat->id ?? null,
+                        'node_id' => $currentNodeId,
+                        'expected_reply_type' => $expectedReplyType,
+                        'actual_reply_type' => $interactiveReply['type'] ?? $this->getInboundMessageType($chat),
+                    ]);
+
+                    // The flow owns this conversation while it waits. Returning
+                    // true prevents this same message from falling through to
+                    // triggers/AI and, most importantly, preserves FlowUserData.
+                    return true;
+                }
+
+                $waitingInteraction = $flowData->getVariable('_waiting_interaction', []);
+                $waitingWamId = trim((string) ($waitingInteraction['outbound_wam_id'] ?? ''));
+                $contextWamId = trim((string) ($interactiveReply['context_wam_id'] ?? ''));
+                $isCurrentWaitingNode = (string) ($waitingInteraction['node_id'] ?? '') === $currentNodeId;
+
+                if ($isCurrentWaitingNode && $waitingWamId !== '' && $contextWamId !== '' && $waitingWamId !== $contextWamId) {
+                    if ($this->runInteractiveTriggerFallback($interactiveTriggerFallback, $interactiveReply)) {
+                        return true;
+                    }
+
+                    if ($this->handleHistoricalPortalReply($chat, $interactiveReply, false)) {
+                        return true;
+                    }
+
+                    Log::info('FlowExecution: stale interactive reply ignored', [
+                        'flow_id' => $flow->id,
+                        'contact_id' => $chat->contact_id,
+                        'chat_id' => $chat->id ?? null,
+                        'node_id' => $currentNodeId,
+                        'reply_id' => $interactiveReply['id'] ?? null,
+                    ]);
+
+                    return true;
+                }
+
+                // Route by the stable payload ID. Title fallback is handled by
+                // the parser only for legacy nodes that do not define IDs.
+                $nextNode = $parser->getNextNodeForInteractiveReply(
+                    $currentNodeId,
+                    (string) ($interactiveReply['id'] ?? ''),
+                    (string) ($interactiveReply['title'] ?? '')
+                );
                 if ($nextNode) {
-                    $this->captureInteractiveSelection($fields, $message, $flowData);
+                    $selection = trim((string) ($interactiveReply['title'] ?? ''));
+                    if ($selection === '') {
+                        $selection = trim((string) ($interactiveReply['id'] ?? ''));
+                    }
+
+                    $this->captureInteractiveSelection($fields, $selection, $flowData);
+                    $this->clearWaitingInteraction($flowData);
                     $this->updateStep($chat->contact_id, (string) $nextNode['id']);
                     $previousNodeId = $currentNodeId;
                     $currentNodeId = (string) $nextNode['id'];
                     Log::info('FlowExecution: interactive input routed', [
                         'from_node' => $previousNodeId,
-                        'user_input' => $message,
+                        'reply_type' => $interactiveReply['type'],
+                        'reply_id' => $interactiveReply['id'] ?? null,
                         'next_node' => $currentNodeId,
                     ]);
-                    // Clear message so the next interactive node in the loop
-                    // doesn't try to process this same user input again
+                    // Consume this reply so a subsequent interactive node in
+                    // the same loop cannot process it a second time.
                     $message = '';
+                    $interactiveReply = null;
                     $flowData = $this->refreshFlowData($chat->contact_id);
+
                     continue;
                 }
-                // No matching branch found — end flow or fall through
-                Log::warning('FlowExecution: no matching branch for interactive input', [
+
+                if ($this->runInteractiveTriggerFallback($interactiveTriggerFallback, $interactiveReply)) {
+                    return true;
+                }
+
+                if ($this->handleHistoricalPortalReply($chat, $interactiveReply, false)) {
+                    return true;
+                }
+
+                Log::info('FlowExecution: interactive reply has no edge or matching trigger', [
+                    'organization_id' => $this->organizationId,
+                    'flow_id' => $flow->id,
+                    'contact_id' => $chat->contact_id,
+                    'chat_id' => $chat->id ?? null,
                     'node_id' => $currentNodeId,
-                    'message' => $message,
+                    'reply_type' => $interactiveReply['type'],
+                    'reply_id' => $interactiveReply['id'] ?? null,
+                    'reply_title' => $interactiveReply['title'] ?? null,
+                    'context_wam_id' => $interactiveReply['context_wam_id'] ?? null,
+                    'flow_state_preserved' => true,
                 ]);
-                $this->endFlow($chat->contact_id, 'completed', $chat->id);
-                return false;
+
+                return true;
             }
 
             // Send the message (first visit to this node, no user input yet)
@@ -608,25 +708,32 @@ class FlowExecutionService
             ]);
 
             if ($needsUserInput) {
+                if ($sent) {
+                    $this->rememberWaitingInteraction($flowData, $currentNodeId, $fields);
+                    $this->rememberInteractiveMessage($flow, $parser, $flowData, $currentNodeId, $fields);
+                }
+
                 // Interactive node: stay on this node and wait for user response.
                 // Do NOT advance — getNextNode can't resolve multi-edge nodes
                 // without a button/list selection, and advancing would end the flow.
                 return true;
             }
 
-            // Plain text/media: send and advance to next node
+            // Non-waiting messages (including CTA URL): send and advance.
             $this->advanceToNextStep($parser, $currentNodeId, $chat->contact_id);
             $flowData = $this->refreshFlowData($chat->contact_id);
-            if (!$flowData) {
+            if (! $flowData) {
                 // Flow was completed (no more steps) — endFlow already called by advanceToNextStep
                 return true;
             }
             $currentNodeId = (string) $flowData->current_step;
+
             continue;
         }
 
         Log::warning("FlowExecution: max iterations reached for contact {$chat->contact_id}");
         $this->endFlow($chat->contact_id, 'completed', $chat->id);
+
         return false;
     }
 
@@ -638,7 +745,7 @@ class FlowExecutionService
         $config = \Arr::get($node, 'data.config', []);
         $isActive = \Arr::get($node, 'data.is_active', true);
 
-        if (!$actionType || !$isActive) {
+        if (! $actionType || ! $isActive) {
             return true; // Skip inactive/empty actions
         }
 
@@ -659,6 +766,7 @@ class FlowExecutionService
         if ($result === false) {
             Log::warning("FlowExecution: action {$actionType} failed for contact {$contactId}");
             $this->endFlow($contactId);
+
             return false;
         }
 
@@ -682,18 +790,20 @@ class FlowExecutionService
 
         // Build handle for the matched condition or default
         $handle = ($conditionResult !== 'default')
-            ? 'condition-' . $conditionResult . '|' . $nodeId
-            : 'default|' . $nodeId;
+            ? 'condition-'.$conditionResult.'|'.$nodeId
+            : 'default|'.$nodeId;
 
         $nextNode = $parser->getNextNode($nodeId, '', $handle);
 
         if ($nextNode) {
             $this->updateStep($contactId, (string) $nextNode['id']);
+
             return 'conditional_routed';
         }
 
         Log::warning("FlowExecution: no conditional path for handle {$handle}");
         $this->endFlow($contactId);
+
         return false;
     }
 
@@ -701,6 +811,7 @@ class FlowExecutionService
 
     private function sendNodeMessage(array $node, Contact $contact, array $flowVariables = []): bool
     {
+        $this->lastSentInteractiveWamId = null;
         $fields = \Arr::get($node, 'data.metadata.fields', []);
         $type = $fields['type'] ?? null;
 
@@ -709,14 +820,15 @@ class FlowExecutionService
             'node_type' => $node['type'] ?? 'unknown',
             'message_type' => $type,
             'contact_uuid' => $contact->uuid,
-            'has_body' => !empty($fields['body']),
+            'has_body' => ! empty($fields['body']),
         ]);
 
-        if (!$type) {
+        if (! $type) {
             Log::warning('FlowExecution::sendNodeMessage - no message type found', [
                 'node_id' => $node['id'] ?? 'unknown',
                 'fields_keys' => array_keys($fields),
             ]);
+
             return false;
         }
 
@@ -772,7 +884,404 @@ class FlowExecutionService
                 return false;
         }
 
-        return $response !== null && $response !== false;
+        $sent = $response !== null && $response !== false;
+
+        if ($sent && in_array($type, ['interactive buttons', 'interactive list'], true)) {
+            $wamId = data_get($response, 'data.chat.wam_id')
+                ?? data_get($response, 'data.messages.0.id');
+            $this->lastSentInteractiveWamId = $wamId !== null ? (string) $wamId : null;
+        }
+
+        return $sent;
+    }
+
+    private function extractInteractiveReply($chat): ?array
+    {
+        $metadata = is_array($chat->metadata ?? null)
+            ? $chat->metadata
+            : json_decode((string) ($chat->metadata ?? ''), true);
+
+        if (! is_array($metadata)) {
+            return null;
+        }
+
+        if (($metadata['type'] ?? null) === 'interactive') {
+            $interactive = $metadata['interactive'] ?? [];
+            $type = $interactive['type'] ?? null;
+            if (! in_array($type, ['button_reply', 'list_reply'], true)) {
+                return null;
+            }
+
+            $reply = $interactive[$type] ?? [];
+
+            return [
+                'type' => $type,
+                'id' => trim((string) ($reply['id'] ?? '')),
+                'title' => trim((string) ($reply['title'] ?? '')),
+                'context_wam_id' => trim((string) data_get($metadata, 'context.id', '')),
+            ];
+        }
+
+        // Preserve compatibility with the legacy WhatsApp "button" webhook.
+        if (($metadata['type'] ?? null) === 'button') {
+            return [
+                'type' => 'button_reply',
+                'id' => trim((string) data_get($metadata, 'button.payload', '')),
+                'title' => trim((string) data_get($metadata, 'button.text', data_get($metadata, 'button.payload', ''))),
+                'context_wam_id' => trim((string) data_get($metadata, 'context.id', '')),
+            ];
+        }
+
+        return null;
+    }
+
+    private function expectedInteractiveReplyType(array $fields): ?string
+    {
+        $type = $fields['type'] ?? null;
+
+        if ($type === 'interactive list') {
+            return 'list_reply';
+        }
+
+        // Keep this discriminator identical to sendNodeMessage(): anything
+        // other than the explicit "buttons" value is sent as a CTA URL.
+        if ($type === 'interactive buttons' && ($fields['buttonType'] ?? '') === 'buttons') {
+            return 'button_reply';
+        }
+
+        return null;
+    }
+
+    private function rememberWaitingInteraction(
+        FlowUserData $flowData,
+        string $nodeId,
+        array $fields
+    ): void {
+        $expectedReplyType = $this->expectedInteractiveReplyType($fields);
+        if ($expectedReplyType === null) {
+            return;
+        }
+
+        $flowData->setVariable('_waiting_interaction', [
+            'node_id' => $nodeId,
+            'reply_type' => $expectedReplyType,
+            'outbound_wam_id' => $this->lastSentInteractiveWamId,
+        ]);
+    }
+
+    private function clearWaitingInteraction(FlowUserData $flowData): void
+    {
+        $variables = $flowData->variables ?? [];
+        unset($variables['_waiting_interaction']);
+        $flowData->variables = $variables;
+        $flowData->save();
+    }
+
+    private function rememberInteractiveMessage(
+        Flow $flow,
+        FlowMetadataParser $parser,
+        FlowUserData $flowData,
+        string $nodeId,
+        array $fields
+    ): void {
+        if (! $this->isStalePortalReentryEnabled()) {
+            return;
+        }
+
+        $replyType = $this->expectedInteractiveReplyType($fields);
+        $outboundWamId = trim((string) $this->lastSentInteractiveWamId);
+        if ($replyType === null || $outboundWamId === '') {
+            return;
+        }
+
+        $options = [];
+        foreach ($parser->getInteractiveChoiceIds($nodeId) as $replyId) {
+            $targetFlowId = null;
+            $targetFlowUuid = $parser->getDirectPortalTargetUuid($nodeId, $replyId);
+            $isPortal = $targetFlowUuid !== null;
+
+            if ($isPortal) {
+                $targetFlowId = Flow::where('uuid', $targetFlowUuid)
+                    ->where('organization_id', $this->organizationId)
+                    ->value('id');
+            }
+
+            $options[(string) $replyId] = [
+                'is_portal' => $isPortal,
+                'target_flow_id' => $targetFlowId !== null ? (int) $targetFlowId : null,
+            ];
+        }
+
+        try {
+            FlowInteractiveMessage::updateOrCreate(
+                ['outbound_wam_id' => $outboundWamId],
+                [
+                    'organization_id' => $this->organizationId,
+                    'contact_id' => $flowData->contact_id,
+                    'flow_id' => $flow->id,
+                    'node_id' => $nodeId,
+                    'flow_run_uuid' => (string) $flowData->getVariable('_flow_run_uuid'),
+                    'reply_type' => $replyType,
+                    'options' => $options,
+                ]
+            );
+        } catch (\Throwable $e) {
+            // Sending the original menu succeeded. Provenance persistence is
+            // additive and must not break the established conversation path.
+            Log::error('FlowExecution: failed to remember interactive message', [
+                'flow_id' => $flow->id,
+                'contact_id' => $flowData->contact_id,
+                'node_id' => $nodeId,
+                'outbound_wam_id' => $outboundWamId,
+                'error' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * Resolve a reply to an older menu from its immutable send-time snapshot.
+     * Returns false only when the feature is disabled or the input is not an
+     * interactive reply, allowing the existing pipeline to remain unchanged.
+     */
+    public function handleHistoricalPortalReply(
+        $chat,
+        ?array $interactiveReply = null,
+        bool $consumeRejectedReply = true
+    ): bool
+    {
+        if (! $this->isStalePortalReentryEnabled()) {
+            return false;
+        }
+
+        $interactiveReply ??= $this->extractInteractiveReply($chat);
+        if ($interactiveReply === null) {
+            return false;
+        }
+
+        $contextWamId = trim((string) ($interactiveReply['context_wam_id'] ?? ''));
+        $replyId = trim((string) ($interactiveReply['id'] ?? ''));
+
+        Log::info('FlowExecution: stale_interaction_detected', [
+            'organization_id' => $this->organizationId,
+            'contact_id' => $chat->contact_id,
+            'chat_id' => $chat->id ?? null,
+            'context_wam_id' => $contextWamId,
+            'reply_type' => $interactiveReply['type'] ?? null,
+            'reply_id' => $replyId,
+        ]);
+
+        $source = FlowInteractiveMessage::where('organization_id', $this->organizationId)
+            ->where('contact_id', $chat->contact_id)
+            ->where('outbound_wam_id', $contextWamId)
+            ->first();
+
+        $targetFlowId = $source === null
+            ? null
+            : $this->resolveHistoricalPortalTargetId(
+                (string) $source->reply_type,
+                $source->options ?? [],
+                $interactiveReply
+            );
+
+        $targetFlow = $targetFlowId !== null
+            ? Flow::whereKey($targetFlowId)
+                ->where('organization_id', $this->organizationId)
+                ->where('status', 'active')
+                ->first()
+            : null;
+
+        if (! $targetFlow) {
+            Log::info('FlowExecution: portal_reentry_rejected', [
+                'organization_id' => $this->organizationId,
+                'contact_id' => $chat->contact_id,
+                'chat_id' => $chat->id ?? null,
+                'context_wam_id' => $contextWamId,
+                'reply_id' => $replyId,
+                'reason' => $source === null ? 'provenance_not_found' : 'not_a_valid_active_portal',
+            ]);
+            if (! $consumeRejectedReply) {
+                return false;
+            }
+
+            $this->sendExpiredMenuNotice($chat->contact_id);
+
+            return true;
+        }
+
+        $switch = $this->switchFlowFromPortalReply($source, $targetFlow, $chat);
+        if ($switch['duplicate']) {
+            Log::info('FlowExecution: duplicate_reply_ignored', [
+                'organization_id' => $this->organizationId,
+                'contact_id' => $chat->contact_id,
+                'chat_id' => $chat->id ?? null,
+                'wam_id' => $chat->wam_id ?? null,
+            ]);
+
+            return true;
+        }
+
+        Log::info('FlowExecution: portal_reentry_started', [
+            'organization_id' => $this->organizationId,
+            'contact_id' => $chat->contact_id,
+            'chat_id' => $chat->id ?? null,
+            'from_flow_id' => $switch['from_flow_id'],
+            'to_flow_id' => $targetFlow->id,
+            'context_wam_id' => $contextWamId,
+        ]);
+
+        $result = $this->processFlow($chat, $switch['flow_data'], '');
+
+        return $result !== false;
+    }
+
+    private function resolveHistoricalPortalTargetId(
+        string $expectedReplyType,
+        array $options,
+        array $interactiveReply
+    ): ?int {
+        $actualReplyType = (string) ($interactiveReply['type'] ?? '');
+        $replyId = trim((string) ($interactiveReply['id'] ?? ''));
+        if ($replyId === '' || ! hash_equals($expectedReplyType, $actualReplyType)) {
+            return null;
+        }
+
+        $option = $options[$replyId] ?? null;
+        if (! is_array($option) || ($option['is_portal'] ?? false) !== true) {
+            return null;
+        }
+
+        $targetFlowId = $option['target_flow_id'] ?? null;
+
+        return is_numeric($targetFlowId) && (int) $targetFlowId > 0
+            ? (int) $targetFlowId
+            : null;
+    }
+
+    private function runInteractiveTriggerFallback(?callable $fallback, array $interactiveReply): bool
+    {
+        if ($fallback === null) {
+            return false;
+        }
+
+        $title = trim((string) ($interactiveReply['title'] ?? ''));
+        if ($title === '') {
+            return false;
+        }
+
+        try {
+            return $fallback($title, $interactiveReply) === true;
+        } catch (\Throwable $e) {
+            Log::error('FlowExecution: interactive trigger fallback failed; preserving active flow', [
+                'organization_id' => $this->organizationId,
+                'reply_type' => $interactiveReply['type'] ?? null,
+                'reply_id' => $interactiveReply['id'] ?? null,
+                'error' => $e->getMessage(),
+            ]);
+
+            return false;
+        }
+    }
+
+    private function isStalePortalReentryEnabled(): bool
+    {
+        if (config('flow_builder.stale_portal_reentry_enabled', false)) {
+            return true;
+        }
+
+        return in_array(
+            $this->organizationId,
+            config('flow_builder.stale_portal_reentry_organizations', []),
+            true
+        );
+    }
+
+    private function switchFlowFromPortalReply(
+        FlowInteractiveMessage $source,
+        Flow $targetFlow,
+        $chat
+    ): array {
+        return DB::transaction(function () use ($source, $targetFlow, $chat): array {
+            Contact::whereKey($chat->contact_id)->lockForUpdate()->firstOrFail();
+
+            $duplicate = FlowPortalReplyTransition::where('inbound_chat_id', $chat->id)
+                ->orWhere('inbound_wam_id', (string) $chat->wam_id)
+                ->exists();
+            if ($duplicate) {
+                return ['duplicate' => true, 'flow_data' => null, 'from_flow_id' => null];
+            }
+
+            $active = FlowUserData::where('contact_id', $chat->contact_id)
+                ->lockForUpdate()
+                ->first();
+            $fromFlowId = $active?->flow_id;
+
+            if ($active) {
+                FlowLog::create([
+                    'flow_id' => $active->flow_id,
+                    'contact_id' => $chat->contact_id,
+                    'organization_id' => $this->organizationId,
+                    'chat_id' => $chat->id,
+                    'status' => 'superseded_by_portal_reply',
+                    'nodes_processed' => $this->logNodesProcessed,
+                ]);
+                $active->delete();
+            }
+
+            $parser = new FlowMetadataParser($targetFlow->metadata);
+            $flowData = FlowUserData::create([
+                'contact_id' => $chat->contact_id,
+                'flow_id' => $targetFlow->id,
+                'current_step' => $parser->getStartNodeId() ?? '1',
+                'variables' => ['_flow_run_uuid' => (string) Str::uuid()],
+            ]);
+
+            FlowLog::create([
+                'flow_id' => $targetFlow->id,
+                'contact_id' => $chat->contact_id,
+                'organization_id' => $this->organizationId,
+                'chat_id' => $chat->id,
+                'status' => 'started',
+                'nodes_processed' => 0,
+            ]);
+
+            FlowPortalReplyTransition::create([
+                'organization_id' => $this->organizationId,
+                'contact_id' => $chat->contact_id,
+                'interactive_message_id' => $source->id,
+                'inbound_chat_id' => $chat->id,
+                'inbound_wam_id' => (string) $chat->wam_id,
+                'from_flow_id' => $fromFlowId,
+                'to_flow_id' => $targetFlow->id,
+            ]);
+
+            return [
+                'duplicate' => false,
+                'flow_data' => $flowData,
+                'from_flow_id' => $fromFlowId,
+            ];
+        }, 3);
+    }
+
+    private function sendExpiredMenuNotice(int $contactId): void
+    {
+        $contact = Contact::find($contactId);
+        if (! $contact) {
+            return;
+        }
+
+        try {
+            $this->whatsappService->sendMessage(
+                $contact->uuid,
+                'هذه القائمة قديمة، يرجى استخدام أحدث قائمة مرسلة. / This menu is no longer active; please use the latest menu.',
+                0,
+                'text'
+            );
+        } catch (\Throwable $e) {
+            Log::error('FlowExecution: failed to send expired menu notice', [
+                'contact_id' => $contactId,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     /**
@@ -803,10 +1312,10 @@ class FlowExecutionService
             return $selection;
         }
 
-        $item = '• ' . $selection;
+        $item = '• '.$selection;
         $current = trim($current);
 
-        return $current === '' ? $item : $current . "\n" . $item;
+        return $current === '' ? $item : $current."\n".$item;
     }
 
     private function prepareHeader(array $fields): array
@@ -846,10 +1355,11 @@ class FlowExecutionService
         if ($type === 'interactive buttons') {
             $buttons = [];
             foreach ($fields['buttons'] ?? [] as $id => $title) {
-                if (!empty($title)) {
+                if (! empty($title)) {
                     $buttons[] = ['id' => $id, 'title' => $title];
                 }
             }
+
             return $buttons;
         }
 
@@ -890,8 +1400,9 @@ class FlowExecutionService
     private function sendTemplateMessage(array $fields, Contact $contact, array $flowVariables)
     {
         $templateUuid = $fields['template_uuid'] ?? null;
-        if (!$templateUuid) {
+        if (! $templateUuid) {
             Log::warning('FlowExecution: template node missing template_uuid');
+
             return false;
         }
 
@@ -900,11 +1411,12 @@ class FlowExecutionService
             ->where('status', 'APPROVED')
             ->first();
 
-        if (!$template) {
+        if (! $template) {
             Log::warning('FlowExecution: template not found or not approved', [
                 'template_uuid' => $templateUuid,
                 'organization_id' => $this->organizationId,
             ]);
+
             return false;
         }
 
@@ -939,6 +1451,7 @@ class FlowExecutionService
                 'contact_id' => $contact->id,
                 'error' => $e->getMessage(),
             ]);
+
             return false;
         }
     }
@@ -949,8 +1462,9 @@ class FlowExecutionService
     private function sendMetaFlowMessage(array $fields, Contact $contact, array $flowVariables)
     {
         $metaflowUuid = $fields['metaflow_uuid'] ?? null;
-        if (!$metaflowUuid) {
+        if (! $metaflowUuid) {
             Log::warning('FlowExecution: metaflow node missing metaflow_uuid');
+
             return false;
         }
 
@@ -959,11 +1473,12 @@ class FlowExecutionService
             ->where('status', 'published')
             ->first();
 
-        if (!$metaFlow) {
+        if (! $metaFlow) {
             Log::warning('FlowExecution: metaflow not found or not published', [
                 'metaflow_uuid' => $metaflowUuid,
                 'organization_id' => $this->organizationId,
             ]);
+
             return false;
         }
 
@@ -971,8 +1486,8 @@ class FlowExecutionService
         $cta = $fields['cta'] ?? 'Open';
 
         $options = [
-            'body'   => $body,
-            'cta'    => $cta,
+            'body' => $body,
+            'cta' => $cta,
             'header' => $metaFlow->name,
         ];
 
@@ -980,28 +1495,29 @@ class FlowExecutionService
             $metaFlowService = MetaFlowService::fromOrganization($this->organizationId);
             $sendResult = $metaFlowService->sendFlowToContact($metaFlow, $contact, $options);
 
-            if (!$sendResult['success']) {
+            if (! $sendResult['success']) {
                 Log::error('FlowExecution: metaflow send failed', [
                     'metaflow_uuid' => $metaflowUuid,
                     'contact_id' => $contact->id,
                     'error' => $sendResult['message'] ?? 'Unknown error',
                 ]);
+
                 return false;
             }
 
             // Create a Chat record for rendering in the chat thread
             $chatMetadata = [
-                'type'        => 'interactive',
-                'flow_name'   => $metaFlow->name,
-                'flow_uuid'   => $metaFlow->uuid,
-                'flow_token'  => $sendResult['flow_token'],
+                'type' => 'interactive',
+                'flow_name' => $metaFlow->name,
+                'flow_uuid' => $metaFlow->uuid,
+                'flow_token' => $sendResult['flow_token'],
                 'interactive' => [
                     'type' => 'flow',
                     'body' => ['text' => $body],
                     'action' => [
-                        'name'       => 'flow',
+                        'name' => 'flow',
                         'parameters' => [
-                            'flow_id'  => $metaFlow->meta_flow_id,
+                            'flow_id' => $metaFlow->meta_flow_id,
                             'flow_cta' => $cta,
                         ],
                     ],
@@ -1010,23 +1526,23 @@ class FlowExecutionService
 
             $chat = Chat::create([
                 'organization_id' => $this->organizationId,
-                'wam_id'          => $sendResult['data']->messages[0]->id ?? null,
-                'contact_id'      => $contact->id,
-                'type'            => 'outbound',
-                'user_id'         => null,
-                'metadata'        => json_encode($chatMetadata),
-                'status'          => 'delivered',
-                'created_at'      => now(),
+                'wam_id' => $sendResult['data']->messages[0]->id ?? null,
+                'contact_id' => $contact->id,
+                'type' => 'outbound',
+                'user_id' => null,
+                'metadata' => json_encode($chatMetadata),
+                'status' => 'delivered',
+                'created_at' => now(),
             ]);
 
             // Chat threads are rendered from chat_logs, not directly from chats.
             // Keep the automated Meta Flow path consistent with the regular
             // outbound message path so the flow is visible in the conversation.
             $chatLog = ChatLog::create([
-                'contact_id'  => $contact->id,
+                'contact_id' => $contact->id,
                 'entity_type' => 'chat',
-                'entity_id'   => $chat->id,
-                'created_at'  => now(),
+                'entity_id' => $chat->id,
+                'created_at' => now(),
             ]);
 
             // Notify an already-open chat window immediately. The ChatLog above
@@ -1051,6 +1567,7 @@ class FlowExecutionService
                 'contact_id' => $contact->id,
                 'error' => $e->getMessage(),
             ]);
+
             return false;
         }
     }
@@ -1092,7 +1609,7 @@ class FlowExecutionService
                         'text' => $btn['text'] ?? '',
                         'parameters' => [],
                     ];
-                    if (($btn['type'] ?? '') === 'URL' && !empty($btn['url'])) {
+                    if (($btn['type'] ?? '') === 'URL' && ! empty($btn['url'])) {
                         $buttons[count($buttons) - 1]['url'] = $btn['url'];
                     }
                 }
@@ -1101,7 +1618,7 @@ class FlowExecutionService
 
         // Fill header parameters from node config
         $headerParams = $parameters['header'] ?? [];
-        if ($header && !empty($headerParams)) {
+        if ($header && ! empty($headerParams)) {
             foreach ($headerParams as $param) {
                 $value = $this->replacePlaceholders($contact->uuid, $param['value'] ?? '', $flowVariables);
                 $header['parameters'][] = [
@@ -1125,7 +1642,7 @@ class FlowExecutionService
 
         // Fill body parameters from node config
         $bodyParams = $parameters['body'] ?? [];
-        if (!empty($bodyParams)) {
+        if (! empty($bodyParams)) {
             foreach ($bodyParams as $param) {
                 $value = $this->replacePlaceholders($contact->uuid, $param['value'] ?? '', $flowVariables);
                 $bodyParamsResolved[] = [
@@ -1162,6 +1679,53 @@ class FlowExecutionService
 
     // ─── Flow State ─────────────────────────────────────────────
 
+    private function replaceActiveFlowState(
+        Flow $flow,
+        $chat,
+        string $startNodeId,
+        string $replacementReason
+    ): FlowUserData {
+        return DB::transaction(function () use ($flow, $chat, $startNodeId, $replacementReason): FlowUserData {
+            // Locking the contact also serializes the no-active-state case,
+            // where SELECT ... FOR UPDATE on flow_user_data would lock no row.
+            Contact::whereKey($chat->contact_id)->lockForUpdate()->firstOrFail();
+
+            $active = FlowUserData::where('contact_id', $chat->contact_id)
+                ->lockForUpdate()
+                ->first();
+
+            if ($active) {
+                FlowLog::create([
+                    'flow_id' => $active->flow_id,
+                    'contact_id' => $chat->contact_id,
+                    'organization_id' => $this->organizationId,
+                    'chat_id' => $chat->id ?? null,
+                    'status' => $replacementReason,
+                    'nodes_processed' => $this->logNodesProcessed,
+                ]);
+                $active->delete();
+            }
+
+            $flowData = FlowUserData::create([
+                'contact_id' => $chat->contact_id,
+                'flow_id' => $flow->id,
+                'current_step' => $startNodeId,
+                'variables' => ['_flow_run_uuid' => (string) Str::uuid()],
+            ]);
+
+            FlowLog::create([
+                'flow_id' => $flow->id,
+                'contact_id' => $chat->contact_id,
+                'organization_id' => $this->organizationId,
+                'chat_id' => $chat->id ?? null,
+                'status' => 'started',
+                'nodes_processed' => 0,
+            ]);
+
+            return $flowData;
+        }, 3);
+    }
+
     private function advanceToNextStep(FlowMetadataParser $parser, string $currentNodeId, int $contactId): void
     {
         $nextNode = $parser->getNextNode($currentNodeId);
@@ -1184,7 +1748,7 @@ class FlowExecutionService
             ->update(['current_step' => $step]);
     }
 
-    private function endFlow(int $contactId, string $reason = 'completed', ?int $chatId = null): void
+    private function endFlow(int $contactId, string $reason = 'completed', int $chatId = null): void
     {
         $flowData = FlowUserData::where('contact_id', $contactId)->first();
         if ($flowData) {
@@ -1249,12 +1813,12 @@ class FlowExecutionService
      *   {{flow.order_id}}    — flow-scoped session variables
      *   {{system.current_date}} — read-only system variables
      */
-    private function replacePlaceholders(string $contactUuid, string $message, ?array $flowVariables = null): string
+    private function replacePlaceholders(string $contactUuid, string $message, array $flowVariables = null): string
     {
         $organization = Organization::where('id', $this->organizationId)->first();
         $contact = Contact::with('contactGroups')->where('uuid', $contactUuid)->first();
 
-        if (!$contact) {
+        if (! $contact) {
             return $message;
         }
 
@@ -1335,7 +1899,7 @@ class FlowExecutionService
     private function handleQuestionResponse($chat, FlowUserData $flowData, string $message, array $config): bool
     {
         $contact = Contact::find($chat->contact_id);
-        if (!$contact) {
+        if (! $contact) {
             return false;
         }
 
@@ -1400,32 +1964,35 @@ class FlowExecutionService
 
             // Advance past the question node and continue processing
             $flow = $this->findFlow((int) $flowData->flow_id);
-            if (!$flow) {
+            if (! $flow) {
                 $this->endFlow($chat->contact_id, 'completed', $chat->id);
+
                 return false;
             }
 
             $parser = new FlowMetadataParser($flow->metadata);
-            $successHandle = 'success|' . $nodeId;
+            $successHandle = 'success|'.$nodeId;
             $nextNode = $parser->getNextNode($nodeId, '', $successHandle);
 
             // Fallback: if no success handle edge found, try default (no handle) edge
-            if (!$nextNode) {
+            if (! $nextNode) {
                 $nextNode = $parser->getNextNode($nodeId);
             }
 
             if ($nextNode) {
                 $this->updateStep($chat->contact_id, (string) $nextNode['id']);
                 $flowData = $this->refreshFlowData($chat->contact_id);
-                if (!$flowData) {
+                if (! $flowData) {
                     return true;
                 }
                 $result = $this->processFlow($chat, $flowData, '');
+
                 return $result !== false;
             }
 
             // No next node — flow complete
             $this->endFlow($chat->contact_id, 'completed', $chat->id);
+
             return true;
         }
 
@@ -1444,13 +2011,14 @@ class FlowExecutionService
 
             // Max retries reached — look for fail route or end flow
             $flow = $this->findFlow((int) $flowData->flow_id);
-            if (!$flow) {
+            if (! $flow) {
                 $this->endFlow($chat->contact_id, 'completed', $chat->id);
+
                 return false;
             }
 
             $parser = new FlowMetadataParser($flow->metadata);
-            $failHandle = 'fail|' . $nodeId;
+            $failHandle = 'fail|'.$nodeId;
             $failNode = $parser->getNextNode($nodeId, '', $failHandle);
 
             if ($failNode) {
@@ -1462,10 +2030,11 @@ class FlowExecutionService
 
                 $this->updateStep($chat->contact_id, (string) $failNode['id']);
                 $flowData = $this->refreshFlowData($chat->contact_id);
-                if (!$flowData) {
+                if (! $flowData) {
                     return true;
                 }
                 $result = $this->processFlow($chat, $flowData, $message);
+
                 return $result !== false;
             }
 
@@ -1474,6 +2043,7 @@ class FlowExecutionService
                 'contact_id' => $chat->contact_id,
             ]);
             $this->endFlow($chat->contact_id, 'completed', $chat->id);
+
             return false;
         }
 
@@ -1481,7 +2051,7 @@ class FlowExecutionService
         $flowData->setVariable('_question_retries', $currentRetries);
         $this->storeQuestionAttempt($chat, $flowData, $config, $message, 'invalid', $currentRetries);
 
-        if (!empty($retryMessage)) {
+        if (! empty($retryMessage)) {
             $retryText = $this->replacePlaceholders($contact->uuid, $retryMessage, $flowData->variables ?? []);
             $this->whatsappService->sendMessage($contact->uuid, $retryText, 0, 'text');
         }
@@ -1507,7 +2077,7 @@ class FlowExecutionService
         $value = trim($value);
 
         if ($value !== '') {
-            $variables[$target] = $current === '' ? $value : $current . "\n" . $value;
+            $variables[$target] = $current === '' ? $value : $current."\n".$value;
         }
 
         foreach (($config['clear_variables_after_append'] ?? []) as $variable) {
@@ -1563,13 +2133,13 @@ class FlowExecutionService
         }
 
         return match ($inputType) {
-            'text'   => true,
-            'email'  => filter_var($input, FILTER_VALIDATE_EMAIL) !== false,
-            'phone'  => preg_match('/^\+?[0-9\s\-\(\)]{7,15}$/', $input) === 1,
-            'number'  => is_numeric($input),
-            'date'   => (bool) strtotime($input),
-            'regex'  => $pattern ? (preg_match('/' . $pattern . '/', $input) === 1) : true,
-            default  => true,
+            'text' => true,
+            'email' => filter_var($input, FILTER_VALIDATE_EMAIL) !== false,
+            'phone' => preg_match('/^\+?[0-9\s\-\(\)]{7,15}$/', $input) === 1,
+            'number' => is_numeric($input),
+            'date' => (bool) strtotime($input),
+            'regex' => $pattern ? (preg_match('/'.$pattern.'/', $input) === 1) : true,
+            default => true,
         };
     }
 }

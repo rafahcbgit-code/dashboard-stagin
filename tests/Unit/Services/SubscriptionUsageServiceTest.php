@@ -165,6 +165,63 @@ it('counts 24-hour conversation windows and lets add-ons restore capacity', func
     expect($service->canUse($organization->id, SubscriptionUsageService::CONVERSATIONS)['allowed'])->toBeTrue();
 });
 
+it('shows pool totals for the resource account and local usage for shared accounts', function () {
+    [$user, $resourceOrganization, $plan, $subscription] = createUsageContext([
+        'template_messages_limit' => 10,
+        'conversations_limit' => 10,
+        'contacts_limit' => 10,
+        'team_limit' => 10,
+        'organizations_limit' => 10,
+        'resource_sharing_enabled' => 1,
+    ]);
+
+    $sharedOrganization = createTestOrganization([
+        'created_by' => $user->id,
+        'billing_organization_id' => $resourceOrganization->id,
+    ]);
+
+    Subscription::create([
+        'uuid' => (string) Str::uuid(),
+        'organization_id' => $sharedOrganization->id,
+        'plan_id' => $plan->id,
+        'status' => 'active',
+        'start_date' => $subscription->start_date,
+        'valid_until' => $subscription->valid_until,
+    ]);
+
+    $resourceContact = Contact::factory()->create([
+        'organization_id' => $resourceOrganization->id,
+    ]);
+    $sharedContact = Contact::factory()->create([
+        'organization_id' => $sharedOrganization->id,
+    ]);
+
+    $service = new SubscriptionUsageService();
+    $service->recordUsage($resourceOrganization->id, SubscriptionUsageService::TEMPLATE_MESSAGES, 2, 'primary-template');
+    $service->recordUsage($sharedOrganization->id, SubscriptionUsageService::TEMPLATE_MESSAGES, 3, 'shared-template');
+    $service->ensureConversationWindowForInbound($resourceOrganization->id, $resourceContact->id);
+    $service->ensureConversationWindowForInbound($sharedOrganization->id, $sharedContact->id);
+
+    $primaryTemplateSummary = $service->summary($resourceOrganization->id, SubscriptionUsageService::TEMPLATE_MESSAGES);
+    $sharedTemplateSummary = $service->summary($sharedOrganization->id, SubscriptionUsageService::TEMPLATE_MESSAGES);
+    $sharedConversationSummary = $service->summary($sharedOrganization->id, SubscriptionUsageService::CONVERSATIONS);
+    $organizationSummary = $service->summary($resourceOrganization->id, SubscriptionUsageService::ORGANIZATIONS);
+    $organizationRows = collect($organizationSummary['organization_breakdown'])->keyBy('organization_id');
+
+    expect($primaryTemplateSummary['used'])->toBe(5)
+        ->and($primaryTemplateSummary['is_resource_account'])->toBeTrue()
+        ->and($sharedTemplateSummary['used'])->toBe(3)
+        ->and($sharedTemplateSummary['pool_used'])->toBe(5)
+        ->and($sharedTemplateSummary['remaining'])->toBe(5)
+        ->and($sharedTemplateSummary['is_resource_account'])->toBeFalse()
+        ->and($sharedConversationSummary['used'])->toBe(1)
+        ->and($sharedConversationSummary['pool_used'])->toBe(2)
+        ->and($organizationRows[$resourceOrganization->id]['role'])->toBe('resource_account')
+        ->and($organizationRows[$resourceOrganization->id]['template_messages_used'])->toBe(2)
+        ->and($organizationRows[$sharedOrganization->id]['role'])->toBe('shared_account')
+        ->and($organizationRows[$sharedOrganization->id]['template_messages_used'])->toBe(3);
+});
+
 it('counts active team members and unexpired invites', function () {
     [$user, $organization] = createUsageContext([
         'team_limit' => 2,

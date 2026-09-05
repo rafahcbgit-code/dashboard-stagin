@@ -121,7 +121,16 @@ class AutoReplyService
             $text = $this->extractMessageText($chat);
             if (File::exists(base_path('modules/FlowBuilder/Services/FlowExecutionService.php'))) {
                 $service = new \Modules\FlowBuilder\Services\FlowExecutionService($organizationId, $this->metaPayload);
-                $result = $service->resumeActiveFlow($chat, $text);
+                $result = $service->resumeActiveFlow(
+                    $chat,
+                    $text,
+                    fn (string $title, array $reply): bool => $this->handleInteractiveTriggerFallback(
+                        $organizationId,
+                        $chat,
+                        $title,
+                        $reply
+                    )
+                );
                 if ($result) {
                     return true;
                 }
@@ -130,10 +139,33 @@ class AutoReplyService
             // Active flow didn't handle the message — fall through to AI/fallback
         }
 
+        // With no active flow, an interactive reply may still belong to a
+        // previously sent Flow Builder menu. Resolve it before text triggers
+        // interpret the visible button title as an unrelated keyword.
+        if (! $activeFlow && File::exists($modulePath)) {
+            $service = new \Modules\FlowBuilder\Services\FlowExecutionService($organizationId, $this->metaPayload);
+            if ($service->handleHistoricalPortalReply($chat, null, false)) {
+                return true;
+            }
+        }
+
         // Evaluate trigger groups (greeting, new_contact, away, fallback, new_message)
         $triggerResult = $this->handleTriggerEvaluation($organizationId, $chat, $isNewContact);
         if ($triggerResult) {
             return $triggerResult;
+        }
+
+        // An unmatched interactive reply must not be interpreted by AI. Keep
+        // any flow state untouched and leave an actionable diagnostic log.
+        if (! $activeFlow && $this->isInteractiveReply($chat)) {
+            Log::info('AutoReplyService: interactive reply has no matching trigger', [
+                'organization_id' => $organizationId,
+                'contact_id' => $chat->contact_id,
+                'chat_id' => $chat->id,
+                'flow_state_preserved' => true,
+            ]);
+
+            return true;
         }
 
         // AI Fallback — attempt KB answer when no trigger matched
@@ -144,6 +176,104 @@ class AutoReplyService
 
         // Nothing matched — no further handling
         return null;
+    }
+
+    private function handleInteractiveTriggerFallback(
+        int $organizationId,
+        Chat $chat,
+        string $title,
+        array $reply
+    ): bool {
+        $contact = Contact::find($chat->contact_id);
+        if (! $contact) {
+            return false;
+        }
+
+        $this->triggerGroupService->initializeSystemTriggers($organizationId);
+        $result = $this->triggerEvaluationService->evaluateKeywordTriggers(
+            $organizationId,
+            $contact,
+            $title
+        );
+
+        if ($result === null || ! $result->flow) {
+            return false;
+        }
+
+        $targetFlow = \Modules\FlowBuilder\Models\Flow::whereKey($result->flow->id)
+            ->where('organization_id', $organizationId)
+            ->where('status', 'active')
+            ->first();
+        if (! $targetFlow) {
+            Log::info('AutoReplyService: interactive trigger target rejected', [
+                'organization_id' => $organizationId,
+                'contact_id' => $chat->contact_id,
+                'chat_id' => $chat->id,
+                'trigger_group_id' => $result->triggerGroup->id,
+                'target_flow_id' => $result->flow->id,
+                'reason' => 'target_flow_not_active',
+            ]);
+
+            return false;
+        }
+
+        $flowExecutionService = new \Modules\FlowBuilder\Services\FlowExecutionService(
+            $organizationId,
+            $this->metaPayload
+        );
+        $started = $flowExecutionService->startFlow(
+            $targetFlow->id,
+            $chat,
+            'superseded_by_interactive_trigger'
+        );
+
+        if (! $started) {
+            return false;
+        }
+
+        try {
+            $this->rateLimitService->recordTrigger(
+                $organizationId,
+                $contact->id,
+                $result->triggerGroup->id
+            );
+        } catch (\Throwable $e) {
+            // The target flow has already started. A metrics/rate-limit write
+            // failure must not make this same click fall through to another
+            // route and produce a second response.
+            Log::error('AutoReplyService: failed to record interactive trigger', [
+                'organization_id' => $organizationId,
+                'contact_id' => $contact->id,
+                'trigger_group_id' => $result->triggerGroup->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        Log::info('AutoReplyService: interactive trigger flow started', [
+            'organization_id' => $organizationId,
+            'contact_id' => $chat->contact_id,
+            'chat_id' => $chat->id,
+            'trigger_group_id' => $result->triggerGroup->id,
+            'target_flow_id' => $targetFlow->id,
+            'reply_type' => $reply['type'] ?? null,
+            'reply_id' => $reply['id'] ?? null,
+            'reply_title' => $title,
+            'context_wam_id' => $reply['context_wam_id'] ?? null,
+        ]);
+
+        return true;
+    }
+
+    private function isInteractiveReply(Chat $chat): bool
+    {
+        $metadata = json_decode((string) $chat->metadata, true);
+
+        return ($metadata['type'] ?? null) === 'interactive'
+            && in_array(
+                data_get($metadata, 'interactive.type'),
+                ['button_reply', 'list_reply'],
+                true
+            );
     }
 
     /**
