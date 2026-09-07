@@ -62,7 +62,7 @@ class ProcessWebhookJob implements ShouldQueue
     /**
      * The type of webhook being processed.
      * Possible values: messages, smb_message_echoes, smb_app_state_sync,
-     * history, message_template_status_update, template_category_update, account_review_update,
+     * history, message_template_status_update, template_category_update, account_update, account_review_update,
      * phone_number_name_update, phone_number_quality_update, business_capability_update
      */
     public string $webhookType;
@@ -180,6 +180,7 @@ class ProcessWebhookJob implements ShouldQueue
                 'history' => $this->processHistory(),
                 'message_template_status_update',
                 'template_category_update' => $this->processTemplateStatusUpdate(),
+                'account_update',
                 'account_review_update',
                 'phone_number_name_update',
                 'phone_number_quality_update',
@@ -2385,7 +2386,8 @@ class ProcessWebhookJob implements ShouldQueue
         Log::channel('webhook')->info('Account update received', [
             'organization_id' => $this->organizationId,
             'webhook_type' => $this->webhookType,
-            'payload' => $this->payload,
+            'waba_id' => $this->context['waba_id'] ?? null,
+            'event' => data_get($this->payload, 'value.event'),
         ]);
 
         if ($this->webhookType !== 'business_capability_update') {

@@ -1,7 +1,7 @@
 <script setup>
     import { ref, onMounted } from 'vue';
     import { router } from "@inertiajs/vue3";
-    import { decodeMetaUnicode } from '../lib/embeddedSignupHelpers.js';
+    import { embeddedSignupOptions, parseEmbeddedSignupEvent } from '../lib/embeddedSignupHelpers.js';
     
     const props = defineProps(['appId', 'configId', 'graphAPIVersion'])
 
@@ -44,10 +44,7 @@
     let sessionPhoneNumberId = null;
     let sessionWabaId = null;
     let authCode = null;
-    let codeGeneratedAt = null;
-    let submitTimer = null;
     let hasSubmitted = false;
-    const sessionInfoWaitMs = 8000;
 
     const getSignupValue = (payload, keys) => {
         if (!payload || typeof payload !== 'object') {
@@ -86,11 +83,10 @@
         }
 
         hasSubmitted = true;
-        clearTimeout(submitTimer);
         console.log('[ESU] Sending POST to /whatsapp/exchange-code at', new Date().toISOString());
 
         router.post(`/whatsapp/exchange-code`, {
-            token: authCode,
+            code: authCode,
             phone_number_id: sessionPhoneNumberId,
             waba_id: sessionWabaId,
         }, {
@@ -112,10 +108,6 @@
                 isSetupLoading.value = false;
                 hasSubmitted = false;
             },
-            onFinish: () => {
-                const elapsed = Date.now() - codeGeneratedAt;
-                console.log('[ESU] Backend request finished. Time from code received to finish:', elapsed, 'ms');
-            }
         })
     };
 
@@ -123,43 +115,16 @@
         if (hasSubmitted || !authCode) {
             return;
         }
-
-        if (sessionWabaId) {
-            submitSignup();
-            return;
-        }
-
-        if (!submitTimer) {
-            console.log('[ESU] Auth code received before waba_id; waiting for Meta session info.');
-            submitTimer = setTimeout(submitSignup, sessionInfoWaitMs);
-        }
-    };
-
-    const logEmbeddedSignupEvent = (eventName, payload) => {
-        if (!payload) {
-            console.log('[ESU] Embedded Signup event:', eventName, 'payload: empty');
-            return;
-        }
-
-        const decodedHtml = decodeMetaUnicode(payload.html);
-        const payloadForLog = {
-            ...payload,
-            ...(decodedHtml && decodedHtml !== payload.html ? { decoded_html: decodedHtml } : {})
-        };
-
-        console.log('[ESU] Embedded Signup event:', eventName, payloadForLog);
+        submitSignup();
     };
 
     const sessionInfoListener = (event) => {
-        if (event.origin !== "https://www.facebook.com" && event.origin !== "https://web.facebook.com") {
+        const data = parseEmbeddedSignupEvent(event);
+        if (!data) {
             return;
         }
 
         try {
-            const data = JSON.parse(event.data);
-
-            if (data.type === 'WA_EMBEDDED_SIGNUP') {
-                logEmbeddedSignupEvent(data.event, data.data);
                 captureSessionInfo(data.data);
 
                 if (sessionWabaId) {
@@ -179,11 +144,14 @@
                 } else if (data.event === 'CANCEL') {
                     console.warn('[ESU] CANCEL event — user cancelled at step:', data.data?.current_step);
                 } else if (data.event === 'ERROR') {
-                    console.error('[ESU] ERROR event from Meta dialog:', JSON.stringify(data.data));
+                    console.error('[ESU] Meta reported an Embedded Signup error.', {
+                        error_code: data.data?.error_code ?? null,
+                        session_id: data.data?.session_id ?? null,
+                        timestamp: data.data?.timestamp ?? null,
+                    });
                 } else {
-                    console.log('[ESU] Unknown WA_EMBEDDED_SIGNUP event:', data.event, JSON.stringify(data.data));
+                    console.log('[ESU] Embedded Signup event:', data.event);
                 }
-            }
         } catch {
             // non-JSON postMessage — ignore
         }
@@ -192,13 +160,10 @@
     function launchWhatsAppSignup() {
         console.log('[ESU] launchWhatsAppSignup() called at', new Date().toISOString());
         console.log('[ESU] FB object available?', typeof FB !== 'undefined');
-        clearTimeout(submitTimer);
-        submitTimer = null;
         hasSubmitted = false;
         authCode = null;
         sessionPhoneNumberId = null;
         sessionWabaId = null;
-        codeGeneratedAt = null;
         window.removeEventListener("message", sessionInfoListener);
         window.addEventListener("message", sessionInfoListener);
 
@@ -214,14 +179,9 @@
         FB.login(function (response) {
             const callbackAt = new Date().toISOString();
             console.log('[ESU] FB.login() callback fired at', callbackAt);
-            console.log('[ESU] Full authResponse:', JSON.stringify(response));
-
-            if (response.authResponse) {
-                codeGeneratedAt = Date.now();
+            if (response.authResponse?.code) {
                 const code = response.authResponse.code;
                 authCode = code;
-                console.log('[ESU] Auth code received — length:', code?.length, '| first 10 chars:', code?.substring(0, 10));
-                console.log('[ESU] session phone_number_id:', sessionPhoneNumberId, '| waba_id:', sessionWabaId);
 
                 isSetupLoading.value = true;
                 queueSignupSubmit();
@@ -230,15 +190,7 @@
             } else {
                 console.warn('[ESU] No authResponse — user cancelled or did not authorize. Status:', response.status);
             }
-        }, {
-            config_id: props.configId,
-            response_type: 'code',
-            override_default_response_type: true,
-            extras: {
-                sessionInfoVersion: '3',
-                setup: {}
-            }
-        });
+        }, embeddedSignupOptions(props.configId));
     }
 </script>
 <template>
