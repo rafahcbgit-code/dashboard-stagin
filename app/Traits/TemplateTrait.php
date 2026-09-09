@@ -560,20 +560,29 @@ trait TemplateTrait
      */
     private function sanitizeTemplateTextParameters(array &$template): void
     {
-        foreach ($template['components'] ?? [] as &$component) {
-            foreach ($component['parameters'] ?? [] as &$parameter) {
-                if (($parameter['type'] ?? '') !== 'text' || ! array_key_exists('text', $parameter)) {
-                    continue;
-                }
+        $this->sanitizeTemplateTextValues($template);
+    }
 
-                $text = (string) $parameter['text'];
-                $text = preg_replace('/[\r\n\t]+/u', ' ', $text) ?? $text;
-                $text = preg_replace('/[\x{00A0}\x{200B}\x{FEFF}]+/u', ' ', $text) ?? $text;
-                $parameter['text'] = trim(preg_replace('/ {2,}/u', ' ', $text) ?? $text);
+    /**
+     * Carousel cards nest their button parameters below cards/components, so
+     * text values must be normalized recursively rather than only at the top
+     * level of a template payload.
+     */
+    private function sanitizeTemplateTextValues(array &$value): void
+    {
+        foreach ($value as $key => &$item) {
+            if ($key === 'text' && is_scalar($item)) {
+                $text = (string) $item;
+                $text = preg_replace('/[\s\x{00A0}\x{200B}\x{FEFF}]+/u', ' ', $text) ?? $text;
+                $item = trim($text);
+                continue;
             }
-            unset($parameter);
+
+            if (is_array($item)) {
+                $this->sanitizeTemplateTextValues($item);
+            }
         }
-        unset($component);
+        unset($item);
     }
 
 
