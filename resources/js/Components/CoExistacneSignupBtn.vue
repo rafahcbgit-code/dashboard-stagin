@@ -1,6 +1,7 @@
 <script setup>
 import { ref, onMounted, onBeforeUnmount } from 'vue';
 import { router } from "@inertiajs/vue3";
+import { embeddedSignupOptions, parseEmbeddedSignupEvent } from '../lib/embeddedSignupHelpers.js';
 
 const props = defineProps({
   appId: String,
@@ -12,9 +13,7 @@ const isSetupLoading = ref(false);
 let sessionPhoneNumberId = null;
 let sessionWabaId = null;
 let authCode = null;
-let submitTimer = null;
 let hasSubmitted = false;
-const sessionInfoWaitMs = 8000;
 
 function getSignupValue(payload, keys) {
   if (!payload || typeof payload !== 'object') {
@@ -53,10 +52,8 @@ function submitSignup() {
   }
 
   hasSubmitted = true;
-  clearTimeout(submitTimer);
-
   router.post(`/whatsapp/exchange-code`, {
-    token: authCode,
+    code: authCode,
     coexistence: true,
     phone_number_id: sessionPhoneNumberId,
     waba_id: sessionWabaId,
@@ -83,15 +80,7 @@ function queueSignupSubmit() {
     return;
   }
 
-  if (sessionWabaId) {
-    submitSignup();
-    return;
-  }
-
-  if (!submitTimer) {
-    console.log('[ESU-CO] Auth code received before waba_id; waiting for Meta session info.');
-    submitTimer = setTimeout(submitSignup, sessionInfoWaitMs);
-  }
+  submitSignup();
 }
 
 function initFacebookSDK() {
@@ -115,13 +104,12 @@ function initFacebookSDK() {
 }
 
 function sessionInfoListener(event) {
-  if (event.origin !== "https://www.facebook.com" && event.origin !== "https://web.facebook.com") {
+  const data = parseEmbeddedSignupEvent(event);
+  if (!data) {
     return;
   }
 
   try {
-    const data = JSON.parse(event.data);
-    if (data.type === 'WA_EMBEDDED_SIGNUP') {
       captureSessionInfo(data.data);
 
       if (sessionWabaId) {
@@ -144,19 +132,20 @@ function sessionInfoListener(event) {
       } else if (data.event === 'CANCEL') {
         console.log('[ESU-CO] User cancelled at step:', data.data?.current_step);
       } else if (data.event === 'ERROR') {
-        console.error('[ESU-CO] Error event from Meta:', JSON.stringify(data.data));
+        console.error('[ESU-CO] Meta reported an Embedded Signup error.', {
+          error_code: data.data?.error_code ?? null,
+          session_id: data.data?.session_id ?? null,
+          timestamp: data.data?.timestamp ?? null,
+        });
       } else {
-        console.log('[ESU-CO] Embedded Signup event:', data.event, data.data);
+        console.log('[ESU-CO] Embedded Signup event:', data.event);
       }
-    }
   } catch {
     // ignore non-JSON messages
   }
 }
 
 function launchWhatsAppCoexistenceSignup() {
-  clearTimeout(submitTimer);
-  submitTimer = null;
   hasSubmitted = false;
   authCode = null;
   sessionPhoneNumberId = null;
@@ -172,7 +161,7 @@ function launchWhatsAppCoexistenceSignup() {
   }
 
   FB.login(function (response) {
-    if (response.authResponse) {
+    if (response.authResponse?.code) {
       authCode = response.authResponse.code;
       isSetupLoading.value = true;
       queueSignupSubmit();
@@ -182,16 +171,7 @@ function launchWhatsAppCoexistenceSignup() {
       isSetupLoading.value = false;
       console.log('❌ User cancelled login or did not authorize.');
     }
-  }, {
-    config_id: props.configId, 
-    response_type: 'code', 
-    override_default_response_type: true,
-    extras: {
-      setup: {},
-      featureType: 'whatsapp_business_app_onboarding',
-      sessionInfoVersion: '3'
-    }
-  });
+  }, embeddedSignupOptions(props.configId, true));
 }
 
 onMounted(() => {

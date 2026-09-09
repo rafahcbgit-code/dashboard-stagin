@@ -129,17 +129,28 @@ class MetaTokenDiagnosticsService
      */
     public function firstWhatsappManagementTarget(array $inspection): ?string
     {
+        return $this->whatsappManagementTargets($inspection)[0] ?? null;
+    }
+
+    /**
+     * Return every WABA granted specifically to whatsapp_business_management.
+     * A v4 configuration can authorize more than one selected asset.
+     */
+    public function whatsappManagementTargets(array $inspection): array
+    {
+        $targetIds = [];
+
         foreach ($inspection['details']['granular_scopes'] ?? [] as $scope) {
             if (($scope['scope'] ?? null) !== 'whatsapp_business_management') {
                 continue;
             }
 
-            $targetId = $scope['target_ids'][0] ?? null;
-
-            return $targetId !== null ? (string) $targetId : null;
+            foreach ($scope['target_ids'] ?? [] as $targetId) {
+                $targetIds[] = (string) $targetId;
+            }
         }
 
-        return null;
+        return array_values(array_unique($targetIds));
     }
 
     /**

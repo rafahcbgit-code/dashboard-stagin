@@ -41,6 +41,27 @@ it('accepts a valid token and extracts only the WhatsApp management WABA target'
         ->and(json_encode($inspection))->not->toContain('onboarding-token');
 });
 
+it('returns every WABA target granted by the v4 login configuration', function () {
+    $service = new MetaTokenDiagnosticsService('v23.0', 'app-id', 'app-secret');
+    $inspection = [
+        'details' => [
+            'granular_scopes' => [
+                [
+                    'scope' => 'whatsapp_business_management',
+                    'target_ids' => ['waba-1', 'waba-2'],
+                ],
+                [
+                    'scope' => 'whatsapp_business_messaging',
+                    'target_ids' => ['phone-1'],
+                ],
+            ],
+        ],
+    ];
+
+    expect($service->whatsappManagementTargets($inspection))->toBe(['waba-1', 'waba-2'])
+        ->and($service->firstWhatsappManagementTarget($inspection))->toBe('waba-1');
+});
+
 it('explains that Advanced Access does not add a missing permission to the issued token', function () {
     Http::fake([
         '*debug_token*' => Http::response([
