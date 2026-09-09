@@ -10,6 +10,8 @@ use App\Models\Contact;
 use App\Models\Organization;
 use App\Models\Setting;
 use App\Services\WhatsappService;
+use App\Services\CampaignRetrySettings;
+use App\Services\CampaignFailedContactService;
 use App\Services\ContactGroupCountService;
 use App\Services\CampaignStatsService;
 use App\Traits\HasUuid;
@@ -175,8 +177,8 @@ class SendCampaignJob implements ShouldQueue
     {
         $campaign = Campaign::with('organization')->find($campaign->id);
         $orgMetadata = json_decode($campaign->organization->metadata ?? '{}', true);
-        $retryEnabled = $orgMetadata['campaigns']['enable_resend'] ?? false;
-        $retryIntervals = $orgMetadata['campaigns']['resend_intervals'] ?? [];
+        $retryEnabled = CampaignRetrySettings::enabled($orgMetadata);
+        $retryIntervals = CampaignRetrySettings::intervals($orgMetadata);
         $maxRetries = count($retryIntervals);
 
         // Process pending logs
@@ -230,8 +232,8 @@ class SendCampaignJob implements ShouldQueue
     {
         $campaign = Campaign::with('organization')->find($campaign->id);
         $orgMetadata = json_decode($campaign->organization->metadata ?? '{}', true);
-        $retryEnabled = $orgMetadata['campaigns']['enable_resend'] ?? false;
-        $retryIntervals = $orgMetadata['campaigns']['resend_intervals'] ?? [];
+        $retryEnabled = CampaignRetrySettings::enabled($orgMetadata);
+        $retryIntervals = CampaignRetrySettings::intervals($orgMetadata);
         $maxRetries = count($retryIntervals);
         
         // Check for pending logs first
@@ -369,7 +371,7 @@ class SendCampaignJob implements ShouldQueue
                         $log->save();
 
                         $orgMetadata = json_decode($campaignLog->campaign->organization->metadata ?? '{}', true);
-                        $retryIntervals = $orgMetadata['campaigns']['resend_intervals'] ?? [];
+                        $retryIntervals = CampaignRetrySettings::intervals($orgMetadata);
                         $maxRetries = count($retryIntervals);
 
                         if ($log->status === 'failed' && $log->retry_count >= $maxRetries) {
@@ -402,7 +404,7 @@ class SendCampaignJob implements ShouldQueue
 
                     //If this is the last retry send contact to failed group
                     $orgMetadata = json_decode($campaignLog->campaign->organization->metadata ?? '{}', true);
-                    $retryIntervals = $orgMetadata['campaigns']['resend_intervals'] ?? [];
+                    $retryIntervals = CampaignRetrySettings::intervals($orgMetadata);
                     $maxRetries = count($retryIntervals);
 
                     if ($log->status === 'failed' && $log->retry_count >= $maxRetries) {
@@ -446,36 +448,6 @@ class SendCampaignJob implements ShouldQueue
     protected function addContactToFailedGroup($campaignLog)
     {
         $campaignSettings = json_decode($campaignLog->campaign->organization->metadata, true)['campaigns'] ?? [];
-        $retryIntervals = $campaignSettings['resend_intervals'];
-
-        if (!empty($campaignSettings['move_failed_contacts_to_group'])) {
-            $groupUuid = $campaignSettings['failed_campaign_group'];
-            $failedGroupId = DB::table('contact_groups')->where('uuid', $groupUuid)->value('id');
-
-            // Check if the group exists in the contact_groups table by UUID
-            if (!$failedGroupId) {
-                Log::warning('Failed to move contact: Group with UUID ' . $groupUuid . ' does not exist.');
-                return;
-            }
-
-            $affectedGroupIds = DB::table('contact_contact_group')
-                ->where('contact_id', $campaignLog->contact_id)
-                ->pluck('contact_group_id')
-                ->all();
-
-            // Remove all groups for the contact
-            DB::table('contact_contact_group')
-                ->where('contact_id', $campaignLog->contact_id)
-                ->delete();
-
-             // Add contact to the failed group
-             DB::table('contact_contact_group')->insert([
-                'contact_id' => $campaignLog->contact_id,
-                'contact_group_id' => $failedGroupId, // Use the group ID here
-            ]);
-
-            $affectedGroupIds[] = (int) $failedGroupId;
-            ContactGroupCountService::rebuildGroups($affectedGroupIds);
-        }
+        CampaignFailedContactService::moveToConfiguredGroup($campaignLog->contact_id, $campaignSettings);
     }
 }

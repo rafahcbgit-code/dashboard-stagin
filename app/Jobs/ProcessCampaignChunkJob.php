@@ -8,8 +8,12 @@ use App\Models\CampaignLog;
 use App\Models\Contact;
 use App\Models\Template;
 use App\Services\CampaignStatsService;
+use App\Services\CampaignFailedContactService;
+use App\Services\CampaignFailureClassifier;
+use App\Services\CampaignRetrySettings;
 use App\Services\CampaignRateLimiter;
 use App\Services\OrganizationService;
+use App\Services\PhoneService;
 use App\Services\WhatsappService;
 use App\Traits\TemplateTrait;
 use GuzzleHttp\Exception\ConnectException;
@@ -114,8 +118,8 @@ class ProcessCampaignChunkJob implements ShouldQueue
         $whatsappService = $this->getWhatsappService();
 
         $orgMetadata = OrganizationService::getCachedMetadata($this->organizationId);
-        $retryEnabled = $orgMetadata['campaigns']['enable_resend'] ?? false;
-        $retryIntervals = $orgMetadata['campaigns']['resend_intervals'] ?? [];
+        $retryEnabled = CampaignRetrySettings::enabled($orgMetadata);
+        $retryIntervals = CampaignRetrySettings::intervals($orgMetadata);
         $maxRetries = count($retryIntervals);
 
         // 6. Mark all reserved pending/failed logs as 'ongoing' in one bulk update
@@ -150,9 +154,19 @@ class ProcessCampaignChunkJob implements ShouldQueue
                     ? 'Contact not found.'
                     : (($contact->is_blocked ?? false) ? 'Contact is blocked.' : 'Contact phone is missing.');
 
-                $this->markLogFailed($log, $reason, 'CAMPAIGN_CONTACT_NOT_SENDABLE', [
+                $this->markLogPermanentlyFailed($log, $reason, 'CAMPAIGN_CONTACT_NOT_SENDABLE', [
                     'contact_id' => $log->contact_id,
                 ]);
+                CampaignFailedContactService::moveToConfiguredGroup($log->contact_id, $orgMetadata['campaigns'] ?? []);
+                continue;
+            }
+
+            $phone = PhoneService::getE164Format($contact->phone);
+            if ($phone === null) {
+                $this->markLogPermanentlyFailed($log, 'Contact phone is not a valid E.164 number.', 'CAMPAIGN_CONTACT_PHONE_INVALID', [
+                    'contact_id' => $contact->id,
+                ]);
+                CampaignFailedContactService::moveToConfiguredGroup($contact->id, $orgMetadata['campaigns'] ?? []);
                 continue;
             }
 
@@ -216,7 +230,7 @@ class ProcessCampaignChunkJob implements ShouldQueue
 
                 // Build raw request payload
                 $requestData = $whatsappService->buildTemplateRequestPayload(
-                    $contact->phone,
+                    $phone,
                     $templatePayload
                 );
 
@@ -328,7 +342,9 @@ class ProcessCampaignChunkJob implements ShouldQueue
                 } else {
                     $failedUpdates[] = [
                         'id' => $log->id,
-                        'status' => 'failed',
+                        'status' => CampaignFailureClassifier::isTerminal($result->data ?? null)
+                            ? 'permanently_failed'
+                            : 'failed',
                         'metadata' => json_encode($result->data ?? ['error' => ['message' => $result->message ?? 'Unknown error']]),
                         'updated_at' => now(),
                     ];
@@ -365,6 +381,13 @@ class ProcessCampaignChunkJob implements ShouldQueue
 
             $oldLog = $logsById->get($id);
             if ($oldLog) {
+                if (($update['status'] ?? null) === 'permanently_failed') {
+                    CampaignFailedContactService::moveToConfiguredGroup(
+                        $oldLog->contact_id,
+                        $orgMetadata['campaigns'] ?? []
+                    );
+                }
+
                 $old = CampaignStatsService::snapshot($oldLog);
                 $oldSnapshots[] = $old;
                 $newSnapshots[] = array_merge($old, [
@@ -757,8 +780,8 @@ class ProcessCampaignChunkJob implements ShouldQueue
         }
 
         $orgMetadata = OrganizationService::getCachedMetadata($this->organizationId);
-        $retryEnabled = $orgMetadata['campaigns']['enable_resend'] ?? false;
-        $retryIntervals = $orgMetadata['campaigns']['resend_intervals'] ?? [];
+        $retryEnabled = CampaignRetrySettings::enabled($orgMetadata);
+        $retryIntervals = CampaignRetrySettings::intervals($orgMetadata);
         $maxRetries = count($retryIntervals);
 
         $hasRetriableLogs = false;
@@ -840,6 +863,15 @@ class ProcessCampaignChunkJob implements ShouldQueue
     {
         $log->update([
             'status' => 'failed',
+            'metadata' => $this->failureMetadata($message, $code, $context),
+            'updated_at' => now(),
+        ]);
+    }
+
+    private function markLogPermanentlyFailed(CampaignLog $log, string $message, string $code, array $context = []): void
+    {
+        $log->update([
+            'status' => 'permanently_failed',
             'metadata' => $this->failureMetadata($message, $code, $context),
             'updated_at' => now(),
         ]);

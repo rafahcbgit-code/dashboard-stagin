@@ -53,6 +53,8 @@ trait TemplateTrait
             }
         }
 
+        $this->sanitizeTemplateTextParameters($template);
+
         $error = $this->validateResolvedTemplate($template);
 
         if ($error !== null) {
@@ -549,6 +551,29 @@ trait TemplateTrait
         }
 
         return null;
+    }
+
+    /**
+     * Meta rejects template text containing tabs/new lines or runs of spaces.
+     * Normalize the generated payload only; stored contact/custom-field data is
+     * intentionally left untouched.
+     */
+    private function sanitizeTemplateTextParameters(array &$template): void
+    {
+        foreach ($template['components'] ?? [] as &$component) {
+            foreach ($component['parameters'] ?? [] as &$parameter) {
+                if (($parameter['type'] ?? '') !== 'text' || ! array_key_exists('text', $parameter)) {
+                    continue;
+                }
+
+                $text = (string) $parameter['text'];
+                $text = preg_replace('/[\r\n\t]+/u', ' ', $text) ?? $text;
+                $text = preg_replace('/[\x{00A0}\x{200B}\x{FEFF}]+/u', ' ', $text) ?? $text;
+                $parameter['text'] = trim(preg_replace('/ {2,}/u', ' ', $text) ?? $text);
+            }
+            unset($parameter);
+        }
+        unset($component);
     }
 
 

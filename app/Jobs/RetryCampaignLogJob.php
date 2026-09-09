@@ -4,7 +4,10 @@ namespace App\Jobs;
 
 use App\Models\CampaignLog;
 use App\Models\CampaignLogRetry;
-use App\Services\ContactGroupCountService;
+use App\Services\CampaignCompletionService;
+use App\Services\CampaignFailureClassifier;
+use App\Services\CampaignFailedContactService;
+use App\Services\CampaignRetrySettings;
 use App\Services\CampaignStatsService;
 use App\Services\CampaignRateLimiter;
 use App\Services\OrganizationService;
@@ -49,11 +52,13 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
     {
         $log = CampaignLog::with('campaign', 'campaign.organization', 'campaign.template', 'contact')->find($this->campaignLogId);
 
-        if (! $log || $log->status !== 'failed' || ! $log->contact || empty($log->contact->phone)) {
-            if ($log && $log->status === 'failed' && (empty($log->contact) || empty($log->contact->phone))) {
+        if (! $log || $log->status !== 'failed' || ! $log->contact || empty($log->contact->phone) || (bool) ($log->contact->is_blocked ?? false)) {
+            if ($log && $log->status === 'failed' && (empty($log->contact) || empty($log->contact->phone) || (bool) ($log->contact->is_blocked ?? false))) {
                 $log->status = 'permanently_failed';
                 $log->metadata = $this->failureMetadata(
-                    empty($log->contact) ? 'Contact not found.' : 'Contact phone is missing.',
+                    empty($log->contact)
+                        ? 'Contact not found.'
+                        : ((bool) ($log->contact->is_blocked ?? false) ? 'Contact is blocked.' : 'Contact phone is missing.'),
                     'CAMPAIGN_RETRY_CONTACT_NOT_SENDABLE',
                     ['contact_id' => $log->contact_id]
                 );
@@ -63,6 +68,17 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
                     'campaign_id' => $log->campaign_id,
                     'contact_id' => $log->contact_id,
                 ]);
+
+                CampaignFailedContactService::moveToConfiguredGroup(
+                    $log->contact_id,
+                    OrganizationService::getCachedMetadata($this->organizationId)['campaigns'] ?? []
+                );
+
+                // A terminal log must also be allowed to finish its campaign.
+                // Without this, a campaign whose final retry is not sendable
+                // remains "ongoing" forever because the dispatcher only picks
+                // campaigns that still have pending or failed logs.
+                CampaignCompletionService::completeIfFinished($log->campaign_id);
             }
             return;
         }
@@ -83,6 +99,10 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
         $retryCount = $log->retries_count;
 
         if ($retryCount >= $maxRetries) {
+            // This can happen when a delayed/duplicate retry job reaches the
+            // queue after another worker has already exhausted the attempts.
+            // Re-evaluate completion so it cannot leave the campaign ongoing.
+            CampaignCompletionService::completeIfFinished($log->campaign_id);
             return; // Don't process if retry count limit reached
         }
 
@@ -117,7 +137,9 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
                 $log->campaign->template ?? null
             );
 
-            $status = ($response->success === true) ? 'success' : 'failed';
+            $status = ($response->success === true)
+                ? 'success'
+                : (CampaignFailureClassifier::isTerminal($response->data ?? null) ? 'permanently_failed' : 'failed');
             $retryLog->chat_id = $response->data->chat->id ?? null;
             $retryLog->status = $status;
 
@@ -136,7 +158,9 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
             $log->save();
 
             // Check if it failed
-            if ($retryLog->status === 'failed') {
+            if ($retryLog->status === 'permanently_failed') {
+                $this->handlePermanentFailure($log, $retryCount + 1, $maxRetries, $response, $campaignSettings);
+            } elseif ($retryLog->status === 'failed') {
                 $newRetryCount = $retryCount + 1; // After this retry
 
                 // Task 2.4: Check if max retries reached (AC-2.4.3)
@@ -149,6 +173,11 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
             }
 
             DB::commit();
+
+            // Retry processing is the last state transition for a failed log.
+            // Check only after committing so the completion query sees the
+            // final success/permanently_failed state.
+            CampaignCompletionService::completeIfFinished($log->campaign_id);
         } catch (\Exception $e) {
             DB::rollBack();
             Log::error("Retry failed for campaign_log {$this->campaignLogId}: ".$e->getMessage());
@@ -172,6 +201,8 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
                 ->all();
 
             CampaignStatsService::recordSnapshotsChanged($oldSnapshot, $newSnapshot);
+
+            CampaignCompletionService::completeIfFinished($log->campaign_id);
         }
     }
 
@@ -182,14 +213,7 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
     private function getRetryIntervals(array $campaignSettings): array
     {
         // First try org metadata, then fall back to config
-        $intervals = $campaignSettings['resend_intervals'] ?? null;
-
-        if (empty($intervals) || ! is_array($intervals)) {
-            $intervals = config('campaigns.retry.default_intervals', [5, 15, 60]);
-        }
-
-        // Validate intervals are all positive integers
-        return array_values(array_filter($intervals, fn ($val) => is_numeric($val) && $val > 0));
+        return CampaignRetrySettings::intervals(['campaigns' => $campaignSettings]);
     }
 
     /**
@@ -235,9 +259,7 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
         }
 
         // Move contact to failed group if configured (existing behavior)
-        if (! empty($campaignSettings['move_failed_contacts_to_group'])) {
-            $this->moveContactToFailedGroup($log->contact_id, $campaignSettings);
-        }
+        CampaignFailedContactService::moveToConfiguredGroup($log->contact_id, $campaignSettings);
     }
 
     /**
@@ -245,40 +267,7 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
      */
     private function moveContactToFailedGroup(int $contactId, array $campaignSettings): void
     {
-        $groupUuid = $campaignSettings['failed_campaign_group'] ?? null;
-
-        if (empty($groupUuid)) {
-            return;
-        }
-
-        $failedGroupId = DB::table('contact_groups')->where('uuid', $groupUuid)->value('id');
-
-        if (! $failedGroupId) {
-            Log::warning('Failed to move contact: Group with UUID '.$groupUuid.' does not exist.');
-
-            return;
-        }
-
-        $affectedGroupIds = DB::table('contact_contact_group')
-            ->where('contact_id', $contactId)
-            ->pluck('contact_group_id')
-            ->all();
-
-        // Remove all groups for the contact
-        DB::table('contact_contact_group')
-            ->where('contact_id', $contactId)
-            ->delete();
-
-        // Add contact to the failed group
-        DB::table('contact_contact_group')->insert([
-            'contact_id' => $contactId,
-            'contact_group_id' => $failedGroupId,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-
-        $affectedGroupIds[] = (int) $failedGroupId;
-        ContactGroupCountService::rebuildGroups($affectedGroupIds);
+        CampaignFailedContactService::moveToConfiguredGroup($contactId, $campaignSettings);
     }
 
     /**
