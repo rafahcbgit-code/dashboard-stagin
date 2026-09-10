@@ -24,7 +24,7 @@ class MetaService
         try {
             $response = Http::withHeaders([
                 'Authorization' => 'Bearer ' . $accessToken
-            ])->post("https://graph.facebook.com/v20.0/{$wabaId}/subscribed_apps", [
+            ])->post('https://graph.facebook.com/'.config('graph.api_version')."/{$wabaId}/subscribed_apps", [
                 'override_callback_uri' => $callbackUrl,
                 'verify_token' => $verifyToken
             ])->throw()->json();

@@ -214,7 +214,7 @@ class DownloadWebhookMediaJob implements ShouldQueue
     {
         $response = Http::withToken($accessToken)
             ->timeout(120)
-            ->get("https://graph.facebook.com/v18.0/{$mediaId}");
+            ->get('https://graph.facebook.com/'.config('graph.api_version')."/{$mediaId}");
 
         if ($response->failed()) {
             throw new \RuntimeException("Failed to get media URL from WhatsApp: {$response->body()}");
