@@ -712,7 +712,7 @@ class WebhookController extends BaseController
                 ],
             ];
 
-            $response = $client->request('GET', "https://graph.facebook.com/v18.0/{$mediaId}", $requestOptions);
+            $response = $client->request('GET', 'https://graph.facebook.com/'.config('graph.api_version')."/{$mediaId}", $requestOptions);
 
             return json_decode($response->getBody()->getContents(), true);
         } catch (Exception $e) {

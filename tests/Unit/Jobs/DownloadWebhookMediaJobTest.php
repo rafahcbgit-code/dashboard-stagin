@@ -87,7 +87,7 @@ function createOrganizationWithWhatsApp(string $storage = 'local'): Organization
 function mockWhatsAppMediaApi(string $mediaId, string $mediaUrl = 'https://cdn.whatsapp.net/media/test.jpg', string $mimeType = 'image/jpeg'): void
 {
     Http::fake([
-        "graph.facebook.com/v18.0/{$mediaId}" => Http::response([
+        "graph.facebook.com/v24.0/{$mediaId}" => Http::response([
             'url' => $mediaUrl,
             'mime_type' => $mimeType,
             'sha256' => 'abc123',
@@ -117,7 +117,7 @@ describe('AC-1.3.1: Media Downloaded from WhatsApp API', function () {
         $job->handle();
 
         Http::assertSent(function ($request) use ($mediaId) {
-            return str_contains($request->url(), "graph.facebook.com/v18.0/{$mediaId}");
+            return str_contains($request->url(), "graph.facebook.com/v24.0/{$mediaId}");
         });
     });
 
@@ -161,7 +161,7 @@ describe('AC-1.3.1: Media Downloaded from WhatsApp API', function () {
         $mediaData = createMediaData('image', $mediaId);
 
         Http::fake([
-            "graph.facebook.com/v18.0/{$mediaId}" => Http::response(['error' => 'Not Found'], 404),
+            "graph.facebook.com/v24.0/{$mediaId}" => Http::response(['error' => 'Not Found'], 404),
         ]);
 
         $job = new DownloadWebhookMediaJob($chat->id, $contact->id, $organization->id, $mediaData);

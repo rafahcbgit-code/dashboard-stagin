@@ -20,6 +20,7 @@ use App\Models\Contact;
 use App\Models\ContactGroup;
 use App\Models\Organization;
 use App\Services\OrganizationService;
+use App\Services\CampaignCompletionService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
@@ -281,6 +282,21 @@ describe('AC-2.4.4: Permanent Failure Logging', function () {
         // Verify log status was updated
         $log->refresh();
         expect($log->status)->toBe('permanently_failed');
+    });
+
+    it('completes the campaign after the final retry becomes permanently failed', function () {
+        $org = createRetryTestOrg(['resend_intervals' => [5]]);
+        $campaign = Campaign::factory()->forOrganization($org)->ongoing()->create();
+        $contact = Contact::factory()->create(['organization_id' => $org->id]);
+        $log = CampaignLog::factory()
+            ->forCampaign($campaign)
+            ->forContact($contact)
+            ->create(['status' => 'permanently_failed', 'retry_count' => 1]);
+
+        CampaignCompletionService::completeIfFinished($campaign->id);
+
+        expect($campaign->refresh()->status)->toBe('completed')
+            ->and($campaign->completed_at)->not->toBeNull();
     });
 });
 

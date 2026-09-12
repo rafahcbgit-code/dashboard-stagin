@@ -14,6 +14,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use App\Events\CampaignProgressEvent;
 use App\Services\OrganizationService;
+use App\Services\CampaignRetrySettings;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -255,8 +256,8 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
 
         // Use cached metadata instead of loading via relationship
         $orgMetadata = OrganizationService::getCachedMetadata($this->organizationId);
-        $retryEnabled = $orgMetadata['campaigns']['enable_resend'] ?? false;
-        $retryIntervals = $orgMetadata['campaigns']['resend_intervals'] ?? [];
+        $retryEnabled = CampaignRetrySettings::enabled($orgMetadata);
+        $retryIntervals = CampaignRetrySettings::intervals($orgMetadata);
         $maxRetries = count($retryIntervals);
 
         $pendingOrOngoing = CampaignLog::where('campaign_id', $campaignId)

@@ -53,6 +53,8 @@ trait TemplateTrait
             }
         }
 
+        $this->sanitizeTemplateTextParameters($template);
+
         $error = $this->validateResolvedTemplate($template);
 
         if ($error !== null) {
@@ -549,6 +551,38 @@ trait TemplateTrait
         }
 
         return null;
+    }
+
+    /**
+     * Meta rejects template text containing tabs/new lines or runs of spaces.
+     * Normalize the generated payload only; stored contact/custom-field data is
+     * intentionally left untouched.
+     */
+    private function sanitizeTemplateTextParameters(array &$template): void
+    {
+        $this->sanitizeTemplateTextValues($template);
+    }
+
+    /**
+     * Carousel cards nest their button parameters below cards/components, so
+     * text values must be normalized recursively rather than only at the top
+     * level of a template payload.
+     */
+    private function sanitizeTemplateTextValues(array &$value): void
+    {
+        foreach ($value as $key => &$item) {
+            if ($key === 'text' && is_scalar($item)) {
+                $text = (string) $item;
+                $text = preg_replace('/[\s\x{00A0}\x{200B}\x{FEFF}]+/u', ' ', $text) ?? $text;
+                $item = trim($text);
+                continue;
+            }
+
+            if (is_array($item)) {
+                $this->sanitizeTemplateTextValues($item);
+            }
+        }
+        unset($item);
     }
 
 

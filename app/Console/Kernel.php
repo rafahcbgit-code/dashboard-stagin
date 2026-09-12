@@ -40,6 +40,12 @@ class Kernel extends ConsoleKernel
         ->everyTwoMinutes()
         ->withoutOverlapping();
 
+        // Safety net for campaigns that reached terminal states while a worker
+        // was interrupted or while an older deployment did not close them.
+        $schedule->command('campaigns:reconcile-completion')
+            ->everyFiveMinutes()
+            ->withoutOverlapping();
+
         // Process missed status updates every 3 minutes
         $schedule->job(new \App\Jobs\ProcessMissedStatusUpdatesJob(), 'webhook-status')
             ->everyTenMinutes()

@@ -5,6 +5,7 @@ namespace App\Jobs;
 use App\Models\Campaign;
 use App\Models\CampaignLog;
 use App\Services\OrganizationService;
+use App\Services\CampaignRetrySettings;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -63,8 +64,8 @@ class ProcessCampaignMessagesJob implements ShouldQueue
 
         try {
             $orgMetadata = OrganizationService::getCachedMetadata($this->organizationId);
-            $retryEnabled = $orgMetadata['campaigns']['enable_resend'] ?? false;
-            $retryIntervals = $orgMetadata['campaigns']['resend_intervals'] ?? [];
+            $retryEnabled = CampaignRetrySettings::enabled($orgMetadata);
+            $retryIntervals = CampaignRetrySettings::intervals($orgMetadata);
             $maxRetries = count($retryIntervals);
 
             $chunkSize = $this->getChunkSize($orgMetadata);
@@ -300,8 +301,8 @@ class ProcessCampaignMessagesJob implements ShouldQueue
 
         // Task 2.2: AC-2.2.2 - Use cached metadata instead of loading via relationship
         $orgMetadata = OrganizationService::getCachedMetadata($this->organizationId);
-        $retryEnabled = $orgMetadata['campaigns']['enable_resend'] ?? false;
-        $retryIntervals = $orgMetadata['campaigns']['resend_intervals'] ?? [];
+        $retryEnabled = CampaignRetrySettings::enabled($orgMetadata);
+        $retryIntervals = CampaignRetrySettings::intervals($orgMetadata);
         $maxRetries = count($retryIntervals);
 
         $pendingOrOngoingExists = CampaignLog::where('campaign_id', $campaignId)

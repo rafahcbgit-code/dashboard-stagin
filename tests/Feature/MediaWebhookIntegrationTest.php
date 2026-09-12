@@ -124,7 +124,7 @@ function mockWhatsAppMediaApiForIntegration(string $mediaId): void
     $mediaUrl = 'https://cdn.whatsapp.net/media/test_'.uniqid().'.jpg';
 
     Http::fake([
-        "graph.facebook.com/v18.0/{$mediaId}" => Http::response([
+        "graph.facebook.com/v24.0/{$mediaId}" => Http::response([
             'url' => $mediaUrl,
             'mime_type' => 'image/jpeg',
             'sha256' => 'abc123',
@@ -224,7 +224,7 @@ describe('End-to-End Media Webhook Flow', function () {
 
         $mediaUrl = 'https://cdn.whatsapp.net/doc/test.pdf';
         Http::fake([
-            "graph.facebook.com/v18.0/{$mediaId}" => Http::response([
+            "graph.facebook.com/v24.0/{$mediaId}" => Http::response([
                 'url' => $mediaUrl,
                 'mime_type' => 'application/pdf',
             ]),
@@ -281,7 +281,7 @@ describe('Media Processing Performance', function () {
         $mediaId = 'media_perf_'.uniqid();
 
         Http::fake([
-            "graph.facebook.com/v18.0/{$mediaId}" => Http::response([
+            "graph.facebook.com/v24.0/{$mediaId}" => Http::response([
                 'url' => 'https://cdn.whatsapp.net/media/test.jpg',
                 'mime_type' => 'image/jpeg',
             ]),
