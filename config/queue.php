@@ -30,6 +30,14 @@ return [
 
     'connections' => [
 
+        'chatbot_studio' => [
+            'driver' => 'database',
+            'table' => 'jobs',
+            'queue' => 'chatbot-studio',
+            'retry_after' => 660,
+            'after_commit' => false,
+        ],
+
         'sync' => [
             'driver' => 'sync',
         ],
