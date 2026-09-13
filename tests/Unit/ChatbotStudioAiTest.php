@@ -42,6 +42,14 @@ it('refuses non-allowlisted models', function () {
     Http::assertNothingSent();
 });
 
+it('supports explicitly selecting the verified alternative without automatic fallback', function () {
+    config(['chatbot_studio.model' => 'gemini-3.6-flash']);
+    Http::fake(['generativelanguage.googleapis.com/*' => Http::response(studioAiResponse('{"ready":true}'))]);
+    expect(app(StudioAiService::class)->chat('system', 'source'))->toBe('{"ready":true}');
+    Http::assertSent(fn ($request) => str_ends_with($request->url(), '/gemini-3.6-flash:generateContent'));
+    Http::assertSentCount(1);
+});
+
 it('stops at the free quota limit without automatic retries or paid or local fallback', function () {
     Http::fake(['generativelanguage.googleapis.com/*' => Http::response(['error' => ['message' => 'quota']], 429)]);
     expect(fn () => app(BlueprintGenerator::class)->generate('source', 'build bot'))->toThrow(ValidationException::class);

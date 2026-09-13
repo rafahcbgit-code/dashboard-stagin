@@ -32,8 +32,13 @@ The free service has quotas and regional availability restrictions. A quota
 error preserves the draft and stops generation; the tool does not switch to a
 paid model, another provider or a local model. There is no promise of unlimited
 free usage or permanent provider pricing. Check the current project quota in AI
-Studio. The default model and `gemini-2.5-flash` are allowlisted; both have a free
-standard tier in the pricing documentation checked on 2026-09-12.
+Studio. The default model, `gemini-3.6-flash`, and `gemini-2.5-flash` are
+allowlisted. Free standard tiers are documented, but availability can differ
+by project. A live diagnostic on 2026-09-13 returned high-demand HTTP 503 for
+3.8, new-user unavailability HTTP 404 for 2.5, and successful generation for
+3.6. Select 3.6 explicitly with `CHATBOT_STUDIO_AI_MODEL=gemini-3.6-flash` if
+needed; no automatic model fallback is performed. Rebuild configuration cache
+and restart the dedicated worker after changing the model.
 
 **Privacy:** Google's unpaid-service terms permit use of submitted content to
 improve its products. Do not submit customer secrets, passwords, sensitive
@@ -118,3 +123,16 @@ php scripts/inspect_chatbot_studio.php
 Feature tests use an isolated in-memory SQLite database and mocked AI/network
 responses. The inspector checks the real source link and configured AI endpoint
 without publishing flows. A live cloud generation still requires a valid key.
+
+For production diagnosis without reading customer sources or modifying drafts:
+
+```shell
+php scripts/diagnose_chatbot_studio.php --probe
+php scripts/diagnose_chatbot_studio.php --probe --model=gemini-3.6-flash
+```
+
+The CLI-only diagnostic reads configuration, checks model metadata, and with
+`--probe` makes one short synthetic generation request. It prints sanitized
+provider errors, never the API key. `--model` changes only that diagnostic
+process, not `.env` or the running worker. Successful probes do not establish
+that an entire simulator can be generated faithfully.
