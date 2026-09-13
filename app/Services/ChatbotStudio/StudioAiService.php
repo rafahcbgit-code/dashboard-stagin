@@ -4,6 +4,7 @@ namespace App\Services\ChatbotStudio;
 
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Sleep;
 use Illuminate\Validation\ValidationException;
 
 class StudioAiService
@@ -29,20 +30,40 @@ class StudioAiService
     {
         $this->assertConfigured();
         $model = config('chatbot_studio.model');
+        // Retries share one request budget so JSON repair still fits the queue timeout.
+        $budget = max(0.001, min(240, (float) ($options['timeout'] ?? config('chatbot_studio.request_timeout'))));
+        $deadline = hrtime(true) / 1e9 + $budget;
         // Keep the key in a header, never in a URL, a browser payload, or logs.
         try {
-            $response = Http::acceptJson()->asJson()->timeout($options['timeout'] ?? config('chatbot_studio.request_timeout'))
-                ->connectTimeout(15)->withOptions(['allow_redirects' => false])
-                ->withHeaders(['x-goog-api-key' => config('chatbot_studio.api_key')])
-                ->post('https://generativelanguage.googleapis.com/v1beta/models/'.$model.':generateContent', [
-                    'systemInstruction' => ['parts' => [['text' => $systemPrompt]]],
-                    'contents' => [['role' => 'user', 'parts' => [['text' => $userMessage]]]],
-                    'generationConfig' => ['responseMimeType' => 'application/json',
-                        'maxOutputTokens' => $options['max_tokens'] ?? config('chatbot_studio.output_tokens'),
-                        'temperature' => $options['temperature'] ?? 0.1],
-                ]);
+            for ($attempt = 0; $attempt < 3; $attempt++) {
+                $remaining = $deadline - hrtime(true) / 1e9;
+                if ($remaining <= 0) {
+                    break;
+                }
+                $response = Http::acceptJson()->asJson()->timeout($remaining)
+                    ->connectTimeout(min(15, $remaining))->withOptions(['allow_redirects' => false])
+                    ->withHeaders(['x-goog-api-key' => config('chatbot_studio.api_key')])
+                    ->post('https://generativelanguage.googleapis.com/v1beta/models/'.$model.':generateContent', [
+                        'systemInstruction' => ['parts' => [['text' => $systemPrompt]]],
+                        'contents' => [['role' => 'user', 'parts' => [['text' => $userMessage]]]],
+                        'generationConfig' => ['responseMimeType' => 'application/json',
+                            'maxOutputTokens' => $options['max_tokens'] ?? config('chatbot_studio.output_tokens'),
+                            'temperature' => $options['temperature'] ?? 0.1],
+                    ]);
+                if (!in_array($response->status(), [500, 502, 503, 504], true) || $attempt === 2) {
+                    break;
+                }
+                $delayMs = (1000 * (2 ** $attempt)) + random_int(0, 250);
+                if ($deadline - hrtime(true) / 1e9 <= $delayMs / 1000 + 1) {
+                    break;
+                }
+                Sleep::for($delayMs)->milliseconds();
+            }
         } catch (ConnectionException $e) {
             throw ValidationException::withMessages(['generation' => 'Gemini could not be reached. The draft is preserved; retry later.']);
+        }
+        if (!isset($response) || in_array($response->status(), [500, 502, 503, 504], true)) {
+            throw ValidationException::withMessages(['generation' => 'Gemini is temporarily unavailable'.(isset($response) ? ' (HTTP '.$response->status().')' : '').'. Please wait a few minutes and generate again. The draft is preserved; no model or provider was changed.']);
         }
         if ($response->status() === 429) {
             throw ValidationException::withMessages(['generation' => 'Gemini quota is exhausted or rate-limited. Retry after your free quota resets. No paid or local fallback was used.']);

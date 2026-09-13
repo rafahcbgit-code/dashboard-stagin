@@ -3,6 +3,7 @@
 use App\Services\ChatbotStudio\BlueprintGenerator;
 use App\Services\ChatbotStudio\StudioAiService;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Sleep;
 use Illuminate\Validation\ValidationException;
 
 uses(Tests\TestCase::class);
@@ -10,6 +11,7 @@ uses(Tests\TestCase::class);
 beforeEach(function () {
     config(['chatbot_studio.api_key' => 'private-test-key', 'chatbot_studio.free_tier_confirmed' => true, 'chatbot_studio.model' => 'gemini-3.8-flash']);
     Http::preventStrayRequests();
+    Sleep::fake();
 });
 
 function studioAiResponse(string $content, string $finishReason = 'STOP'): array
@@ -45,6 +47,46 @@ it('stops at the free quota limit without automatic retries or paid or local fal
     expect(fn () => app(BlueprintGenerator::class)->generate('source', 'build bot'))->toThrow(ValidationException::class);
     Http::assertSentCount(1);
 });
+
+it('recovers from temporary service errors using the same model and source', function () {
+    Http::fake(['generativelanguage.googleapis.com/*' => Http::sequence()
+        ->push(['error' => ['status' => 'UNAVAILABLE']], 503)
+        ->push(['error' => ['status' => 'UNAVAILABLE']], 503)
+        ->push(studioAiResponse('{"ok":true}'))]);
+    expect(app(StudioAiService::class)->chat('system', 'original source'))->toBe('{"ok":true}');
+    Http::assertSentCount(3);
+    foreach (Http::recorded() as [$request]) {
+        expect($request->url())->toEndWith('/gemini-3.8-flash:generateContent');
+        expect($request['contents'][0]['parts'][0]['text'])->toBe('original source');
+    }
+});
+
+it('stops temporary service retries at three attempts with a sanitized actionable error', function () {
+    Http::fake(['generativelanguage.googleapis.com/*' => Http::response(['error' => ['message' => 'private-test-key sensitive upstream details']], 503)]);
+    try {
+        app(BlueprintGenerator::class)->generate('source', 'build bot');
+        test()->fail('Expected service-unavailable error');
+    } catch (ValidationException $e) {
+        $message = $e->errors()['generation'][0];
+        expect($message)->toContain('temporarily unavailable', 'HTTP 503')->not->toContain('private-test-key', 'sensitive upstream details', 'Check the API key');
+    }
+    Http::assertSentCount(3);
+});
+
+it('does not retry when the request time budget is exhausted', function () {
+    Http::fake(['generativelanguage.googleapis.com/*' => function () {
+        usleep(20000);
+        return Http::response([], 503);
+    }]);
+    expect(fn () => app(StudioAiService::class)->chat('system', 'source', ['timeout' => 0.01]))->toThrow(ValidationException::class);
+    Http::assertSentCount(1);
+});
+
+it('does not retry permanent request errors', function (int $status) {
+    Http::fake(['generativelanguage.googleapis.com/*' => Http::response([], $status)]);
+    expect(fn () => app(StudioAiService::class)->chat('system', 'source'))->toThrow(ValidationException::class);
+    Http::assertSentCount(1);
+})->with([400, 401, 403, 404]);
 
 it('rejects truncated or blocked model outputs', function (string $reason) {
     Http::fake(['generativelanguage.googleapis.com/*' => Http::response(studioAiResponse('{"partial":true}', $reason))]);

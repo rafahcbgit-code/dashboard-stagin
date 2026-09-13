@@ -63,6 +63,12 @@ running on the server. Its database connection has a 660-second retry window;
 each job allows two 240-second AI requests by default. Queue cancellation
 invalidates late results without stopping other organizations' work.
 
+Temporary HTTP 500/502/503/504 responses are retried up to twice, with exponential
+backoff and jitter, using the same model and source. All attempts share the
+original 240-second request budget. HTTP 429 and permanent request errors are
+not retried. Persistent service outages preserve the draft and ask the admin to
+try again later; neither a paid provider nor a local fallback is selected.
+
 Admin permissions use `organizations.view` for access and `organizations.edit`
 for generation, editing, cancellation and publication. Drafts are private to
 their creator. Existing admin authentication remains in use.
