@@ -103,7 +103,7 @@ it('is idempotent for identical webhook payloads', function () {
     Queue::assertPushed(ProcessSallaWebhookDeliveryJob::class, 1);
 });
 
-it('processes order.created when enabled and mappings are configured', function () {
+it('handles order.created according to payment status', function (?string $statusSlug, bool $shouldSend) {
     $organization = Organization::factory()->create();
 
     $store = SallaStore::create([
@@ -167,6 +167,15 @@ it('processes order.created when enabled and mappings are configured', function 
         ],
     ];
 
+    if ($statusSlug !== null) {
+        $payload['data']['status'] = ['slug' => $statusSlug];
+    }
+
+    if (!$shouldSend) {
+        $this->mock(SallaWebhookMessageSenderInterface::class)
+            ->shouldNotReceive('sendTemplateMessage');
+    }
+
     $this->postJson('/webhook/salla', $payload)->assertOk();
 
     $delivery = SallaWebhookDelivery::firstOrFail();
@@ -175,6 +184,17 @@ it('processes order.created when enabled and mappings are configured', function 
     (new ProcessSallaWebhookDeliveryJob($delivery->id))->handle(app(\App\Services\Salla\Webhooks\SallaWebhookEventRouter::class));
 
     $delivery->refresh();
-    expect($delivery->status)->toBe('processed')
-        ->and($delivery->sent_chat_id)->toBe(999);
-});
+    if ($shouldSend) {
+        expect($delivery->status)->toBe('processed')
+            ->and($delivery->sent_chat_id)->toBe(999);
+    } else {
+        expect($delivery->status)->toBe('skipped')
+            ->and($delivery->error)->toBe('payment_pending:order.created')
+            ->and($delivery->processed_at)->not->toBeNull()
+            ->and($delivery->sent_chat_id)->toBeNull();
+    }
+})->with([
+    'awaiting payment' => ['payment_pending', false],
+    'paid order' => ['in_progress', true],
+    'missing status' => [null, true],
+]);
