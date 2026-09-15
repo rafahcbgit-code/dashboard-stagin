@@ -722,13 +722,17 @@ class ChatService
         // message.  Treat an uploaded file as media even when a stale client
         // submits type=text (for example after focusing the caption field).
         $hasUploadedFile = method_exists($request, 'hasFile') && $request->hasFile('file');
-        $messageType = $request->type ?? 'text';
+        $messageType = $request->type ?: 'text';
 
-        if ($hasUploadedFile && $messageType === 'text') {
+        if ($hasUploadedFile && ! in_array($messageType, ['image', 'video', 'audio', 'document'], true)) {
             $mimeType = (string) $request->file('file')->getMimeType();
             $messageType = str_starts_with($mimeType, 'image/') ? 'image'
                 : (str_starts_with($mimeType, 'video/') ? 'video'
                     : (str_starts_with($mimeType, 'audio/') ? 'audio' : 'document'));
+        }
+
+        if (! $hasUploadedFile && in_array($messageType, ['image', 'video', 'audio', 'document'], true)) {
+            return $this->buildSendMessageError('A file is required for a media message.', 422, 'MEDIA_FILE_REQUIRED');
         }
 
         if ($replyToMessage instanceof \stdClass && ($replyToMessage->success ?? true) === false) {

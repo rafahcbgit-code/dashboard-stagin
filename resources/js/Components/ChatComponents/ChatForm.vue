@@ -390,16 +390,19 @@ const sendMessage = async () => {
 
     if (hasText || form.value.file) {
         const formData = new FormData();
+        // A caption must keep the selected media type, while a message with no
+        // attachment must always be sent as text.
+        const messageType = form.value.file ? form.value.type : 'text';
 
         formData.append('message', form.value.message ?? '');
-        formData.append('type', form.value.type);
+        formData.append('type', messageType);
         formData.append('uuid', form.value.uuid);
 
         if (form.value.file) {
             formData.append('file', form.value.file);
         }
 
-        if (props.replyingTo?.id && form.value.type === 'text') {
+        if (props.replyingTo?.id && messageType === 'text') {
             formData.append('reply_to_message_id', props.replyingTo.id);
         }
 
