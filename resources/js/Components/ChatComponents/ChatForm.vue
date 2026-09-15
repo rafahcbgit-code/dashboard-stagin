@@ -911,7 +911,7 @@ onBeforeUnmount(() => {
                 </button>
             </div>
             <div>
-                <textarea ref="textInputRef" @focus="form.type = 'text'" @keydown.enter.exact.prevent="handleEnterKey"
+                <textarea ref="textInputRef" @keydown.enter.exact.prevent="handleEnterKey"
                     class="w-full outline-none resize-none text-sm rounded-md p-2"
                     :class="processingForm ? 'bg-gray-100' : 'bg-white'" v-model="formTextInput"
                     @input="handleComposerInput" @blur="stopTyping" type="text" rows="3" :placeholder="$t('Type your message...')"

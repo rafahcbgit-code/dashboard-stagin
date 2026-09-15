@@ -1750,7 +1750,7 @@ class WhatsappService
             //Log::info($mediaUrl);
             $wamId = $responseObject->data->messages[0]->id;
             $contentType = $this->getContentTypeFromUrl($mediaUrl);
-            $mediaData = $this->formatMediaResponse($wamId, $mediaUrl, $mediaType, $contentType, $transcription);
+            $mediaData = $this->formatMediaResponse($wamId, $mediaUrl, $mediaType, $contentType, $transcription, $caption);
             $mediaSize = $this->getMediaSizeInBytesFromUrl($mediaUrl);
 
             $media = ChatMedia::create([
@@ -1942,7 +1942,7 @@ class WhatsappService
         return $response;
     }
 
-    function formatMediaResponse($wamId, $mediaUrl, $mediaType, $contentType, $transcription = null){
+    function formatMediaResponse($wamId, $mediaUrl, $mediaType, $contentType, $transcription = null, $caption = null){
         $response = [
             "id" => $wamId,
             "type" => $mediaType,
@@ -1953,6 +1953,10 @@ class WhatsappService
 
         if ($mediaType === 'audio' && $transcription) {
             $response['transcript'] = $transcription;
+        }
+
+        if ($caption !== null && $caption !== '' && $mediaType !== 'audio') {
+            $response[$mediaType]['caption'] = $caption;
         }
 
         return $response;

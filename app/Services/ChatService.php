@@ -718,12 +718,24 @@ class ChatService
         $userId = $request->user_id ?? $this->getUserId();
         $replyToMessageId = $request->reply_to_message_id ?? null;
         $replyToMessage = $replyToMessageId ? $this->resolveReplyToMessage($request->uuid, $replyToMessageId) : null;
+        // A caption is submitted in the same `message` field as a text-only
+        // message.  Treat an uploaded file as media even when a stale client
+        // submits type=text (for example after focusing the caption field).
+        $hasUploadedFile = method_exists($request, 'hasFile') && $request->hasFile('file');
+        $messageType = $request->type ?? 'text';
+
+        if ($hasUploadedFile && $messageType === 'text') {
+            $mimeType = (string) $request->file('file')->getMimeType();
+            $messageType = str_starts_with($mimeType, 'image/') ? 'image'
+                : (str_starts_with($mimeType, 'video/') ? 'video'
+                    : (str_starts_with($mimeType, 'audio/') ? 'audio' : 'document'));
+        }
 
         if ($replyToMessage instanceof \stdClass && ($replyToMessage->success ?? true) === false) {
             return $replyToMessage;
         }
 
-        if ($request->type === 'text') {
+        if ($messageType === 'text') {
             return $this->getWhatsappService()->sendMessage(
                 $request->uuid,
                 $request->message,
@@ -735,7 +747,7 @@ class ChatService
                 null,
                 $replyToMessage
             );
-        } elseif (in_array($request->type, ['interactive buttons', 'interactive call to action url', 'interactive list'])) {
+        } elseif (in_array($messageType, ['interactive buttons', 'interactive call to action url', 'interactive list'])) {
             $buttons = $request->buttons ?? [];
             $header = $request->header ?? [];
             $footer = $request->footer ?? null;
@@ -745,7 +757,7 @@ class ChatService
                 $request->uuid,
                 $request->message,
                 $userId,
-                $request->type,
+                $messageType,
                 $buttons,
                 $header,
                 $footer,
@@ -773,11 +785,12 @@ class ChatService
 
             return $this->getWhatsappService()->sendMedia(
                 $request->uuid,
-                $request->type,
+                $messageType,
                 $fileName,
                 $mediaFilePath,
                 $mediaUrl,
-                $location
+                $location,
+                $request->message ?? null
             );
         }
     }
