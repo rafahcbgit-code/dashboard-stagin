@@ -503,6 +503,7 @@ Route::prefix('admin')->middleware(['auth:admin', 'admin.permission'])->group(fu
     Route::put('/chatbot-studio/drafts/{id}', [App\Http\Controllers\Admin\ChatbotStudioController::class, 'update']);
     Route::post('/chatbot-studio/drafts/{id}/publish', [App\Http\Controllers\Admin\ChatbotStudioController::class, 'publish']);
     Route::post('/chatbot-studio/drafts/{id}/cancel', [App\Http\Controllers\Admin\ChatbotStudioController::class, 'cancel']);
+    Route::post('/chatbot-studio/drafts/{id}/retry', [App\Http\Controllers\Admin\ChatbotStudioController::class, 'retry'])->middleware('throttle:10,1');
     Route::get('/dashboard', [App\Http\Controllers\Admin\DashboardController::class, 'index']);
     Route::resource('users', App\Http\Controllers\Admin\UserController::class);
     Route::post('/organizations/sync-whatsapp-number-statuses', [App\Http\Controllers\Admin\OrganizationController::class, 'syncWhatsappNumberStatuses'])

@@ -8,9 +8,7 @@ class BlueprintGenerator
 {
     public function __construct(private StudioAiService $ai, private BlueprintCompiler $compiler) {}
 
-    public function generate(string $source, string $instruction, ?array $previous = null): array
-    {
-        $prompt = <<<'PROMPT'
+    public const INSTRUCTIONS = <<<'PROMPT'
 Create a complete chatbot blueprint for the existing Chatberry flow engine.
 Return ONLY JSON matching this contract:
 {"name":"Bot name","start":"welcome","trigger":"000","issues":[],"screens":[
@@ -32,10 +30,14 @@ Rules:
 - Do not invent website URLs or success texts. Put missing details, external integrations, unsupported media/actions, and uncertain source content in issues. issues must be empty only when the full source is represented without unresolved requirements. Unresolved issues block publishing.
 - A previous blueprint is an editable draft. Apply the admin's revision while retaining all unaffected branches. Return the entire updated blueprint.
 PROMPT;
+
+    public function generate(string $source, string $instruction, ?array $previous = null): array
+    {
         $input = ['source' => $source, 'admin_instruction' => $instruction, 'previous_blueprint' => $previous];
         for ($attempt = 0; $attempt < 2; $attempt++) {
-            $response = $this->ai->chat($prompt, json_encode($input, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR), [
+            $response = $this->ai->chat(self::INSTRUCTIONS, json_encode($input, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR), [
                 'max_tokens' => config('chatbot_studio.output_tokens'), 'timeout' => config('chatbot_studio.request_timeout'), 'temperature' => 0.1,
+                'schema' => BlueprintSchema::blueprint(),
             ]);
             try {
                 $content = preg_replace('/^```(?:json)?\s*|\s*```$/', '', trim($response));

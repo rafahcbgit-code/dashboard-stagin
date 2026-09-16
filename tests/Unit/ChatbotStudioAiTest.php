@@ -101,6 +101,47 @@ it('rejects truncated or blocked model outputs', function (string $reason) {
     expect(fn () => app(StudioAiService::class)->chat('system', 'source'))->toThrow(ValidationException::class);
 })->with(['MAX_TOKENS', 'SAFETY', 'RECITATION']);
 
+it('reports the exact finish reason without logging source text or API keys', function () {
+    Illuminate\Support\Facades\Log::spy();
+    Http::fake(['generativelanguage.googleapis.com/*' => Http::response(array_merge(
+        studioAiResponse('sensitive incomplete output', 'MAX_TOKENS'),
+        ['usageMetadata' => ['promptTokenCount' => 12, 'candidatesTokenCount' => 24, 'thoughtsTokenCount' => 8]]
+    ))]);
+    try {
+        app(StudioAiService::class)->chat('system', 'sensitive source');
+        test()->fail('Expected incomplete generation');
+    } catch (App\Services\ChatbotStudio\IncompleteGenerationException $e) {
+        expect($e->reason)->toBe('MAX_TOKENS');
+        expect($e->errors()['generation'][0])->toContain('MAX_TOKENS')->not->toContain('sensitive', 'private-test-key');
+    }
+    Illuminate\Support\Facades\Log::shouldHaveReceived('notice')->once()->withArgs(function ($message, $context) {
+        return $context['finish_reason'] === 'MAX_TOKENS' && $context['output_tokens'] === 24
+            && !str_contains(json_encode($context), 'sensitive') && !str_contains(json_encode($context), 'private-test-key');
+    });
+});
+
+it('rejects an empty successful candidate and reports prompt blocking', function () {
+    Http::fake(['generativelanguage.googleapis.com/*' => Http::sequence()
+        ->push(studioAiResponse(''))
+        ->push(['promptFeedback' => ['blockReason' => 'SAFETY']])]);
+    foreach (['EMPTY_OUTPUT', 'SAFETY'] as $reason) {
+        try {
+            app(StudioAiService::class)->chat('system', 'source');
+            test()->fail('Expected incomplete generation');
+        } catch (App\Services\ChatbotStudio\IncompleteGenerationException $e) {
+            expect($e->reason)->toBe($reason);
+        }
+    }
+});
+
+it('uses structured output and recommended Gemini 3 temperature with bounded output tokens', function () {
+    Http::fake(['generativelanguage.googleapis.com/*' => Http::response(studioAiResponse('{}'))]);
+    app(StudioAiService::class)->chat('system', 'source', ['schema' => App\Services\ChatbotStudio\BlueprintSchema::blueprint(), 'max_tokens' => 999999, 'temperature' => 0.1]);
+    Http::assertSent(fn ($request) => $request['generationConfig']['maxOutputTokens'] === 65536
+        && $request['generationConfig']['temperature'] == 1
+        && isset($request['generationConfig']['responseJsonSchema']['properties']['screens']));
+});
+
 it('repairs invalid structured output using the original source without publishing anything', function () {
     $blueprint = ['name' => 'Hello bot', 'start' => 'welcome', 'trigger' => '000', 'issues' => [], 'screens' => [
         ['key' => 'welcome', 'name' => 'Welcome', 'messages' => ['Exact original text'], 'questions' => [], 'choices' => []],

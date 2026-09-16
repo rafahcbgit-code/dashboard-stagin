@@ -4,6 +4,7 @@ namespace App\Services\ChatbotStudio;
 
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Sleep;
 use Illuminate\Validation\ValidationException;
 
@@ -30,6 +31,14 @@ class StudioAiService
     {
         $this->assertConfigured();
         $model = config('chatbot_studio.model');
+        $generationConfig = [
+            'responseMimeType' => 'application/json',
+            'maxOutputTokens' => min(65536, max(256, (int) ($options['max_tokens'] ?? config('chatbot_studio.output_tokens')))),
+            'temperature' => str_starts_with($model, 'gemini-3') ? 1.0 : ($options['temperature'] ?? 0.1),
+        ];
+        if (isset($options['schema'])) {
+            $generationConfig['responseJsonSchema'] = $options['schema'];
+        }
         // Retries share one request budget so JSON repair still fits the queue timeout.
         $budget = max(0.001, min(240, (float) ($options['timeout'] ?? config('chatbot_studio.request_timeout'))));
         $deadline = hrtime(true) / 1e9 + $budget;
@@ -46,9 +55,7 @@ class StudioAiService
                     ->post('https://generativelanguage.googleapis.com/v1beta/models/'.$model.':generateContent', [
                         'systemInstruction' => ['parts' => [['text' => $systemPrompt]]],
                         'contents' => [['role' => 'user', 'parts' => [['text' => $userMessage]]]],
-                        'generationConfig' => ['responseMimeType' => 'application/json',
-                            'maxOutputTokens' => $options['max_tokens'] ?? config('chatbot_studio.output_tokens'),
-                            'temperature' => $options['temperature'] ?? 0.1],
+                        'generationConfig' => $generationConfig,
                     ]);
                 if (!in_array($response->status(), [500, 502, 503, 504], true) || $attempt === 2) {
                     break;
@@ -73,10 +80,28 @@ class StudioAiService
         }
         $candidate = $response->json('candidates.0');
         if (!$candidate || ($candidate['finishReason'] ?? '') !== 'STOP') {
-            throw ValidationException::withMessages(['generation' => 'Gemini did not complete the blueprint. No partial chatbot was saved. Review the source or output limit before retrying.']);
+            $reason = $candidate['finishReason'] ?? $response->json('promptFeedback.blockReason') ?? 'NO_CANDIDATE';
+            $reason = is_string($reason) && preg_match('/^[A-Z_]{1,80}$/', $reason) ? $reason : 'UNKNOWN';
+            $usage = $response->json('usageMetadata', []);
+            Log::notice('Chatbot Studio incomplete generation', [
+                'model' => $model, 'finish_reason' => $reason,
+                'output_limit' => $generationConfig['maxOutputTokens'],
+                'prompt_tokens' => (int) ($usage['promptTokenCount'] ?? 0),
+                'output_tokens' => (int) ($usage['candidatesTokenCount'] ?? 0),
+                'thinking_tokens' => (int) ($usage['thoughtsTokenCount'] ?? 0),
+            ]);
+            $message = match ($reason) {
+                'MAX_TOKENS' => 'Gemini reached the output limit (MAX_TOKENS). The draft is preserved; retry to recover in smaller batches.',
+                'SAFETY', 'RECITATION', 'BLOCKLIST', 'PROHIBITED_CONTENT', 'SPII' => 'Gemini blocked the response ('.$reason.'). Review the source for sensitive or restricted content. No chatbot was published.',
+                default => 'Gemini returned no complete result ('.$reason.'). The draft is preserved. Retry generation; contact support with this reason if it persists.',
+            };
+            throw new IncompleteGenerationException($reason, $message);
         }
         $parts = array_filter($candidate['content']['parts'] ?? [], fn ($part) => isset($part['text']) && empty($part['thought']));
         $text = implode('', array_column($parts, 'text'));
+        if (trim($text) === '') {
+            throw new IncompleteGenerationException('EMPTY_OUTPUT', 'Gemini returned an empty result (EMPTY_OUTPUT). The draft is preserved; retry generation.');
+        }
         return $text;
     }
 }

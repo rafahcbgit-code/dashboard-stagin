@@ -41,6 +41,20 @@ function studioDraft(array $overrides = []): ChatbotStudioDraft
         'version' => 1, 'status' => 'draft', 'source' => 'Original source', 'blueprint' => studioBlueprint(), 'conversation' => []], $overrides));
 }
 
+function studioRecoveryPlan(array $blueprint): array
+{
+    $blueprint['screens'] = array_map(function ($screen) {
+        return ['key' => $screen['key'], 'name' => $screen['name'], 'choices' => $screen['choices'],
+            'next' => $screen['next'] ?? null, 'list_label' => $screen['list_label'] ?? null, 'source_hint' => 'Exact content for '.$screen['key']];
+    }, $blueprint['screens']);
+    return $blueprint;
+}
+
+function studioRecoveryResponse(array $data, string $reason = 'STOP'): array
+{
+    return ['candidates' => [['finishReason' => $reason, 'content' => ['parts' => [['text' => json_encode($data)]]]]]];
+}
+
 beforeEach(function () {
     config(['database.default' => 'sqlite', 'database.connections.sqlite.database' => ':memory:', 'cache.default' => 'array', 'session.driver' => 'array']);
     config(['chatbot_studio.api_key' => 'test-only-key', 'chatbot_studio.free_tier_confirmed' => true]);
@@ -61,6 +75,7 @@ beforeEach(function () {
     Schema::create('roles', function (Blueprint $table) { $table->id(); $table->string('name'); $table->softDeletes(); });
     Schema::create('role_permissions', function (Blueprint $table) { $table->id(); $table->unsignedBigInteger('role_id'); $table->string('module'); $table->string('action'); });
     (require base_path('database/migrations/2026_09_12_180000_create_chatbot_studio_drafts_table.php'))->up();
+    (require base_path('database/migrations/2026_09_16_180000_add_generation_state_to_chatbot_studio_drafts.php'))->up();
     DB::table('organizations')->insert(['id' => 285, 'uuid' => (string) Str::uuid(), 'name' => 'Test organization']);
     $this->withoutMiddleware([App\Http\Middleware\CheckAppStatus::class, App\Http\Middleware\HandleInertiaRequests::class,
         App\Http\Middleware\SetOrganizationFromSession::class, App\Http\Middleware\Localization::class]);
@@ -217,4 +232,144 @@ it('does not enqueue or create drafts when free cloud configuration is missing',
         ->assertUnprocessable();
     expect(ChatbotStudioDraft::count())->toBe(0);
     Queue::assertNothingPushed();
+});
+
+it('recovers a truncated blueprint in checkpointed batches without publishing partial content', function () {
+    $blueprint = studioBlueprint(4);
+    $draft = studioDraft(['status' => 'generating', 'blueprint' => null, 'conversation' => [['role' => 'user', 'content' => 'Build every branch']]]);
+    Http::preventStrayRequests();
+    Http::fake(['generativelanguage.googleapis.com/*' => Http::sequence()
+        ->push(studioRecoveryResponse([], 'MAX_TOKENS'))
+        ->push(studioRecoveryResponse(studioRecoveryPlan($blueprint)))
+        ->push(studioRecoveryResponse(['screens' => array_slice($blueprint['screens'], 0, 3), 'issues' => []]))
+        ->push(studioRecoveryResponse(['screens' => array_slice($blueprint['screens'], 3), 'issues' => []]))]);
+    $generator = app(BlueprintGenerator::class);
+    (new GenerateChatbotStudioDraft($draft->id, 1))->handle($generator);
+    expect($draft->fresh()->generation_state['stage'])->toBe('plan');
+    (new GenerateChatbotStudioDraft($draft->id, 1, 1))->handle($generator);
+    (new GenerateChatbotStudioDraft($draft->id, 1, 2))->handle($generator);
+    expect($draft->fresh()->blueprint)->toBeNull();
+    expect($draft->fresh()->generation_state['completed'])->toHaveCount(3);
+    expect($draft->fresh()->toArray())->not->toHaveKey('generation_state');
+    (new GenerateChatbotStudioDraft($draft->id, 1, 2))->handle($generator);
+    Http::assertSentCount(3);
+    (new GenerateChatbotStudioDraft($draft->id, 1, 3))->handle($generator);
+    expect($draft->fresh()->status)->toBe('draft');
+    expect($draft->fresh()->generation_state)->toBeNull();
+    expect($draft->fresh()->blueprint)->toBe(app(BlueprintCompiler::class)->validate($blueprint));
+    expect(DB::table('flows')->count())->toBe(0);
+    Queue::assertPushed(GenerateChatbotStudioDraft::class, 3);
+});
+
+it('automatically splits overflowing batches and preserves every exact screen', function () {
+    $blueprint = studioBlueprint(4);
+    $draft = studioDraft(['source' => str_repeat('x', 60001), 'status' => 'generating', 'blueprint' => null,
+        'conversation' => [['role' => 'user', 'content' => 'Build every branch']]]);
+    Http::preventStrayRequests();
+    Http::fake(['generativelanguage.googleapis.com/*' => function ($request) use ($blueprint) {
+        $input = json_decode($request['contents'][0]['parts'][0]['text'], true);
+        if (!isset($input['requested_keys'])) {
+            return Http::response(studioRecoveryResponse(studioRecoveryPlan($blueprint)));
+        }
+        if (count($input['requested_keys']) > 1) {
+            return Http::response(studioRecoveryResponse([], 'MAX_TOKENS'));
+        }
+        $screen = collect($blueprint['screens'])->firstWhere('key', $input['requested_keys'][0]);
+        return Http::response(studioRecoveryResponse(['screens' => [$screen], 'issues' => []]));
+    }]);
+    for ($i = 0; $i < 20 && $draft->fresh()->status === 'generating'; $i++) {
+        (new GenerateChatbotStudioDraft($draft->id, 1, $draft->fresh()->generation_state['step'] ?? 0))->handle(app(BlueprintGenerator::class));
+    }
+    expect($draft->fresh()->status)->toBe('draft');
+    expect($draft->fresh()->blueprint)->toBe(app(BlueprintCompiler::class)->validate($blueprint));
+    expect(DB::table('flows')->count())->toBe(0);
+});
+
+it('blocks missing batch screens and resumes the saved stage with an owned versioned retry', function () {
+    $blueprint = studioBlueprint(2);
+    $state = ['stage' => 'batch', 'step' => 5, 'model' => config('chatbot_studio.model'), 'limit' => 24000,
+        'plan' => studioRecoveryPlan($blueprint), 'completed' => [$blueprint['screens'][0]], 'pending' => [['service_0', 'service_1']]];
+    $draft = studioDraft(['status' => 'generating', 'generation_state' => $state, 'conversation' => [['role' => 'user', 'content' => 'Exact original instructions']]]);
+    Http::fake(['generativelanguage.googleapis.com/*' => Http::sequence()
+        ->push(studioRecoveryResponse(['screens' => [$blueprint['screens'][1]], 'issues' => []]))
+        ->push(studioRecoveryResponse(['screens' => [$blueprint['screens'][1]], 'issues' => []]))
+        ->push(studioRecoveryResponse(['screens' => array_slice($blueprint['screens'], 1), 'issues' => []]))]);
+    (new GenerateChatbotStudioDraft($draft->id, 1, 5))->handle(app(BlueprintGenerator::class));
+    expect($draft->fresh()->status)->toBe('failed');
+    expect($draft->fresh()->generation_state)->toBe($state);
+    expect($draft->fresh()->blueprint)->toBe(studioBlueprint());
+    $this->actingAs(studioAdmin(2), 'admin')->postJson('/admin/chatbot-studio/drafts/'.$draft->id.'/retry', ['version' => 1])->assertNotFound();
+    $this->actingAs(studioAdmin(), 'admin')->postJson('/admin/chatbot-studio/drafts/'.$draft->id.'/retry', ['version' => 9])->assertConflict();
+    $this->postJson('/admin/chatbot-studio/drafts/'.$draft->id.'/retry', ['version' => 1])->assertStatus(202)->assertJsonMissingPath('generation_state');
+    Queue::assertPushed(GenerateChatbotStudioDraft::class, fn ($job) => $job->version === 2 && $job->step === 5);
+    $this->postJson('/admin/chatbot-studio/drafts/'.$draft->id.'/retry', ['version' => 1])->assertConflict();
+    (new GenerateChatbotStudioDraft($draft->id, 2, 5))->handle(app(BlueprintGenerator::class));
+    expect($draft->fresh()->status)->toBe('draft');
+    Http::assertSent(fn ($request) => json_decode($request['contents'][0]['parts'][0]['text'], true)['requested_keys'] === ['service_0', 'service_1']);
+});
+
+it('does not continue cancelled recovery or let stale failure callbacks overwrite progress', function () {
+    $draft = studioDraft(['status' => 'generating', 'generation_state' => ['stage' => 'plan', 'step' => 2, 'limit' => 24000]]);
+    $old = new GenerateChatbotStudioDraft($draft->id, 1, 1);
+    $old->failed(new RuntimeException('old task'));
+    expect($draft->fresh()->status)->toBe('generating');
+    $this->actingAs(studioAdmin(), 'admin')->postJson('/admin/chatbot-studio/drafts/'.$draft->id.'/cancel', ['version' => 1])->assertOk();
+    Http::fake();
+    (new GenerateChatbotStudioDraft($draft->id, 1, 2))->handle(app(BlueprintGenerator::class));
+    Http::assertNothingSent();
+    expect($draft->fresh()->status)->toBe('draft');
+});
+
+it('stops safety blocked recovery without retrying or publishing', function () {
+    $draft = studioDraft(['status' => 'generating', 'conversation' => [['role' => 'user', 'content' => 'Build']]]);
+    Http::fake(['generativelanguage.googleapis.com/*' => Http::response(studioRecoveryResponse([], 'SAFETY'))]);
+    (new GenerateChatbotStudioDraft($draft->id, 1))->handle(app(BlueprintGenerator::class));
+    expect($draft->fresh()->status)->toBe('failed');
+    expect($draft->fresh()->errors['generation'][0])->toContain('SAFETY');
+    Http::assertSentCount(1);
+    Queue::assertNothingPushed();
+});
+
+it('requires edit permission for retry and keeps generation checkpoints on quota errors', function () {
+    DB::table('roles')->insert(['id' => 7, 'name' => 'viewer']);
+    DB::table('role_permissions')->insert(['role_id' => 7, 'module' => 'organizations', 'action' => 'view']);
+    $draft = studioDraft(['status' => 'failed', 'conversation' => [['role' => 'user', 'content' => 'Build']],
+        'generation_state' => ['stage' => 'plan', 'step' => 1, 'limit' => 24000]]);
+    $this->actingAs(studioAdmin(1, 'viewer'), 'admin')->postJson('/admin/chatbot-studio/drafts/'.$draft->id.'/retry', ['version' => 1])->assertForbidden();
+    $draft->update(['status' => 'generating']);
+    Http::fake(['generativelanguage.googleapis.com/*' => Http::response([], 429)]);
+    (new GenerateChatbotStudioDraft($draft->id, 1, 1))->handle(app(BlueprintGenerator::class));
+    expect($draft->fresh()->status)->toBe('failed');
+    expect($draft->fresh()->generation_state['stage'])->toBe('plan');
+    Queue::assertNothingPushed();
+});
+
+it('increases the single-screen output budget once and then stops without losing checkpoints', function () {
+    $blueprint = studioBlueprint(1);
+    $draft = studioDraft(['status' => 'generating', 'conversation' => [['role' => 'user', 'content' => 'Build']],
+        'generation_state' => ['stage' => 'batch', 'step' => 1, 'model' => config('chatbot_studio.model'), 'limit' => 24000,
+            'plan' => studioRecoveryPlan($blueprint), 'completed' => [$blueprint['screens'][0]], 'pending' => [['service_0']]]]);
+    Http::fake(['generativelanguage.googleapis.com/*' => Http::response(studioRecoveryResponse([], 'MAX_TOKENS'))]);
+    (new GenerateChatbotStudioDraft($draft->id, 1, 1))->handle(app(BlueprintGenerator::class));
+    expect($draft->fresh()->generation_state['limit'])->toBe(65536);
+    (new GenerateChatbotStudioDraft($draft->id, 1, 2))->handle(app(BlueprintGenerator::class));
+    expect($draft->fresh()->status)->toBe('failed');
+    expect($draft->fresh()->generation_state['completed'])->toHaveCount(1);
+    Http::assertSentCount(2);
+    Http::assertSent(fn ($request) => $request['generationConfig']['maxOutputTokens'] === 65536);
+    Queue::assertPushed(GenerateChatbotStudioDraft::class, 1);
+});
+
+it('recovers empty output only once and starts fresh for explicit source revisions', function () {
+    $draft = studioDraft(['status' => 'generating', 'conversation' => [['role' => 'user', 'content' => 'Build']]]);
+    Http::fake(['generativelanguage.googleapis.com/*' => Http::response(['candidates' => [['finishReason' => 'STOP', 'content' => ['parts' => []]]]])]);
+    (new GenerateChatbotStudioDraft($draft->id, 1))->handle(app(BlueprintGenerator::class));
+    (new GenerateChatbotStudioDraft($draft->id, 1, 1))->handle(app(BlueprintGenerator::class));
+    expect($draft->fresh()->status)->toBe('failed');
+    expect($draft->fresh()->errors['generation'][0])->toContain('EMPTY_OUTPUT');
+    Queue::assertPushed(GenerateChatbotStudioDraft::class, 1);
+    $this->actingAs(studioAdmin(), 'admin')->postJson('/admin/chatbot-studio/generate', [
+        'organization_id' => 285, 'draft_id' => $draft->id, 'version' => 1, 'message' => 'New revision',
+    ])->assertStatus(202);
+    expect($draft->fresh()->generation_state)->toBeNull();
 });

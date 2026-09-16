@@ -95,7 +95,7 @@ class ChatbotStudioController extends Controller
             $history = $draft->conversation;
             $history[] = ['role' => 'user', 'content' => $message];
             $draft->fill(['source' => $source, 'sources' => $sourceLabels, 'conversation' => $history,
-                'version' => $draft->version + 1, 'status' => 'generating', 'errors' => null])->save();
+                'version' => $draft->version + 1, 'status' => 'generating', 'errors' => null, 'generation_state' => null])->save();
             // Database queue insertion participates in this transaction: a failed enqueue leaves no stuck draft.
             GenerateChatbotStudioDraft::dispatch($draft->id, $draft->version);
             return $draft;
@@ -110,8 +110,23 @@ class ChatbotStudioController extends Controller
         return DB::transaction(function () use ($request, $id, $data, $blueprint) {
             $draft = $this->draft($request, $id, true);
             $this->assertEditable($draft, (int) $data['version']);
-            $draft->update(['blueprint' => $blueprint, 'version' => $draft->version + 1, 'status' => 'draft', 'errors' => null]);
+            $draft->update(['blueprint' => $blueprint, 'version' => $draft->version + 1, 'status' => 'draft', 'errors' => null, 'generation_state' => null]);
             return $draft;
+        });
+    }
+
+    public function retry(Request $request, string $id, StudioAiService $ai)
+    {
+        $data = $request->validate(['version' => 'required|integer|min:1']);
+        $ai->assertConfigured();
+        return DB::transaction(function () use ($request, $id, $data) {
+            $draft = $this->draft($request, $id, true);
+            abort_if($draft->status !== 'failed' || $draft->version !== (int) $data['version'], 409, 'Draft has changed. Reload before retrying.');
+            abort_unless(DB::table('organizations')->where('id', $draft->organization_id)->whereNull('deleted_at')->exists(), 422, 'Organization is no longer available.');
+            abort_unless(collect($draft->conversation)->contains(fn ($entry) => ($entry['role'] ?? null) === 'user'), 422, 'Add source instructions before generating.');
+            $draft->update(['version' => $draft->version + 1, 'status' => 'generating', 'errors' => null]);
+            GenerateChatbotStudioDraft::dispatch($draft->id, $draft->version, (int) ($draft->generation_state['step'] ?? 0));
+            return response()->json($draft, 202);
         });
     }
 

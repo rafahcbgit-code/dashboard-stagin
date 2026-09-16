@@ -131,6 +131,13 @@ async function save() {
         acceptDraft(data);
     });
 }
+async function retryGeneration() {
+    if (!editable.value || dirty.value || !props.ai.configured || draft.value?.status !== 'failed' || message.value.trim() || url.value.trim() || file.value) return;
+    await run(async () => {
+        acceptDraft((await axios.post(`${base}/drafts/${draft.value.id}/retry`, { version: draft.value.version })).data);
+        await refreshDrafts();
+    });
+}
 async function publish() {
     if (!canPublish.value) return;
     confirmPublish.value = false;
@@ -201,6 +208,7 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(pollTimer); clearTimeout(s
                     <div class="messages" aria-live="polite">
                         <div v-for="(entry, index) in draft?.conversation ?? []" :key="index" class="chat-entry" :class="entry.role"><span class="role-label">{{ $t(entry.role === 'user' ? 'You' : 'Chatbot Studio') }}</span><p dir="auto">{{ entry.content }}</p><span v-if="entry.flows" class="muted">{{ entry.flows }} {{ $t('Flows') }} · {{ entry.issues }} {{ $t('Open issues') }}</span></div>
                         <div v-if="!draft" class="empty-state"><MessageSquare :size="28" /><h3>{{ $t('New chatbot') }}</h3></div>
+                        <button v-if="draft?.status === 'failed'" type="button" class="command" :disabled="!editable || dirty || !ai.configured || !!message.trim() || !!url.trim() || !!file" @click="retryGeneration"><RefreshCw :size="16" />{{ $t('Retry generation') }}</button>
                         <div v-if="generating" class="working" role="status"><LoaderCircle :size="18" class="spin" /><span>{{ $t('Generating draft') }}</span><button v-if="can('organizations', 'edit')" :disabled="busy" :title="$t('Cancel generation')" :aria-label="$t('Cancel generation')" @click="cancel"><Square :size="14" /></button></div>
                         <ul v-if="generationErrors.length" class="generation-errors" role="alert"><li v-for="(error, index) in generationErrors" :key="index">{{ error }}</li></ul>
                     </div>
