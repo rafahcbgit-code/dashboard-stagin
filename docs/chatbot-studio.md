@@ -317,3 +317,95 @@ Verification: 58 focused tests passed (269 assertions). The additive token-usage
 migration was applied locally. Browser visual verification remains unavailable
 because the CUA runtime cannot initialize its assets. Production deployment and
 the server-side diagnostic above are still required.
+
+## Optional Flash-Lite model
+
+`gemini-3.5-flash-lite` is now explicitly allowlisted. Google's current pricing
+lists a free tier for standard input/output; project quotas and availability
+still apply. Keep billing disabled. No automatic model/provider fallback or
+change to the configured default is introduced.
+
+- Model: https://ai.google.dev/gemini-api/docs/models/gemini-3.5-flash-lite
+- Pricing: https://ai.google.dev/gemini-api/docs/pricing#gemini-3.5-flash-lite
+
+On top of the already deployed Studio release, upload `config/chatbot_studio.php`,
+refresh the config cache, and test before changing production's `.env`:
+
+```shell
+sudo -u www-data php artisan config:cache
+sudo -u www-data php scripts/diagnose_chatbot_studio.php --probe --model=gemini-3.5-flash-lite
+```
+
+If the probe completes, explicitly set `CHATBOT_STUDIO_AI_MODEL=gemini-3.5-flash-lite`
+in production `.env`, rebuild the config cache, and restart only the Studio worker
+after active work completes. Start a new draft rather than resuming saved recovery
+stages pinned to the previous model. No migration or frontend build is needed
+for this model-only change. This does not bypass quotas or guarantee no timeouts.
+
+A local synthetic direct-generation test on 2026-09-16 returned HTTP 200 and
+preserved all five screens' exact messages and routing, compiling five flows and
+six triggers without database writes. Production connectivity and fidelity of
+the user's complete simulator still require acceptance testing.
+
+## Text-only model allowlist
+
+The server configuration now permits these text-output models, selected through
+`CHATBOT_STUDIO_AI_MODEL` (no new browser selector or automatic fallback):
+
+```text
+gemini-3.8-flash
+gemini-3.7-flash
+gemini-3.6-flash
+gemini-3.5-flash
+gemini-3.5-flash-lite
+gemini-3.1-flash-lite
+gemini-3-flash-preview
+gemini-2.5-flash
+gemini-2.5-flash-lite
+gemma-4-26b-a4b-it
+gemma-4-31b-it
+```
+
+Retain 3.6 for existing deployments. Gemini 2.0 Flash/Flash-Lite are excluded
+because Google lists them as shut down on June 1, 2026. Pro variants with no free
+quota in the supplied project snapshot remain excluded under the free-only
+requirement. Image/video/music/audio/TTS/Live/transcription models, embeddings,
+computer-use/robotics models and agent products are not blueprint generators in
+this integration and are not on the allowlist.
+
+Gemma uses Google's hosted endpoint, not a local service. Listing a model permits
+an explicit attempt; it does not prove availability or reliable structured output
+for a particular project. The local Gemma 4 26B synthetic blueprint probe returned
+HTTP 500 followed by a timeout, so it is not acceptance-verified. Gemma 4 31B has
+not been cloud-tested here. The supplied Gemma quota snapshot also has a much
+smaller input-token-per-minute limit (16K), which can block large simulator
+sources despite the larger daily request count. Prefer the tested 3.5 Flash-Lite
+for the current workflow; test each alternative explicitly before switching.
+
+No quota values are hardcoded into the application. The user's snapshot is not
+a live quota API; actual project/model access, usage and retirement can change.
+In particular, 2.5 availability for new users must be checked with the provider.
+
+Deploy the updated `config/chatbot_studio.php` and
+`scripts/diagnose_chatbot_studio.php`, then inspect the effective cached list:
+
+```shell
+cd /var/www/dashboard.chatberry.net
+sudo -u www-data php artisan config:cache
+sudo -u www-data php scripts/diagnose_chatbot_studio.php --list-models
+```
+
+`--list-models` is offline, does not require a valid API key, and makes no HTTP
+request. Test one chosen model using `--probe --model=...`, not the entire list
+in a retry loop. After a successful production probe, change `.env`, rebuild
+config cache and restart only the Studio worker once active work has finished.
+Start a new draft if saved recovery stages were pinned to a different model.
+This config/CLI-only update requires no migration or frontend build. Unit and
+feature checks: 79 tests passed (321 assertions); these use mocked provider calls
+and must not be mistaken for successful live generation on every listed model.
+
+Sources checked 2026-09-16:
+- https://ai.google.dev/gemini-api/docs/models
+- https://ai.google.dev/gemini-api/docs/pricing
+- https://ai.google.dev/gemini-api/docs/deprecations
+- https://ai.google.dev/gemma/docs/core/gemma_on_gemini_api

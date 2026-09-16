@@ -17,6 +17,12 @@ require __DIR__.'/../vendor/autoload.php';
 $app = require __DIR__.'/../bootstrap/app.php';
 $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
 
+if (in_array('--list-models', $argv, true)) {
+    echo json_encode(['configured_model' => config('chatbot_studio.model'),
+        'allowed_models' => config('chatbot_studio.allowed_models', [])], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES).PHP_EOL;
+    exit(0);
+}
+
 foreach ($argv as $argument) {
     if (str_starts_with($argument, '--model=')) {
         $candidate = substr($argument, strlen('--model='));

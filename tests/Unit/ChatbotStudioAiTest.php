@@ -36,19 +36,24 @@ it('does not call any service without explicit free-tier configuration', functio
     Http::assertNothingSent();
 })->with(['api_key', 'free_tier_confirmed']);
 
-it('refuses non-allowlisted models', function () {
-    config(['chatbot_studio.model' => 'a-paid-only-model']);
+it('refuses non-allowlisted media agent embedding paid-only and retired models', function (string $model) {
+    config(['chatbot_studio.model' => $model]);
     expect(fn () => app(StudioAiService::class)->chat('system', 'source'))->toThrow(ValidationException::class);
     Http::assertNothingSent();
-});
+})->with(['a-paid-only-model', 'gemini-3.1-pro-preview', 'gemini-2.5-pro',
+    'gemini-2.0-flash', 'gemini-2.0-flash-lite', 'gemini-3-pro-image',
+    'gemini-2.5-flash-preview-tts', 'gemini-3.8-live', 'gemini-embedding-2',
+    'veo-3.1-generate-preview', 'lyria-3-clip-preview', 'deep-research-pro-preview']);
 
-it('supports explicitly selecting the verified alternative without automatic fallback', function () {
-    config(['chatbot_studio.model' => 'gemini-3.6-flash']);
+it('supports explicitly selecting an allowed alternative without automatic fallback', function (string $model) {
+    config(['chatbot_studio.model' => $model]);
     Http::fake(['generativelanguage.googleapis.com/*' => Http::response(studioAiResponse('{"ready":true}'))]);
     expect(app(StudioAiService::class)->chat('system', 'source'))->toBe('{"ready":true}');
-    Http::assertSent(fn ($request) => str_ends_with($request->url(), '/gemini-3.6-flash:generateContent'));
+    Http::assertSent(fn ($request) => str_ends_with($request->url(), '/'.$model.':generateContent'));
     Http::assertSentCount(1);
-});
+})->with(['gemini-3.8-flash', 'gemini-3.7-flash', 'gemini-3.6-flash', 'gemini-3.5-flash',
+    'gemini-3.5-flash-lite', 'gemini-3.1-flash-lite', 'gemini-3-flash-preview',
+    'gemini-2.5-flash', 'gemini-2.5-flash-lite', 'gemma-4-26b-a4b-it', 'gemma-4-31b-it']);
 
 it('stops at the free quota limit without automatic retries or paid or local fallback', function () {
     Http::fake(['generativelanguage.googleapis.com/*' => Http::response(['error' => ['message' => 'quota']], 429)]);
