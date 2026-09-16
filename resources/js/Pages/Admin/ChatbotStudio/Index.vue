@@ -5,6 +5,7 @@ import axios from 'axios';
 import { Plus, Search, Send, Paperclip, X, Save, Upload, RefreshCw, LoaderCircle, Trash2, ArrowRight, GitBranch, MessageSquare, Code, Check, Square } from 'lucide-vue-next';
 import AppLayout from '../Layout/App.vue';
 import Preview from './Preview.vue';
+import TokenUsage from './TokenUsage.vue';
 import { useAdminPermissions } from '@/Composables/useAdminPermissions';
 
 const props = defineProps({ drafts: { type: Array, default: () => [] }, ai: { type: Object, default: () => ({}) } });
@@ -221,6 +222,7 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(pollTimer); clearTimeout(s
                     </form>
                 </section>
                 <section class="review">
+                    <TokenUsage v-if="draft" :usage="draft.token_usage" />
                     <div class="review-heading"><div class="tabs" role="tablist" :aria-label="$t('Draft review')"><button v-for="item in [{ key: 'flows', label: 'Flows', icon: GitBranch }, { key: 'preview', label: 'Preview', icon: MessageSquare }, { key: 'json', label: 'JSON', icon: Code }]" :key="item.key" role="tab" :aria-selected="tab === item.key" :class="{ active: tab === item.key }" @click="tab = item.key"><component :is="item.icon" :size="15" />{{ $t(item.label) }}</button></div><span v-if="blueprint" class="counts">{{ screens.length }} {{ $t('Flows') }} · {{ triggerCount }} {{ $t('Triggers') }}</span></div>
                     <div v-if="!draft?.blueprint" class="empty-state"><GitBranch :size="32" /><h3>{{ $t('No generated flows') }}</h3></div>
                     <div v-else class="review-content" role="tabpanel">

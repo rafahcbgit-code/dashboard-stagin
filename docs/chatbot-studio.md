@@ -236,3 +236,84 @@ setup failures); Studio's own ownership, permission, cancellation and retry
 tests passed. Browser screenshot verification was unavailable because the CUA
 runtime could not initialize its assets. The reported production simulator has
 not been replayed against this release; perform that acceptance test in staging.
+
+## Per-chatbot token usage and connection diagnostics
+
+Each selected draft now displays Token usage, cumulative across generation,
+repairs, staged recovery, retries and revisions, and retained after publishing.
+Totals are stored in `chatbot_studio_drafts.token_usage`. These measure Studio
+generation, not WhatsApp conversations or other applications using the key.
+The UI uses Gemini's `usageMetadata.totalTokenCount` as the total and separately
+shows input, output, thinking, cached input and tool-input tokens. Cached input
+is already included in prompt tokens and is not added again to the total.
+These are token counts, not billing estimates or remaining quota.
+
+Every HTTP attempt is counted before sending. A response with valid usage is
+recorded immediately, including truncated, blocked or invalid-JSON outputs.
+Attempts without reported totals (including 429, timeouts and interrupted workers)
+remain visibly unaccounted for, not assumed to cost zero. Legacy drafts retain
+an earlier-usage-unavailable marker; old usage cannot be reconstructed. In-flight
+requests still count after cancellation because they may consume tokens even
+when their blueprint result is discarded. Tracking uses short row-locking
+transactions and does not store prompts, responses or API keys.
+
+Deploy this incremental release on top of the complete recovery release:
+
+- `app/Services/ChatbotStudio/TokenUsageTracker.php` (new)
+- `app/Services/ChatbotStudio/StudioAiService.php`
+- `app/Services/ChatbotStudio/BlueprintGenerator.php`
+- `app/Services/ChatbotStudio/BlueprintRecovery.php`
+- `app/Jobs/GenerateChatbotStudioDraft.php`
+- `app/Models/ChatbotStudioDraft.php`
+- `app/Http/Controllers/Admin/ChatbotStudioController.php`
+- `database/migrations/2026_09_16_190000_add_token_usage_to_chatbot_studio_drafts.php` (new)
+- `resources/js/Pages/Admin/ChatbotStudio/TokenUsage.vue` (new)
+- `resources/js/Pages/Admin/ChatbotStudio/Index.vue`
+- `lang/ar.json`
+- `scripts/diagnose_chatbot_studio.php`
+- Complete matching `public/build/` output and manifest, not isolated hashed files.
+
+Pause Studio access and allow running generation to finish before stopping its
+Supervisor group. Keep email workers running. After deploying the files:
+
+```shell
+cd /var/www/dashboard.chatberry.net
+sudo -u www-data php artisan migrate --path=database/migrations/2026_09_16_190000_add_token_usage_to_chatbot_studio_drafts.php --force
+sudo -u www-data php artisan config:cache
+sudo -u www-data php artisan view:cache
+sudo supervisorctl restart 'chatberry-chatbot-studio:*'
+```
+
+Run the earlier generation-state migration first if it is not installed. Refresh
+Composer's optimized autoloader if using authoritative classmaps, and reload PHP
+FPM if OPcache does not check timestamps. Use the actual Supervisor program name.
+Rollback code/build together while Studio is paused; retain the additive column
+to preserve measured usage. No production migration is performed automatically.
+
+Connection failures now log `Chatbot Studio connection failed` with sanitized
+`reason`, `curl_errno`, model and request budget only. `TIMEOUT` (28), `DNS` (5/6),
+`CONNECT` (7), and `TLS` (including 60) require different remedies. Do not disable
+TLS validation, change keys speculatively, or increase queue timeouts without
+coordinating worker timeout, retry_after and stopwaitsecs.
+
+Run this on production as the same user as the worker:
+
+```shell
+sudo -u www-data php scripts/diagnose_chatbot_studio.php --source=https://chatbot.chatberry.click/1huM61ME --probe
+```
+
+`--source` fetches the allowlisted simulator and reports only its extracted byte
+count and initial generation mode; it does not send that source to Gemini.
+`--probe` sends one small synthetic request and consumes its normal API quota.
+The diagnostic does not change the model, billing, drafts or published flows.
+Share only its sanitized JSON result, never `.env` or the API key.
+
+Local diagnosis for this link (2026-09-16): HTTP 200, 75,714 extracted source bytes,
+staged mode; model lookup and a small synthetic generation both returned HTTP 200
+on the locally configured `gemini-3.8-flash`. This does not verify production
+network access, its API key, or successful generation of the full simulator.
+
+Verification: 58 focused tests passed (269 assertions). The additive token-usage
+migration was applied locally. Browser visual verification remains unavailable
+because the CUA runtime cannot initialize its assets. Production deployment and
+the server-side diagnostic above are still required.

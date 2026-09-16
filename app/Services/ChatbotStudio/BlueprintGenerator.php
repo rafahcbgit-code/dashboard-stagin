@@ -31,13 +31,14 @@ Rules:
 - A previous blueprint is an editable draft. Apply the admin's revision while retaining all unaffected branches. Return the entire updated blueprint.
 PROMPT;
 
-    public function generate(string $source, string $instruction, ?array $previous = null): array
+    public function generate(string $source, string $instruction, ?array $previous = null, ?string $usageDraftId = null): array
     {
         $input = ['source' => $source, 'admin_instruction' => $instruction, 'previous_blueprint' => $previous];
         for ($attempt = 0; $attempt < 2; $attempt++) {
             $response = $this->ai->chat(self::INSTRUCTIONS, json_encode($input, JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR), [
                 'max_tokens' => config('chatbot_studio.output_tokens'), 'timeout' => config('chatbot_studio.request_timeout'), 'temperature' => 0.1,
                 'schema' => BlueprintSchema::blueprint(),
+                'usage_draft_id' => $usageDraftId,
             ]);
             try {
                 $content = preg_replace('/^```(?:json)?\s*|\s*```$/', '', trim($response));

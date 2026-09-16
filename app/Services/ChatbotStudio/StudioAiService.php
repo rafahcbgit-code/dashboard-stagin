@@ -49,6 +49,9 @@ class StudioAiService
                 if ($remaining <= 0) {
                     break;
                 }
+                if (!empty($options['usage_draft_id'])) {
+                    app(TokenUsageTracker::class)->started($options['usage_draft_id']);
+                }
                 $response = Http::acceptJson()->asJson()->timeout($remaining)
                     ->connectTimeout(min(15, $remaining))->withOptions(['allow_redirects' => false])
                     ->withHeaders(['x-goog-api-key' => config('chatbot_studio.api_key')])
@@ -57,6 +60,9 @@ class StudioAiService
                         'contents' => [['role' => 'user', 'parts' => [['text' => $userMessage]]]],
                         'generationConfig' => $generationConfig,
                     ]);
+                if (!empty($options['usage_draft_id'])) {
+                    app(TokenUsageTracker::class)->completed($options['usage_draft_id'], $response->json('usageMetadata'));
+                }
                 if (!in_array($response->status(), [500, 502, 503, 504], true) || $attempt === 2) {
                     break;
                 }
@@ -67,7 +73,18 @@ class StudioAiService
                 Sleep::for($delayMs)->milliseconds();
             }
         } catch (ConnectionException $e) {
-            throw ValidationException::withMessages(['generation' => 'Gemini could not be reached. The draft is preserved; retry later.']);
+            $details = $this->connectionFailureDetails($e);
+            Log::notice('Chatbot Studio connection failed', array_merge($details, [
+                'model' => $model, 'request_budget_seconds' => $budget,
+            ]));
+            $message = match ($details['reason']) {
+                'TIMEOUT' => 'Gemini request timed out (TIMEOUT). The draft is preserved. Check worker logs and retry later.',
+                'DNS' => 'Gemini hostname could not be resolved (DNS). Check the production server DNS settings.',
+                'TLS' => 'Gemini secure connection failed (TLS). Check the production server CA certificates and clock; do not disable certificate verification.',
+                'CONNECT' => 'Gemini connection failed (CONNECT). Check outbound HTTPS access from the production server.',
+                default => 'Gemini could not be reached. The draft is preserved; retry later.',
+            };
+            throw ValidationException::withMessages(['generation' => $message]);
         }
         if (!isset($response) || in_array($response->status(), [500, 502, 503, 504], true)) {
             throw ValidationException::withMessages(['generation' => 'Gemini is temporarily unavailable'.(isset($response) ? ' (HTTP '.$response->status().')' : '').'. Please wait a few minutes and generate again. The draft is preserved; no model or provider was changed.']);
@@ -103,5 +120,23 @@ class StudioAiService
             throw new IncompleteGenerationException('EMPTY_OUTPUT', 'Gemini returned an empty result (EMPTY_OUTPUT). The draft is preserved; retry generation.');
         }
         return $text;
+    }
+
+    public function connectionFailureDetails(ConnectionException $exception): array
+    {
+        $errno = null;
+        for ($error = $exception; $error; $error = $error->getPrevious()) {
+            if ($error instanceof \GuzzleHttp\Exception\ConnectException || $error instanceof \GuzzleHttp\Exception\RequestException) {
+                $value = $error->getHandlerContext()['errno'] ?? null;
+                if (is_int($value)) {
+                    $errno = $value;
+                    break;
+                }
+            }
+        }
+        return ['curl_errno' => $errno, 'reason' => match ($errno) {
+            28 => 'TIMEOUT', 5, 6 => 'DNS', 35, 51, 58, 60, 77, 83, 90, 91 => 'TLS', 7 => 'CONNECT',
+            default => 'CONNECTION',
+        }];
     }
 }

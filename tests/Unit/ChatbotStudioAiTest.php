@@ -96,6 +96,24 @@ it('does not retry permanent request errors', function (int $status) {
     Http::assertSentCount(1);
 })->with([400, 401, 403, 404]);
 
+it('classifies connection failures without disclosing upstream secrets or retrying blindly', function (int $errno, string $reason) {
+    Illuminate\Support\Facades\Log::spy();
+    $request = new GuzzleHttp\Psr7\Request('POST', 'https://generativelanguage.googleapis.com');
+    $cause = new GuzzleHttp\Exception\ConnectException('private-test-key sensitive source', $request, null, ['errno' => $errno]);
+    Http::fake(['generativelanguage.googleapis.com/*' => function () use ($cause) {
+        throw new Illuminate\Http\Client\ConnectionException('private-test-key sensitive source', 0, $cause);
+    }]);
+    try {
+        app(StudioAiService::class)->chat('system', 'sensitive source');
+        test()->fail('Expected connection failure');
+    } catch (ValidationException $e) {
+        expect($e->errors()['generation'][0])->toContain($reason)->not->toContain('private-test-key', 'sensitive source');
+    }
+    Illuminate\Support\Facades\Log::shouldHaveReceived('notice')->once()->withArgs(fn ($message, $context) =>
+        $context['curl_errno'] === $errno && $context['reason'] === $reason
+        && !str_contains(json_encode($context), 'private-test-key') && !str_contains(json_encode($context), 'sensitive source'));
+})->with([[28, 'TIMEOUT'], [6, 'DNS'], [60, 'TLS'], [7, 'CONNECT']]);
+
 it('rejects truncated or blocked model outputs', function (string $reason) {
     Http::fake(['generativelanguage.googleapis.com/*' => Http::response(studioAiResponse('{"partial":true}', $reason))]);
     expect(fn () => app(StudioAiService::class)->chat('system', 'source'))->toThrow(ValidationException::class);

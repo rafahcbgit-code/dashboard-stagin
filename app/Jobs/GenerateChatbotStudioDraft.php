@@ -49,7 +49,7 @@ class GenerateChatbotStudioDraft implements ShouldQueue
                 throw ValidationException::withMessages(['generation' => 'The model changed during generation. Start a new revision to use the new model consistently.']);
             }
             if (($state['stage'] ?? 'direct') === 'plan') {
-                $plan = app(BlueprintRecovery::class)->plan($draft->source, $instruction, $draft->blueprint, $state['limit']);
+                $plan = app(BlueprintRecovery::class)->plan($draft->source, $instruction, $draft->blueprint, $state['limit'], $draft->id);
                 $state = array_merge($state, ['stage' => 'batch', 'plan' => $plan, 'completed' => [],
                     'pending' => array_chunk(array_column($plan['screens'], 'key'), 3), 'empty_retries' => 0]);
                 $this->checkpoint($state);
@@ -58,7 +58,7 @@ class GenerateChatbotStudioDraft implements ShouldQueue
             if (($state['stage'] ?? 'direct') === 'batch') {
                 $recovery = app(BlueprintRecovery::class);
                 $batch = $recovery->batch($draft->source, $instruction, $draft->blueprint, $state['plan'],
-                    $state['completed'], $state['pending'][0], $state['limit']);
+                    $state['completed'], $state['pending'][0], $state['limit'], $draft->id);
                 $state['completed'] = array_merge($state['completed'], $batch['screens']);
                 $state['plan']['issues'] = array_values(array_unique(array_merge($state['plan']['issues'], $batch['issues'])));
                 array_shift($state['pending']);
@@ -69,7 +69,7 @@ class GenerateChatbotStudioDraft implements ShouldQueue
                 }
                 $blueprint = $recovery->assemble($state['plan'], $state['completed'], true);
             } else {
-                $blueprint = $generator->generate($draft->source, $instruction, $draft->blueprint);
+                $blueprint = $generator->generate($draft->source, $instruction, $draft->blueprint, $draft->id);
             }
             DB::transaction(function () use ($blueprint) {
                 $draft = ChatbotStudioDraft::lockForUpdate()->find($this->draftId);

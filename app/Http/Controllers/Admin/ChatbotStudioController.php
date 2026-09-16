@@ -9,6 +9,7 @@ use App\Services\ChatbotStudio\BlueprintCompiler;
 use App\Services\ChatbotStudio\BlueprintPublisher;
 use App\Services\ChatbotStudio\SourceReader;
 use App\Services\ChatbotStudio\StudioAiService;
+use App\Services\ChatbotStudio\TokenUsageTracker;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -90,7 +91,7 @@ class ChatbotStudioController extends Controller
                 $this->assertEditable($draft, (int) $data['version']);
             } else {
                 $draft = new ChatbotStudioDraft(['id' => (string) Str::uuid(), 'organization_id' => (int) $data['organization_id'],
-                    'admin_id' => $request->user('admin')->id, 'version' => 0, 'conversation' => []]);
+                    'admin_id' => $request->user('admin')->id, 'version' => 0, 'conversation' => [], 'token_usage' => TokenUsageTracker::emptySummary()]);
             }
             $history = $draft->conversation;
             $history[] = ['role' => 'user', 'content' => $message];

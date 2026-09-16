@@ -11,5 +11,5 @@ class ChatbotStudioDraft extends Model
     protected $guarded = [];
     protected $hidden = ['source', 'generation_state'];
     protected $casts = ['blueprint' => 'array', 'conversation' => 'array', 'result' => 'array',
-        'sources' => 'array', 'errors' => 'array', 'generation_state' => 'array', 'version' => 'integer', 'organization_id' => 'integer', 'admin_id' => 'integer'];
+        'sources' => 'array', 'errors' => 'array', 'generation_state' => 'array', 'token_usage' => 'array', 'version' => 'integer', 'organization_id' => 'integer', 'admin_id' => 'integer'];
 }

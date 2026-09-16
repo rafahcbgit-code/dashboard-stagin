@@ -3,6 +3,8 @@
 declare(strict_types=1);
 
 use App\Services\ChatbotStudio\StudioAiService;
+use App\Services\ChatbotStudio\SourceReader;
+use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Validation\ValidationException;
 
@@ -49,6 +51,13 @@ $summarize = static function ($response) use ($key): array {
 };
 
 try {
+    foreach ($argv as $argument) {
+        if (str_starts_with($argument, '--source=')) {
+            $source = app(SourceReader::class)->fromUrl(substr($argument, strlen('--source=')));
+            $report['source'] = ['readable' => true, 'bytes' => strlen($source),
+                'generation_mode' => strlen($source) > 60000 ? 'staged' : 'direct'];
+        }
+    }
     $service->assertConfigured();
     $model = config('chatbot_studio.model');
     $endpoint = 'https://generativelanguage.googleapis.com/v1beta/models/'.$model;
@@ -80,7 +89,10 @@ try {
         $report['generation_probe'] = 'Not requested. Pass --probe for one synthetic generation request.';
     }
 } catch (ValidationException $e) {
-    $report['configuration_error'] = 'API key, Free Tier confirmation or allowlisted model is missing.';
+    $report['validation_error'] = 'Check the source URL, source size, API configuration and model allowlist.';
+    $exitCode = 1;
+} catch (ConnectionException $e) {
+    $report['connection_error'] = $service->connectionFailureDetails($e);
     $exitCode = 1;
 } catch (Throwable $e) {
     $report['diagnostic_error'] = 'The check could not finish. Check server DNS, TLS certificates and outbound HTTPS access; no exception details were printed.';

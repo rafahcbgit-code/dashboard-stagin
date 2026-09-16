@@ -55,7 +55,16 @@ function studioRecoveryResponse(array $data, string $reason = 'STOP'): array
     return ['candidates' => [['finishReason' => $reason, 'content' => ['parts' => [['text' => json_encode($data)]]]]]];
 }
 
+function studioMeteredResponse(array $data, string $reason = 'STOP'): array
+{
+    return array_merge(studioRecoveryResponse($data, $reason), ['usageMetadata' => [
+        'promptTokenCount' => 100, 'candidatesTokenCount' => 20, 'thoughtsTokenCount' => 10,
+        'cachedContentTokenCount' => 40, 'totalTokenCount' => 130,
+    ]]);
+}
+
 beforeEach(function () {
+    Http::preventStrayRequests();
     config(['database.default' => 'sqlite', 'database.connections.sqlite.database' => ':memory:', 'cache.default' => 'array', 'session.driver' => 'array']);
     config(['chatbot_studio.api_key' => 'test-only-key', 'chatbot_studio.free_tier_confirmed' => true]);
     DB::purge('sqlite');
@@ -76,6 +85,7 @@ beforeEach(function () {
     Schema::create('role_permissions', function (Blueprint $table) { $table->id(); $table->unsignedBigInteger('role_id'); $table->string('module'); $table->string('action'); });
     (require base_path('database/migrations/2026_09_12_180000_create_chatbot_studio_drafts_table.php'))->up();
     (require base_path('database/migrations/2026_09_16_180000_add_generation_state_to_chatbot_studio_drafts.php'))->up();
+    (require base_path('database/migrations/2026_09_16_190000_add_token_usage_to_chatbot_studio_drafts.php'))->up();
     DB::table('organizations')->insert(['id' => 285, 'uuid' => (string) Str::uuid(), 'name' => 'Test organization']);
     $this->withoutMiddleware([App\Http\Middleware\CheckAppStatus::class, App\Http\Middleware\HandleInertiaRequests::class,
         App\Http\Middleware\SetOrganizationFromSession::class, App\Http\Middleware\Localization::class]);
@@ -96,6 +106,94 @@ it('compiles every choice to a separate flow through a native portal', function 
     $metadata['nodes'] = array_values(array_filter($metadata['nodes'], fn ($n) => $n['type'] !== 'portal'));
     expect(app(FlowValidator::class)->validateMessageNodes($metadata))->toBeTrue();
 })->with([1, 3, 4, 10]);
+
+it('accumulates actual usage for repair calls without double counting cached input', function () {
+    $draft = studioDraft(['status' => 'generating', 'conversation' => [['role' => 'user', 'content' => 'Build']],
+        'token_usage' => App\Services\ChatbotStudio\TokenUsageTracker::emptySummary()]);
+    Http::fake(['generativelanguage.googleapis.com/*' => Http::sequence()
+        ->push(studioMeteredResponse(['invalid' => true]))
+        ->push(studioMeteredResponse(studioBlueprint()))]);
+    (new GenerateChatbotStudioDraft($draft->id, 1))->handle(app(BlueprintGenerator::class));
+    $usage = $draft->fresh()->token_usage;
+    expect($usage)->toMatchArray(['requests' => 2, 'reported_requests' => 2, 'total_tokens' => 260,
+        'input_tokens' => 200, 'output_tokens' => 40, 'thinking_tokens' => 20, 'cached_input_tokens' => 80,
+        'historical_usage_unknown' => false]);
+    expect($draft->fresh()->status)->toBe('draft');
+    foreach (Http::recorded() as [$request]) {
+        expect(json_encode($request->data()))->not->toContain($draft->id, 'usage_draft_id');
+    }
+    $this->actingAs(studioAdmin(), 'admin')->getJson('/admin/chatbot-studio/drafts/'.$draft->id)
+        ->assertOk()->assertJsonPath('token_usage.total_tokens', 260);
+    $this->actingAs(studioAdmin(2), 'admin')->getJson('/admin/chatbot-studio/drafts/'.$draft->id)->assertNotFound();
+});
+
+it('retains metered truncation and plan usage across quota failure retry and publication', function () {
+    $draft = studioDraft(['status' => 'generating', 'conversation' => [['role' => 'user', 'content' => 'Build']]]);
+    $blueprint = studioBlueprint();
+    Http::fake(['generativelanguage.googleapis.com/*' => Http::sequence()
+        ->push(studioMeteredResponse([], 'MAX_TOKENS'))
+        ->push(studioMeteredResponse(studioRecoveryPlan($blueprint)))
+        ->push(['error' => ['message' => 'quota']], 429)
+        ->push(studioMeteredResponse(['screens' => $blueprint['screens'], 'issues' => []]))]);
+    foreach ([0, 1, 2] as $step) {
+        (new GenerateChatbotStudioDraft($draft->id, 1, $step))->handle(app(BlueprintGenerator::class));
+    }
+    expect($draft->fresh()->status)->toBe('failed');
+    expect($draft->fresh()->token_usage)->toMatchArray(['requests' => 3, 'reported_requests' => 2, 'total_tokens' => 260,
+        'historical_usage_unknown' => true]);
+    $this->actingAs(studioAdmin(), 'admin')->postJson('/admin/chatbot-studio/drafts/'.$draft->id.'/retry', ['version' => 1])->assertStatus(202);
+    (new GenerateChatbotStudioDraft($draft->id, 2, 2))->handle(app(BlueprintGenerator::class));
+    expect($draft->fresh()->status)->toBe('draft');
+    expect($draft->fresh()->token_usage)->toMatchArray(['requests' => 4, 'reported_requests' => 3, 'total_tokens' => 390]);
+    (new GenerateChatbotStudioDraft($draft->id, 1, 2))->handle(app(BlueprintGenerator::class));
+    Http::assertSentCount(4);
+    app(BlueprintPublisher::class)->publish($draft->id, 1, 2);
+    expect($draft->fresh()->token_usage['total_tokens'])->toBe(390);
+});
+
+it('records unknown usage for unavailable responses and connection failures without inventing tokens', function () {
+    Illuminate\Support\Sleep::fake();
+    $draft = studioDraft();
+    $calls = 0;
+    Http::fake(['generativelanguage.googleapis.com/*' => function () use (&$calls) {
+        $calls++;
+        if ($calls > 3) {
+            throw new Illuminate\Http\Client\ConnectionException('private failure details');
+        }
+        return $calls < 3 ? Http::response([], 503) : Http::response(studioRecoveryResponse(studioBlueprint()));
+    }]);
+    $ai = app(App\Services\ChatbotStudio\StudioAiService::class);
+    $ai->chat('system', 'source', ['usage_draft_id' => $draft->id]);
+    expect($draft->fresh()->token_usage)->toMatchArray(['requests' => 3, 'reported_requests' => 0, 'total_tokens' => 0]);
+    expect(fn () => $ai->chat('system', 'source', ['usage_draft_id' => $draft->id]))->toThrow(ValidationException::class);
+    expect($draft->fresh()->token_usage)->toMatchArray(['requests' => 4, 'reported_requests' => 0]);
+});
+
+it('initializes new draft tracking and keeps usage through manual edits and revisions', function () {
+    $this->actingAs(studioAdmin(), 'admin');
+    $created = $this->postJson('/admin/chatbot-studio/generate', ['organization_id' => 285, 'message' => 'Build'])
+        ->assertStatus(202)->assertJsonPath('token_usage.requests', 0)->assertJsonPath('token_usage.historical_usage_unknown', false);
+    $id = $created->json('id');
+    Http::fake(['generativelanguage.googleapis.com/*' => Http::response(studioMeteredResponse(studioBlueprint()))]);
+    (new GenerateChatbotStudioDraft($id, 1))->handle(app(BlueprintGenerator::class));
+    $this->putJson('/admin/chatbot-studio/drafts/'.$id, ['version' => 1, 'blueprint' => studioBlueprint()])
+        ->assertOk()->assertJsonPath('token_usage.total_tokens', 130);
+    $this->postJson('/admin/chatbot-studio/generate', ['organization_id' => 285, 'draft_id' => $id, 'version' => 2, 'message' => 'Revise'])
+        ->assertStatus(202)->assertJsonPath('token_usage.total_tokens', 130);
+    (new GenerateChatbotStudioDraft($id, 3))->handle(app(BlueprintGenerator::class));
+    expect(ChatbotStudioDraft::find($id)->token_usage['total_tokens'])->toBe(260);
+});
+
+it('counts in-flight usage after cancellation without restoring stale generation state', function () {
+    $draft = studioDraft(['status' => 'generating', 'conversation' => [['role' => 'user', 'content' => 'Build']]]);
+    Http::fake(['generativelanguage.googleapis.com/*' => function () use ($draft) {
+        $draft->update(['version' => 2, 'status' => 'failed']);
+        return Http::response(studioMeteredResponse(studioBlueprint()));
+    }]);
+    (new GenerateChatbotStudioDraft($draft->id, 1))->handle(app(BlueprintGenerator::class));
+    expect($draft->fresh()->status)->toBe('failed');
+    expect($draft->fresh()->token_usage)->toMatchArray(['requests' => 1, 'total_tokens' => 130]);
+});
 
 it('preserves original messages and uses the engine question success handle', function () {
     $blueprint = studioBlueprint();
