@@ -409,3 +409,79 @@ Sources checked 2026-09-16:
 - https://ai.google.dev/gemini-api/docs/pricing
 - https://ai.google.dev/gemini-api/docs/deprecations
 - https://ai.google.dev/gemma/docs/core/gemma_on_gemini_api
+
+## Deterministic blueprint adjustments (2026-09-17)
+
+Generation now normalizes mechanical incompatibilities before strict validation,
+in both direct and staged generation. It separates a website CTA from reply
+buttons/questions into connected screens, adds missing list titles, shortens
+labels to 20 UTF-16 units without breaking emoji, and disambiguates reply labels
+when destinations differ. It preserves original message strings, questions,
+HTTPS URLs and reply destinations. A separate reply menu adds a small localized
+navigation prompt; it does not replace the original message. Valid input remains
+unchanged. The compiler and publisher remain strict, including for manual edits.
+
+Every automatic change is stored in `blueprint.adjustments` and shown in the
+draft's **Flow adjustments** panel. A review issue blocks publication. Compare
+the original/adjusted labels and routes, edit any unclear shortened labels,
+resolve the review issue and save before publishing. This approval is deliberate,
+not another generation failure. Do not dismiss unrelated source/integration issues.
+
+Missing destinations, unreachable screens, unsupported/non-HTTPS CTA links,
+missing map URLs and unspecified human-handoff integrations are NOT invented or
+silently discarded. Email addresses can remain message text; a `mailto:` address
+is not a supported website CTA. The 200-screen cap still applies after splitting;
+oversized graphs stop without dropping branches. Provider quota, timeout and
+availability errors are unaffected.
+
+### Deploy this update
+
+Deploy these application files together on top of the existing Studio release:
+
+- `app/Services/ChatbotStudio/BlueprintNormalizer.php` (new)
+- `app/Services/ChatbotStudio/BlueprintCompiler.php`
+- `app/Services/ChatbotStudio/BlueprintGenerator.php`
+- `app/Services/ChatbotStudio/BlueprintRecovery.php`
+- `resources/js/Pages/Admin/ChatbotStudio/FlowAdjustments.vue` (new)
+- `resources/js/Pages/Admin/ChatbotStudio/Index.vue`
+- `lang/ar.json`
+- The complete matching `public/build/` directory, including `manifest.json`.
+
+No new migration, model change or API-key change is needed for this update.
+Build the frontend before deployment with `npm ci` then `npm run build`, or use
+the complete already built assets from this release. Back up the current release
+and database. Pause team generation, let current jobs finish, then stop ONLY the
+Studio Supervisor group. Prefer an atomic release switch for PHP and assets:
+
+```shell
+cd /var/www/dashboard.chatberry.net
+sudo supervisorctl stop 'chatberry-chatbot-studio:*'
+# Deploy the matching application files and built assets now.
+# As the deployment user, rebuild Composer's optimized class map:
+composer dump-autoload --optimize --no-dev
+sudo -u www-data php artisan config:cache
+sudo -u www-data php artisan view:clear
+sudo supervisorctl start 'chatberry-chatbot-studio:*'
+sudo supervisorctl status 'chatberry-chatbot-studio:*'
+```
+
+Use the actual Studio group name from your Supervisor configuration. Do not
+restart the email worker or use `restart all`. If OPcache disables timestamp
+validation, gracefully reload the web PHP service using its actual service name.
+Refresh the browser to load the new asset manifest. Existing failed drafts can
+use **Retry generation** to resume the saved stage with the fix; do not repeatedly
+add repair prompts. Model-pinned checkpoints still require a fresh draft when
+switching models. This update does not automatically rewrite published flows.
+
+Acceptance: upload the Markdown to a test organization, generate, inspect Flow
+adjustments, compare every original branch, then review/save/publish explicitly.
+Test website/WhatsApp links and each Back destination on a test contact. Automated
+coverage uses synthetic Arabic/English examples of the document's CTA/Back pattern
+and mocked model responses, not a live generation of the complete user document.
+
+Verification: 95 focused tests passed (686 assertions); `npm run build` and
+`git diff --check` succeeded. Browser visual verification was unavailable because
+the CUA runtime could not initialize its assets. Run tests with an isolated
+`APP_CONFIG_CACHE` path when a local cached production configuration exists;
+otherwise Laravel may use the wrong environment and reject test requests with 419.
+No production deployment or full-document live generation was performed here.

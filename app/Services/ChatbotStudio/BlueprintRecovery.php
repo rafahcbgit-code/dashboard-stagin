@@ -24,6 +24,7 @@ class BlueprintRecovery
                     'screens.*.choices' => 'present|array',
                     'screens.*.source_hint' => 'required|string|max:400',
                 ])->validate();
+                $plan = app(BlueprintNormalizer::class)->normalize($plan);
                 $this->compiler->validate($this->assemble($plan, []));
                 return $plan;
             }, $limit, $usageDraftId,
@@ -45,14 +46,29 @@ class BlueprintRecovery
                     throw ValidationException::withMessages(['generation' => 'Batch must contain every requested screen exactly once.']);
                 }
                 $inventory = array_column($plan['screens'], null, 'key');
-                foreach ($result['screens'] as $screen) {
-                    foreach (['name', 'choices', 'next', 'list_label'] as $field) {
+                foreach ($result['screens'] as &$screen) {
+                    $planned = $inventory[$screen['key']];
+                    Validator::make($screen, ['choices' => 'present|array', 'choices.*' => 'array:label,target',
+                        'choices.*.target' => 'required|string', 'choices.*.label' => 'required|string'])->validate();
+                    if (array_column($screen['choices'], 'target') !== array_column($planned['choices'], 'target')) {
+                        throw ValidationException::withMessages(['generation' => 'Batch changed planned choice destinations for '.$screen['key'].'.']);
+                    }
+                    // The validated plan owns button names; models may echo the original source labels.
+                    foreach ($screen['choices'] as $index => &$choice) {
+                        $choice['label'] = $planned['choices'][$index]['label'];
+                    }
+                    unset($choice);
+                    if (($screen['list_label'] ?? null) !== ($planned['list_label'] ?? null)) {
+                        $screen['list_label'] = $planned['list_label'] ?? null;
+                    }
+                    foreach (['name', 'next'] as $field) {
                         if (($screen[$field] ?? null) != ($inventory[$screen['key']][$field] ?? null)) {
                             throw ValidationException::withMessages(['generation' => 'Batch changed planned routing for '.$screen['key'].'.']);
                         }
                     }
                 }
-                $this->compiler->validate($this->assemble($plan, array_merge($completed, $result['screens'])));
+                unset($screen);
+                $this->compiler->validate(app(BlueprintNormalizer::class)->normalize($this->assemble($plan, array_merge($completed, $result['screens']))));
                 return $result;
             }, $limit, $usageDraftId,
         );
@@ -71,7 +87,7 @@ class BlueprintRecovery
             unset($screen['source_hint']);
             $blueprint['screens'][] = $byKey[$screen['key']] ?? array_merge($screen, ['messages' => ['Pending content'], 'questions' => []]);
         }
-        return $final ? $this->compiler->validate($blueprint) : $blueprint;
+        return $final ? $this->compiler->validate(app(BlueprintNormalizer::class)->normalize($blueprint)) : $blueprint;
     }
 
     private function request(string $task, array $input, array $schema, callable $validate, ?int $limit = null, ?string $usageDraftId = null): array

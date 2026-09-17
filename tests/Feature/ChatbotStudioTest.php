@@ -249,6 +249,34 @@ it('rejects existing triggers and unresolved requirements without any writes', f
     expect(DB::table('flows')->count())->toBe(3)->and(DB::table('trigger_groups')->count())->toBe(3);
 });
 
+it('requires review of deterministic flow adjustments before publishing native CTA and portal flows', function () {
+    $source = require __DIR__.'/../Fixtures/ChatbotStudioMixedBlueprint.php';
+    $fixed = app(App\Services\ChatbotStudio\BlueprintNormalizer::class)->normalize($source);
+    $draft = studioDraft(['blueprint' => app(BlueprintCompiler::class)->validate($fixed)]);
+    expect(fn () => app(BlueprintPublisher::class)->publish($draft->id, 1, 1))->toThrow(ValidationException::class);
+    expect(DB::table('flows')->count())->toBe(0);
+    $this->actingAs(studioAdmin(), 'admin')->getJson('/admin/chatbot-studio/drafts/'.$draft->id)
+        ->assertOk()->assertJsonCount(count($fixed['adjustments']), 'blueprint.adjustments');
+    $fixed['issues'] = [];
+    $this->actingAs(studioAdmin(), 'admin')->putJson('/admin/chatbot-studio/drafts/'.$draft->id, ['version' => 1, 'blueprint' => $fixed])->assertOk();
+    $result = app(BlueprintPublisher::class)->publish($draft->id, 1, 2);
+    expect($result['flows'])->toBe(count($fixed['screens']));
+    expect($draft->fresh()->blueprint['adjustments'])->toBe($fixed['adjustments']);
+    foreach (DB::table('flows')->get() as $flow) {
+        $metadata = json_decode($flow->metadata, true);
+        $messages = $metadata;
+        $messages['nodes'] = array_values(array_filter($messages['nodes'], fn ($node) => $node['type'] !== 'portal'));
+        expect(app(FlowValidator::class)->validateMessageNodes($messages))->toBeTrue();
+        foreach ($metadata['nodes'] as $node) {
+            if ($node['type'] === 'portal') {
+                $fields = $node['data']['metadata']['fields'];
+                $target = DB::table('flows')->where('id', $fields['target_flow_id'])->first();
+                expect($target->organization_id)->toBe(285)->and($target->uuid)->toBe($fields['target_flow_uuid']);
+            }
+        }
+    }
+});
+
 it('rolls back all flows if trigger insertion fails', function () {
     DB::statement("CREATE TRIGGER fail_studio BEFORE INSERT ON trigger_groups BEGIN SELECT RAISE(ABORT, 'forced failure'); END");
     $draft = studioDraft();

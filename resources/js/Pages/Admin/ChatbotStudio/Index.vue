@@ -6,6 +6,7 @@ import { Plus, Search, Send, Paperclip, X, Save, Upload, RefreshCw, LoaderCircle
 import AppLayout from '../Layout/App.vue';
 import Preview from './Preview.vue';
 import TokenUsage from './TokenUsage.vue';
+import FlowAdjustments from './FlowAdjustments.vue';
 import { useAdminPermissions } from '@/Composables/useAdminPermissions';
 
 const props = defineProps({ drafts: { type: Array, default: () => [] }, ai: { type: Object, default: () => ({}) } });
@@ -226,7 +227,8 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(pollTimer); clearTimeout(s
                     <div class="review-heading"><div class="tabs" role="tablist" :aria-label="$t('Draft review')"><button v-for="item in [{ key: 'flows', label: 'Flows', icon: GitBranch }, { key: 'preview', label: 'Preview', icon: MessageSquare }, { key: 'json', label: 'JSON', icon: Code }]" :key="item.key" role="tab" :aria-selected="tab === item.key" :class="{ active: tab === item.key }" @click="tab = item.key"><component :is="item.icon" :size="15" />{{ $t(item.label) }}</button></div><span v-if="blueprint" class="counts">{{ screens.length }} {{ $t('Flows') }} · {{ triggerCount }} {{ $t('Triggers') }}</span></div>
                     <div v-if="!draft?.blueprint" class="empty-state"><GitBranch :size="32" /><h3>{{ $t('No generated flows') }}</h3></div>
                     <div v-else class="review-content" role="tabpanel">
-                        <div v-if="blueprint?.issues?.length" class="issues"><h3>{{ $t('Open issues') }} ({{ blueprint.issues.length }})</h3><label v-for="(issue, index) in blueprint.issues" :key="`${index}-${issue}`"><input type="checkbox" :disabled="!editable" :aria-label="$t('Mark resolved')" @change="mutate(value => value.issues.splice(index, 1))" /><span>{{ issue }}</span></label></div>
+                        <FlowAdjustments :adjustments="blueprint?.adjustments ?? []" />
+                        <div v-if="blueprint?.issues?.length" class="issues"><h3>{{ $t('Open issues') }} ({{ blueprint.issues.length }})</h3><label v-for="(issue, index) in blueprint.issues" :key="`${index}-${issue}`"><input type="checkbox" :disabled="!editable" :aria-label="$t('Mark resolved')" @change="mutate(value => value.issues.splice(index, 1))" /><span>{{ $t(issue) }}</span></label></div>
                         <template v-if="tab === 'flows' && blueprint">
                             <div class="bot-settings"><label>{{ $t('Chatbot name') }}<input :value="blueprint.name" :disabled="!editable" maxlength="150" dir="auto" @input="mutate(value => value.name = $event.target.value)" /></label><label>{{ $t('Start trigger') }}<input :value="blueprint.trigger" :disabled="!editable" maxlength="20" dir="auto" @input="mutate(value => value.trigger = $event.target.value)" /></label></div>
                             <label>{{ $t('Start flow') }}<select :value="blueprint.start" :disabled="!editable" @change="mutate(value => value.start = $event.target.value)"><option v-for="flow in screens" :key="flow.key" :value="flow.key">{{ flow.name }}</option></select></label>

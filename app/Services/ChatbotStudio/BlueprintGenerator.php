@@ -46,7 +46,7 @@ PROMPT;
                 if (!is_array($blueprint)) {
                     throw new \JsonException('A JSON object is required.');
                 }
-                return $this->compiler->validate($blueprint);
+                return $this->compiler->validate(app(BlueprintNormalizer::class)->normalize($blueprint));
             } catch (\JsonException | ValidationException $e) {
                 $errors = $e instanceof ValidationException ? $e->errors() : ['generation' => ['AI returned invalid or incomplete JSON.']];
                 if ($attempt === 1) {
