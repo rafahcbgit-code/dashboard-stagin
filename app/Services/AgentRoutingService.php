@@ -253,7 +253,12 @@ class AgentRoutingService
             if ($ticket->status === 'closed') {
                 $ticket->status = 'open';
             }
-            $ticket->assigned_to = $agentId;
+            // A null routing result means "no new assignment", not
+            // "unassign the existing agent".  Explicit unassignment is
+            // handled by the assignment endpoints.
+            if ($agentId !== null) {
+                $ticket->assigned_to = $agentId;
+            }
             $ticket->updated_at = now();
             $ticket->save();
 

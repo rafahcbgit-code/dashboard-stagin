@@ -505,7 +505,11 @@ class ChatService
     private function assignAgentToTicket($ticket, $organizationId, $autoassignment)
     {
         if (!$autoassignment) {
-            $ticket->assigned_to = null;
+            // An existing assignment is authoritative.  This method is also
+            // used while reopening tickets; disabling auto-assignment must
+            // not turn an already assigned conversation into an unassigned
+            // one.  A null value is only valid for a genuinely new/unassigned
+            // ticket.
             return;
         }
 
@@ -611,9 +615,16 @@ class ChatService
                 $autoassignment = $settings->tickets->auto_assignment;
                 $reassignOnReopen = $settings->tickets->reassign_reopened_chats;
 
-                $ticket = ChatTicket::where('contact_id', $contactId)->first();
+                DB::transaction(function () use ($reassignOnReopen, $autoassignment, $contactId, $organizationId) {
+                    // Reload while holding the row lock. The initial
+                    // existence check above is only an optimization; using
+                    // that stale model here could overwrite a manual
+                    // assignment made while the webhook was being queued.
+                    $ticket = ChatTicket::where('contact_id', $contactId)
+                        ->where('organization_id', $organizationId)
+                        ->lockForUpdate()
+                        ->first();
 
-                DB::transaction(function () use ($reassignOnReopen, $autoassignment, $ticket, $contactId, $organizationId) {
                     if (!$ticket) {
                         // Create a new ticket
                         $this->createNewTicket($contactId, $organizationId, $autoassignment);
