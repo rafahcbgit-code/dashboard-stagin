@@ -6,6 +6,7 @@ use App\Helpers\Email;
 use App\Models\Team;
 use App\Models\TeamInvite;
 use App\Models\User;
+use App\Models\ChatTicket;
 use Auth;
 use DB;
 use Illuminate\Support\Carbon;
@@ -213,7 +214,9 @@ class TeamService
 
     public function destroy($uuid)
     {
-        $team = Team::where('uuid', $uuid)->first();
+        $team = Team::where('uuid', $uuid)
+            ->where('organization_id', session()->get('current_organization'))
+            ->firstOrFail();
 
         if ($team->role === 'owner') {
             return Redirect::back()->with(
@@ -223,7 +226,22 @@ class TeamService
                 ]
             );
         } else {
-            Team::where('uuid', $uuid)->where('role', '!=', 'owner')->delete();
+            DB::transaction(function () use ($team, $uuid) {
+                // Removing a team member must also remove their active
+                // conversation assignments. Otherwise assigned_to keeps
+                // pointing at a user who is no longer an agent in this org,
+                // leaving stale assignments and breaking the Unassigned view.
+                ChatTicket::where('organization_id', $team->organization_id)
+                    ->where('assigned_to', $team->user_id)
+                    ->update([
+                        'assigned_to' => null,
+                        'updated_at' => now(),
+                    ]);
+
+                Team::where('uuid', $uuid)
+                    ->where('role', '!=', 'owner')
+                    ->delete();
+            });
 
             return Redirect::back()->with(
                 'status', [

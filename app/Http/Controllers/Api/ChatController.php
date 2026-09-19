@@ -164,7 +164,7 @@ class ChatController extends Controller
                     'unread_count' => $unreadCount,
                     'ticket' => $ticket ? [
                         'status' => $ticket->status,
-                        'assigned_to' => $ticket->assigned_to ? [
+                        'assigned_to' => $ticket->assigned_to && $ticket->user ? [
                             'id' => $ticket->user->id,
                             'uuid' => $ticket->user->uuid,
                             'first_name' => $ticket->user->first_name,

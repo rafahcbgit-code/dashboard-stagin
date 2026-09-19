@@ -524,6 +524,14 @@ class Contact extends Model
             'id',
             'id',
             'assigned_to'
-        )->whereNull('users.deleted_at')->latest('chat_tickets.id');
+        )->whereNull('users.deleted_at')
+            ->whereExists(function ($query) {
+                $query->selectRaw('1')
+                    ->from('teams')
+                    ->whereColumn('teams.user_id', 'users.id')
+                    ->whereColumn('teams.organization_id', 'chat_tickets.organization_id')
+                    ->whereNull('teams.deleted_at');
+            })
+            ->latest('chat_tickets.id');
     }
 }

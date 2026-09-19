@@ -24,6 +24,14 @@ class ChatTicket extends Model {
     }
 
     public function user(){
-        return $this->belongsTo(User::class, 'assigned_to', 'id')->whereNull('users.deleted_at');
+        return $this->belongsTo(User::class, 'assigned_to', 'id')
+            ->whereNull('users.deleted_at')
+            ->whereExists(function ($query) {
+                $query->selectRaw('1')
+                    ->from('teams')
+                    ->whereColumn('teams.user_id', 'users.id')
+                    ->whereColumn('teams.organization_id', 'chat_tickets.organization_id')
+                    ->whereNull('teams.deleted_at');
+            });
     }
 }
