@@ -59,6 +59,7 @@ const currentLanguage = computed(() => page.props.currentLanguage);
 const primaryItems = [
     { href: '/admin/dashboard', label: 'Dashboard', module: 'dashboard' },
     { href: '/admin/organizations', label: 'Organizations', module: 'organizations' },
+    { href: '/admin/chatbot-studio', label: 'Chatbot Studio', module: 'organizations' },
     { href: '/admin/users', label: 'Users', module: 'customers' },
     { href: '/admin/payment-logs', label: 'Billing', module: 'billing' },
     { href: '/admin/support', label: 'Support desk', module: 'support' },

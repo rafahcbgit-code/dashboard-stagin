@@ -35,6 +35,11 @@ class SallaOrderStatusUpdatedFieldSchema
             ['path' => 'data.order.urls.customer', 'label' => 'Customer Order URL'],
             ['path' => 'data.order.urls.admin', 'label' => 'Admin Order URL'],
 
+            // Shipping tracking links. Salla provides the first path on the order's
+            // primary shipment and the second path in the shipments collection.
+            ['path' => 'data.order.shipping.shipment.tracking_link', 'label' => 'Tracking Link (Primary Shipment)'],
+            ['path' => 'data.order.shipments.0.tracking_link', 'label' => 'Tracking Link (First Shipment)'],
+
             // Customer
             ['path' => 'data.order.customer.id', 'label' => 'Customer ID'],
             ['path' => 'data.order.customer.name', 'label' => 'Customer Name'],

@@ -4,6 +4,7 @@ import { usePage } from '@inertiajs/vue3';
 const pageModules = [
     ['/admin/dashboard', 'dashboard'],
     ['/admin/organizations', 'organizations'],
+    ['/admin/chatbot-studio', 'organizations'],
     ['/admin/users', 'customers'],
     ['/admin/payment-logs', 'billing'],
     ['/admin/billing', 'billing'],

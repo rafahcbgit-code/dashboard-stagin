@@ -72,6 +72,16 @@ class OrderCreatedHandler implements SallaWebhookEventHandlerInterface
         }
 
         if (!$setting) {
+            // New Order messages must not be sent while the order is awaiting payment.
+            if (data_get($payload, 'data.status.slug') === 'payment_pending') {
+                $delivery->update([
+                    'status' => 'skipped',
+                    'processed_at' => now(),
+                    'error' => 'payment_pending:order.created',
+                ]);
+                return;
+            }
+
             // 3) Load default automation settings + mappings for this org.
             $setting = SallaWebhookEventSetting::with('mappings')
                 ->where('organization_id', $delivery->organization_id)

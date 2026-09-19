@@ -33,6 +33,9 @@ return [
      * method/URI pair wins; every admin route for a non-super-admin must map.
      */
     'routes' => [
+        ['GET', 'admin/chatbot-studio*', 'organizations', 'view'],
+        ['POST', 'admin/chatbot-studio*', 'organizations', 'edit'],
+        ['PUT', 'admin/chatbot-studio*', 'organizations', 'edit'],
         ['GET', 'admin/dashboard', 'dashboard', 'view'],
 
         ['GET', 'admin/users', 'customers', 'view'], ['GET', 'admin/users/create', 'customers', 'create'], ['GET', 'admin/users/*/edit', 'customers', 'edit'], ['GET', 'admin/users/*', 'customers', 'view'], ['POST', 'admin/users', 'customers', 'create'], ['PUT', 'admin/users/*', 'customers', 'edit'], ['PATCH', 'admin/users/*', 'customers', 'edit'], ['DELETE', 'admin/users/*', 'customers', 'delete'],

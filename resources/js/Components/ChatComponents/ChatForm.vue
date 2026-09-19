@@ -390,16 +390,19 @@ const sendMessage = async () => {
 
     if (hasText || form.value.file) {
         const formData = new FormData();
+        // A caption must keep the selected media type, while a message with no
+        // attachment must always be sent as text.
+        const messageType = form.value.file ? form.value.type : 'text';
 
         formData.append('message', form.value.message ?? '');
-        formData.append('type', form.value.type);
+        formData.append('type', messageType);
         formData.append('uuid', form.value.uuid);
 
         if (form.value.file) {
             formData.append('file', form.value.file);
         }
 
-        if (props.replyingTo?.id && form.value.type === 'text') {
+        if (props.replyingTo?.id && messageType === 'text') {
             formData.append('reply_to_message_id', props.replyingTo.id);
         }
 
@@ -911,7 +914,7 @@ onBeforeUnmount(() => {
                 </button>
             </div>
             <div>
-                <textarea ref="textInputRef" @focus="form.type = 'text'" @keydown.enter.exact.prevent="handleEnterKey"
+                <textarea ref="textInputRef" @keydown.enter.exact.prevent="handleEnterKey"
                     class="w-full outline-none resize-none text-sm rounded-md p-2"
                     :class="processingForm ? 'bg-gray-100' : 'bg-white'" v-model="formTextInput"
                     @input="handleComposerInput" @blur="stopTyping" type="text" rows="3" :placeholder="$t('Type your message...')"
