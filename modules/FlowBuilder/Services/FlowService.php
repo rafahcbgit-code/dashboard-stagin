@@ -51,6 +51,17 @@ class FlowService
         
         $flow = Flow::where('uuid', $uuid)->firstOrFail();
 
+        $incomingMetadata = json_decode($data['metadata'] ?? $flow->metadata, true);
+        $ctaDisplayTextValidation = $validator->validateCtaDisplayTextLengths($incomingMetadata ?: []);
+
+        if (is_array($ctaDisplayTextValidation)) {
+            return response()->json([
+                'success' => false,
+                'errors' => $ctaDisplayTextValidation,
+                'status' => $flow->status,
+            ], 422);
+        }
+
         if(isset($flow->metadata)){
             $metadataArray = json_decode($flow->metadata, true);
             $result = $validator->validateMessageNodes($metadataArray);

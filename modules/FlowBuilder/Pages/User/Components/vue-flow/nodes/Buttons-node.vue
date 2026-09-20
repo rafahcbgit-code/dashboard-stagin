@@ -48,9 +48,9 @@ const options2 = ref([
   { value: 'document', label: 'Document' },
 ]);
 
-// Max character limit for buttons (WhatsApp limit: 20 for reply, 25 for CTA display)
+// WhatsApp limits button labels, including CTA display text, to 20 characters.
 const maxButtonLength = 20;
-const maxCtaDisplayLength = 25;
+const maxCtaDisplayLength = 20;
 const maxHeaderLength = 60;
 const maxBodyLength = 1024;
 const maxFooterLength = 60;
@@ -127,6 +127,8 @@ const shouldShowWarning = computed(() => {
   const hasCtaUrlFields = 
     fields.value.ctaUrlButton.displayText !== '' && 
     fields.value.ctaUrlButton.url !== '';
+  const isCtaDisplayTextWithinLimit =
+    getCharsCount(fields.value.ctaUrlButton.displayText) <= maxCtaDisplayLength;
 
   // Validate URL format
   const isValidUrl = (url: string) => {
@@ -139,12 +141,12 @@ const shouldShowWarning = computed(() => {
     (fields.value.headerType !== '' && fields.value.headerType !== 'text' && fields.value.headerType !== 'none' && fields.value.headerMedia.length === 0) ||
     fields.value.body === '' ||
     (fields.value.buttonType === 'buttons' && !hasAtLeastOneButton) ||
-    (fields.value.buttonType === 'cta_url' && (!hasCtaUrlFields || !isValidUrl(fields.value.ctaUrlButton.url)))
+    (fields.value.buttonType === 'cta_url' && (!hasCtaUrlFields || !isCtaDisplayTextWithinLimit || !isValidUrl(fields.value.ctaUrlButton.url)))
   );
 });
 
 function getCharsCount(input: string): number {
-  return input.length;
+  return Array.from(input || '').length;
 }
 </script>
 
@@ -257,7 +259,15 @@ function getCharsCount(input: string): number {
         <div class="mb-4">
           <label class="text-sm mb-2">Display text</label>
           <FormInput v-model="fields.ctaUrlButton.displayText" :type="'text'" :maxLength="maxCtaDisplayLength" :class="'col-span-4'"/>
-          <span class="text-xs text-gray-500">{{ getCharsCount(fields.ctaUrlButton.displayText) }}/{{ maxCtaDisplayLength }}</span>
+          <span
+            class="text-xs"
+            :class="getCharsCount(fields.ctaUrlButton.displayText) > maxCtaDisplayLength ? 'text-red-600 font-medium' : 'text-gray-500'"
+          >
+            {{ getCharsCount(fields.ctaUrlButton.displayText) }}/{{ maxCtaDisplayLength }}
+          </span>
+          <p v-if="getCharsCount(fields.ctaUrlButton.displayText) > maxCtaDisplayLength" class="mt-1 text-xs text-red-600">
+            Display text must not exceed {{ maxCtaDisplayLength }} characters.
+          </p>
         </div>
 
         <div class="mb-4">
