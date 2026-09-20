@@ -4,10 +4,10 @@ namespace App\Services\Meta\WhatsApp;
 
 use App\Models\Organization;
 use App\Models\Template;
+use App\Services\WhatsappService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 
 class TemplateStatusWebhookProcessor
 {
@@ -45,18 +45,40 @@ class TemplateStatusWebhookProcessor
         ]);
 
         try {
-            $template = $organization ? $this->findTemplate($organization->id, $value) : null;
-
-            if (! $organization || ! $template) {
+            if (! $organization) {
                 $this->log()->warning('Template status webhook skipped', [
-                    'organization_id' => $organization?->id,
+                    'organization_id' => null,
                     'waba_id' => $wabaId,
                     'template_id' => $templateId,
                     'template_name' => $templateName,
                     'template_language' => $templateLanguage,
                     'template_category' => $templateCategory,
                     'event_type' => $mapping['event'],
-                    'reason' => ! $organization ? 'Organization not found for WABA ID' : 'Template not found',
+                    'reason' => 'Organization not found for WABA ID',
+                    'request_id' => $requestId,
+                ]);
+
+                return;
+            }
+
+            if ($isCategoryUpdate) {
+                $this->syncTemplates($organization, $requestId);
+
+                return;
+            }
+
+            $template = $organization ? $this->findTemplate($organization->id, $value) : null;
+
+            if (! $template) {
+                $this->log()->warning('Template status webhook skipped', [
+                    'organization_id' => $organization->id,
+                    'waba_id' => $wabaId,
+                    'template_id' => $templateId,
+                    'template_name' => $templateName,
+                    'template_language' => $templateLanguage,
+                    'template_category' => $templateCategory,
+                    'event_type' => $mapping['event'],
+                    'reason' => 'Template not found',
                     'request_id' => $requestId,
                 ]);
 
@@ -114,10 +136,6 @@ class TemplateStatusWebhookProcessor
                 $template->save();
             });
 
-            if ($hasKnownStatus) {
-                $this->sendStatusChangeEmail($organization, $template, $mapping['event'], $requestId);
-            }
-
             $this->log()->info('Template status webhook processed', [
                 'organization_id' => $organization->id,
                 'template_id' => $templateId,
@@ -148,57 +166,48 @@ class TemplateStatusWebhookProcessor
         return Log::channel('template_status_webhook');
     }
 
-    private function sendStatusChangeEmail(Organization $organization, Template $template, string $eventType, ?string $requestId): void
+    protected function syncTemplates(Organization $organization, ?string $requestId): void
     {
-        $recipientEmail = 'rafah@chatberry.net';
-        $templateName = $template->name ?: 'Unknown template';
-        $organizationName = $organization->name ?: 'Unknown organization';
+        $metadata = json_decode($organization->metadata ?: '{}', true);
+        $whatsapp = is_array($metadata['whatsapp'] ?? null) ? $metadata['whatsapp'] : [];
+        $accessToken = $whatsapp['access_token'] ?? null;
+        $wabaId = $whatsapp['waba_id'] ?? null;
 
-        $message = implode("\n", [
-            'This is a notification from Chatberry.',
-            '',
-            'A WhatsApp template status webhook was received and processed successfully.',
-            "Template name: {$templateName}",
-            "New status: {$eventType}",
-            "Organization: {$organizationName}",
-            '',
-            'Chatberry Notification',
-        ]);
+        if (! is_string($accessToken) || trim($accessToken) === '' || ! is_string($wabaId) || trim($wabaId) === '') {
+            throw new \RuntimeException('Cannot synchronize templates: WhatsApp access token or WABA ID is missing.');
+        }
 
-        $this->log()->info('Template status email notification sending', [
+        $service = new WhatsappService(
+            $accessToken,
+            config('graph.api_version'),
+            $whatsapp['app_id'] ?? null,
+            $whatsapp['phone_number_id'] ?? null,
+            $wabaId,
+            $organization->id
+        );
+
+        $this->log()->info('Template category update triggered template sync', [
             'organization_id' => $organization->id,
-            'template_id' => $template->meta_id,
-            'template_name' => $templateName,
-            'event_type' => $eventType,
-            'recipient_email' => $recipientEmail,
+            'waba_id' => $wabaId,
             'request_id' => $requestId,
         ]);
 
-        try {
-            Mail::raw($message, function ($mail) use ($recipientEmail, $templateName, $eventType) {
-                $mail->to($recipientEmail)
-                    ->subject("Chatberry template status update: {$templateName} - {$eventType}");
-            });
+        $result = $service->syncTemplates();
 
-            $this->log()->info('Template status email notification sent', [
-                'organization_id' => $organization->id,
-                'template_id' => $template->meta_id,
-                'template_name' => $templateName,
-                'event_type' => $eventType,
-                'recipient_email' => $recipientEmail,
-                'request_id' => $requestId,
-            ]);
-        } catch (\Throwable $e) {
-            $this->log()->error('Template status email notification failed', [
-                'organization_id' => $organization->id,
-                'template_id' => $template->meta_id,
-                'template_name' => $templateName,
-                'event_type' => $eventType,
-                'recipient_email' => $recipientEmail,
-                'error' => $e->getMessage(),
-                'request_id' => $requestId,
-            ]);
+        if (($result->success ?? true) === false) {
+            $message = $result->message
+                ?? data_get($result, 'data.error.error_user_msg')
+                ?? data_get($result, 'data.error.message')
+                ?? 'Template synchronization failed';
+
+            throw new \RuntimeException($message);
         }
+
+        $this->log()->info('Template sync completed after category update', [
+            'organization_id' => $organization->id,
+            'waba_id' => $wabaId,
+            'request_id' => $requestId,
+        ]);
     }
 
     private function findTemplate(int $organizationId, array $value): ?Template
@@ -246,7 +255,7 @@ class TemplateStatusWebhookProcessor
         return null;
     }
 
-    private function findOrganizationByWabaId(?string $wabaId): ?Organization
+    protected function findOrganizationByWabaId(?string $wabaId): ?Organization
     {
         if (! $wabaId) {
             return null;

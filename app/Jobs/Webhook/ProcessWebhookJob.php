@@ -118,6 +118,14 @@ class ProcessWebhookJob implements ShouldQueue
      */
     public function middleware(): array
     {
+        if (in_array($this->webhookType, ['message_template_status_update', 'template_category_update'], true)) {
+            return [
+                (new WithoutOverlapping("webhook-template-{$this->organizationId}"))
+                    ->expireAfter(180)
+                    ->releaseAfter(15),
+            ];
+        }
+
         // Extract contact phone from payload for FIFO ordering
         $contactPhone = $this->extractContactPhone();
 
