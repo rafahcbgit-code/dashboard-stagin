@@ -1,6 +1,6 @@
 <script setup lang="ts">
     import axios from "axios"
-    import { ref } from 'vue'
+    import { computed, ref } from 'vue'
     import AppLayout from "./../../../../resources/js/Pages/User/Layout/App.vue";
     import { Link, useForm } from "@inertiajs/vue3"
     import { useVueFlow } from '@vue-flow/core'
@@ -32,8 +32,41 @@
     const status = ref(props.flow.status);
     const metadata = ref(props.flow.metadata);
     const loading = ref(false);
+    const maxCtaDisplayLength = 20;
+
+    const ctaDisplayTextErrors = computed(() => {
+      try {
+        const flowMetadata = typeof metadata.value === 'string'
+          ? JSON.parse(metadata.value)
+          : metadata.value;
+
+        return (flowMetadata?.nodes || [])
+          .filter((node) => node.type === 'buttons')
+          .map((node) => node.data?.metadata?.fields)
+          .filter((fields) => fields?.buttonType === 'cta_url')
+          .map((fields) => fields.ctaUrlButton?.displayText || '')
+          .filter((displayText) => Array.from(displayText).length > maxCtaDisplayLength);
+      } catch (error) {
+        return [];
+      }
+    });
+
+    const hasInvalidCtaDisplayText = computed(() => ctaDisplayTextErrors.value.length > 0);
+
+    const showCtaDisplayTextError = () => {
+      toastClass.value = 'bg-red-700 text-white';
+      toast({
+        title: 'Error',
+        description: `CTA display text must not exceed ${maxCtaDisplayLength} characters.`,
+      });
+    };
 
     const handleClickSaveBtn = async () => {
+      if (hasInvalidCtaDisplayText.value) {
+        showCtaDisplayTextError();
+        return;
+      }
+
       loading.value = true;
 
       try {
@@ -63,6 +96,11 @@
     }
 
     const handleClickPublishBtn = async (publish) => {
+      if (hasInvalidCtaDisplayText.value) {
+        showCtaDisplayTextError();
+        return;
+      }
+
       loading.value = true;
 
       try {
@@ -158,9 +196,9 @@
                 Responses
                 <span v-if="props.flow.submissions_count" class="rounded bg-slate-100 px-1.5 py-0.5 text-xs text-slate-500">{{ props.flow.submissions_count }}</span>
               </Link>
-              <Button variant="outline" :class="'bg-green-700 text-white'" size="sm" @click="handleClickSaveBtn"> {{ $t('Save changes') }}</Button>
-              <Button v-if="status == 'inactive' && loading == false" variant="outline" :class="'bg-green-700 text-white'" size="sm" @click="handleClickPublishBtn(1)"> {{ $t('Save changes & publish') }}</Button>
-              <Button v-else-if="status == 'active' && loading == false" variant="outline" :class="'bg-red-500 text-white'" size="sm" @click="handleClickPublishBtn(0)"> {{ $t('Save changes & unpublish') }}</Button>
+              <Button variant="outline" :class="'bg-green-700 text-white'" size="sm" :disabled="hasInvalidCtaDisplayText" @click="handleClickSaveBtn"> {{ $t('Save changes') }}</Button>
+              <Button v-if="status == 'inactive' && loading == false" variant="outline" :class="'bg-green-700 text-white'" size="sm" :disabled="hasInvalidCtaDisplayText" @click="handleClickPublishBtn(1)"> {{ $t('Save changes & publish') }}</Button>
+              <Button v-else-if="status == 'active' && loading == false" variant="outline" :class="'bg-red-500 text-white'" size="sm" :disabled="hasInvalidCtaDisplayText" @click="handleClickPublishBtn(0)"> {{ $t('Save changes & unpublish') }}</Button>
             </div>
             <div v-else>
               <Button variant="outline" :class="'bg-white'" size="sm"> {{ $t('Updating flow, please wait...') }}</Button>

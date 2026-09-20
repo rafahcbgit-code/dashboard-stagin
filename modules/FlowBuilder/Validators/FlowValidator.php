@@ -7,6 +7,35 @@ use Illuminate\Support\Facades\Validator;
 class FlowValidator
 {
     /**
+     * Validate CTA display-text limits without applying the other publish rules.
+     *
+     * Draft flows may legitimately be incomplete, but an invalid CTA label must
+     * never be persisted because WhatsApp rejects labels longer than 20 characters.
+     *
+     * @return array|bool
+     */
+    public function validateCtaDisplayTextLengths(array $metadata)
+    {
+        foreach ($metadata['nodes'] ?? [] as $node) {
+            if (($node['type'] ?? '') !== 'buttons') {
+                continue;
+            }
+
+            $fields = $node['data']['metadata']['fields'] ?? [];
+            if (($fields['buttonType'] ?? '') !== 'cta_url') {
+                continue;
+            }
+
+            $displayText = $fields['ctaUrlButton']['displayText'] ?? '';
+            if (mb_strlen($displayText, 'UTF-8') > 20) {
+                return ['buttons' => ['CTA display text must not exceed 20 characters.']];
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * Validate WhatsApp message nodes for required fields.
      *
      * @param array $nodes
@@ -277,8 +306,8 @@ class FlowValidator
                 $errors[] = 'Both displayText and url must not be empty.';
             }
 
-            if (!empty($data['ctaUrlButton']['displayText']) && mb_strlen($data['ctaUrlButton']['displayText'], 'UTF-8') > 25) {
-                $errors[] = 'CTA display text must not exceed 25 characters.';
+            if (!empty($data['ctaUrlButton']['displayText']) && mb_strlen($data['ctaUrlButton']['displayText'], 'UTF-8') > 20) {
+                $errors[] = 'CTA display text must not exceed 20 characters.';
             }
 
             $urlPattern = '/^(https?:\/\/)([a-zA-Z0-9-]+\.)+[a-zA-Z]{2,}(:\d+)?(\/\S*)?$/';
