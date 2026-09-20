@@ -3007,6 +3007,7 @@ class WhatsappService
 
         $client = new Client();
         $responseObject = new \stdClass();
+        $organizationId = (int) $this->organizationId;
 
         try {
             do {
@@ -3014,12 +3015,18 @@ class WhatsappService
                     'headers' => [
                         'Authorization' => "OAuth {$this->accessToken}",
                     ],
+                    'connect_timeout' => 10,
+                    'timeout' => 30,
                 ]);
 
                 $responseObject = json_decode($response->getBody()->getContents());
 
+                if (! $responseObject instanceof \stdClass || ! isset($responseObject->data) || ! is_array($responseObject->data)) {
+                    throw new \RuntimeException('Unexpected response while synchronizing WhatsApp templates.');
+                }
+
                 foreach($responseObject->data as $templateData){
-                    $template = Template::where('organization_id', session()->get('current_organization'))
+                    $template = Template::where('organization_id', $organizationId)
                         ->where('meta_id', $templateData->id)->first();
 
                     if($template){
@@ -3057,14 +3064,15 @@ class WhatsappService
                         }
 
                         $template = new Template();
-                        $template->organization_id = session()->get('current_organization');
+                        $template->organization_id = $organizationId;
                         $template->meta_id = $templateData->id;
                         $template->name = $templateData->name;
                         $template->category = $templateData->category;
                         $template->language = $templateData->language;
                         $template->metadata = json_encode($newMeta);
                         $template->status = $templateData->status;
-                        $template->created_by = auth()->user()->id;
+                        $template->created_by = auth()->id()
+                            ?? Organization::whereKey($organizationId)->value('created_by');
                         $template->created_at = now();
                         $template->updated_at = now();
                         $template->save();
@@ -3085,13 +3093,12 @@ class WhatsappService
         } catch (GuzzleException $e) {
             $response = $e->getResponse();
             $responseObject->success = false;
-            $responseObject->data = json_decode($response->getBody()->getContents());
-
-            if (isset($responseObject->data->error->error_user_msg)) {
-                $responseObject->message = $responseObject->data->error->error_user_msg;
-            } else {
-                $responseObject->message = $responseObject->data->error->message;
-            }
+            $responseObject->data = $response
+                ? json_decode($response->getBody()->getContents())
+                : null;
+            $responseObject->message = data_get($responseObject, 'data.error.error_user_msg')
+                ?? data_get($responseObject, 'data.error.message')
+                ?? $e->getMessage();
         } catch (Exception $e) {
             $responseObject->success = false;
             $responseObject->data = new \stdClass();
