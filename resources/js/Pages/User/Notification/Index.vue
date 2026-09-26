@@ -41,7 +41,6 @@ const getContactUuid = (notification) => {
 
 const handleClick = async (notification) => {
     const contactUuid = getContactUuid(notification)
-    if (!contactUuid) return
 
     // Mark as clicked via API
     try {
@@ -53,8 +52,11 @@ const handleClick = async (notification) => {
         // Continue even if mark-as-read fails
     }
 
-    // Navigate to the chat thread
-    router.visit(`/chats/${contactUuid}`)
+    if (contactUuid) {
+        router.visit(`/chats/${contactUuid}`)
+    } else {
+        router.reload()
+    }
 }
 
 const markAllRead = async () => {

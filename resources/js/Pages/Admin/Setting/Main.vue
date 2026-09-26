@@ -64,6 +64,9 @@
                     <svg class="float-right" xmlns="http://www.w3.org/2000/svg" width="2em" height="2em" viewBox="0 0 256 256"><path fill="currentColor" d="m180.24 132.24l-80 80a6 6 0 0 1-8.48-8.48L167.51 128L91.76 52.24a6 6 0 0 1 8.48-8.48l80 80a6 6 0 0 1 0 8.48"/></svg>
                 </div>
             </Link>
+            <Link v-if="can('notifications', 'view')" href="/admin/settings/managed-notifications" class="flex justify-between border-b py-5">
+                <span>{{ $t('Managed notifications') }}</span><span>›</span>
+            </Link>
             <Link href="/admin/settings/email-templates" class="flex justify-between border-b py-5">
                 <div class="flex items-center gap-3">
                     <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m4 6l6.108 4.612l.002.002c.678.497 1.017.746 1.389.842a2 2 0 0 0 1.002 0c.372-.096.712-.345 1.392-.844c0 0 3.917-3.006 6.107-4.612M3 15.8V8.2c0-1.12 0-1.68.218-2.108c.192-.377.497-.682.874-.874C4.52 5 5.08 5 6.2 5h11.6c1.12 0 1.68 0 2.107.218c.377.192.683.497.875.874c.218.427.218.987.218 2.105v7.607c0 1.118 0 1.676-.218 2.104a2.002 2.002 0 0 1-.875.874c-.427.218-.986.218-2.104.218H6.197c-1.118 0-1.678 0-2.105-.218a2 2 0 0 1-.874-.874C3 17.48 3 16.92 3 15.8Z"/></svg>
@@ -115,6 +118,9 @@
 <script setup>
     import { Link } from "@inertiajs/vue3"; 
     import AppLayout from "../Layout/App.vue";
+    import { useAdminPermissions } from '@/Composables/useAdminPermissions';
+
+    const { can } = useAdminPermissions();
 
     const props = defineProps('title');
 </script>

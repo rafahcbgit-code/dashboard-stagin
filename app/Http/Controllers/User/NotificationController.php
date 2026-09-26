@@ -4,20 +4,21 @@ namespace App\Http\Controllers\User;
 
 use App\Models\Addon;
 use App\Models\NotificationLog;
+use App\Services\ManagedNotifications\NotificationCatalog;
 use App\Http\Controllers\Controller as BaseController;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
 class NotificationController extends BaseController
 {
-    public function index(Request $request)
+    public function index(Request $request, NotificationCatalog $catalog)
     {
         $organizationId = session()->get('current_organization');
         $userId = $request->user()->id;
 
         $notifications = NotificationLog::where('user_id', $userId)
             ->where('organization_id', $organizationId)
-            ->whereIn('notification_type', ['chat_assigned', 'chat_note_added'])
+            ->whereIn('notification_type', $this->visibleTypes($catalog))
             ->orderBy('sent_at', 'desc')
             ->paginate(20);
 
@@ -28,7 +29,7 @@ class NotificationController extends BaseController
         ]);
     }
 
-    public function unreadCount(Request $request)
+    public function unreadCount(Request $request, NotificationCatalog $catalog)
     {
         $organizationId = session()->get('current_organization');
         $userId = $request->user()->id;
@@ -36,7 +37,7 @@ class NotificationController extends BaseController
         $count = NotificationLog::query()
             ->where('user_id', $userId)
             ->where('organization_id', $organizationId)
-            ->whereIn('notification_type', ['chat_assigned', 'chat_note_added'])
+            ->whereIn('notification_type', $this->visibleTypes($catalog))
             ->where('clicked', false)
             ->count();
 
@@ -61,14 +62,14 @@ class NotificationController extends BaseController
         return response()->json(['success' => false], 404);
     }
 
-    public function markAllRead(Request $request)
+    public function markAllRead(Request $request, NotificationCatalog $catalog)
     {
         $organizationId = session()->get('current_organization');
         $userId = $request->user()->id;
 
         NotificationLog::where('user_id', $userId)
             ->where('organization_id', $organizationId)
-            ->whereIn('notification_type', ['chat_assigned', 'chat_note_added'])
+            ->whereIn('notification_type', $this->visibleTypes($catalog))
             ->where('clicked', false)
             ->update([
                 'clicked' => true,
@@ -76,5 +77,10 @@ class NotificationController extends BaseController
             ]);
 
         return response()->json(['success' => true]);
+    }
+
+    private function visibleTypes(NotificationCatalog $catalog): array
+    {
+        return array_merge(['chat_assigned', 'chat_note_added'], array_keys($catalog->all()));
     }
 }

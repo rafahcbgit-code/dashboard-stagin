@@ -558,6 +558,10 @@ Route::prefix('admin')->middleware(['auth:admin', 'admin.permission'])->group(fu
     Route::get('/settings/broadcast-drivers', [App\Http\Controllers\Admin\SettingController::class, 'broadcast_driver']);
     Route::match(['get', 'post'], '/settings/timezone', [App\Http\Controllers\Admin\SettingController::class, 'timezone']);
     Route::get('/settings/email-templates', [App\Http\Controllers\Admin\EmailTemplateController::class, 'index']);
+    Route::get('/settings/managed-notifications', [App\Http\Controllers\Admin\ManagedNotificationController::class, 'index']);
+    Route::put('/settings/managed-notifications/{typeKey}', [App\Http\Controllers\Admin\ManagedNotificationController::class, 'update']);
+    Route::post('/settings/managed-notifications/{typeKey}/test-email', [App\Http\Controllers\Admin\ManagedNotificationController::class, 'testEmail'])
+        ->middleware('throttle:6,1');
     Route::get('/settings/email-template/{id}', [App\Http\Controllers\Admin\EmailTemplateController::class, 'show']);
     Route::put('/settings/email-template/{id}', [App\Http\Controllers\Admin\EmailTemplateController::class, 'update']);
     Route::get('/settings/pages', [App\Http\Controllers\Admin\PagesController::class, 'index']);
@@ -575,6 +579,8 @@ Route::prefix('admin')->middleware(['auth:admin', 'admin.permission'])->group(fu
     Route::post('/update', [App\Http\Controllers\Admin\UpdateController::class, 'update']);
 
     Route::get('/user-logs/notifications', [App\Http\Controllers\Admin\NotificationController::class, 'index']);
+    Route::get('/notifications', [App\Http\Controllers\Admin\ManagedNotificationInboxController::class, 'index']);
+    Route::post('/notifications/{id}/read', [App\Http\Controllers\Admin\ManagedNotificationInboxController::class, 'markRead']);
     Route::get('/user-logs/emails', [App\Http\Controllers\Admin\EmailLogController::class, 'index']);
     Route::get('/salla/app-installations', [SallaAppInstallationController::class, 'index']);
 
