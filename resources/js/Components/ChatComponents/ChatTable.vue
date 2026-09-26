@@ -6,6 +6,7 @@ import { Link, router } from "@inertiajs/vue3";
 import Pagination from '@/Components/Pagination.vue';
 import SortDirectionToggle from '@/Components/SortDirectionToggle.vue';
 import SendTemplateToPhone from '@/Components/ChatComponents/SendTemplateToPhone.vue';
+import { parseChatMetadata as parseMetadata, documentExtension } from '@/Components/ChatComponents/chatPreview.js';
 import { useChatFilterStore } from '@/stores/chatFilterStore.js';
 import { useI18n } from 'vue-i18n';
 
@@ -84,15 +85,6 @@ const handleQuickSendSent = () => {
     // Optional: refresh or notify parent if needed.
 };
 
-const parseMetadata = (metadata) => {
-    try {
-        if (!metadata) return {};
-        return typeof metadata === 'string' ? JSON.parse(metadata) : metadata;
-    } catch {
-        return {};
-    }
-}
-
 const contentType = (metadata) => {
     return parseMetadata(metadata).type;
 }
@@ -106,28 +98,16 @@ const isDeletedMessagePreview = (metadata) => {
     return chatData.type === 'revoke' || Boolean(chatData.revoked?.is_revoked);
 }
 
-const getExtension = (fileFormat) => {
-    const formatMap = {
-        'text/plain': 'TXT',
-        'application/pdf': 'PDF',
-        'application/vnd.ms-powerpoint': 'PPT',
-        'application/msword': 'DOC',
-        'application/vnd.ms-excel': 'XLS',
-        'application/vnd.openxmlformats-officedocument.wordprocessingml.document': 'DOCX',
-        'application/vnd.openxmlformats-officedocument.presentationml.presentation': 'PPTX',
-        'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': 'XLSX',
-    };
-
-    return formatMap[fileFormat] || 'Unknown';
-};
-
 const getContactDisplayName = (metadata) => {
-    const contacts = parseMetadata(metadata).contacts || [];
+    const contacts = parseMetadata(metadata).contacts;
+    if (!Array.isArray(contacts) || contacts.length === 0) {
+        return 'No contacts available';
+    }
     if (contacts.length === 1) {
         const contact = contacts[0];
-        return contact.name?.formatted_name || `${contact.name?.first_name || ''} ${contact.name?.last_name || ''}`.trim();
+        return contact?.name?.formatted_name || `${contact?.name?.first_name || ''} ${contact?.name?.last_name || ''}`.trim();
     } else if (contacts.length > 1) {
-        const firstName = contacts[0].name?.first_name || contacts[0].name?.formatted_name || '';
+        const firstName = contacts[0]?.name?.first_name || contacts[0]?.name?.formatted_name || '';
         const otherContactsCount = contacts.length - 1;
         return `${firstName} and ${otherContactsCount} other contacts`;
     } else {
@@ -790,10 +770,10 @@ const cleanupNavigationBlockers = () => {
                         <template v-else>
                         <div v-if="contentType(contact?.last_chat?.metadata) === 'text'"
                             class="text-slate-500 text-xs truncate self-end"> {{
-                                content(contact?.last_chat?.metadata).text.body }}</div>
+                                content(contact?.last_chat?.metadata).text?.body }}</div>
                         <div v-if="contentType(contact?.last_chat?.metadata) === 'button'"
                             class="text-slate-500 text-xs truncate self-end"> {{
-                                content(contact?.last_chat?.metadata).button.text }}</div>
+                                content(contact?.last_chat?.metadata).button?.text }}</div>
                         <div v-if="contentType(contact?.last_chat?.metadata) === 'interactive'"
                             class="text-slate-500 text-xs truncate self-end"> {{
                                 content(contact?.last_chat?.metadata).interactive?.button_reply?.title ||
@@ -820,7 +800,7 @@ const cleanupNavigationBlockers = () => {
                                     <path fill="currentColor"
                                         d="M15.75 2.824c0-.184.193-.301.336-.186c.121.098.23.212.323.342l3.013 4.197c.068.096-.006.22-.124.22H16a.25.25 0 0 1-.25-.25V2.824Z" />
                                 </svg>
-                                <span class="ml-2">{{ getExtension(contact?.last_chat?.media.type) }} {{ $t('File')
+                                <span class="ml-2">{{ documentExtension(contact?.last_chat) }} {{ $t('File')
                                     }}</span>
                             </div>
                         </div>
