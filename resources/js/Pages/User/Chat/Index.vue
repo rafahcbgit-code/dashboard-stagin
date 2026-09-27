@@ -56,6 +56,7 @@ import AppLayout from "./../Layout/App.vue";
 import { default as axios } from "axios";
 import { router, useForm } from "@inertiajs/vue3";
 import { useChatFilterStore } from '@/stores/chatFilterStore.js';
+import { chatListFilterKey, chatListRequestParams, preserveChatListPage } from './chatListSync.js';
 import { defineEmits, ref, onMounted, watch, onUnmounted, computed } from "vue";
 import CampaignForm from "@/Components/CampaignForm.vue";
 import ChatForm from "@/Components/ChatComponents/ChatForm.vue";
@@ -479,16 +480,10 @@ const performChatUpdate = async () => {
   debugLog("Request locked");
 
   try {
-    // Get active filters from the filter store
-    const filterStore = useChatFilterStore();
-    const params = {};
-
-    // Only add filter parameters if they exist
-    if (filterStore.search) params.search = filterStore.search;
-    if (filterStore.labels) params.labels = filterStore.labels;
-    if (filterStore.assigned_to) params.assigned_to = filterStore.assigned_to;
-    if (filterStore.status) params.status = filterStore.status;
-    if (filterStore.awaiting_reply) params.awaiting_reply = 1;
+    // Server props describe the list currently on screen, including when the
+    // page was opened directly rather than reached through the filter controls.
+    const params = chatListRequestParams(props.filters);
+    const requestFilterKey = chatListFilterKey(params, props.chat_sort_direction);
 
     debugLog("Fetching chats with filters:", params);
 
@@ -501,6 +496,10 @@ const performChatUpdate = async () => {
     if (!isComponentMounted) {
       return;
     }
+    if (requestFilterKey !== chatListFilterKey(props.filters, props.chat_sort_direction)) {
+      debugLog("Ignoring chat update for an old filter or sort order");
+      return;
+    }
     debugLog("API call successful", response.data);
 
     // Check if server says to wait
@@ -511,35 +510,14 @@ const performChatUpdate = async () => {
     }
 
     if (response?.data?.result) {
-      // Preserve current page to avoid jumping back to page 1 when new
-      // messages arrive and the side panel is updated.
-      const newResult = response.data.result;
-      try {
-        if (rows.value && rows.value.meta && rows.value.meta.current_page) {
-          const currentPage = rows.value.meta.current_page;
-          newResult.meta = newResult.meta || {};
-          // Preserve the user's current page
-          newResult.meta.current_page = currentPage;
-
-          // If the user is NOT on page 1, keep the current page data intact
-          // (don't replace the list shown) so new chats on page 1 don't
-          // force the UI to show page 1.
-          if (currentPage > 1 && rows.value.data) {
-            newResult.data = rows.value.data;
-          }
-        }
-      } catch (e) {
-        debugLog('Error preserving page meta/data:', e);
-      }
-
-      rows.value = newResult;
-
       if (broadcastChannel) {
         try {
-          // Broadcast the result that includes the preserved meta page
+          // Send the untouched page-one response. Each tab preserves its own
+          // page locally, so reactive rows never enter BroadcastChannel.
           broadcastChannel.postMessage({
             type: "ROWS_UPDATED",
-            data: newResult,
+            data: response.data.result,
+            filterKey: requestFilterKey,
             timestamp: Date.now(),
           });
           debugLog("Broadcasted to other tabs");
@@ -547,6 +525,8 @@ const performChatUpdate = async () => {
           debugLog("BroadcastChannel post failed", e);
         }
       }
+
+      rows.value = preserveChatListPage(response.data.result, rows.value);
     }
   } catch (error) {
     console.error("Error updating side panel:", error);
@@ -618,30 +598,15 @@ const setupBroadcastChannel = () => {
     debugLog("BroadcastChannel created:", BROADCAST_CHANNEL_NAME);
 
     broadcastChannel.onmessage = (event) => {
-      const { type, data, timestamp } = event.data;
+      const { type, data, filterKey, timestamp } = event.data;
 
       if (!isLeaderTab.value) {
         debugLog("Message received from LEADER tab:", type);
       }
 
       if (Date.now() - timestamp < 2000) {
-        if (type === "ROWS_UPDATED") {
-          // Preserve current page and page data when receiving broadcasted rows
-          const incoming = data;
-          try {
-            if (rows.value && rows.value.meta && rows.value.meta.current_page && incoming && incoming.meta) {
-              const currentPage = rows.value.meta.current_page;
-              incoming.meta.current_page = currentPage;
-
-              if (currentPage > 1 && rows.value.data) {
-                incoming.data = rows.value.data;
-              }
-            }
-          } catch (e) {
-            debugLog('Error preserving page on broadcast receive:', e);
-          }
-
-          rows.value = incoming;
+        if (type === "ROWS_UPDATED" && data && filterKey === chatListFilterKey(props.filters, props.chat_sort_direction)) {
+          rows.value = preserveChatListPage(data, rows.value);
           debugLog("Rows updated from broadcast");
         }
       } else {
