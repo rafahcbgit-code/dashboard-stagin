@@ -9,6 +9,7 @@ use App\Services\ManagedNotifications\PermanentDeliveryException;
 use App\Services\ManagedNotifications\NotificationCatalog;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Mail\Mailer;
+use Illuminate\Support\HtmlString;
 use RuntimeException;
 use Throwable;
 
@@ -24,11 +25,11 @@ class EmailChannel
         $sender = strtolower((string) ($rendered['sender'] ?? ''));
         $recipient = (string) $delivery->destination;
 
-        $this->sendRaw($sender, $recipient, (string) ($rendered['subject'] ?? 'Notification'),
-            (string) ($rendered['email'] ?? ''));
+        $this->sendMessage($sender, $recipient, (string) ($rendered['subject'] ?? 'Notification'),
+            (string) ($rendered['email'] ?? ''), $rendered['email_html'] ?? null);
     }
 
-    public function sendRaw(string $sender, string $recipient, string $subject, string $body): void
+    public function sendMessage(string $sender, string $recipient, string $subject, string $body, ?string $html = null): void
     {
         if (! filter_var($sender, FILTER_VALIDATE_EMAIL)
             || ! filter_var($recipient, FILTER_VALIDATE_EMAIL)) {
@@ -46,7 +47,11 @@ class EmailChannel
         };
 
         if (! $account) {
-            Mail::raw($body, $send);
+            if ($html === null) {
+                Mail::raw($body, $send);
+            } else {
+                Mail::send(['html' => new HtmlString($html), 'raw' => $body], [], $send);
+            }
             return;
         }
 
@@ -66,7 +71,11 @@ class EmailChannel
                 ]),
                 app('events')
             );
-            $mailer->raw($body, $send);
+            if ($html === null) {
+                $mailer->raw($body, $send);
+            } else {
+                $mailer->send(['html' => new HtmlString($html), 'raw' => $body], [], $send);
+            }
         } catch (Throwable $exception) {
             throw new RuntimeException('Notification SMTP transport failed.', 0, $exception);
         }

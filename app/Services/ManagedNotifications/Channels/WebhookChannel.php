@@ -5,10 +5,12 @@ namespace App\Services\ManagedNotifications\Channels;
 use App\Models\NotificationDelivery;
 use App\Models\NotificationEvent;
 use App\Services\ManagedNotifications\PermanentDeliveryException;
+use App\Services\ManagedNotifications\RetryableDeliveryException;
 use App\Services\ManagedNotifications\WebhookUrlValidator;
+use Carbon\Carbon;
 use Illuminate\Support\Facades\Http;
 use InvalidArgumentException;
-use RuntimeException;
+use Throwable;
 
 class WebhookChannel
 {
@@ -66,10 +68,26 @@ class WebhookChannel
             return;
         }
 
-        if ($response->status() >= 400 && $response->status() < 500 && $response->status() !== 429) {
+        if ($response->status() >= 400 && $response->status() < 500 && ! in_array($response->status(), [408, 429], true)) {
             throw new PermanentDeliveryException('Webhook rejected request with HTTP '.$response->status());
         }
 
-        throw new RuntimeException('Webhook returned HTTP '.$response->status());
+        throw new RetryableDeliveryException('Webhook returned HTTP '.$response->status(),
+            $this->retryAfterSeconds($response->header('Retry-After')));
+    }
+
+    private function retryAfterSeconds(?string $value): int
+    {
+        $value = trim((string) $value);
+        if (ctype_digit($value)) {
+            return min(86400, (int) $value);
+        }
+        try {
+            $date = Carbon::createFromFormat(DATE_RFC7231, $value, 'UTC');
+
+            return $date ? max(0, min(86400, now()->diffInSeconds($date, false))) : 0;
+        } catch (Throwable) {
+            return 0;
+        }
     }
 }

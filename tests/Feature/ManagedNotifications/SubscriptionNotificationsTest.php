@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\Schema;
 uses(Tests\TestCase::class);
 
 beforeEach(function () {
+    \Carbon\Carbon::setTestNow('2026-09-28 00:00:00');
     config()->set('database.default', 'sqlite');
     config()->set('database.connections.sqlite.database', ':memory:');
     DB::purge('sqlite');
@@ -164,6 +165,7 @@ beforeEach(function () {
 
 afterEach(function () {
     \Carbon\Carbon::setTestNow();
+    DB::disableQueryLog();
     DB::disconnect('sqlite');
 });
 
@@ -383,6 +385,19 @@ it('respects the paid reminder enable switch', function () {
     expect(NotificationEvent::where('type_key', 'subscription.expiring')->count())->toBe(1);
 });
 
+it('never selects an older active subscription after the latest subscription is suspended', function () {
+    \Carbon\Carbon::setTestNow('2026-10-01 10:00:00');
+    enableSubscriptionNotification('subscription.expiring');
+    $plan = subscriptionNotificationPlan('Plan', []);
+    $suspendedOrg = subscriptionNotificationOrg('Suspended');
+    subscriptionNotificationSubscription($suspendedOrg, $plan->id, 'active', '2026-10-08 20:00:00');
+    subscriptionNotificationSubscription($suspendedOrg, $plan->id, 'suspended', '2026-10-08 20:00:00');
+    $activeOrg = subscriptionNotificationOrg('Active');
+    subscriptionNotificationSubscription($activeOrg, $plan->id, 'active', '2026-10-08 20:00:00');
+    app(SubscriptionNotificationScanner::class)->scanDates();
+    expect(NotificationEvent::where('type_key', 'subscription.expiring')->sole()->organization_id)->toBe($activeOrg);
+});
+
 it('uses the organization local expiration date for paid reminders', function () {
     \Carbon\Carbon::setTestNow('2026-10-02 10:00:00');
     DB::table('settings')->where('key', 'subscription_notifications_started_at')
@@ -460,6 +475,101 @@ it('detects paid expiry from time even while status remains active', function ()
         ->and(NotificationEvent::where('type_key', 'subscription.expired')->first()->organization_id)->toBe($org);
 });
 
+it('skips processed expiries without locking and still detects a changed expiration', function () {
+    \Carbon\Carbon::setTestNow('2026-10-01 10:00:00');
+    enableSubscriptionNotification('subscription.expired');
+    $org = subscriptionNotificationOrg();
+    $plan = subscriptionNotificationPlan('Plan', []);
+    $subscription = subscriptionNotificationSubscription($org, $plan->id, 'active', '2026-10-01 09:00:00');
+    $scanner = app(SubscriptionNotificationScanner::class);
+    $scanner->scanDates();
+
+    DB::enableQueryLog();
+    DB::flushQueryLog();
+    $scanner->scanDates();
+    $queries = collect(DB::getQueryLog())->pluck('query');
+    DB::disableQueryLog();
+    expect($queries->filter(fn ($sql) => str_contains($sql, 'organizations'))->all())->toBe([])
+        ->and($queries->filter(fn ($sql) => preg_match('/^(insert|update)/i', $sql))->all())->toBe([]);
+
+    // Also handle an expiry changed outside Eloquent without clearing the old marker.
+    DB::table('subscriptions')->where('id', $subscription->id)->update(['valid_until' => '2026-10-02 09:00:00']);
+    \Carbon\Carbon::setTestNow('2026-10-02 10:00:00');
+    $scanner->scanDates();
+    expect(NotificationEvent::where('type_key', 'subscription.expired')->count())->toBe(2);
+});
+
+it('checks recorded reminders in bounded batches without rewriting or locking each subscription', function () {
+    \Carbon\Carbon::setTestNow('2026-10-01 10:00:00');
+    enableSubscriptionNotification('subscription.expiring');
+    $plan = subscriptionNotificationPlan('Plan', []);
+    for ($i = 0; $i < 210; $i++) {
+        $org = subscriptionNotificationOrg('Tenant '.$i);
+        $subscription = subscriptionNotificationSubscription($org, $plan->id, 'active', '2026-10-08 20:00:00');
+        app(NotificationEventRecorder::class)->record($org, 'subscription.expiring',
+            'subscription-reminder:'.$subscription->id.':2026-10-08 20:00:00:7', [
+                'organization_name' => 'Tenant '.$i, 'plan_name' => 'Plan',
+                'subscription_end_date' => '2026-10-08', 'days_remaining' => '7',
+            ]);
+    }
+    DB::table('organizations')->update(['name' => 'Renamed after the reminder']);
+    DB::enableQueryLog();
+    DB::flushQueryLog();
+    app(SubscriptionNotificationScanner::class)->scanDates();
+    $queries = collect(DB::getQueryLog())->pluck('query');
+    DB::disableQueryLog();
+    expect($queries->count())->toBeLessThanOrEqual(12)
+        ->and($queries->filter(fn ($sql) => str_contains($sql, 'from "notification_events"'))->count())->toBe(2)
+        ->and($queries->filter(fn ($sql) => preg_match('/^(insert|update)/i', $sql))->all())->toBe([])
+        ->and(NotificationEvent::where('type_key', 'subscription.expiring')->count())->toBe(210);
+});
+
+it('does not rewrite resource alert states when usage and limits are unchanged', function () {
+    enableSubscriptionNotification('subscription.resource_warning');
+    $org = subscriptionNotificationOrg();
+    $plan = subscriptionNotificationPlan('Plan', []);
+    subscriptionNotificationSubscription($org, $plan->id, 'active', now()->addMonth()->toDateTimeString());
+    $usage = Mockery::mock(SubscriptionUsageService::class)->makePartial();
+    $usage->shouldReceive('bulkSummaries')->andReturn([$org => array_fill_keys([
+        'template_messages', 'conversations', 'contacts', 'team_members', 'organizations',
+    ], ['billing_organization_id' => $org, 'limit' => 100, 'used' => 10])]);
+    app()->instance(SubscriptionUsageService::class, $usage);
+    $scanner = app(SubscriptionNotificationScanner::class);
+    $scanner->scanUsage();
+    DB::enableQueryLog();
+    DB::flushQueryLog();
+    $scanner->scanUsage();
+    $queries = collect(DB::getQueryLog())->pluck('query');
+    DB::disableQueryLog();
+    expect($queries->filter(fn ($sql) => preg_match('/^(insert|update|savepoint)/i', $sql))->all())->toBe([])
+        ->and(DB::table('subscription_usage_alert_states')->count())->toBe(5);
+});
+
+it('rolls back all resource states and events if one resource cannot be recorded', function () {
+    \Carbon\Carbon::setTestNow('2026-10-01 12:00:00');
+    enableSubscriptionNotification('subscription.resource_warning');
+    $org = subscriptionNotificationOrg();
+    $plan = subscriptionNotificationPlan('Plan', []);
+    $subscription = subscriptionNotificationSubscription($org, $plan->id, 'active', now()->addMonth()->toDateTimeString());
+    Subscription::withoutEvents(fn () => $subscription->update(['start_date' => now()]));
+    $usage = Mockery::mock(SubscriptionUsageService::class)->makePartial();
+    $usage->shouldReceive('bulkSummaries')->andReturn([$org => array_fill_keys(['contacts', 'team_members'],
+        ['billing_organization_id' => $org, 'limit' => 100, 'used' => 80])]);
+    $realRecorder = app(NotificationEventRecorder::class);
+    $recorder = Mockery::mock(NotificationEventRecorder::class)->makePartial();
+    $recorder->shouldReceive('record')->twice()->andReturnUsing(function (...$args) use ($realRecorder) {
+        if ($args[3]['resource_name'] === 'Team members') {
+            throw new RuntimeException('Simulated recording failure.');
+        }
+        return $realRecorder->record(...$args);
+    });
+    app()->instance(SubscriptionUsageService::class, $usage);
+    app()->instance(NotificationEventRecorder::class, $recorder);
+    expect(fn () => app(SubscriptionNotificationScanner::class)->scanUsage())->toThrow(RuntimeException::class)
+        ->and(NotificationEvent::count())->toBe(0)
+        ->and(DB::table('subscription_usage_alert_states')->count())->toBe(0);
+});
+
 it('keeps resource alerts on the resource owner and chooses the highest crossed threshold', function () {
     enableSubscriptionNotification('subscription.resource_warning');
     $owner = subscriptionNotificationOrg('Resource owner');
@@ -468,7 +578,7 @@ it('keeps resource alerts on the resource owner and chooses the highest crossed 
     subscriptionNotificationSubscription($owner, $plan->id, 'active', now()->addDays(20)->toDateTimeString());
     subscriptionNotificationSubscription($member, $plan->id, 'active', now()->addDays(20)->toDateTimeString());
 
-    $usage = Mockery::mock(SubscriptionUsageService::class);
+    $usage = Mockery::mock(SubscriptionUsageService::class)->makePartial();
     $used = 95;
     $usage->shouldReceive('bulkSummaries')->andReturnUsing(function () use ($owner, $member, &$used) {
         $summary = ['billing_organization_id' => $owner, 'limit' => 100, 'used' => $used];
@@ -496,7 +606,7 @@ it('emits each resource threshold once during a new period', function () {
     $plan = subscriptionNotificationPlan('Plan', []);
     subscriptionNotificationSubscription($org, $plan->id, 'active', now()->addMonth()->toDateTimeString());
     $used = 71;
-    $usage = Mockery::mock(SubscriptionUsageService::class);
+    $usage = Mockery::mock(SubscriptionUsageService::class)->makePartial();
     $usage->shouldReceive('bulkSummaries')->andReturnUsing(function () use ($org, &$used) {
         return [$org => ['contacts' => [
             'billing_organization_id' => $org, 'limit' => 100, 'used' => $used,
@@ -523,7 +633,7 @@ it('records a paid plan limit increase once per resource owner', function () {
     $old = array_replace($new, ['contacts_limit' => 100]);
     subscriptionNotificationSubscription($owner, $plan->id, 'active', now()->addMonth()->toDateTimeString());
     subscriptionNotificationSubscription($member, $plan->id, 'active', now()->addMonth()->toDateTimeString());
-    $usage = Mockery::mock(SubscriptionUsageService::class);
+    $usage = Mockery::mock(SubscriptionUsageService::class)->makePartial();
     $usage->shouldReceive('bulkSummaries')->andReturnUsing(function () use ($owner, $member) {
         return [
             $owner => ['contacts' => ['billing_organization_id' => $owner, 'addon_quantity' => 0]],
@@ -602,7 +712,7 @@ it('uses stored add-on transition limits and sends to the resource account', fun
             'old_limit' => 100, 'new_limit' => 150],
         'occurred_at' => now(),
     ]);
-    $usage = Mockery::mock(SubscriptionUsageService::class);
+    $usage = Mockery::mock(SubscriptionUsageService::class)->makePartial();
     $usage->shouldReceive('resourceAccountId')->andReturn($account);
     app()->instance(SubscriptionUsageService::class, $usage);
     $scanner = app(SubscriptionNotificationScanner::class);
@@ -620,6 +730,13 @@ it('fixes resource warning delivery modes by threshold', function () {
     enableSubscriptionNotification('subscription.resource_warning');
     NotificationDefinition::where('type_key', 'subscription.resource_warning')->update(['delivery_mode' => 'email']);
     $org = subscriptionNotificationOrg();
+    $plan = subscriptionNotificationPlan('Plan', []);
+    $subscription = subscriptionNotificationSubscription($org, $plan->id, 'active', now()->addMonth()->toDateTimeString());
+    $period = $subscription->usagePeriodKey();
+    DB::table('subscription_usage_alert_states')->insert([
+        'organization_id' => $org, 'resource' => 'contacts', 'period_key' => $period,
+        'last_limit' => 100, 'highest_threshold' => 90, 'created_at' => now(), 'updated_at' => now(),
+    ]);
     $user = DB::table('users')->insertGetId(['email' => 'owner@example.com', 'status' => 1]);
     DB::table('teams')->insert(['organization_id' => $org, 'user_id' => $user,
         'role' => 'owner', 'status' => 'active']);
@@ -627,12 +744,12 @@ it('fixes resource warning delivery modes by threshold', function () {
     $resolver = app(NotificationResolver::class);
     $base = ['organization_name' => 'Tenant A', 'resource_name' => 'Contacts',
         'usage' => '70', 'limit' => '100', 'threshold' => '70'];
-    $lower = $recorder->record($org, 'subscription.resource_warning', 'usage-70', $base);
+    $lower = $recorder->record($org, 'subscription.resource_warning', 'subscription-usage:'.$org.':contacts:'.$period.':100:70', $base);
     $resolver->resolve($lower->id);
     expect(DB::table('notification_deliveries')->where('event_id', $lower->id)->pluck('channel')->all())
         ->toBe(['dashboard']);
 
-    $higher = $recorder->record($org, 'subscription.resource_warning', 'usage-90',
+    $higher = $recorder->record($org, 'subscription.resource_warning', 'subscription-usage:'.$org.':contacts:'.$period.':100:90',
         array_replace($base, ['usage' => '90', 'threshold' => '90']));
     $resolver->resolve($higher->id);
     expect(DB::table('notification_deliveries')->where('event_id', $higher->id)
@@ -867,7 +984,7 @@ it('discards usage sampled before a concurrent renewal', function () {
     $subscription = subscriptionNotificationSubscription($org, $plan->id, 'active', now()->addDays(10)->toDateTimeString());
     Subscription::withoutEvents(fn () => $subscription->update(['start_date' => now()]));
     (new SubscriptionUsageService())->recordUsage($org, 'template_messages', 90, 'old-90');
-    $usage = Mockery::mock(SubscriptionUsageService::class);
+    $usage = Mockery::mock(SubscriptionUsageService::class)->makePartial();
     $usage->shouldReceive('bulkSummaries')->once()->andReturnUsing(function ($ids) use ($org, $subscription) {
         $summaries = (new SubscriptionUsageService())->bulkSummaries($ids);
         manageTestSubscriptionPeriod($org, 'renew', subscriptionPeriodInput($subscription));
@@ -877,4 +994,340 @@ it('discards usage sampled before a concurrent renewal', function () {
     app(SubscriptionNotificationScanner::class)->scanUsage();
     expect(DB::table('subscription_usage_alert_states')->count())->toBe(0)
         ->and(NotificationEvent::where('type_key', 'subscription.resource_warning')->count())->toBe(0);
+});
+
+it('aggregates a shared resource pool once across several scanner batches', function () {
+    enableSubscriptionNotification('subscription.resource_warning');
+    $owner = subscriptionNotificationOrg('Resource owner');
+    $plan = subscriptionNotificationPlan('Shared plan', [
+        'resource_sharing_enabled' => 1, 'organizations_limit' => 10000,
+    ]);
+    subscriptionNotificationSubscription($owner, $plan->id, 'active', now()->addMonth()->toDateTimeString());
+    for ($i = 0; $i < 210; $i++) {
+        $child = subscriptionNotificationOrg('Child '.$i);
+        DB::table('organizations')->where('id', $child)->update(['billing_organization_id' => $owner]);
+        subscriptionNotificationSubscription($child, $plan->id, 'active', now()->addMonth()->toDateTimeString());
+    }
+    $usage = Mockery::mock(SubscriptionUsageService::class)->makePartial();
+    $usage->shouldReceive('bulkSummaries')->once()->andReturnUsing(fn ($ids) =>
+        (new SubscriptionUsageService())->bulkSummaries($ids));
+    app()->instance(SubscriptionUsageService::class, $usage);
+    app(SubscriptionNotificationScanner::class)->scanUsage();
+    expect(DB::table('subscription_usage_alert_states')->count())->toBe(5)
+        ->and(DB::table('subscription_usage_alert_states')->distinct()->pluck('organization_id')->all())->toBe([$owner]);
+});
+
+function subscriptionDateReviewEvent(string $type): NotificationEvent
+{
+    \Carbon\Carbon::setTestNow('2026-10-01 10:00:00');
+    enableSubscriptionNotification($type);
+    $org = subscriptionNotificationOrg('Date review', 'UTC');
+    $plan = subscriptionNotificationPlan('Paid', []);
+    $trial = str_contains($type, '.trial_');
+    $end = str_ends_with($type, 'expired') ? '2026-10-01 09:00:00'
+        : ($trial ? '2026-10-04 20:00:00' : '2026-10-08 20:00:00');
+    subscriptionNotificationSubscription($org, $trial ? null : $plan->id, $trial ? 'trial' : 'active', $end);
+    $user = DB::table('users')->insertGetId(['email' => 'owner@example.com', 'status' => 1]);
+    DB::table('teams')->insert(['organization_id' => $org, 'user_id' => $user, 'role' => 'owner', 'status' => 'active']);
+    app(SubscriptionNotificationScanner::class)->scanDates();
+    return NotificationEvent::where('type_key', $type)->sole();
+}
+
+it('cancels a queued date alert when its subscription has already been extended', function (string $type) {
+    $event = subscriptionDateReviewEvent($type);
+    Subscription::currentForOrganization($event->organization_id)->update(['valid_until' => '2026-11-01 20:00:00']);
+    app(NotificationResolver::class)->resolve($event->id);
+    expect($event->fresh()->status)->toBe('canceled')
+        ->and(DB::table('notification_deliveries')->count())->toBe(0)
+        ->and(DB::table('notification_logs')->count())->toBe(0);
+})->with(['subscription.trial_expiring', 'subscription.expiring', 'subscription.trial_expired', 'subscription.expired']);
+
+it('does not email an already resolved expiry alert after renewal', function () {
+    $event = subscriptionDateReviewEvent('subscription.expired');
+    app(NotificationResolver::class)->resolve($event->id);
+    $delivery = App\Models\NotificationDelivery::where('event_id', $event->id)->where('channel', 'email')->sole();
+    $subscription = Subscription::currentForOrganization($event->organization_id);
+    manageTestSubscriptionPeriod($event->organization_id, 'renew', subscriptionPeriodInput($subscription));
+    Illuminate\Support\Facades\Mail::shouldReceive('send')->never();
+    app(App\Services\ManagedNotifications\NotificationDispatcher::class)->deliver($delivery->id);
+    expect($delivery->fresh()->status)->toBe('canceled');
+});
+
+it('does not resolve a late reminder saying seven days when only six remain', function () {
+    $event = subscriptionDateReviewEvent('subscription.expiring');
+    \Carbon\Carbon::setTestNow('2026-10-02 10:00:00');
+    app(NotificationResolver::class)->resolve($event->id);
+    expect($event->fresh()->status)->toBe('canceled');
+});
+
+it('allows a current date alert to deliver to its owner', function (string $type) {
+    $event = subscriptionDateReviewEvent($type);
+    app(NotificationResolver::class)->resolve($event->id);
+    expect($event->fresh()->status)->toBe('resolved')
+        ->and(DB::table('notification_logs')->where('organization_id', $event->organization_id)->count())->toBe(1)
+        ->and(DB::table('notification_deliveries')->where('channel', 'email')->count())->toBe(1);
+})->with(['subscription.trial_expiring', 'subscription.expiring', 'subscription.trial_expired', 'subscription.expired']);
+
+it('renders activation and trial end dates using the organization timezone', function (string $status, string $type, string $variable) {
+    \Carbon\Carbon::setTestNow('2026-10-01 10:00:00');
+    enableSubscriptionNotification($type);
+    $org = subscriptionNotificationOrg('Damascus', 'Asia/Damascus');
+    $plan = subscriptionNotificationPlan('Paid', []);
+    subscriptionNotificationSubscription($org, $status === 'trial' ? null : $plan->id, $status, '2026-10-08 22:00:00');
+    app(SubscriptionNotificationScanner::class)->projectEvents();
+    expect(NotificationEvent::where('type_key', $type)->sole()->variables[$variable])->toBe('2026-10-09');
+})->with([
+    ['trial', 'subscription.trial_started', 'trial_end_date'],
+    ['active', 'subscription.activated', 'subscription_end_date'],
+]);
+
+it('does not repeat a resource threshold or throw when its previous limit returns', function () {
+    \Carbon\Carbon::setTestNow('2026-10-01 12:00:00');
+    enableSubscriptionNotification('subscription.resource_warning');
+    $org = subscriptionNotificationOrg();
+    $plan = subscriptionNotificationPlan('Plan', []);
+    $subscription = subscriptionNotificationSubscription($org, $plan->id, 'active', now()->addMonth()->toDateTimeString());
+    Subscription::withoutEvents(fn () => $subscription->update(['start_date' => now()]));
+    $limit = 100;
+    $used = 90;
+    $usage = Mockery::mock(SubscriptionUsageService::class)->makePartial();
+    $usage->shouldReceive('bulkSummaries')->andReturnUsing(function () use ($org, &$limit, &$used) {
+        return [$org => ['contacts' => ['billing_organization_id' => $org, 'limit' => $limit, 'used' => $used]]];
+    });
+    app()->instance(SubscriptionUsageService::class, $usage);
+    $scanner = app(SubscriptionNotificationScanner::class);
+    $scanner->scanUsage();
+    $limit = 200;
+    $scanner->scanUsage();
+    $limit = 100;
+    $used = 95;
+    $scanner->scanUsage();
+    expect(NotificationEvent::where('type_key', 'subscription.resource_warning')->count())->toBe(1)
+        ->and(DB::table('subscription_usage_alert_states')->where('resource', 'contacts')->value('highest_threshold'))->toBe(90);
+});
+
+it('rolls back notification projection together with its source marker', function () {
+    enableSubscriptionNotification('subscription.activated');
+    $org = subscriptionNotificationOrg();
+    $plan = subscriptionNotificationPlan('Paid', []);
+    subscriptionNotificationSubscription($org, $plan->id, 'active', now()->addMonth()->toDateTimeString());
+    $failOnce = true;
+    DB::listen(function ($query) use (&$failOnce) {
+        if ($failOnce && str_starts_with($query->sql, 'update "subscription_events"')) {
+            $failOnce = false;
+            throw new RuntimeException('Simulated source-marker failure.');
+        }
+    });
+    $scanner = app(SubscriptionNotificationScanner::class);
+    expect(fn () => $scanner->projectEvents())->toThrow(RuntimeException::class)
+        ->and(NotificationEvent::count())->toBe(0)
+        ->and(SubscriptionEvent::sole()->notification_projected_at)->toBeNull();
+    $scanner->projectEvents();
+    expect(NotificationEvent::where('type_key', 'subscription.activated')->count())->toBe(1);
+});
+
+it('keeps a plan limit alert valid after an unrelated metadata edit and skips it on retry', function () {
+    enableSubscriptionNotification('subscription.limit_increased');
+    $org = subscriptionNotificationOrg();
+    $plan = subscriptionNotificationPlan('Paid', ['contacts_limit' => 200]);
+    subscriptionNotificationSubscription($org, $plan->id, 'active', now()->addMonth()->toDateTimeString());
+    $new = json_decode($plan->metadata, true);
+    $old = array_replace($new, ['contacts_limit' => 100]);
+    DB::table('subscription_plans')->where('id', $plan->id)->update(['metadata' => json_encode($new + ['description' => 'Updated'])]);
+    $job = new NotifySubscriptionPlanLimitIncreasesJob($plan->id, $old, $new, 'metadata-review');
+    $job->handle(app(NotificationEventRecorder::class), new SubscriptionUsageService());
+    expect(NotificationEvent::where('type_key', 'subscription.limit_increased')->count())->toBe(1);
+    DB::table('organizations')->where('id', $org)->update(['name' => 'Renamed']);
+    $job->handle(app(NotificationEventRecorder::class), new SubscriptionUsageService());
+    expect(NotificationEvent::where('type_key', 'subscription.limit_increased')->count())->toBe(1);
+});
+
+it('does not send a plan allowance alert after a concurrent suspension or plan replacement', function (string $change) {
+    enableSubscriptionNotification('subscription.limit_increased');
+    $org = subscriptionNotificationOrg();
+    $plan = subscriptionNotificationPlan('Paid', ['contacts_limit' => 200]);
+    $replacement = subscriptionNotificationPlan('Replacement', ['contacts_limit' => 1000]);
+    $subscription = subscriptionNotificationSubscription($org, $plan->id, 'active', now()->addMonth()->toDateTimeString());
+    $new = json_decode($plan->metadata, true);
+    $usage = Mockery::mock(SubscriptionUsageService::class)->makePartial();
+    $usage->shouldReceive('bulkSummaries')->once()->andReturnUsing(function ($ids) use ($subscription, $change, $replacement) {
+        $summaries = (new SubscriptionUsageService())->bulkSummaries($ids);
+        $subscription->update($change === 'suspended' ? ['status' => 'suspended'] : ['plan_id' => $replacement->id]);
+        return $summaries;
+    });
+    $job = new NotifySubscriptionPlanLimitIncreasesJob($plan->id, array_replace($new, ['contacts_limit' => 100]), $new, 'concurrent-review');
+    $job->handle(app(NotificationEventRecorder::class), $usage);
+    expect(NotificationEvent::where('type_key', 'subscription.limit_increased')->count())->toBe(0);
+})->with(['suspended', 'replacement']);
+
+it('cancels a date alert from a superseded subscription even when its replacement has the same expiration', function () {
+    $event = subscriptionDateReviewEvent('subscription.expiring');
+    $subscription = Subscription::currentForOrganization($event->organization_id);
+    subscriptionNotificationSubscription($event->organization_id, $subscription->plan_id, 'active', $subscription->getRawOriginal('valid_until'));
+    app(NotificationResolver::class)->resolve($event->id);
+    expect($event->fresh()->status)->toBe('canceled');
+});
+
+it('cancels a trial reminder after paid activation with the same expiration', function () {
+    $event = subscriptionDateReviewEvent('subscription.trial_expiring');
+    $plan = subscriptionNotificationPlan('Paid', []);
+    Subscription::currentForOrganization($event->organization_id)->update(['status' => 'active', 'plan_id' => $plan->id]);
+    app(NotificationResolver::class)->resolve($event->id);
+    expect($event->fresh()->status)->toBe('canceled');
+});
+
+it('classifies resource increases regardless of snapshot key order', function () {
+    enableSubscriptionNotification('subscription.upgraded');
+    $org = subscriptionNotificationOrg();
+    $small = subscriptionNotificationPlan('Small', []);
+    $large = subscriptionNotificationPlan('Large', ['contacts_limit' => 200]);
+    $subscription = subscriptionNotificationSubscription($org, $small->id, 'active', now()->addMonth()->toDateTimeString());
+    $scanner = app(SubscriptionNotificationScanner::class);
+    $scanner->projectEvents();
+    $subscription->update(['plan_id' => $large->id]);
+    $source = SubscriptionEvent::whereNull('notification_projected_at')->orderByDesc('id')->firstOrFail();
+    $new = $source->new_values;
+    $new['resource_limits'] = array_reverse($new['resource_limits'], true);
+    $source->update(['new_values' => $new]);
+    $scanner->projectEvents();
+    expect(NotificationEvent::where('type_key', 'subscription.upgraded')->count())->toBe(1);
+});
+
+it('rejects an add-on transition pointing to another organization add-on', function () {
+    enableSubscriptionNotification('subscription.limit_increased');
+    $org = subscriptionNotificationOrg();
+    $other = subscriptionNotificationOrg('Other');
+    $plan = subscriptionNotificationPlan('Plan', []);
+    $subscription = subscriptionNotificationSubscription($org, $plan->id, 'active', now()->addMonth()->toDateTimeString());
+    $addon = DB::table('resource_addons')->insertGetId(['organization_id' => $other, 'resource' => 'contacts', 'quantity' => 50]);
+    SubscriptionEvent::create([
+        'organization_id' => $org, 'resource_addon_id' => $addon, 'event_type' => 'add_on_purchased', 'occurred_at' => now(),
+        'new_values' => ['resource' => 'contacts', 'quantity' => 50, 'subscription_id' => $subscription->id,
+            'plan_id' => $plan->id, 'subscription_status' => 'active', 'old_limit' => 100, 'new_limit' => 150],
+    ]);
+    app(SubscriptionNotificationScanner::class)->projectEvents();
+    expect(NotificationEvent::count())->toBe(0);
+});
+
+it('retains threshold identities until a long subscription period ends or is renewed', function () {
+    \Carbon\Carbon::setTestNow('2026-10-01 12:00:00');
+    enableSubscriptionNotification('subscription.resource_warning');
+    $org = subscriptionNotificationOrg();
+    $plan = subscriptionNotificationPlan('Annual', []);
+    $subscription = subscriptionNotificationSubscription($org, $plan->id, 'active', '2027-10-01 12:00:00');
+    Subscription::withoutEvents(fn () => $subscription->update(['start_date' => now()]));
+    $usage = Mockery::mock(SubscriptionUsageService::class)->makePartial();
+    $usage->shouldReceive('bulkSummaries')->andReturn([$org => ['contacts' => [
+        'billing_organization_id' => $org, 'limit' => 100, 'used' => 90,
+    ]]]);
+    app()->instance(SubscriptionUsageService::class, $usage);
+    app(SubscriptionNotificationScanner::class)->scanUsage();
+    $event = NotificationEvent::sole();
+    app(NotificationResolver::class)->resolve($event->id);
+    \Carbon\Carbon::setTestNow('2027-05-01 12:00:00');
+    $this->artisan('notifications:prune')->assertSuccessful();
+    expect(NotificationEvent::sole()->id)->toBe($event->id);
+    manageTestSubscriptionPeriod($org, 'renew', subscriptionPeriodInput($subscription));
+    $this->artisan('notifications:prune')->assertSuccessful();
+    expect(NotificationEvent::whereKey($event->id)->exists())->toBeFalse();
+});
+
+function subscriptionResourceReviewEvent(): NotificationEvent
+{
+    \Carbon\Carbon::setTestNow('2026-10-01 12:00:00');
+    enableSubscriptionNotification('subscription.resource_warning');
+    $org = subscriptionNotificationOrg();
+    $plan = subscriptionNotificationPlan('Plan', []);
+    $subscription = subscriptionNotificationSubscription($org, $plan->id, 'active', now()->addMonth()->toDateTimeString());
+    Subscription::withoutEvents(fn () => $subscription->update(['start_date' => now()]));
+    $owner = DB::table('users')->insertGetId(['email' => 'owner@example.com', 'status' => 1]);
+    DB::table('teams')->insert(['organization_id' => $org, 'user_id' => $owner, 'role' => 'owner', 'status' => 'active']);
+    $usage = Mockery::mock(SubscriptionUsageService::class)->makePartial();
+    $usage->shouldReceive('bulkSummaries')->andReturn([$org => ['contacts' => [
+        'billing_organization_id' => $org, 'limit' => 100, 'used' => 90,
+    ]]]);
+    app()->instance(SubscriptionUsageService::class, $usage);
+    app(SubscriptionNotificationScanner::class)->scanUsage();
+    return NotificationEvent::sole();
+}
+
+it('cancels a queued resource warning after renewal, expiry, suspension, or allowance increase', function (string $change) {
+    $event = subscriptionResourceReviewEvent();
+    $subscription = Subscription::currentForOrganization($event->organization_id);
+    if ($change === 'renew') {
+        \Carbon\Carbon::setTestNow(now()->addSecond());
+        manageTestSubscriptionPeriod($event->organization_id, 'renew', subscriptionPeriodInput($subscription));
+    } elseif ($change === 'expired') {
+        \Carbon\Carbon::setTestNow('2026-11-02 12:00:00');
+    } elseif ($change === 'suspended') {
+        $subscription->update(['status' => 'suspended']);
+    } elseif ($change === 'plan') {
+        $plan = subscriptionNotificationPlan('Larger', ['contacts_limit' => 200]);
+        $subscription->update(['plan_id' => $plan->id]);
+    } else {
+        DB::table('resource_addons')->insert(['organization_id' => $event->organization_id, 'resource' => 'contacts', 'quantity' => 100]);
+    }
+    app(NotificationResolver::class)->resolve($event->id);
+    expect($event->fresh()->status)->toBe('canceled')->and(DB::table('notification_deliveries')->count())->toBe(0);
+})->with(['renew', 'expired', 'suspended', 'plan', 'add-on']);
+
+it('cancels a resolved resource email after its usage period is renewed', function () {
+    $event = subscriptionResourceReviewEvent();
+    app(NotificationResolver::class)->resolve($event->id);
+    $delivery = App\Models\NotificationDelivery::where('channel', 'email')->sole();
+    \Carbon\Carbon::setTestNow(now()->addSecond());
+    $subscription = Subscription::currentForOrganization($event->organization_id);
+    manageTestSubscriptionPeriod($event->organization_id, 'renew', subscriptionPeriodInput($subscription));
+    Illuminate\Support\Facades\Mail::shouldReceive('send')->never();
+    app(App\Services\ManagedNotifications\NotificationDispatcher::class)->deliver($delivery->id);
+    expect($delivery->fresh()->status)->toBe('canceled');
+});
+
+it('preserves a current resource warning after an extension without recounting usage', function () {
+    $event = subscriptionResourceReviewEvent();
+    Subscription::currentForOrganization($event->organization_id)->update(['valid_until' => '2026-12-01 12:00:00']);
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+    app(NotificationResolver::class)->resolve($event->id);
+    $queries = collect(DB::getQueryLog())->pluck('query');
+    expect($event->fresh()->status)->toBe('resolved')
+        ->and($queries->filter(fn ($sql) => str_contains($sql, '"contacts"') || str_contains($sql, '"subscription_usage_events"'))->count())->toBe(0)
+        ->and(DB::table('notification_logs')->count())->toBe(1);
+});
+
+it('uses the actual trial expiry for allowance checks regardless of the selected organization timezone', function () {
+    \Carbon\Carbon::setTestNow('2026-10-01 10:00:00');
+    DB::table('settings')->insert(['key' => 'trial_limits', 'value' => json_encode(['contacts' => 100])]);
+    Cache::forget('settings:trial_limits');
+    $org = subscriptionNotificationOrg('Trial');
+    $other = subscriptionNotificationOrg('Other');
+    DB::table('organizations')->where('id', $other)->update(['metadata' => json_encode(['timezone' => 'Pacific/Honolulu'])]);
+    $plan = subscriptionNotificationPlan('Paid', ['contacts_limit' => 200]);
+    $subscription = subscriptionNotificationSubscription($org, $plan->id, 'trial', '2026-10-01 10:30:00');
+    session()->put('current_organization', $other);
+    try {
+        expect((new SubscriptionUsageService())->effectiveLimit($subscription, 'contacts'))->toBe(100);
+    } finally {
+        session()->forget('current_organization');
+    }
+});
+
+it('keeps a reminder immutable when overlapping scanners observe an organization rename', function () {
+    \Carbon\Carbon::setTestNow('2026-10-01 10:00:00');
+    enableSubscriptionNotification('subscription.expiring');
+    $org = subscriptionNotificationOrg('Original');
+    $plan = subscriptionNotificationPlan('Paid', []);
+    subscriptionNotificationSubscription($org, $plan->id, 'active', '2026-10-08 20:00:00');
+    $scanner = app(SubscriptionNotificationScanner::class);
+    $overlapped = false;
+    DB::listen(function ($query) use ($org, $scanner, &$overlapped) {
+        if (! $overlapped && str_starts_with($query->sql, 'select "event_key" from "notification_events"')) {
+            $overlapped = true;
+            DB::table('organizations')->where('id', $org)->update(['name' => 'Renamed']);
+            $scanner->scanDates();
+        }
+    });
+    $scanner->scanDates();
+    expect($overlapped)->toBeTrue()->and(NotificationEvent::count())->toBe(1)
+        ->and(NotificationEvent::sole()->variables['organization_name'])->toBe('Renamed');
 });

@@ -3,6 +3,7 @@
 namespace App\Services\ManagedNotifications;
 
 use InvalidArgumentException;
+use RuntimeException;
 
 class WebhookUrlValidator
 {
@@ -34,10 +35,10 @@ class WebhookUrlValidator
     {
         $this->validate($url);
         $host = (string) parse_url($url, PHP_URL_HOST);
-        $records = dns_get_record($host, DNS_A + DNS_AAAA) ?: [];
+        $records = $this->resolveRecords($host);
 
         if ($records === []) {
-            throw new InvalidArgumentException('Webhook host could not be resolved.');
+            throw new RuntimeException('Webhook host could not be resolved.');
         }
 
         $addresses = [];
@@ -50,5 +51,10 @@ class WebhookUrlValidator
         }
 
         return $addresses[0];
+    }
+
+    protected function resolveRecords(string $host): array
+    {
+        return dns_get_record($host, DNS_A + DNS_AAAA) ?: [];
     }
 }

@@ -33,6 +33,13 @@ class AccountUpdateWebhookProcessor
             if ((string) ($whatsapp['waba_id'] ?? '') !== $wabaId) {
                 return;
             }
+            $identityChanged = (string) ($whatsapp['notification_state_waba_id'] ?? '') !== $wabaId;
+            if (isset($whatsapp['notification_state_waba_id']) && $identityChanged) {
+                foreach (['waba_ban_state', 'account_review_status', 'phone_name_decision',
+                    'messaging_limit_tier', 'whatsapp_business_manager_messaging_limit'] as $stateKey) {
+                    unset($whatsapp[$stateKey]);
+                }
+            }
 
             if (in_array($field, ['phone_number_name_update', 'phone_number_quality_update'], true)) {
                 $receivedPhone = preg_replace('/\D/', '', (string) ($value['display_phone_number'] ?? ''));
@@ -87,7 +94,12 @@ class AccountUpdateWebhookProcessor
                     }
                     $new = $decision.':'.$requestedName;
                     $old = (string) ($whatsapp['phone_name_decision'] ?? '');
+                    if (isset($whatsapp['phone_name_decision_phone_number_id'])
+                        && (string) $whatsapp['phone_name_decision_phone_number_id'] !== (string) ($whatsapp['phone_number_id'] ?? '')) {
+                        $old = '';
+                    }
                     $whatsapp['phone_name_decision'] = $new;
+                    $whatsapp['phone_name_decision_phone_number_id'] = (string) ($whatsapp['phone_number_id'] ?? '');
                     $type = $decision === 'REJECTED' ? 'meta.phone_display_name_rejected' : null;
                     $variables = ['organization_name' => $organization->name, 'phone_number' => (string) $value['display_phone_number'], 'requested_name' => $requestedName];
                     break;
@@ -101,6 +113,9 @@ class AccountUpdateWebhookProcessor
                     $old = (string) ($whatsapp['whatsapp_business_manager_messaging_limit'] ?? $whatsapp['messaging_limit_tier'] ?? '');
                     $oldAmount = $this->limitValue($old);
                     $newAmount = $this->limitValue($new);
+                    if ($newAmount === null) {
+                        return;
+                    }
                     $whatsapp['whatsapp_business_manager_messaging_limit'] = $new;
                     $whatsapp['messaging_limit_tier'] = $new;
                     if ($oldAmount !== null && $newAmount !== null && $oldAmount !== $newAmount) {
@@ -114,22 +129,26 @@ class AccountUpdateWebhookProcessor
                         SyncWhatsappNumberStatusJob::dispatch($organizationId)
                             ->onConnection(config('queue.default'))->onQueue('whatsapp-number-status')->afterCommit();
                     }
+
                     return;
 
                 default:
                     return;
             }
 
-            if ($old === $new) {
+            if ($old === $new && ! $identityChanged) {
                 return;
             }
 
-            $whatsapp['notification_transition_sequence'] = (int) ($whatsapp['notification_transition_sequence'] ?? 0) + 1;
+            $whatsapp['notification_state_waba_id'] = $wabaId;
+            if ($old !== $new) {
+                $whatsapp['notification_transition_sequence'] = (int) ($whatsapp['notification_transition_sequence'] ?? 0) + 1;
+            }
             $metadata['whatsapp'] = $whatsapp;
             $organization->metadata = json_encode($metadata, JSON_THROW_ON_ERROR);
             $organization->save();
 
-            if ($type !== null && ($field !== 'business_capability_update' || $old !== '')) {
+            if ($type !== null && $old !== $new && ($field !== 'business_capability_update' || $old !== '')) {
                 $this->events->record(
                     $organizationId, $type,
                     'meta-'.$field.':'.$wabaId.':'.$whatsapp['notification_transition_sequence'].':'.$old.':'.$new,

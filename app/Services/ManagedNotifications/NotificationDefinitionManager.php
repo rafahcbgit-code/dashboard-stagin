@@ -27,13 +27,10 @@ class NotificationDefinitionManager
             $mode = 'dashboard_email';
         }
 
-        foreach (['dashboard_template', 'email_subject', 'email_body'] as $field) {
+        foreach (['dashboard_template', 'email_body'] as $field) {
             $this->renderer->validate($input[$field], $type['variables']);
         }
-
-        if (preg_match('/[\r\n]/', $input['email_subject']) || mb_strlen($input['email_subject']) > 191) {
-            throw new InvalidArgumentException('Email subject is invalid.');
-        }
+        $input['email_subject'] = $this->renderer->normalizeEmailSubject($input['email_subject'], $type['variables']);
 
         $sender = strtolower(trim((string) ($input['sender_email'] ?? '')));
         $allowed = $this->catalog->approvedSenders();

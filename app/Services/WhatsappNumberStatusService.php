@@ -50,7 +50,9 @@ class WhatsappNumberStatusService
             $status = is_array($responseData) ? ($responseData['status'] ?? null) : null;
 
             if ($response->successful() && is_string($status) && $status !== '') {
-                $this->persistVerifiedStatus($organization->id, $status, $source, $responseData['quality_rating'] ?? null);
+                if (! $this->persistVerifiedStatus($organization->id, $status, $source, $responseData['quality_rating'] ?? null, $whatsapp)) {
+                    return ['success' => false, 'skipped' => true, 'reason' => 'connection_changed'];
+                }
 
                 Log::channel('whatsapp_number_status')->info('Meta phone number status API completed', [
                     'organization_id' => $organization->id,
@@ -75,13 +77,17 @@ class WhatsappNumberStatusService
                 ? self::STATUS_DISCONNECTED
                 : self::STATUS_UNKNOWN;
 
-            $this->persistFailedCheck(
+            $persisted = $this->persistFailedCheck(
                 $organization->id,
                 $source,
                 $errorCode,
                 $errorMessage,
-                $temporaryFailure ? null : $failedStatus
+                $temporaryFailure ? null : $failedStatus,
+                $whatsapp
             );
+            if (! $persisted) {
+                return ['success' => false, 'skipped' => true, 'reason' => 'connection_changed'];
+            }
             $storedStatus = $this->getStoredStatus($organization->id);
 
             Log::channel('whatsapp_number_status')->warning('Meta phone number status API failed', [
@@ -107,7 +113,9 @@ class WhatsappNumberStatusService
                 'error' => $errorMessage,
             ];
         } catch (\Throwable $e) {
-            $this->persistFailedCheck($organization->id, $source, null, $e->getMessage(), null);
+            if (! $this->persistFailedCheck($organization->id, $source, null, $e->getMessage(), null, $whatsapp)) {
+                return ['success' => false, 'skipped' => true, 'reason' => 'connection_changed'];
+            }
 
             Log::channel('whatsapp_number_status')->error('Meta phone number status API exception', [
                 'organization_id' => $organization->id,
@@ -126,14 +134,19 @@ class WhatsappNumberStatusService
         }
     }
 
-    private function persistVerifiedStatus(int $organizationId, string $status, string $source, mixed $qualityRating): void
+    private function persistVerifiedStatus(int $organizationId, string $status, string $source, mixed $qualityRating, array $expectedConnection): bool
     {
-        $this->updateMetadata($organizationId, function (array &$whatsapp, Organization $organization) use ($source, $status, $qualityRating) {
+        return $this->updateMetadata($organizationId, $expectedConnection, function (array &$whatsapp, Organization $organization) use ($source, $status, $qualityRating) {
             $oldQuality = strtoupper((string) ($whatsapp['quality_rating'] ?? ''));
+            if (isset($whatsapp['quality_rating_phone_number_id'])
+                && (string) $whatsapp['quality_rating_phone_number_id'] !== (string) ($whatsapp['phone_number_id'] ?? '')) {
+                $oldQuality = '';
+            }
             $newQuality = strtoupper((string) $qualityRating);
             $rank = ['RED' => 1, 'YELLOW' => 2, 'GREEN' => 3];
             if (isset($rank[$newQuality])) {
                 $whatsapp['quality_rating'] = $newQuality;
+                $whatsapp['quality_rating_phone_number_id'] = (string) ($whatsapp['phone_number_id'] ?? '');
                 if (isset($rank[$oldQuality]) && $rank[$newQuality] < $rank[$oldQuality]) {
                     $whatsapp['notification_transition_sequence'] = (int) ($whatsapp['notification_transition_sequence'] ?? 0) + 1;
                     app(NotificationEventRecorder::class)->record(
@@ -168,9 +181,10 @@ class WhatsappNumberStatusService
         string $source,
         mixed $errorCode,
         string $errorMessage,
-        ?string $failedStatus
-    ): void {
-        $this->updateMetadata($organizationId, function (array &$whatsapp) use (
+        ?string $failedStatus,
+        array $expectedConnection
+    ): bool {
+        return $this->updateMetadata($organizationId, $expectedConnection, function (array &$whatsapp) use (
             $source,
             $errorCode,
             $errorMessage,
@@ -212,13 +226,13 @@ class WhatsappNumberStatusService
         return is_string($status) ? $status : null;
     }
 
-    private function updateMetadata(int $organizationId, callable $callback): void
+    private function updateMetadata(int $organizationId, array $expectedConnection, callable $callback): bool
     {
-        DB::transaction(function () use ($organizationId, $callback) {
+        return DB::transaction(function () use ($organizationId, $expectedConnection, $callback): bool {
             $organization = Organization::query()->lockForUpdate()->find($organizationId);
 
             if (! $organization) {
-                return;
+                return false;
             }
 
             $metadata = $this->decodeMetadata($organization->metadata);
@@ -226,10 +240,17 @@ class WhatsappNumberStatusService
                 ? $metadata['whatsapp']
                 : [];
 
+            foreach (['phone_number_id', 'waba_id', 'access_token'] as $key) {
+                if ((string) ($metadata['whatsapp'][$key] ?? '') !== (string) ($expectedConnection[$key] ?? '')) {
+                    return false;
+                }
+            }
+
             $callback($metadata['whatsapp'], $organization);
 
             $organization->metadata = json_encode($metadata);
             $organization->save();
+            return true;
         });
     }
 

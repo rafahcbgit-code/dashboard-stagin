@@ -106,7 +106,12 @@ class TemplateStatusWebhookProcessor
                 }
             }
 
-            DB::transaction(function () use ($template, $organization, $mapping, $value, $templateCategory, $hasKnownStatus) {
+            DB::transaction(function () use ($template, $organization, $mapping, $value, $templateCategory, $hasKnownStatus, $wabaId) {
+                $organization = Organization::query()->lockForUpdate()->find($organization->id);
+                if (! $organization || ($wabaId !== null
+                    && (string) data_get(json_decode($organization->metadata ?: '{}', true), 'whatsapp.waba_id') !== (string) $wabaId)) {
+                    return;
+                }
                 $template = Template::query()->where('organization_id', $organization->id)
                     ->lockForUpdate()->findOrFail($template->id);
                 $oldStatus = (string) $template->status;

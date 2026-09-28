@@ -10,11 +10,13 @@ use Illuminate\Validation\ValidationException;
 
 class SubscriptionPeriodService
 {
+    public function __construct(private readonly SubscriptionAuditService $audit)
+    {
+    }
+
     public function timezone(Organization $organization): string
     {
-        $metadata = json_decode((string) $organization->metadata, true) ?: [];
-        $timezone = $metadata['timezone'] ?? $organization->timezone ?? 'UTC';
-        return in_array($timezone, timezone_identifiers_list(), true) ? $timezone : 'UTC';
+        return $organization->effectiveTimezone();
     }
 
     public function manage(string $uuid, string $action, array $input, int $adminId): void
@@ -24,6 +26,7 @@ class SubscriptionPeriodService
                 ->lockForUpdate()->firstOrFail();
             $subscription = Subscription::query()->where('organization_id', $organization->id)
                 ->orderByDesc('id')->lockForUpdate()->first();
+            // Each operation needs fresh subscription and resource-pool caches.
             $usage = new SubscriptionUsageService();
             if (! $subscription) {
                 $this->invalid('This organization has no subscription.');
@@ -59,7 +62,7 @@ class SubscriptionPeriodService
                 $this->invalid('Select an active paid plan before renewing this subscription.');
             }
 
-            $audit = app(SubscriptionAuditService::class);
+            $audit = $this->audit;
             $old = $audit->subscriptionSnapshot($subscription);
             $attributes = [
                 'valid_until' => $end->toDateTimeString(),

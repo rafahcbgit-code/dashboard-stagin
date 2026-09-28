@@ -17,6 +17,7 @@ class NotificationResolver
         private readonly NotificationTemplateRenderer $renderer,
         private readonly NotificationRecipientResolver $recipients,
         private readonly DashboardChannel $dashboard,
+        private readonly SubscriptionNotificationEligibility $subscriptionAlerts,
     ) {
     }
 
@@ -30,11 +31,13 @@ class NotificationResolver
                     return;
                 }
 
-                $organization = Organization::query()->whereKey($event->organization_id)
-                    ->whereNull('deleted_at')->first();
-                $definition = NotificationDefinition::query()->where('type_key', $event->type_key)->first();
-                if (! $organization || ! $definition || ! $definition->enabled) {
-                    $event->update(['status' => 'canceled', 'resolved_at' => now()]);
+                $organizationExists = Organization::query()->whereKey($event->organization_id)
+                    ->whereNull('deleted_at')->exists();
+                $definition = NotificationDefinition::query()->where('type_key', $event->type_key)->sharedLock()->first();
+                if (! $organizationExists || ! $definition || ! $definition->enabled || ! $this->subscriptionAlerts->isCurrent($event)) {
+                    $event->update(['status' => 'canceled', 'resolved_at' => now(),
+                        'queued_at' => null, 'last_error' => 'Notification disabled, organization unavailable, or subscription alert no longer current.']);
+
                     return;
                 }
 
@@ -44,17 +47,16 @@ class NotificationResolver
                 $mode = $event->type_key === 'subscription.resource_warning'
                     ? ((int) ($event->variables['threshold'] ?? 0) >= 90 ? 'dashboard_email' : 'dashboard')
                     : $definition->delivery_mode;
+                $emailBody = $this->renderer->renderEmail($definition->email_body, $values, $allowed);
                 $rendered = [
                     'dashboard' => $this->renderer->render($definition->dashboard_template, $values, $allowed),
-                    'subject' => $this->renderer->render($definition->email_subject, $values, $allowed),
-                    'email' => $this->renderer->render($definition->email_body, $values, $allowed),
+                    'subject' => in_array($mode, ['email', 'dashboard_email'], true)
+                        ? $this->renderer->renderEmailSubject($definition->email_subject, $values, $allowed)
+                        : $this->renderer->render($definition->email_subject, $values, $allowed),
+                    'email' => $emailBody['text'],
+                    'email_html' => $emailBody['html'],
                     'sender' => $definition->sender_email,
                 ];
-
-                if (in_array($mode, ['email', 'dashboard_email'], true)
-                    && (preg_match('/[\r\n]/', $rendered['subject']) || mb_strlen($rendered['subject']) > 191)) {
-                    throw new \InvalidArgumentException('Rendered email subject is invalid.');
-                }
 
                 $recipientRows = $this->recipients->forOrganization($event->organization_id);
                 $seenEmails = [];
@@ -116,17 +118,21 @@ class NotificationResolver
                 ]);
             });
         } catch (Throwable $exception) {
-            NotificationEvent::query()->whereKey($eventId)->where('status', 'pending')
-                ->increment('attempts');
-            $event = NotificationEvent::query()->find($eventId);
-            if ($event && $event->status === 'pending') {
+            DB::transaction(function () use ($eventId, $exception): void {
+                $event = NotificationEvent::query()->lockForUpdate()->find($eventId);
+                if (! $event || $event->status !== 'pending') {
+                    return;
+                }
+                $attempts = $event->attempts + 1;
+                $failed = $attempts >= config('managed_notifications.max_attempts', 4);
                 $event->update([
-                    'status' => $event->attempts >= config('managed_notifications.max_attempts', 4) ? 'failed' : 'pending',
-                    'next_attempt_at' => now()->addSeconds(min(900, 30 * (2 ** max(0, $event->attempts - 1)))),
+                    'attempts' => $attempts,
+                    'status' => $failed ? 'failed' : 'pending',
+                    'next_attempt_at' => $failed ? null : now()->addSeconds(min(900, 30 * (2 ** max(0, $attempts - 1)))),
                     'last_error' => mb_substr($exception->getMessage(), 0, 1000),
                     'queued_at' => null,
                 ]);
-            }
+            });
             report($exception);
         }
     }

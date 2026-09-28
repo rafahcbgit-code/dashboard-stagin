@@ -18,7 +18,7 @@ class UpdateNotificationDefinition extends FormRequest
             'enabled' => ['required', 'boolean'],
             'delivery_mode' => ['required', 'in:dashboard,email,dashboard_email'],
             'dashboard_template' => ['required', 'string', 'max:20000'],
-            'email_subject' => ['required', 'string', 'max:191'],
+            'email_subject' => ['required', 'string', 'max:20000'],
             'email_body' => ['required', 'string', 'max:20000'],
             'sender_email' => ['required', 'email', 'max:191'],
             'webhook_url' => ['nullable', 'string', 'max:2048'],

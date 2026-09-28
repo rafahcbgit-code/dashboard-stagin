@@ -53,12 +53,14 @@
                         </Link>
                     </li>
                     <li v-if="can('notifications', 'view')" class="hover:bg-primary hover:text-white rounded-[5px] px-2 truncate" :class="$page.url.startsWith('/admin/settings/managed-notifications') ? 'bg-primary text-white' : ''">
-                        <Link href="/admin/settings/managed-notifications" class="flex items-center p-2 space-x-3 rounded-md">
+                        <Link href="/admin/settings/managed-notifications" class="flex items-center gap-3 p-2 rounded-md">
+                            <svg aria-hidden="true" focusable="false" class="shrink-0" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21a2 2 0 0 0 4 0"/></svg>
                             <span>{{ $t('Managed notifications') }}</span>
                         </Link>
                     </li>
                     <li v-if="can('notifications', 'view')" class="hover:bg-primary hover:text-white rounded-[5px] px-2 truncate" :class="$page.url.startsWith('/admin/settings/notification-senders') ? 'bg-primary text-white' : ''">
-                        <Link href="/admin/settings/notification-senders" class="flex items-center p-2 space-x-3 rounded-md">
+                        <Link href="/admin/settings/notification-senders" class="flex items-center gap-3 p-2 rounded-md">
+                            <svg aria-hidden="true" focusable="false" class="shrink-0" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M21 10V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h7"/><path d="m3 6 9 6 9-6M15 16h7m-3-3 3 3-3 3"/></svg>
                             <span>{{ $t('Notification email senders') }}</span>
                         </Link>
                     </li>

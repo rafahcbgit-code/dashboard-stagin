@@ -32,6 +32,11 @@ beforeEach(function () {
         $table->timestamps();
         $table->softDeletes();
     });
+    Schema::create('settings', function (Blueprint $table) {
+        $table->id();
+        $table->string('key');
+        $table->text('value')->nullable();
+    });
     Schema::create('templates', function (Blueprint $table) {
         $table->id();
         $table->unsignedBigInteger('organization_id');
@@ -58,6 +63,10 @@ beforeEach(function () {
         (require base_path('database/migrations/'.$migration))->up();
     }
     app(NotificationCatalog::class)->ensureDefinitions();
+});
+
+afterEach(function () {
+    App\Services\WhatsappService::resetSharedClient();
 });
 
 function metaTriggerOrganization(string $name = 'Tenant A', string $waba = 'waba-a', array $extra = []): int
@@ -137,6 +146,45 @@ it('does not notify for equivalent messaging limit formats', function () {
         'value' => ['max_daily_conversations_per_business' => 1000],
     ], ['waba_id' => 'waba-a']);
     expect(NotificationEvent::count())->toBe(0);
+});
+
+it('preserves the last known messaging limit when an unrecognized value arrives', function () {
+    $organizationId = metaTriggerOrganization('Tenant A', 'waba-a', ['messaging_limit_tier' => 10000]);
+    $processor = app(AccountUpdateWebhookProcessor::class);
+    foreach (['not-a-tier', -1, [], null] as $invalid) {
+        $processor->process($organizationId, 'business_capability_update', [
+            'value' => ['max_daily_conversations_per_business' => $invalid],
+        ], ['waba_id' => 'waba-a']);
+    }
+    expect(NotificationEvent::count())->toBe(0);
+    $processor->process($organizationId, 'business_capability_update', [
+        'value' => ['max_daily_conversations_per_business' => 1000],
+    ], ['waba_id' => 'waba-a']);
+    expect(NotificationEvent::sole()->variables)->toMatchArray(['old_limit' => '10000', 'new_limit' => '1000']);
+});
+
+it('keeps account transition baselines separate after relinking a different WABA', function (string $field, array $value, string $type, array $oldState) {
+    $organizationId = metaTriggerOrganization('Tenant A', 'waba-a', $oldState + ['notification_state_waba_id' => 'old-waba']);
+    $processor = app(AccountUpdateWebhookProcessor::class);
+    $processor->process($organizationId, $field, ['value' => $value], ['waba_id' => 'waba-a']);
+    $processor->process($organizationId, $field, ['value' => $value], ['waba_id' => 'waba-a']);
+    expect(NotificationEvent::where('type_key', $type)->count())->toBe(1);
+})->with([
+    ['account_update', ['event' => 'DISABLED_UPDATE', 'ban_info' => ['waba_ban_state' => 'FLAGGED']],
+        'meta.waba_disabled_flagged', ['waba_ban_state' => 'FLAGGED']],
+    ['account_review_update', ['decision' => 'REJECTED'], 'meta.waba_review_rejected', ['account_review_status' => 'REJECTED']],
+]);
+
+it('keeps display-name decisions separate for different phone numbers', function () {
+    $organizationId = metaTriggerOrganization('Tenant A', 'waba-a', [
+        'phone_name_decision' => 'REJECTED:Sample', 'phone_name_decision_phone_number_id' => 'old-phone',
+        'notification_state_waba_id' => 'waba-a',
+    ]);
+    $processor = app(AccountUpdateWebhookProcessor::class);
+    $change = ['value' => ['decision' => 'REJECTED', 'requested_verified_name' => 'Sample', 'display_phone_number' => '+15551112222']];
+    $processor->process($organizationId, 'phone_number_name_update', $change, ['waba_id' => 'waba-a']);
+    $processor->process($organizationId, 'phone_number_name_update', $change, ['waba_id' => 'waba-a']);
+    expect(NotificationEvent::where('type_key', 'meta.phone_display_name_rejected')->count())->toBe(1);
 });
 
 it('uses one messaging limit type for both directions', function () {
@@ -231,6 +279,120 @@ it('records a verified phone quality decrease once', function () {
     $event = metaTriggerEvent($organizationId, 'meta.phone_quality_decreased');
     app(NotificationResolver::class)->resolve($event->id);
     expect($event->fresh()->status)->toBe('canceled');
+});
+
+it('ignores an old phone response after the WhatsApp connection changes during the request', function (string $responseKind) {
+    $organizationId = metaTriggerOrganization('Tenant A', 'waba-a', ['quality_rating' => 'GREEN']);
+    $newConnection = ['whatsapp' => [
+        'waba_id' => 'waba-b', 'phone_number_id' => 'phone-b', 'access_token' => 'new-token',
+        'quality_rating' => 'GREEN', 'number_status' => 'CONNECTED',
+    ]];
+    Http::fake(function () use ($organizationId, $newConnection, $responseKind) {
+        DB::table('organizations')->where('id', $organizationId)->update(['metadata' => json_encode($newConnection)]);
+        if ($responseKind === 'exception') {
+            throw new RuntimeException('Temporary API failure.');
+        }
+        return $responseKind === 'verified'
+            ? Http::response(['status' => 'DISCONNECTED', 'quality_rating' => 'RED'])
+            : Http::response(['error' => ['code' => 100, 'message' => 'Old phone unavailable.']], 400);
+    });
+    $result = app(WhatsappNumberStatusService::class)->sync($organizationId);
+    expect($result)->toMatchArray(['success' => false, 'skipped' => true, 'reason' => 'connection_changed'])
+        ->and(json_decode(DB::table('organizations')->where('id', $organizationId)->value('metadata'), true))->toBe($newConnection)
+        ->and(NotificationEvent::count())->toBe(0);
+})->with(['verified', 'failed', 'exception']);
+
+it('establishes a new quality baseline when the previous rating belongs to another phone', function () {
+    $organizationId = metaTriggerOrganization('Tenant A', 'waba-a', [
+        'quality_rating' => 'GREEN', 'quality_rating_phone_number_id' => 'old-phone',
+    ]);
+    Http::fake(['graph.facebook.com/*' => Http::sequence()
+        ->push(['status' => 'CONNECTED', 'quality_rating' => 'YELLOW'])
+        ->push(['status' => 'CONNECTED', 'quality_rating' => 'RED'])]);
+    app(WhatsappNumberStatusService::class)->sync($organizationId);
+    expect(NotificationEvent::count())->toBe(0);
+    app(WhatsappNumberStatusService::class)->sync($organizationId);
+    expect(NotificationEvent::sole()->variables)->toMatchArray(['old_quality' => 'YELLOW', 'new_quality' => 'RED']);
+});
+
+function notificationReviewTemplateSyncService(int $organizationId, GuzzleHttp\Handler\MockHandler $handler): App\Services\WhatsappService
+{
+    App\Services\WhatsappService::setSharedClientForTesting(new GuzzleHttp\Client(['handler' => GuzzleHttp\HandlerStack::create($handler)]));
+    return new App\Services\WhatsappService('token', 'v22.0', null, 'phone-a', 'waba-a', $organizationId);
+}
+
+it('records Graph template transitions once and keeps the payload in the matching tenant', function (string $status, string $type) {
+    $organizationId = metaTriggerOrganization();
+    $otherId = metaTriggerOrganization('Other', 'waba-b');
+    foreach ([$organizationId, $otherId] as $org) {
+        DB::table('templates')->insert([
+            'organization_id' => $org, 'meta_id' => 'template-a',
+            'name' => 'order_update', 'language' => 'en_US', 'status' => 'APPROVED',
+        ]);
+    }
+    $body = json_encode(['data' => [[
+        'id' => 'template-a', 'name' => 'order_update', 'language' => 'en_US', 'status' => $status,
+    ]]]);
+    $service = notificationReviewTemplateSyncService($organizationId, new GuzzleHttp\Handler\MockHandler([
+        new GuzzleHttp\Psr7\Response(200, [], $body), new GuzzleHttp\Psr7\Response(200, [], $body),
+    ]));
+    $service->syncTemplates();
+    $service->syncTemplates();
+    expect(NotificationEvent::where('type_key', $type)->count())->toBe(1)
+        ->and(NotificationEvent::sole()->organization_id)->toBe($organizationId)
+        ->and(NotificationEvent::sole()->variables['template_name'])->toBe('order_update')
+        ->and(DB::table('templates')->where('organization_id', $otherId)->value('status'))->toBe('APPROVED');
+    app(NotificationResolver::class)->resolve(NotificationEvent::sole()->id);
+    expect(NotificationEvent::sole()->status)->toBe('canceled');
+})->with([
+    ['REJECTED', 'meta.template_rejected'], ['PAUSED', 'meta.template_paused'], ['DISABLED', 'meta.template_disabled'],
+]);
+
+it('does not apply Graph templates after the connected WABA changes during the API request', function (bool $existing) {
+    $organizationId = metaTriggerOrganization();
+    if ($existing) {
+        DB::table('templates')->insert([
+            'organization_id' => $organizationId, 'meta_id' => 'template-a',
+            'name' => 'order_update', 'language' => 'en_US', 'status' => 'APPROVED',
+        ]);
+    }
+    $handler = new GuzzleHttp\Handler\MockHandler([function () use ($organizationId) {
+        DB::table('organizations')->where('id', $organizationId)->update([
+            'metadata' => json_encode(['whatsapp' => ['waba_id' => 'new-waba', 'access_token' => 'new-token']]),
+        ]);
+        return new GuzzleHttp\Psr7\Response(200, [], json_encode(['data' => [[
+            'id' => 'template-a', 'name' => 'order_update', 'language' => 'en_US', 'status' => 'DISABLED',
+        ]]]));
+    }]);
+    $result = notificationReviewTemplateSyncService($organizationId, $handler)->syncTemplates();
+    expect($result->success)->toBeFalse()->and(NotificationEvent::count())->toBe(0)
+        ->and(DB::table('templates')->count())->toBe($existing ? 1 : 0);
+    if ($existing) {
+        expect(DB::table('templates')->value('status'))->toBe('APPROVED');
+    }
+})->with([true, false]);
+
+it('does not apply a template webhook if its WABA changes before the update transaction', function () {
+    $organizationId = metaTriggerOrganization();
+    $templateId = DB::table('templates')->insertGetId([
+        'organization_id' => $organizationId, 'meta_id' => 'template-a',
+        'name' => 'order_update', 'language' => 'en_US', 'status' => 'APPROVED',
+    ]);
+    $changed = false;
+    DB::listen(function ($query) use ($organizationId, &$changed) {
+        if (! $changed && str_starts_with($query->sql, 'select') && str_contains($query->sql, '"templates"')) {
+            $changed = true;
+            DB::table('organizations')->where('id', $organizationId)->update([
+                'metadata' => json_encode(['whatsapp' => ['waba_id' => 'new-waba']]),
+            ]);
+        }
+    });
+    app(TemplateStatusWebhookProcessor::class)->process([
+        'field' => 'message_template_status_update',
+        'value' => ['event' => 'DISABLED', 'message_template_id' => 'template-a'],
+    ], $organizationId, ['waba_id' => 'waba-a']);
+    expect(DB::table('templates')->where('id', $templateId)->value('status'))->toBe('APPROVED')
+        ->and(NotificationEvent::count())->toBe(0);
 });
 
 it('queues quality verification only for a matching tenant phone', function () {

@@ -15,6 +15,12 @@ class NotificationEventRecorder
     ) {
     }
 
+    public function hasRecorded(int $organizationId, string $typeKey, string $sourceKey): bool
+    {
+        return NotificationEvent::query()->where('organization_id', $organizationId)
+            ->where('type_key', $typeKey)->where('event_key', hash('sha256', $sourceKey))->exists();
+    }
+
     /**
      * Call this inside the source state transaction to make the outbox atomic.
      * The scheduled reconciler queues all pending rows; no network I/O occurs here.

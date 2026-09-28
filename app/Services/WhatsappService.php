@@ -3007,7 +3007,7 @@ class WhatsappService
     {
         $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->wabaId}/message_templates";
 
-        $client = new Client();
+        $client = self::getSharedClient();
         $responseObject = new \stdClass();
         $organizationId = (int) $this->organizationId;
         $syncOrganization = Organization::find($organizationId);
@@ -3032,72 +3032,77 @@ class WhatsappService
                 }
 
                 foreach($responseObject->data as $templateData){
-                    $template = Template::where('organization_id', $organizationId)
-                        ->where('meta_id', $templateData->id)->first();
-
-                    if($template){
-                        DB::transaction(function () use ($organizationId, $templateData, $template) {
+                    DB::transaction(function () use ($organizationId, $templateData) {
+                        $organization = Organization::query()->lockForUpdate()->find($organizationId);
+                        $connection = json_decode($organization?->metadata ?: '{}', true);
+                        if (! $organization || (string) data_get($connection, 'whatsapp.waba_id') !== (string) $this->wabaId
+                            || (string) data_get($connection, 'whatsapp.access_token') !== (string) $this->accessToken) {
+                            throw new \RuntimeException('WhatsApp connection changed during template synchronization.');
+                        }
                         $template = Template::where('organization_id', $organizationId)
-                            ->lockForUpdate()->findOrFail($template->id);
-                        $oldStatus = (string) $template->status;
-                        // ── Carousel: preserve our carousel_cards before overwriting ──
-                        // Meta's response replaces header_handle with CDN URLs and drops
-                        // any custom keys we stored. We rebuild carousel_cards from the
-                        // synced metadata so the Edit page still has what it needs.
-                        $existingMeta = $template->metadata ? json_decode($template->metadata, true) : [];
-                        $newMeta      = json_decode(json_encode($templateData), true); // stdClass → array
+                            ->where('meta_id', $templateData->id)->first();
 
-                        if ($this->isCarouselTemplate($newMeta)) {
-                            $newMeta = $this->rebuildCarouselMeta($newMeta, $existingMeta);
-                        }
+                        if($template){
+                            $template = Template::where('organization_id', $organizationId)
+                                ->lockForUpdate()->findOrFail($template->id);
+                            $oldStatus = (string) $template->status;
+                            // ── Carousel: preserve our carousel_cards before overwriting ──
+                            // Meta's response replaces header_handle with CDN URLs and drops
+                            // any custom keys we stored. We rebuild carousel_cards from the
+                            // synced metadata so the Edit page still has what it needs.
+                            $existingMeta = $template->metadata ? json_decode($template->metadata, true) : [];
+                            $newMeta      = json_decode(json_encode($templateData), true); // stdClass → array
 
-                        if (isset($existingMeta['_default_header_media'])) {
-                            $newMeta['_default_header_media'] = $existingMeta['_default_header_media'];
-                        }
+                            if ($this->isCarouselTemplate($newMeta)) {
+                                $newMeta = $this->rebuildCarouselMeta($newMeta, $existingMeta);
+                            }
 
-                        $template->metadata = json_encode($newMeta);
-                        $template->name = $templateData->name ?? $template->name;
-                        $template->language = $templateData->language ?? $template->language;
-                        $template->status = $templateData->status;
-                        if ($oldStatus !== (string) $template->status) {
-                            $template->notification_transition_sequence++;
-                            $template->last_status_change_at = now();
-                        }
-                        $template->category = $templateData->category ?? $template->category;
-                        $template->updated_at = now();
-                        $template->deleted_at = NULL;
-                        $template->save();
-                        if ($oldStatus !== (string) $template->status) {
-                            $organization = Organization::findOrFail($organizationId);
-                            app(TemplateStatusNotificationRecorder::class)->record(
-                                $template, $organization, $oldStatus, (string) $template->status
-                            );
-                        }
-                        });
-                    } else {
-                        // New template from Meta we don't have locally yet
-                        $newMeta = json_decode(json_encode($templateData), true);
+                            if (isset($existingMeta['_default_header_media'])) {
+                                $newMeta['_default_header_media'] = $existingMeta['_default_header_media'];
+                            }
 
-                        // If it's a carousel that somehow we never saved (e.g. created
-                        // outside this app), build carousel_cards from scratch
-                        if ($this->isCarouselTemplate($newMeta)) {
-                            $newMeta = $this->rebuildCarouselMeta($newMeta, []);
-                        }
+                            $template->metadata = json_encode($newMeta);
+                            $template->name = $templateData->name ?? $template->name;
+                            $template->language = $templateData->language ?? $template->language;
+                            $template->status = $templateData->status;
+                            if ($oldStatus !== (string) $template->status) {
+                                $template->notification_transition_sequence++;
+                                $template->last_status_change_at = now();
+                            }
+                            $template->category = $templateData->category ?? $template->category;
+                            $template->updated_at = now();
+                            $template->deleted_at = NULL;
+                            $template->save();
+                            if ($oldStatus !== (string) $template->status) {
+                                app(TemplateStatusNotificationRecorder::class)->record(
+                                    $template, $organization, $oldStatus, (string) $template->status
+                                );
+                            }
+                        } else {
+                            // New template from Meta we don't have locally yet
+                            $newMeta = json_decode(json_encode($templateData), true);
 
-                        $template = new Template();
-                        $template->organization_id = $organizationId;
-                        $template->meta_id = $templateData->id;
-                        $template->name = $templateData->name;
-                        $template->category = $templateData->category;
-                        $template->language = $templateData->language;
-                        $template->metadata = json_encode($newMeta);
-                        $template->status = $templateData->status;
-                        $template->created_by = auth()->id()
-                            ?? Organization::whereKey($organizationId)->value('created_by');
-                        $template->created_at = now();
-                        $template->updated_at = now();
-                        $template->save();
-                    }
+                            // If it's a carousel that somehow we never saved (e.g. created
+                            // outside this app), build carousel_cards from scratch
+                            if ($this->isCarouselTemplate($newMeta)) {
+                                $newMeta = $this->rebuildCarouselMeta($newMeta, []);
+                            }
+
+                            $template = new Template();
+                            $template->organization_id = $organizationId;
+                            $template->meta_id = $templateData->id;
+                            $template->name = $templateData->name;
+                            $template->category = $templateData->category;
+                            $template->language = $templateData->language;
+                            $template->metadata = json_encode($newMeta);
+                            $template->status = $templateData->status;
+                            $template->created_by = auth()->id()
+                                ?? $organization->created_by;
+                            $template->created_at = now();
+                            $template->updated_at = now();
+                            $template->save();
+                        }
+                    });
                 };
 
                 if(isset($responseObject->paging) && isset($responseObject->paging->next)) {
@@ -3120,7 +3125,7 @@ class WhatsappService
             $responseObject->message = data_get($responseObject, 'data.error.error_user_msg')
                 ?? data_get($responseObject, 'data.error.message')
                 ?? $e->getMessage();
-        } catch (Exception $e) {
+        } catch (\Throwable $e) {
             $responseObject->success = false;
             $responseObject->data = new \stdClass();
             $responseObject->data->error = new \stdClass();

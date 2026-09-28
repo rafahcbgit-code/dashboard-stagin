@@ -4,12 +4,14 @@ namespace App\Services\ManagedNotifications;
 
 use App\Jobs\NotifySubscriptionPlanLimitIncreasesJob;
 use App\Models\NotificationDefinition;
+use App\Models\NotificationEvent;
 use App\Models\Organization;
+use App\Models\Setting;
 use App\Models\Subscription;
 use App\Models\SubscriptionEvent;
-use App\Models\Setting;
 use App\Services\SubscriptionUsageService;
 use Carbon\Carbon;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Throwable;
 
@@ -71,8 +73,14 @@ class SubscriptionNotificationScanner
             ->whereNull('notification_projected_at')
             ->orderBy('id')->chunkById(200, function ($events): void {
                 foreach ($events as $event) {
-                    $this->projector->project($event);
-                    $event->update(['notification_projected_at' => now()]);
+                    DB::transaction(function () use ($event): void {
+                        $source = SubscriptionEvent::query()->lockForUpdate()->find($event->id);
+                        if (! $source || $source->notification_projected_at) {
+                            return;
+                        }
+                        $this->projector->project($source);
+                        $source->update(['notification_projected_at' => now()]);
+                    });
                 }
             });
     }
@@ -105,20 +113,64 @@ class SubscriptionNotificationScanner
             ->whereNotNull('valid_until')
             ->where('valid_until', '>=', $startedAt)
             ->where('valid_until', '<=', now()->addDays(8))
-            ->whereRaw('NOT EXISTS (SELECT 1 FROM subscriptions newer WHERE newer.organization_id = subscriptions.organization_id AND newer.id > subscriptions.id)')
+            ->where(fn ($query) => $query->where('valid_until', '>', now())
+                ->orWhereNull('expiry_notification_processed_at')
+                ->orWhereColumn('expiry_notification_processed_at', '<', 'valid_until'))
+            ->latestPerOrganization()
             ->orderBy('id')->chunkById(200, function ($subscriptions) use ($enabled): void {
                 $organizations = Organization::query()->whereIn('id', $subscriptions->pluck('organization_id'))
-                    ->whereNull('deleted_at')->get()->keyBy('id');
+                    ->whereNull('deleted_at')->get(['id', 'name', 'metadata', 'timezone'])->keyBy('id');
+                $recordedReminders = $this->recordedReminders($subscriptions, $enabled);
                 foreach ($subscriptions as $subscription) {
                     $organization = $organizations->get($subscription->organization_id);
                     if ($organization) {
-                        $this->checkDate($subscription, $organization, $enabled);
+                        $this->checkDate($subscription, $organization, $enabled, $recordedReminders);
                     }
                 }
             });
     }
 
-    private function checkDate(Subscription $subscription, Organization $organization, $enabled): void
+    private function recordedReminders(Collection $subscriptions, Collection $enabled): Collection
+    {
+        $types = $enabled->keys()->intersect(['subscription.trial_expiring', 'subscription.expiring']);
+        if ($types->isEmpty()) {
+            return collect();
+        }
+
+        $identities = [];
+        foreach ($subscriptions as $subscription) {
+            $type = $subscription->status === 'trial' ? 'subscription.trial_expiring' : 'subscription.expiring';
+            if (! $types->contains($type)) {
+                continue;
+            }
+            $keys = [];
+            foreach ($subscription->status === 'trial' ? [3, 1] : [7, 1] as $days) {
+                $keys[] = hash('sha256', $this->reminderKey($subscription, $days));
+            }
+            $identities[] = [(int) $subscription->organization_id, $type, $keys];
+        }
+        if ($identities === []) {
+            return collect();
+        }
+
+        // At most 400 identities per batch; do not load the tenant's event history.
+        return NotificationEvent::query()
+            ->where(function ($query) use ($identities): void {
+                foreach ($identities as [$organizationId, $type, $keys]) {
+                    $query->orWhere(fn ($identity) => $identity->where('organization_id', $organizationId)
+                        ->where('type_key', $type)->whereIn('event_key', $keys));
+                }
+            })
+            ->pluck('event_key')->flip();
+    }
+
+    private function reminderKey(Subscription $subscription, int $days): string
+    {
+        return 'subscription-reminder:'.$subscription->id.':'.$subscription->getRawOriginal('valid_until').':'.$days;
+    }
+
+    private function checkDate(Subscription $subscription, Organization $organization,
+        Collection $enabled, Collection $recordedReminders): void
     {
         $end = $subscription->getRawOriginal('valid_until');
         $endAt = Carbon::parse($end, 'UTC');
@@ -130,7 +182,7 @@ class SubscriptionNotificationScanner
 
         $base = ['organization_name' => $organization->name];
         $dateVariable = $type === 'trial' ? 'trial_end_date' : 'subscription_end_date';
-        $timezone = $this->timezone($organization);
+        $timezone = $organization->effectiveTimezone();
         $localEnd = $endAt->copy()->setTimezone($timezone);
         $base[$dateVariable] = $localEnd->toDateString();
 
@@ -140,8 +192,7 @@ class SubscriptionNotificationScanner
                 'plan_name' => $subscription->plan?->name ?? 'Plan',
             ];
             $notificationType = $type === 'trial' ? 'subscription.trial_expired' : 'subscription.expired';
-            $this->ifCurrent($subscription, function (Subscription $current) use
-                ($endAt, $enabled, $notificationType, $organizationId, $key, $variables): void {
+            $this->ifCurrent($subscription, function (Subscription $current) use ($endAt, $enabled, $notificationType, $organizationId, $key, $variables): void {
                 if ($current->expiry_notification_processed_at
                     && Carbon::parse($current->getRawOriginal('expiry_notification_processed_at'))->gte($endAt)) {
                     return;
@@ -151,6 +202,7 @@ class SubscriptionNotificationScanner
                 }
                 $current->update(['expiry_notification_processed_at' => now()]);
             });
+
             return;
         }
 
@@ -168,14 +220,18 @@ class SubscriptionNotificationScanner
         if (! $enabled->has($notificationType)) {
             return;
         }
+        $key = $this->reminderKey($subscription, $days);
+        if ($recordedReminders->has(hash('sha256', $key))) {
+            return;
+        }
         $variables = $base + ['days_remaining' => (string) $days];
         if ($type === 'subscription') {
             $variables['plan_name'] = $subscription->plan?->name ?? 'Plan';
         }
-        $this->ifCurrent($subscription, function () use
-            ($organizationId, $notificationType, $subscription, $end, $days, $variables): void {
-            $this->recorder->record($organizationId, $notificationType,
-                'subscription-reminder:'.$subscription->id.':'.$end.':'.$days, $variables);
+        $this->ifCurrent($subscription, function () use ($organizationId, $notificationType, $key, $variables): void {
+            if (! $this->recorder->hasRecorded($organizationId, $notificationType, $key)) {
+                $this->recorder->record($organizationId, $notificationType, $key, $variables);
+            }
         });
     }
 
@@ -189,11 +245,22 @@ class SubscriptionNotificationScanner
             return;
         }
 
+        $checkedAccounts = [];
         Subscription::query()->whereIn('status', ['trial', 'active'])
             ->where('valid_until', '>', now())
-            ->whereRaw('NOT EXISTS (SELECT 1 FROM subscriptions newer WHERE newer.organization_id = subscriptions.organization_id AND newer.id > subscriptions.id)')
-            ->orderBy('id')->chunkById(100, function ($subscriptions) use ($startedAt): void {
-                $summaries = $this->usage->bulkSummaries($subscriptions->pluck('organization_id')->all());
+            ->latestPerOrganization()
+            ->orderBy('id')->chunkById(100, function ($subscriptions) use ($startedAt, &$checkedAccounts): void {
+                $representatives = [];
+                $accountIds = $this->usage->bulkResourceAccountIds($subscriptions->pluck('organization_id')->all());
+                foreach ($accountIds as $organizationId => $accountId) {
+                    if (! isset($checkedAccounts[$accountId])) {
+                        $representatives[$accountId] ??= $organizationId;
+                    }
+                }
+                if ($representatives === []) {
+                    return;
+                }
+                $summaries = $this->usage->bulkSummaries(array_values($representatives));
                 $accounts = [];
                 foreach ($summaries as $resources) {
                     foreach ($resources as $resource => $summary) {
@@ -201,11 +268,16 @@ class SubscriptionNotificationScanner
                         $accounts[$accountId][$resource] = $summary;
                     }
                 }
-                $accountSubscriptions = Subscription::query()->whereIn('organization_id', array_keys($accounts))
-                    ->orderByDesc('id')->get()->unique('organization_id')->keyBy('organization_id');
+                $latestIds = Subscription::query()->selectRaw('MAX(id)')
+                    ->whereIn('organization_id', array_keys($accounts))->groupBy('organization_id');
+                $accountSubscriptions = Subscription::query()->whereIn('id', $latestIds)
+                    ->get()->keyBy('organization_id');
                 $organizations = Organization::query()->whereIn('id', array_keys($accounts))
                     ->whereNull('deleted_at')->get(['id', 'name'])->keyBy('id');
                 foreach ($accounts as $accountId => $resources) {
+                    if (isset($checkedAccounts[$accountId])) {
+                        continue;
+                    }
                     $subscription = $accountSubscriptions->get($accountId);
                     $organization = $organizations->get($accountId);
                     if (! $subscription || ! $organization
@@ -214,7 +286,7 @@ class SubscriptionNotificationScanner
                         || Carbon::parse($subscription->getRawOriginal('valid_until'))->lte(now())) {
                         continue;
                     }
-                    $this->ifCurrent($subscription, function ($current) use ($accountId, $organization, $resources, $startedAt): void {
+                    $this->ifCurrent($subscription, function ($current) use ($accountId, $organization, $resources, $startedAt, &$checkedAccounts): void {
                         foreach ($resources as $resource => $summary) {
                             if (isset($summary['subscription_id']) && ((int) $summary['subscription_id'] !== (int) $current->id
                                 || (int) $summary['period_version'] !== (int) $current->period_version)) {
@@ -222,6 +294,7 @@ class SubscriptionNotificationScanner
                             }
                             $this->checkUsage((int) $accountId, $organization->name, $current,
                                 $resource, $summary, $startedAt);
+                            $checkedAccounts[$accountId] = true;
                         }
                     });
                 }
@@ -244,10 +317,12 @@ class SubscriptionNotificationScanner
             }
         }
         $periodStart = $subscription->getRawOriginal('start_date') ?: $subscription->getRawOriginal('created_at');
-        $periodKey = hash('sha256', $subscription->id.':'.$periodStart.':'.(int) $subscription->usage_event_start_id.':'.(int) $subscription->conversation_start_id);
+        $periodKey = $subscription->usagePeriodKey();
 
-        DB::transaction(function () use ($accountId, $name, $resource, $subscription, $used,
-            $limit, $threshold, $periodKey, $periodStart, $startedAt): void {
+        // ifCurrent holds the subscription lock and transaction for all its resources.
+        $state = DB::table('subscription_usage_alert_states')
+            ->where('organization_id', $accountId)->where('resource', $resource)->lockForUpdate()->first();
+        if (! $state) {
             DB::table('subscription_usage_alert_states')->insertOrIgnore([
                 'organization_id' => $accountId, 'resource' => $resource,
                 'period_key' => $periodKey, 'last_limit' => $limit,
@@ -257,37 +332,35 @@ class SubscriptionNotificationScanner
             ]);
             $state = DB::table('subscription_usage_alert_states')
                 ->where('organization_id', $accountId)->where('resource', $resource)->lockForUpdate()->first();
-            $highest = (int) $state->highest_threshold;
-            if ($state->period_key !== $periodKey) {
-                $highest = 0;
-            } elseif ((int) $state->last_limit < $limit) {
-                $highest = $threshold;
-            } elseif ((int) $state->last_limit > $limit) {
-                $highest = 0;
-            }
+        }
+        $highest = (int) $state->highest_threshold;
+        if ($state->period_key !== $periodKey) {
+            $highest = 0;
+        } elseif ((int) $state->last_limit < $limit) {
+            $highest = $threshold;
+        } elseif ((int) $state->last_limit > $limit) {
+            $highest = 0;
+        }
 
-            if ($threshold > $highest) {
-                $this->recorder->record($accountId, 'subscription.resource_warning',
-                    'subscription-usage:'.$accountId.':'.$resource.':'.$periodKey.':'.$limit.':'.$threshold, [
-                        'organization_name' => $name,
-                        'resource_name' => self::RESOURCES[$resource],
-                        'usage' => (string) $used,
-                        'limit' => (string) $limit,
-                        'threshold' => (string) $threshold,
-                    ]);
+        if ($threshold > $highest) {
+            $sourceKey = 'subscription-usage:'.$accountId.':'.$resource.':'.$periodKey.':'.$limit.':'.$threshold;
+            if (! $this->recorder->hasRecorded($accountId, 'subscription.resource_warning', $sourceKey)) {
+                $this->recorder->record($accountId, 'subscription.resource_warning', $sourceKey, [
+                    'organization_name' => $name,
+                    'resource_name' => self::RESOURCES[$resource],
+                    'usage' => (string) $used,
+                    'limit' => (string) $limit,
+                    'threshold' => (string) $threshold,
+                ]);
             }
+        }
+        if ($state->period_key !== $periodKey || (int) $state->last_limit !== $limit
+            || (int) $state->highest_threshold !== max($highest, $threshold)) {
             DB::table('subscription_usage_alert_states')->where('id', $state->id)->update([
                 'period_key' => $periodKey, 'last_limit' => $limit,
                 'highest_threshold' => max($highest, $threshold), 'updated_at' => now(),
             ]);
-        });
-    }
-
-    private function timezone(Organization $organization): string
-    {
-        $metadata = json_decode((string) $organization->metadata, true);
-        $timezone = $metadata['timezone'] ?? $organization->timezone ?? 'UTC';
-        return in_array($timezone, timezone_identifiers_list(), true) ? $timezone : 'UTC';
+        }
     }
 
     private function ifCurrent(Subscription $candidate, callable $callback): void

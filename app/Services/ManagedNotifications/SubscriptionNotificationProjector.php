@@ -40,10 +40,12 @@ class SubscriptionNotificationProjector
 
         if ($source->event_type === SubscriptionAuditService::ADD_ON_PURCHASED) {
             $this->projectAddon($source, $organization);
+
             return;
         }
 
-        $subscription = Subscription::currentForOrganization($organizationId);
+        $subscription = Subscription::query()->where('organization_id', $organizationId)
+            ->orderByDesc('id')->lockForUpdate()->first();
         if (! $subscription || (int) $subscription->id !== (int) $source->subscription_id) {
             return;
         }
@@ -63,11 +65,13 @@ class SubscriptionNotificationProjector
 
         $base = ['organization_name' => $organization->name];
         $sourceKey = 'subscription-event:'.$source->id;
+        $localEndDate = Carbon::parse($end, 'UTC')->setTimezone($organization->effectiveTimezone())->toDateString();
 
         if ($subscription->status === 'trial' && (! $old || ($old['status'] ?? null) !== 'trial')) {
             $this->record('subscription.trial_started', $organizationId, $sourceKey, $base + [
-                'trial_end_date' => Carbon::parse($end)->toDateString(),
+                'trial_end_date' => $localEndDate,
             ]);
+
             return;
         }
 
@@ -77,10 +81,11 @@ class SubscriptionNotificationProjector
 
         $paid = $base + [
             'plan_name' => (string) ($new['plan_name'] ?? $subscription->plan?->name ?? 'Plan'),
-            'subscription_end_date' => Carbon::parse($end)->toDateString(),
+            'subscription_end_date' => $localEndDate,
         ];
         if ($source->source === 'admin_renew') {
             $this->record('subscription.renewed', $organizationId, $sourceKey, $paid);
+
             return;
         }
         if (! $old) {
@@ -99,15 +104,18 @@ class SubscriptionNotificationProjector
                         ]);
                     }
                 }
+
                 return;
             }
 
             $this->record('subscription.activated', $organizationId, $sourceKey, $paid);
+
             return;
         }
 
         if (($old['status'] ?? null) !== 'active' || ! ($old['plan_id'] ?? null)) {
             $this->record('subscription.activated', $organizationId, $sourceKey, $paid);
+
             return;
         }
 
@@ -119,6 +127,7 @@ class SubscriptionNotificationProjector
                     'new_plan_name' => (string) ($new['plan_name'] ?? 'New plan'),
                 ]);
             }
+
             return;
         }
 
@@ -136,7 +145,7 @@ class SubscriptionNotificationProjector
             return;
         }
 
-        $addon = ResourceAddon::query()->find($source->resource_addon_id);
+        $addon = ResourceAddon::query()->where('organization_id', $organization->id)->find($source->resource_addon_id);
         if (! $addon || ($addon->getRawOriginal('valid_until')
             && Carbon::parse($addon->getRawOriginal('valid_until'))->lte(now()))) {
             return;
@@ -146,7 +155,8 @@ class SubscriptionNotificationProjector
         if ($accountId !== (int) $organization->id) {
             return;
         }
-        $subscription = Subscription::currentForOrganization($accountId);
+        $subscription = Subscription::query()->where('organization_id', $accountId)
+            ->orderByDesc('id')->lockForUpdate()->first();
         if (! $subscription || $subscription->status !== 'active' || ! $subscription->plan_id
             || ($source->new_values['subscription_status'] ?? null) !== 'active'
             || (int) ($source->new_values['subscription_id'] ?? 0) !== (int) $subscription->id
@@ -173,7 +183,7 @@ class SubscriptionNotificationProjector
 
     private function planDirection(array $old, array $new): ?string
     {
-        if (array_keys($old) !== array_keys($new) || ! $old) {
+        if (! $old || array_diff_key($old, $new) || array_diff_key($new, $old)) {
             return null;
         }
 
@@ -195,7 +205,8 @@ class SubscriptionNotificationProjector
 
     private function record(string $type, int $organizationId, string $sourceKey, array $variables): void
     {
-        if (NotificationDefinition::query()->where('type_key', $type)->where('enabled', true)->exists()) {
+        if (NotificationDefinition::query()->where('type_key', $type)->where('enabled', true)->exists()
+            && ! $this->recorder->hasRecorded($organizationId, $type, $sourceKey)) {
             $this->recorder->record($organizationId, $type, $sourceKey, $variables);
         }
     }

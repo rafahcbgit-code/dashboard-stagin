@@ -67,7 +67,7 @@ class NotificationController extends BaseController
             ->where('clicked', false)
             ->orderBy('sent_at')
             ->orderBy('id')
-            ->first(['id', 'payload']);
+            ->first(['id', 'payload', 'notification_type']);
 
         return response()->json(['notification' => $notification ? [
             'id' => $notification->id,

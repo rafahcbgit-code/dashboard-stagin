@@ -23,6 +23,7 @@ const testResult = ref(null)
 const testError = ref(null)
 const testing = ref(false)
 const testSamples = computed(() => Object.entries(selectedTestDefinition.value?.test_preview?.variables || {}))
+const testPreviewDocument = computed(() => `<!doctype html><html><head><meta charset="UTF-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src https: data:"></head><body>${selectedTestDefinition.value?.test_preview?.html || ''}</body></html>`)
 
 watch(selectedTestType, () => {
     testSenderEmail.value = selectedTestDefinition.value?.sender_email || props.senders?.[0] || ''
@@ -136,10 +137,12 @@ const testEmail = () => {
                 <label class="block text-sm">
                     {{ $t('Email subject') }}
                     <input v-model="drafts[definition.type_key].email_subject" :disabled="!mayEdit" class="mt-1 block w-full rounded border-gray-300">
+                    <span class="mt-1 block text-xs text-gray-500">{{ $t('HTML input is converted to plain text when saved. Email subjects cannot display HTML formatting. The resulting subject must fit within 191 characters.') }}</span>
                 </label>
                 <label class="block text-sm">
                     {{ $t('Email body') }}
                     <textarea v-model="drafts[definition.type_key].email_body" :disabled="!mayEdit" rows="4" class="mt-1 block w-full rounded border-gray-300"></textarea>
+                    <span class="mt-1 block text-xs text-gray-500">{{ $t('Plain text and HTML are supported. Use inline styles for email formatting. Scripts and unsafe HTML are removed. Save before previewing or sending a test.') }}</span>
                 </label>
                 <label class="block text-sm">
                     {{ $t('Optional webhook URL') }}
@@ -184,7 +187,7 @@ const testEmail = () => {
                     <p class="font-medium">{{ $t('Saved template preview') }}</p>
                     <p><strong>{{ $t('Sample variables') }}:</strong> <span v-for="[key, value] in testSamples" :key="key" class="mr-3"><code>{{ key }}</code>: {{ value }}</span></p>
                     <p><strong>{{ $t('Subject') }}:</strong> {{ selectedTestDefinition.test_preview.subject }}</p>
-                    <pre class="whitespace-pre-wrap font-sans">{{ selectedTestDefinition.test_preview.body }}</pre>
+                    <iframe :srcdoc="testPreviewDocument" sandbox="" referrerpolicy="no-referrer" :title="$t('Saved template preview')" class="h-80 w-full rounded border bg-white"></iframe>
                 </div>
                 <p v-if="testError" role="alert" class="text-sm text-red-700">{{ testError }}</p>
                 <p v-if="testResult" :role="testResult.type === 'error' ? 'alert' : 'status'" :class="testResult.type === 'error' ? 'text-red-700' : 'text-green-700'" class="text-sm">{{ testResult.message }}</p>

@@ -304,7 +304,18 @@ class SubscriptionUsageService
         ];
     }
 
-    private function bulkUsageContext(array $organizationIds): array
+    public function bulkResourceAccountIds(array $organizationIds): array
+    {
+        $organizationIds = collect($organizationIds)->map(fn ($id) => (int) $id)
+            ->filter()->unique()->values()->all();
+        if ($organizationIds === []) {
+            return [];
+        }
+
+        return $this->bulkResourceAccountContext($organizationIds)['organization_to_billing'];
+    }
+
+    private function bulkResourceAccountContext(array $organizationIds): array
     {
         $requestedOrganizations = Organization::query()
             ->whereIn('id', $organizationIds)
@@ -347,6 +358,19 @@ class SubscriptionUsageService
             $this->resourceAccountIdCache[$organizationId] = $organizationToBilling[$organizationId];
         }
 
+        return [
+            'organization_to_billing' => $organizationToBilling,
+            'subscriptions' => $subscriptions,
+            'sharing_enabled' => $sharingEnabled,
+        ];
+    }
+
+    private function bulkUsageContext(array $organizationIds): array
+    {
+        $accounts = $this->bulkResourceAccountContext($organizationIds);
+        $organizationToBilling = $accounts['organization_to_billing'];
+        $subscriptions = $accounts['subscriptions'];
+        $sharingEnabled = $accounts['sharing_enabled'];
         $billingOrganizationIds = collect($organizationToBilling)
             ->values()
             ->unique()
@@ -1099,6 +1123,13 @@ class SubscriptionUsageService
             ->value('organization_id');
     }
 
+    public function effectiveLimit(Subscription $subscription, string $resource): int
+    {
+        $resource = $this->normalizeResource($resource);
+        $base = $this->baseLimit($subscription, $resource);
+        return $base === -1 ? -1 : $base + $this->activeAddonQuantity((int) $subscription->organization_id, $resource);
+    }
+
     private function activeAddonQuantity(int $organizationId, string $resource): int
     {
         return (int) ResourceAddon::where('organization_id', $organizationId)
@@ -1116,7 +1147,8 @@ class SubscriptionUsageService
             return 0;
         }
 
-        if ($subscription->status === 'trial' && $subscription->valid_until > now()) {
+        $end = $subscription->getRawOriginal('valid_until');
+        if ($subscription->status === 'trial' && $end && Carbon::parse($end, 'UTC')->isFuture()) {
             return $this->trialLimit($resource);
         }
 

@@ -83,6 +83,7 @@ beforeEach(function () {
         $table->timestamp('read_at')->nullable();
     });
     (require base_path('database/migrations/2026_09_27_000005_index_notification_inbox_order.php'))->up();
+    (require base_path('database/migrations/2026_09_28_000003_optimize_notification_inbox_indexes.php'))->up();
 
     foreach ([
         '2026_09_26_000001_create_notification_definitions_table.php',
@@ -97,6 +98,7 @@ beforeEach(function () {
 });
 
 afterEach(function () {
+    \Carbon\Carbon::setTestNow();
     DB::disconnect('sqlite');
 });
 
@@ -156,6 +158,206 @@ it('synchronizes the notification catalog with one definition write', function (
 
     expect($writes)->toHaveCount(1)
         ->and(NotificationDefinition::count())->toBe(count(config('managed_notifications.types')));
+});
+
+it('renders safe HTML email with inline styles, tables, links, images and escaped variables', function () {
+    $template = '<!doctype html><html><body><div dir="rtl"><table cellpadding="8" style="width:100%;background-color:#ffffff">'
+        .'<tr><td style="color:#123456"><strong>{{organization_name}}</strong></td></tr></table>'
+        .'<a href="https://chatberry.net" onclick="alert(1)">Open Chatberry</a>'
+        .'<img src="https://chatberry.net/logo.png" alt="Chatberry" onerror="alert(1)">'
+        .'<a href="javascript:alert(1)">Unsafe link</a><script>alert(1)</script></div></body></html>';
+    $name = 'شركة <img src=x onerror=alert(2)> & "العميل"';
+    $body = app(NotificationTemplateRenderer::class)->renderEmail($template,
+        ['organization_name' => $name], ['organization_name']);
+
+    expect($body['html'])->toContain('<table', 'cellpadding="8"', 'color:#123456', 'dir="rtl"',
+        'href="https://chatberry.net"', 'src="https://chatberry.net/logo.png"', '&lt;img')
+        ->not->toContain('<script', 'onclick=', 'onerror="', 'javascript:', '<img src=x')
+        ->and($body['text'])->toContain($name, 'Open Chatberry')->not->toContain('<table', '<strong>');
+});
+
+it('preserves plain email text and line breaks without treating variable values as HTML', function () {
+    $template = "Contact <support@example.com>\nHello {{organization_name}}\nUsage < 70% & growing";
+    $name = '<strong>Tenant A</strong>';
+    $body = app(NotificationTemplateRenderer::class)->renderEmail($template,
+        ['organization_name' => $name], ['organization_name']);
+
+    expect($body['text'])->toBe(str_replace('{{organization_name}}', $name, $template))
+        ->and($body['html'])->toContain('&lt;support@example.com&gt;', '&lt;strong&gt;Tenant A&lt;/strong&gt;', '<br>', '&amp; growing')
+        ->not->toContain('<strong>Tenant A</strong>');
+});
+
+it('validates HTML variables before escaping and removes unsafe attribute values', function () {
+    $renderer = app(NotificationTemplateRenderer::class);
+    $body = $renderer->renderEmail('<p>{{organization_name}}</p>',
+        ['organization_name' => str_repeat('&', 500)], ['organization_name']);
+    expect($body['text'])->toBe(str_repeat('&', 500));
+
+    $body = $renderer->renderEmail('<a href="{{organization_name}}">Open</a>',
+        ['organization_name' => 'javascript:alert(1)'], ['organization_name']);
+    expect($body['html'])->not->toContain('javascript:');
+    expect(fn () => $renderer->renderEmail('<p>{{password}}</p>',
+        ['organization_name' => 'Tenant A'], ['organization_name']))->toThrow(InvalidArgumentException::class);
+});
+
+it('converts subject HTML to plain text while preserving predefined variables', function ($template, $expected) {
+    $renderer = app(NotificationTemplateRenderer::class);
+    $allowed = ['template_name'];
+    expect($renderer->normalizeEmailSubject($template, $allowed))->toBe($expected)
+        ->and($renderer->renderEmailSubject($template, ['template_name' => 'order_update'], $allowed))
+        ->toBe(str_replace('{{template_name}}', 'order_update', $expected));
+})->with([
+    'Arabic HTML' => ['<strong>تنبيه</strong>: {{template_name}} &amp; الرسائل', 'تنبيه: {{template_name}} & الرسائل'],
+    'blocks' => ['<p>Template</p><p>{{template_name}}</p>', 'Template {{template_name}}'],
+    'unsafe markup' => ['<script>alert(1)</script><b onclick="alert(2)">{{template_name}}</b>', '{{template_name}}'],
+    'existing plain text' => ['Usage < 70% & growing: {{template_name}}', 'Usage < 70% & growing: {{template_name}}'],
+]);
+
+it('rejects empty, oversized, unknown-variable and injected subjects', function () {
+    $renderer = app(NotificationTemplateRenderer::class);
+    foreach (['<img src="https://chatberry.net/logo.png">', '<b>'.str_repeat('x', 192).'</b>',
+        '<b>{{password}}</b>', "Hello\r\nBcc: other@example.com", '<b>Hello&#13;&#10;Bcc: other@example.com</b>',
+        "Hello\0"] as $template) {
+        expect(fn () => $renderer->normalizeEmailSubject($template, ['template_name']))
+            ->toThrow(InvalidArgumentException::class);
+    }
+    foreach (["order\r\nBcc: other@example.com", str_repeat('x', 192)] as $value) {
+        expect(fn () => $renderer->renderEmailSubject('<b>{{template_name}}</b>',
+            ['template_name' => $value], ['template_name']))->toThrow(InvalidArgumentException::class);
+    }
+    expect($renderer->normalizeEmailSubject('Hello&#0;', ['template_name']))->toBe('Hello&#0;');
+});
+
+it('accepts subject HTML longer than the database field and saves its short plain text safely', function () {
+    $adminId = managedNotificationUser('admin@example.com', 'admin');
+    $this->withoutMiddleware([
+        App\Http\Middleware\CheckAppStatus::class,
+        App\Http\Middleware\HandleInertiaRequests::class,
+        App\Http\Middleware\SetOrganizationFromSession::class,
+        App\Http\Middleware\Localization::class,
+        App\Http\Middleware\VerifyCsrfToken::class,
+    ])->actingAs(App\Models\User::findOrFail($adminId), 'admin');
+    $definition = NotificationDefinition::where('type_key', 'meta.template_status_changed')->firstOrFail();
+    $url = '/admin/settings/managed-notifications/'.$definition->type_key;
+    $this->put($url, managedNotificationDefinitionInput($definition, [
+        'email_subject' => '<strong title="'.str_repeat('x', 250).'">تنبيه</strong>: {{template_name}}',
+    ]))->assertRedirect()->assertSessionHasNoErrors();
+    $definition->refresh();
+    expect($definition->email_subject)->toBe('تنبيه: {{template_name}}');
+    foreach (['<b>'.str_repeat('x', 192).'</b>', '<b>{{unknown_variable}}</b>', '<script>alert(1)</script>'] as $subject) {
+        $this->put($url, managedNotificationDefinitionInput($definition, ['email_subject' => $subject]))
+            ->assertSessionHasErrors('definition');
+    }
+    expect($definition->fresh()->email_subject)->toBe('تنبيه: {{template_name}}');
+});
+
+it('delivers an HTML notification as multipart email and preserves its snapshot on retry', function () {
+    config()->set('mail.default', 'array');
+    $organizationId = managedNotificationOrganization('Tenant A');
+    $owner = managedNotificationUser('owner@example.com', 'user');
+    managedNotificationOwner($organizationId, $owner);
+    $definition = NotificationDefinition::where('type_key', 'meta.template_status_changed')->firstOrFail();
+    $manager = app(NotificationDefinitionManager::class);
+    $definition = $manager->update($definition->type_key, managedNotificationDefinitionInput($definition, [
+        'email_subject' => '<strong>Status:</strong> {{template_name}}',
+        'email_body' => '<p dir="rtl">مرحبًا <strong>{{organization_name}}</strong><br>{{template_name}}</p>',
+    ]), $owner);
+    $values = managedNotificationValues();
+    $values['organization_name'] = 'شركة <img src=x onerror=alert(1)>';
+    $event = app(NotificationEventRecorder::class)->record($organizationId, $definition->type_key, 'html-delivery', $values);
+    app(NotificationResolver::class)->resolve($event->id);
+    $snapshot = $event->fresh()->rendered;
+    $manager->update($definition->type_key, managedNotificationDefinitionInput($definition, [
+        'email_body' => '<p>Later edit</p>',
+    ]), $owner);
+
+    $messages = [];
+    app('events')->listen(Illuminate\Mail\Events\MessageSending::class, function ($mail) use (&$messages) {
+        $messages[] = $mail->message;
+    });
+    $delivery = NotificationDelivery::where('channel', 'email')->firstOrFail();
+    app(NotificationDispatcher::class)->deliver($delivery->id);
+    app(NotificationDispatcher::class)->deliver($delivery->id);
+    app(NotificationResolver::class)->resolve($event->id);
+
+    expect($messages)->toHaveCount(1)
+        ->and($messages[0]->getSubject())->toBe('Status: order_update')
+        ->and($messages[0]->getHtmlBody())->toBe($snapshot['email_html'])
+        ->and($messages[0]->getTextBody())->toBe($snapshot['email'])
+        ->and($messages[0]->getHtmlBody())->toContain('<strong>', '&lt;img')->not->toContain('<img src=x', 'Later edit')
+        ->and($messages[0]->toString())->toContain('multipart/alternative', 'text/html', 'text/plain')
+        ->and($delivery->fresh()->status)->toBe('sent')
+        ->and(NotificationDelivery::where('channel', 'email')->count())->toBe(1)
+        ->and(NotificationLog::count())->toBe(1);
+});
+
+it('keeps previously resolved notification email snapshots as plain text', function () {
+    config()->set('mail.default', 'array');
+    $organizationId = managedNotificationOrganization('Tenant A');
+    $owner = managedNotificationUser('owner@example.com', 'user');
+    managedNotificationOwner($organizationId, $owner);
+    $definition = NotificationDefinition::where('type_key', 'meta.template_status_changed')->firstOrFail();
+    app(NotificationDefinitionManager::class)->update($definition->type_key,
+        managedNotificationDefinitionInput($definition, ['delivery_mode' => 'email']), $owner);
+    $event = app(NotificationEventRecorder::class)->record($organizationId, $definition->type_key, 'legacy-text', managedNotificationValues());
+    app(NotificationResolver::class)->resolve($event->id);
+    $snapshot = $event->fresh()->rendered;
+    unset($snapshot['email_html']);
+    $snapshot['email'] = '<p>Existing literal text</p>';
+    $event->update(['rendered' => $snapshot]);
+    $messages = [];
+    app('events')->listen(Illuminate\Mail\Events\MessageSending::class, function ($mail) use (&$messages) {
+        $messages[] = $mail->message;
+    });
+
+    app(NotificationDispatcher::class)->deliver(NotificationDelivery::where('channel', 'email')->firstOrFail()->id);
+    expect($messages)->toHaveCount(1)
+        ->and($messages[0]->getHtmlBody())->toBeNull()
+        ->and($messages[0]->getTextBody())->toBe('<p>Existing literal text</p>');
+});
+
+it('previews and sends the saved HTML test template without creating notification records', function () {
+    config()->set('mail.default', 'array');
+    $adminId = managedNotificationUser('admin@example.com', 'admin');
+    $this->withoutMiddleware([
+        App\Http\Middleware\CheckAppStatus::class,
+        App\Http\Middleware\HandleInertiaRequests::class,
+        App\Http\Middleware\SetOrganizationFromSession::class,
+        App\Http\Middleware\Localization::class,
+        App\Http\Middleware\VerifyCsrfToken::class,
+    ])->actingAs(App\Models\User::findOrFail($adminId), 'admin');
+    $definition = NotificationDefinition::where('type_key', 'meta.template_status_changed')->firstOrFail();
+    $url = '/admin/settings/managed-notifications/'.$definition->type_key;
+    $this->put($url, managedNotificationDefinitionInput($definition, [
+        'email_subject' => '<strong>{{template_name}}</strong> &amp; {{organization_name}}',
+        'email_body' => '<p style="color:#123456">Hello <strong>{{organization_name}}</strong></p><script>alert(1)</script>',
+    ]))->assertRedirect()->assertSessionHasNoErrors();
+    $definition->refresh();
+    expect($definition->email_subject)->toBe('{{template_name}} & {{organization_name}}');
+    $page = $this->withHeader('X-Inertia', 'true')->get('/admin/settings/managed-notifications')->assertOk();
+    $preview = collect($page->json('props.definitions'))->firstWhere('type_key', $definition->type_key)['test_preview'];
+    expect($preview['html'])->toContain('<strong>Example Organization</strong>', 'color:#123456')
+        ->not->toContain('<script>')
+        ->and($preview['body'])->toContain('Hello Example Organization')->not->toContain('<strong>')
+        ->and($preview['subject'])->toBe('[TEST] example_template & Example Organization');
+
+    $messages = [];
+    app('events')->listen(Illuminate\Mail\Events\MessageSending::class, function ($mail) use (&$messages) {
+        $messages[] = $mail->message;
+    });
+    $this->post($url.'/test-email', [
+        'sender_email' => 'alerts@example.com', 'recipient_email' => 'recipient@example.com',
+        'revision' => $definition->revision,
+    ])->assertRedirect()->assertSessionHas('status.type', 'success');
+
+    expect($messages)->toHaveCount(1)
+        ->and($messages[0]->getSubject())->toBe($preview['subject'])
+        ->and($messages[0]->getHtmlBody())->toBe($preview['html'])
+        ->and($messages[0]->getTextBody())->toBe($preview['body'])
+        ->and($messages[0]->getTo()[0]->getAddress())->toBe('recipient@example.com')
+        ->and(NotificationEvent::count())->toBe(0)
+        ->and(NotificationDelivery::count())->toBe(0)
+        ->and(NotificationLog::count())->toBe(0);
 });
 
 it('records events without synchronizing definitions on the webhook path', function () {
@@ -258,8 +460,13 @@ it('sends email through the queued delivery state and records success', function
     app(NotificationResolver::class)->resolve($event->id);
     $delivery = NotificationDelivery::where('channel', 'email')->firstOrFail();
 
-    Mail::shouldReceive('raw')->once();
+    Mail::shouldReceive('send')->once();
+    DB::enableQueryLog();
+    DB::flushQueryLog();
     app(NotificationDispatcher::class)->deliver($delivery->id);
+    $eventReads = collect(DB::getQueryLog())->filter(fn ($query) => str_contains($query['query'], 'from "notification_events"'));
+    DB::disableQueryLog();
+    expect($eventReads)->toHaveCount(1);
     app(NotificationDispatcher::class)->deliver($delivery->id);
 
     expect($delivery->fresh()->status)->toBe('sent')
@@ -330,6 +537,47 @@ it('queues pending outbox work on the existing default worker', function () {
 
     Queue::assertPushed(ResolveNotificationEventJob::class,
         fn ($job) => $job->eventId === $event->id && $job->queue === 'default');
+});
+
+it('leases outbox work before dispatch so overlapping reconcilers do not queue it twice', function () {
+    $org = managedNotificationOrganization('Tenant A');
+    $owner = managedNotificationUser('owner@example.com', 'user');
+    managedNotificationOwner($org, $owner);
+    $definition = NotificationDefinition::where('type_key', 'meta.template_status_changed')->firstOrFail();
+    app(NotificationDefinitionManager::class)->update($definition->type_key,
+        managedNotificationDefinitionInput($definition, ['delivery_mode' => 'email']), $owner);
+    $resolved = app(NotificationEventRecorder::class)->record($org, $definition->type_key, 'resolved', managedNotificationValues());
+    app(NotificationResolver::class)->resolve($resolved->id);
+    $pending = app(NotificationEventRecorder::class)->record($org, $definition->type_key, 'pending', managedNotificationValues());
+    $dispatched = [];
+    Illuminate\Support\Facades\Bus::shouldReceive('dispatch')->twice()->andReturnUsing(function ($job) use (&$dispatched) {
+        $dispatched[] = get_class($job);
+        if (count($dispatched) === 1) {
+            Artisan::call('notifications:reconcile');
+        }
+    });
+    Artisan::call('notifications:reconcile');
+    expect($dispatched)->toHaveCount(2)
+        ->and(array_unique($dispatched))->toHaveCount(2)
+        ->and($pending->fresh()->queued_at)->not->toBeNull()
+        ->and(NotificationDelivery::where('channel', 'email')->sole()->queued_at)->not->toBeNull();
+});
+
+it('releases a failed queue dispatch lease and can retry immediately', function () {
+    $org = managedNotificationOrganization('Tenant A');
+    $event = app(NotificationEventRecorder::class)->record($org, 'meta.template_status_changed',
+        'queue-failure', managedNotificationValues());
+    $attempts = 0;
+    Illuminate\Support\Facades\Bus::shouldReceive('dispatch')->twice()->andReturnUsing(function () use (&$attempts) {
+        if (++$attempts === 1) {
+            throw new RuntimeException('Simulated queue outage.');
+        }
+    });
+    Artisan::call('notifications:reconcile');
+    expect($event->fresh()->queued_at)->toBeNull();
+    Artisan::call('notifications:reconcile');
+    expect($event->fresh()->queued_at)->not->toBeNull()
+        ->and($event->fresh()->status)->toBe('pending');
 });
 
 it('rejects a reused source key carrying different event data', function () {
@@ -554,7 +802,7 @@ it('uses the selected account transport for notification email without changing 
 
     DB::flushQueryLog();
     DB::enableQueryLog();
-    app(EmailChannel::class)->sendRaw('second@example.com', 'recipient@example.com', 'Test', 'Body');
+    app(EmailChannel::class)->sendMessage('second@example.com', 'recipient@example.com', 'Test', 'Body', '<p><strong>Body</strong></p>');
     $senderQueries = collect(DB::getQueryLog())->filter(fn ($query) =>
         str_contains(strtolower($query['query']), 'notification_email_senders'));
     DB::disableQueryLog();
@@ -563,6 +811,8 @@ it('uses the selected account transport for notification email without changing 
         ->and($senderQueries)->toHaveCount(1)
         ->and($messages[0]->getFrom()[0]->getAddress())->toBe('second@example.com')
         ->and($messages[0]->getTo()[0]->getAddress())->toBe('recipient@example.com')
+        ->and($messages[0]->getHtmlBody())->toBe('<p><strong>Body</strong></p>')
+        ->and($messages[0]->getTextBody())->toBe('Body')
         ->and(config('mail.default'))->toBe($defaultMailer);
 });
 
@@ -624,7 +874,7 @@ it('saves admin settings atomically and rejects stale revisions', function () {
         'delivery_mode' => 'dashboard_email',
         'dashboard_template' => 'Template {{template_name}} is {{new_status}}.',
         'email_subject' => '{{template_name}} status',
-        'email_body' => 'In {{organization_name}}, the status is {{new_status}}.',
+        'email_body' => '<p>In <strong>{{organization_name}}</strong>, the status is {{new_status}}.</p>',
         'webhook_url' => 'https://hooks.example.com/receive',
         'webhook_secret' => str_repeat('s', 32),
     ]);
@@ -690,8 +940,9 @@ it('sends a rendered test email without creating a production notification event
         App\Http\Middleware\VerifyCsrfToken::class,
     ])->actingAs(App\Models\User::findOrFail($adminId), 'admin');
 
-    Mail::shouldReceive('raw')->once()->andReturnUsing(function ($body, $callback) {
-        expect($body)->toContain('Example Organization')->toContain('example_template');
+    Mail::shouldReceive('send')->once()->andReturnUsing(function ($views, $data, $callback) {
+        expect($views['raw'])->toContain('Example Organization')->toContain('example_template')
+            ->and((string) $views['html'])->toContain('Example Organization')->toContain('example_template');
         $message = Mockery::mock();
         $message->shouldReceive('from')->once()->with('alerts@example.com')->andReturnSelf();
         $message->shouldReceive('to')->once()->with('recipient@example.com')->andReturnSelf();
@@ -720,7 +971,7 @@ it('reports test mail transport failure without creating a notification event', 
         App\Http\Middleware\Localization::class,
         App\Http\Middleware\VerifyCsrfToken::class,
     ])->actingAs(App\Models\User::findOrFail($adminId), 'admin');
-    Mail::shouldReceive('raw')->once()->andThrow(new RuntimeException('SMTP password=sensitive'));
+    Mail::shouldReceive('send')->once()->andThrow(new RuntimeException('SMTP password=sensitive'));
 
     $response = $this->post('/admin/settings/managed-notifications/'.$definition->type_key.'/test-email', [
         'sender_email' => 'alerts@example.com',
@@ -758,6 +1009,7 @@ it('validates test sender, recipient, template revision, and permission', functi
     $adminId = managedNotificationUser('admin@example.com', 'admin');
     $this->actingAs(App\Models\User::findOrFail($adminId), 'admin');
     Mail::shouldReceive('raw')->never();
+    Mail::shouldReceive('send')->never();
     $this->post($url, array_merge($data, ['sender_email' => 'unapproved@example.com']))
         ->assertSessionHasErrors('sender_email');
     $this->post($url, array_merge($data, ['recipient_email' => 'invalid']))
@@ -789,6 +1041,7 @@ it('keeps the settings page available when a stored test template cannot render 
     expect($preview['error'])->toContain('unknown_variable');
 
     Mail::shouldReceive('raw')->never();
+    Mail::shouldReceive('send')->never();
     $this->post('/admin/settings/managed-notifications/'.$definition->type_key.'/test-email', [
         'sender_email' => 'alerts@example.com',
         'recipient_email' => 'recipient@example.com',
@@ -817,6 +1070,7 @@ it('cancels unsent email after the definition is disabled', function () {
         managedNotificationDefinitionInput($definition, ['enabled' => false, 'delivery_mode' => 'email']), $owner);
 
     Mail::shouldReceive('raw')->never();
+    Mail::shouldReceive('send')->never();
     app(NotificationDispatcher::class)->deliver($delivery->id);
 
     expect($delivery->fresh()->status)->toBe('canceled');
@@ -872,6 +1126,7 @@ it('does not send to an owner after their membership is suspended', function () 
     DB::table('teams')->where('organization_id', $org)->where('user_id', $owner)->update(['status' => 'suspended']);
 
     Mail::shouldReceive('raw')->never();
+    Mail::shouldReceive('send')->never();
     app(NotificationDispatcher::class)->deliver($delivery->id);
 
     expect($delivery->fresh()->status)->toBe('canceled');
@@ -890,6 +1145,7 @@ it('does not deliver to a disabled user account', function () {
     DB::table('users')->where('id', $owner)->update(['status' => 0]);
 
     Mail::shouldReceive('raw')->never();
+    Mail::shouldReceive('send')->never();
     app(NotificationDispatcher::class)->deliver($delivery->id);
 
     expect($delivery->fresh()->status)->toBe('canceled');
@@ -1150,3 +1406,229 @@ it('prunes old completed records while retaining failures and unread dashboard i
         ->and(NotificationEvent::whereKey($unread->id)->exists())->toBeTrue()
         ->and(NotificationLog::whereKey($unreadLog->id)->exists())->toBeTrue();
 });
+
+it('prunes multiple batches past retained records without skipping completed notifications', function () {
+    $org = managedNotificationOrganization('Tenant A');
+    $user = managedNotificationUser('owner@example.com', 'user');
+    $type = 'meta.template_status_changed';
+    $old = now()->subDays(200)->toDateTimeString();
+    $logs = $events = [];
+    for ($i = 0; $i < 1002; $i++) {
+        $logs[] = [
+            'user_id' => $user, 'organization_id' => $org, 'notification_type' => $type,
+            'payload' => json_encode(['message' => 'Message '.$i]), 'sent_at' => $old,
+            'clicked' => $i !== 0,
+        ];
+        $events[] = [
+            'organization_id' => $org, 'type_key' => $type, 'event_key' => hash('sha256', 'batch-'.$i),
+            'variables' => '{}', 'status' => $i === 0 ? 'failed' : 'canceled',
+            'created_at' => $old, 'updated_at' => $old,
+        ];
+    }
+    foreach (array_chunk($logs, 100) as $batch) {
+        DB::table('notification_logs')->insert($batch);
+    }
+    foreach (array_chunk($events, 100) as $batch) {
+        DB::table('notification_events')->insert($batch);
+    }
+    $this->artisan('notifications:prune')->assertSuccessful();
+    expect(NotificationLog::count())->toBe(1)
+        ->and(NotificationLog::sole()->clicked)->toBeFalse()
+        ->and(NotificationEvent::count())->toBe(1)
+        ->and(NotificationEvent::sole()->status)->toBe('failed');
+});
+
+it('reverses and reapplies inbox indexes without removing notification data', function () {
+    $org = managedNotificationOrganization('Tenant A');
+    $user = managedNotificationUser('owner@example.com', 'user');
+    NotificationLog::create([
+        'user_id' => $user, 'organization_id' => $org, 'notification_type' => 'meta.template_status_changed',
+        'payload' => ['message' => 'Preserved'],
+    ]);
+    $migration = require base_path('database/migrations/2026_09_28_000003_optimize_notification_inbox_indexes.php');
+    $migration->up();
+    $migration->down();
+    expect(Schema::hasIndex('notification_logs', 'idx_notification_logs_user_org_type_sent'))->toBeTrue();
+    $migration->up();
+    expect(Schema::hasIndex('notification_logs', 'notification_logs_inbox_order'))->toBeTrue()
+        ->and(Schema::hasIndex('notification_logs', 'notification_logs_popup_order'))->toBeTrue()
+        ->and(Schema::hasIndex('notification_logs', 'idx_notification_logs_user_org_type_sent'))->toBeFalse()
+        ->and(NotificationLog::sole()->payload['message'])->toBe('Preserved');
+});
+
+it('cancels unsent email when the admin changes the mode to dashboard only', function () {
+    $org = managedNotificationOrganization('Tenant A');
+    $owner = managedNotificationUser('owner@example.com', 'user');
+    managedNotificationOwner($org, $owner);
+    $definition = NotificationDefinition::where('type_key', 'meta.template_status_changed')->firstOrFail();
+    $manager = app(NotificationDefinitionManager::class);
+    $definition = $manager->update($definition->type_key,
+        managedNotificationDefinitionInput($definition, ['delivery_mode' => 'email']), $owner);
+    $event = app(NotificationEventRecorder::class)->record($org, $definition->type_key, 'mode-review', managedNotificationValues());
+    app(NotificationResolver::class)->resolve($event->id);
+    $delivery = NotificationDelivery::where('channel', 'email')->sole();
+    $manager->update($definition->type_key,
+        managedNotificationDefinitionInput($definition, ['delivery_mode' => 'dashboard']), $owner);
+    Mail::shouldReceive('send')->never();
+    app(NotificationDispatcher::class)->deliver($delivery->id);
+    expect($delivery->fresh()->status)->toBe('canceled');
+});
+
+it('cancels the previous queued webhook when its configuration is removed or changed', function (string $change) {
+    $org = managedNotificationOrganization('Tenant A');
+    $definition = NotificationDefinition::where('type_key', 'meta.template_status_changed')->firstOrFail();
+    $manager = app(NotificationDefinitionManager::class);
+    $definition = $manager->update($definition->type_key, managedNotificationDefinitionInput($definition, [
+        'webhook_url' => 'https://hooks.example.com/old', 'webhook_secret' => str_repeat('s', 32),
+    ]), 1);
+    $event = app(NotificationEventRecorder::class)->record($org, $definition->type_key, 'webhook-config-review', managedNotificationValues());
+    app(NotificationResolver::class)->resolve($event->id);
+    $delivery = NotificationDelivery::where('channel', 'webhook')->sole();
+    $input = match ($change) {
+        'removed' => ['webhook_url' => null],
+        'url' => ['webhook_url' => 'https://hooks.example.com/new'],
+        'secret' => ['webhook_secret' => str_repeat('n', 32)],
+    };
+    $manager->update($definition->type_key, managedNotificationDefinitionInput($definition, $input), 1);
+    Http::fake();
+    app(NotificationDispatcher::class)->deliver($delivery->id);
+    Http::assertNothingSent();
+    expect($delivery->fresh()->status)->toBe('canceled');
+})->with(['removed', 'url', 'secret']);
+
+it('retries a temporary webhook DNS failure instead of marking it permanently failed', function () {
+    $org = managedNotificationOrganization('Tenant A');
+    $definition = NotificationDefinition::where('type_key', 'meta.template_status_changed')->firstOrFail();
+    app(NotificationDefinitionManager::class)->update($definition->type_key, managedNotificationDefinitionInput($definition, [
+        'webhook_url' => 'https://hooks.example.com/receive', 'webhook_secret' => str_repeat('s', 32),
+    ]), 1);
+    $event = app(NotificationEventRecorder::class)->record($org, $definition->type_key, 'dns-review', managedNotificationValues());
+    app(NotificationResolver::class)->resolve($event->id);
+    app()->instance(WebhookUrlValidator::class, new class extends WebhookUrlValidator {
+        protected function resolveRecords(string $host): array { return []; }
+    });
+    Http::fake();
+    app(NotificationDispatcher::class)->deliver(NotificationDelivery::where('channel', 'webhook')->sole()->id);
+    $delivery = NotificationDelivery::where('channel', 'webhook')->sole();
+    expect($delivery->status)->toBe('pending')->and($delivery->next_attempt_at->isFuture())->toBeTrue();
+    Http::assertNothingSent();
+});
+
+it('retries webhook timeouts and respects a rate limit retry-after value', function (int $status, ?string $retryAfter, int $delay) {
+    \Carbon\Carbon::setTestNow('2026-10-01 10:00:00');
+    $org = managedNotificationOrganization('Tenant A');
+    $definition = NotificationDefinition::where('type_key', 'meta.template_status_changed')->firstOrFail();
+    app(NotificationDefinitionManager::class)->update($definition->type_key, managedNotificationDefinitionInput($definition, [
+        'webhook_url' => 'https://hooks.example.com/receive', 'webhook_secret' => str_repeat('s', 32),
+    ]), 1);
+    $event = app(NotificationEventRecorder::class)->record($org, $definition->type_key, 'http-review', managedNotificationValues());
+    app(NotificationResolver::class)->resolve($event->id);
+    $urls = Mockery::mock(WebhookUrlValidator::class);
+    $urls->shouldReceive('validateResolvedAddress')->once()->andReturn('93.184.215.14');
+    app()->instance(WebhookUrlValidator::class, $urls);
+    Http::fake(['hooks.example.com/*' => Http::response([], $status, $retryAfter ? ['Retry-After' => $retryAfter] : [])]);
+    $delivery = NotificationDelivery::where('channel', 'webhook')->sole();
+    $before = now()->startOfSecond();
+    app(NotificationDispatcher::class)->deliver($delivery->id);
+    expect($delivery->fresh()->status)->toBe('pending');
+    expect($delivery->fresh()->next_attempt_at->equalTo($before->addSeconds($delay)))->toBeTrue();
+})->with([
+    [408, null, 30], [429, '600', 600], [503, '300', 300],
+    [503, 'Thu, 01 Oct 2026 10:05:00 GMT', 300], [503, 'invalid', 30], [503, '9999999', 86400],
+]);
+
+it('permanently rejects private webhook DNS addresses without sending a request', function () {
+    $org = managedNotificationOrganization('Tenant A');
+    $definition = NotificationDefinition::where('type_key', 'meta.template_status_changed')->firstOrFail();
+    app(NotificationDefinitionManager::class)->update($definition->type_key, managedNotificationDefinitionInput($definition, [
+        'webhook_url' => 'https://hooks.example.com/receive', 'webhook_secret' => str_repeat('s', 32),
+    ]), 1);
+    $event = app(NotificationEventRecorder::class)->record($org, $definition->type_key, 'private-dns-review', managedNotificationValues());
+    app(NotificationResolver::class)->resolve($event->id);
+    app()->instance(WebhookUrlValidator::class, new class extends WebhookUrlValidator {
+        protected function resolveRecords(string $host): array { return [['ip' => '127.0.0.1']]; }
+    });
+    Http::fake();
+    app(NotificationDispatcher::class)->deliver(NotificationDelivery::where('channel', 'webhook')->sole()->id);
+    expect(NotificationDelivery::where('channel', 'webhook')->sole()->status)->toBe('failed');
+    Http::assertNothingSent();
+});
+
+it('rolls back partial dashboard resolution and retries without creating duplicates', function (bool $terminal) {
+    \Carbon\Carbon::setTestNow('2026-10-01 10:00:00');
+    config()->set('managed_notifications.max_attempts', 2);
+    $org = managedNotificationOrganization('Tenant A');
+    $owner = managedNotificationUser('owner@example.com', 'user');
+    managedNotificationOwner($org, $owner);
+    $definition = NotificationDefinition::where('type_key', 'meta.template_status_changed')->firstOrFail();
+    app(NotificationDefinitionManager::class)->update($definition->type_key, managedNotificationDefinitionInput($definition), 1);
+    $event = app(NotificationEventRecorder::class)->record($org, $definition->type_key, 'resolve-retry-review', managedNotificationValues());
+    $dashboard = Mockery::mock(App\Services\ManagedNotifications\Channels\DashboardChannel::class);
+    $dashboard->shouldReceive('write')->andReturnUsing(function ($event, $user, $message) {
+        (new App\Services\ManagedNotifications\Channels\DashboardChannel())->write($event, $user, $message);
+        throw new RuntimeException('Temporary dashboard transaction failure.');
+    });
+    app()->instance(App\Services\ManagedNotifications\Channels\DashboardChannel::class, $dashboard);
+    app(NotificationResolver::class)->resolve($event->id);
+    expect($event->fresh()->status)->toBe('pending')->and($event->fresh()->attempts)->toBe(1)
+        ->and(NotificationLog::count())->toBe(0)->and(NotificationDelivery::count())->toBe(0);
+    \Carbon\Carbon::setTestNow(now()->addSeconds(31));
+    if (! $terminal) {
+        app()->instance(App\Services\ManagedNotifications\Channels\DashboardChannel::class,
+            new App\Services\ManagedNotifications\Channels\DashboardChannel());
+    }
+    app(NotificationResolver::class)->resolve($event->id);
+    expect($event->fresh()->status)->toBe($terminal ? 'failed' : 'resolved')
+        ->and(NotificationLog::count())->toBe($terminal ? 0 : 1)
+        ->and(NotificationDelivery::count())->toBe($terminal ? 0 : 2);
+    if ($terminal) {
+        expect($event->fresh()->next_attempt_at)->toBeNull()->and($event->fresh()->attempts)->toBe(2);
+    }
+})->with([false, true]);
+
+it('does not retry an accepted email after its acknowledgement write fails and recovers a webhook safely', function (string $channel) {
+    \Carbon\Carbon::setTestNow('2026-10-01 10:00:00');
+    $org = managedNotificationOrganization('Tenant A');
+    $owner = managedNotificationUser('owner@example.com', 'user');
+    managedNotificationOwner($org, $owner);
+    $definition = NotificationDefinition::where('type_key', 'meta.template_status_changed')->firstOrFail();
+    $input = $channel === 'email' ? ['delivery_mode' => 'email'] : [
+        'delivery_mode' => 'dashboard', 'webhook_url' => 'https://hooks.example.com/receive',
+        'webhook_secret' => str_repeat('s', 32),
+    ];
+    app(NotificationDefinitionManager::class)->update($definition->type_key, managedNotificationDefinitionInput($definition, $input), 1);
+    $event = app(NotificationEventRecorder::class)->record($org, $definition->type_key, 'acknowledgement-review', managedNotificationValues());
+    app(NotificationResolver::class)->resolve($event->id);
+    $delivery = NotificationDelivery::where('channel', $channel)->sole();
+    if ($channel === 'email') {
+        Mail::shouldReceive('send')->once();
+    } else {
+        $urls = Mockery::mock(WebhookUrlValidator::class);
+        $urls->shouldReceive('validateResolvedAddress')->twice()->andReturn('93.184.215.14');
+        app()->instance(WebhookUrlValidator::class, $urls);
+        Http::fake(['hooks.example.com/*' => Http::response([], 200)]);
+    }
+    $failOnce = true;
+    DB::connection()->beforeExecuting(function ($sql, $bindings) use (&$failOnce) {
+        if ($failOnce && str_starts_with($sql, 'update "notification_deliveries"') && ($bindings[0] ?? null) === 'sent') {
+            $failOnce = false;
+            throw new RuntimeException('Acknowledgement storage unavailable.');
+        }
+    });
+    $dispatcher = app(NotificationDispatcher::class);
+    expect(fn () => $dispatcher->deliver($delivery->id))->toThrow(RuntimeException::class)
+        ->and($delivery->fresh()->status)->toBe('processing');
+    $dispatcher->deliver($delivery->id);
+    \Carbon\Carbon::setTestNow(now()->addMinutes(6));
+    Queue::fake();
+    $this->artisan('notifications:reconcile')->assertSuccessful();
+    expect($delivery->fresh()->status)->toBe($channel === 'email' ? 'uncertain' : 'pending');
+    $dispatcher->deliver($delivery->id);
+    if ($channel === 'webhook') {
+        expect($delivery->fresh()->status)->toBe('sent');
+        Http::assertSentCount(2);
+        expect(Http::recorded()->map(fn ($pair) => $pair[0]->header('X-Chatberry-Idempotency-Key'))->unique()->count())->toBe(1);
+    } else {
+        expect($delivery->fresh()->status)->toBe('uncertain');
+    }
+})->with(['email', 'webhook']);

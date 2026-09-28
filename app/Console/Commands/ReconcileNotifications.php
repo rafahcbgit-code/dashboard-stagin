@@ -46,13 +46,21 @@ class ReconcileNotifications extends Command
             ->where(fn ($query) => $query->whereNull('queued_at')->orWhere('queued_at', '<', now()->subMinutes(5)))
             ->orderBy('id')->limit(500)->pluck('id')
             ->each(function ($id) use ($connection) {
+                $leasedAt = now();
+                $leased = NotificationEvent::query()->whereKey($id)->where('status', 'pending')
+                    ->where(fn ($query) => $query->whereNull('next_attempt_at')->orWhere('next_attempt_at', '<=', $leasedAt))
+                    ->where(fn ($query) => $query->whereNull('queued_at')->orWhere('queued_at', '<', $leasedAt->copy()->subMinutes(5)))
+                    ->update(['queued_at' => $leasedAt, 'updated_at' => $leasedAt]);
+                if (! $leased) {
+                    return;
+                }
                 try {
                     ResolveNotificationEventJob::dispatch((int) $id)
                         ->onConnection($connection)
                         ->onQueue(config('managed_notifications.queues.resolve'));
-                    NotificationEvent::query()->whereKey($id)->where('status', 'pending')
-                        ->update(['queued_at' => now(), 'updated_at' => now()]);
                 } catch (Throwable $exception) {
+                    NotificationEvent::query()->whereKey($id)->where('status', 'pending')
+                        ->where('queued_at', $leasedAt)->update(['queued_at' => null, 'updated_at' => now()]);
                     Log::error('Notification resolver dispatch failed', ['event_id' => $id, 'error' => $exception->getMessage()]);
                 }
             });
@@ -63,13 +71,21 @@ class ReconcileNotifications extends Command
             ->where(fn ($query) => $query->whereNull('queued_at')->orWhere('queued_at', '<', now()->subMinutes(5)))
             ->orderBy('id')->limit(500)->get(['id', 'channel'])
             ->each(function ($delivery) use ($connection) {
+                $leasedAt = now();
+                $leased = NotificationDelivery::query()->whereKey($delivery->id)->where('status', 'pending')
+                    ->where(fn ($query) => $query->whereNull('next_attempt_at')->orWhere('next_attempt_at', '<=', $leasedAt))
+                    ->where(fn ($query) => $query->whereNull('queued_at')->orWhere('queued_at', '<', $leasedAt->copy()->subMinutes(5)))
+                    ->update(['queued_at' => $leasedAt, 'updated_at' => $leasedAt]);
+                if (! $leased) {
+                    return;
+                }
                 try {
                     DeliverNotificationJob::dispatch((int) $delivery->id)
                         ->onConnection($connection)
                         ->onQueue(config('managed_notifications.queues.'.$delivery->channel, 'default'));
-                    NotificationDelivery::query()->whereKey($delivery->id)->where('status', 'pending')
-                        ->update(['queued_at' => now(), 'updated_at' => now()]);
                 } catch (Throwable $exception) {
+                    NotificationDelivery::query()->whereKey($delivery->id)->where('status', 'pending')
+                        ->where('queued_at', $leasedAt)->update(['queued_at' => null, 'updated_at' => now()]);
                     Log::error('Notification delivery dispatch failed', ['delivery_id' => $delivery->id, 'error' => $exception->getMessage()]);
                 }
             });

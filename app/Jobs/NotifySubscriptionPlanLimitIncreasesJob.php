@@ -8,6 +8,7 @@ use App\Models\Subscription;
 use App\Models\SubscriptionPlan;
 use App\Services\ManagedNotifications\NotificationEventRecorder;
 use App\Services\SubscriptionUsageService;
+use Carbon\Carbon;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -36,7 +37,9 @@ class NotifySubscriptionPlanLimitIncreasesJob implements ShouldQueue
     ];
 
     public int $tries = 3;
+
     public int $timeout = 600;
+
     public array $backoff = [60, 300, 900];
 
     public function __construct(
@@ -61,7 +64,7 @@ class NotifySubscriptionPlanLimitIncreasesJob implements ShouldQueue
     private function process(NotificationEventRecorder $recorder, SubscriptionUsageService $usage): void
     {
         $plan = SubscriptionPlan::query()->find($this->planId);
-        if (! $plan || (json_decode((string) $plan->metadata, true) ?: []) !== $this->newMetadata) {
+        if (! $plan) {
             return;
         }
 
@@ -74,6 +77,9 @@ class NotifySubscriptionPlanLimitIncreasesJob implements ShouldQueue
         foreach (self::LIMIT_KEYS as $resource => $key) {
             $old = $this->baseLimit($this->oldMetadata, $resource, $key);
             $new = $this->baseLimit($this->newMetadata, $resource, $key);
+            if ($this->baseLimit(json_decode((string) $plan->metadata, true) ?: [], $resource, $key) !== $new) {
+                continue;
+            }
             if ($new !== -1 && ($old === -1 || $new <= $old)) {
                 continue;
             }
@@ -87,33 +93,53 @@ class NotifySubscriptionPlanLimitIncreasesJob implements ShouldQueue
 
         Subscription::query()->where('plan_id', $this->planId)->where('status', 'active')
             ->where('valid_until', '>', now())
-            ->whereRaw('NOT EXISTS (SELECT 1 FROM subscriptions newer WHERE newer.organization_id = subscriptions.organization_id AND newer.id > subscriptions.id)')
+            ->latestPerOrganization()
             ->orderBy('id')->chunkById(100, function ($subscriptions) use ($recorder, $usage, $increases): void {
                 $organizations = Organization::query()->whereIn('id', $subscriptions->pluck('organization_id'))
                     ->whereNull('deleted_at')->get(['id', 'name'])->keyBy('id');
                 $summaries = $usage->bulkSummaries($subscriptions->pluck('organization_id')->all());
+                $currentPlan = SubscriptionPlan::query()->find($this->planId);
+                if (! $currentPlan) {
+                    return;
+                }
+                $currentMetadata = json_decode((string) $currentPlan->metadata, true) ?: [];
 
                 foreach ($subscriptions as $subscription) {
                     $organization = $organizations->get($subscription->organization_id);
                     if (! $organization) {
                         continue;
                     }
-                    foreach ($increases as $resource => [$oldBase, $newBase]) {
-                        $summary = $summaries[$organization->id][$resource] ?? null;
-                        if (! $summary || (int) $summary['billing_organization_id'] !== (int) $organization->id) {
-                            continue;
+                    DB::transaction(function () use ($subscription, $organization, $summaries, $increases, $currentMetadata, $recorder): void {
+                        $current = Subscription::query()->lockForUpdate()->find($subscription->id);
+                        if (! $current || $current->status !== 'active' || (int) $current->plan_id !== $this->planId
+                            || ! $current->getRawOriginal('valid_until')
+                            || Carbon::parse($current->getRawOriginal('valid_until'), 'UTC')->lte(now())
+                            || (int) Subscription::query()->where('organization_id', $organization->id)->max('id') !== (int) $current->id) {
+                            return;
                         }
-                        $addons = (int) $summary['addon_quantity'];
-                        $oldLimit = $oldBase === -1 ? -1 : $oldBase + $addons;
-                        $newLimit = $newBase === -1 ? -1 : $newBase + $addons;
-                        $recorder->record((int) $organization->id, 'subscription.limit_increased',
-                            'subscription-plan-limit:'.$this->changeId.':'.$organization->id.':'.$resource, [
+                        foreach ($increases as $resource => [$oldBase, $newBase]) {
+                            if ($this->baseLimit($currentMetadata, $resource, self::LIMIT_KEYS[$resource]) !== $newBase) {
+                                continue;
+                            }
+                            $summary = $summaries[$organization->id][$resource] ?? null;
+                            if (! $summary || (int) $summary['billing_organization_id'] !== (int) $organization->id) {
+                                continue;
+                            }
+                            $addons = (int) $summary['addon_quantity'];
+                            $oldLimit = $oldBase === -1 ? -1 : $oldBase + $addons;
+                            $newLimit = $newBase === -1 ? -1 : $newBase + $addons;
+                            $sourceKey = 'subscription-plan-limit:'.$this->changeId.':'.$organization->id.':'.$resource;
+                            if ($recorder->hasRecorded((int) $organization->id, 'subscription.limit_increased', $sourceKey)) {
+                                continue;
+                            }
+                            $recorder->record((int) $organization->id, 'subscription.limit_increased', $sourceKey, [
                                 'organization_name' => $organization->name,
                                 'resource_name' => self::RESOURCE_NAMES[$resource],
                                 'old_limit' => $oldLimit === -1 ? 'Unlimited' : (string) $oldLimit,
                                 'new_limit' => $newLimit === -1 ? 'Unlimited' : (string) $newLimit,
                             ]);
-                    }
+                        }
+                    });
                 }
             });
     }

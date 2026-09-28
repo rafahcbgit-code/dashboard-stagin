@@ -127,8 +127,8 @@ class ManagedNotificationController extends Controller
         }
 
         try {
-            $email->sendRaw($data['sender_email'], $data['recipient_email'],
-                $preview['subject'], $preview['body']);
+            $email->sendMessage($data['sender_email'], $data['recipient_email'],
+                $preview['subject'], $preview['body'], $preview['html']);
         } catch (Throwable $exception) {
             Log::warning('Notification test email failed', [
                 'type_key' => $typeKey,
@@ -168,16 +168,18 @@ class ManagedNotificationController extends Controller
         $type = $catalog->get($definition->type_key);
         $values = $catalog->sampleValues($definition->type_key);
         $renderer->validateValues($values, $type['variables']);
-        $subject = '[TEST] '.$renderer->render($definition->email_subject, $values, $type['variables']);
+        $subject = '[TEST] '.$renderer->renderEmailSubject($definition->email_subject, $values, $type['variables']);
         if (preg_match('/[\r\n]/', $subject) || mb_strlen($subject) > 191) {
             throw new InvalidArgumentException('Rendered test subject is invalid.');
         }
 
+        $body = $renderer->renderEmail($definition->email_body, $values, $type['variables']);
+
         return [
             'variables' => $values,
             'subject' => $subject,
-            'body' => "This is a Chatberry notification test.\n\n"
-                .$renderer->render($definition->email_body, $values, $type['variables']),
+            'body' => "This is a Chatberry notification test.\n\n".$body['text'],
+            'html' => '<p>This is a Chatberry notification test.</p>'.$body['html'],
         ];
     }
 }

@@ -65,10 +65,18 @@
                 </div>
             </Link>
             <Link v-if="can('notifications', 'view')" href="/admin/settings/managed-notifications" class="flex justify-between border-b py-5">
-                <span>{{ $t('Managed notifications') }}</span><span>›</span>
+                <div class="flex items-center gap-3">
+                    <svg aria-hidden="true" focusable="false" class="shrink-0" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21a2 2 0 0 0 4 0"/></svg>
+                    <span class="text-xl">{{ $t('Managed notifications') }}</span>
+                </div>
+                <span>›</span>
             </Link>
             <Link v-if="can('notifications', 'view')" href="/admin/settings/notification-senders" class="flex justify-between border-b py-5">
-                <span>{{ $t('Notification email senders') }}</span><span>›</span>
+                <div class="flex items-center gap-3">
+                    <svg aria-hidden="true" focusable="false" class="shrink-0" xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M21 10V6a2 2 0 0 0-2-2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h7"/><path d="m3 6 9 6 9-6M15 16h7m-3-3 3 3-3 3"/></svg>
+                    <span class="text-xl">{{ $t('Notification email senders') }}</span>
+                </div>
+                <span>›</span>
             </Link>
             <Link v-if="can('notifications', 'view')" href="/admin/settings/notification-deliveries" class="flex justify-between border-b py-5">
                 <span>{{ $t('Recent delivery status') }}</span><span>›</span>
