@@ -31,6 +31,8 @@ class StoreOrganization extends FormRequest
             'name' => 'required',
             'plan' => 'required',
             'valid_until' => $this->isMethod('post') ? 'nullable|date|after_or_equal:now' : 'nullable|date',
+            'subscription_id' => 'nullable|integer|min:1',
+            'subscription_version' => 'nullable|integer|min:1',
             'subscription_status' => 'nullable|in:trial,active,suspended',
             'billing_organization_id' => 'nullable|integer|exists:organizations,id',
             'campaign_phone_mps' => 'nullable|integer|min:1|max:'.((int) config('campaigns.throttle.max_phone_mps', 80)),

@@ -119,15 +119,15 @@
                             <FormInput v-model="form.name" :name="$t('Name')" :error="form.errors.name" :type="'text'" :class="'sm:col-span-6'"/>
                             <FormSelect v-model="form.plan" :name="$t('Subscription plan')" :error="form.errors.plan" :options="roleOptions()" :type="'text'" :class="'sm:col-span-6'"/>
                             <FormInput
-                                v-if="!props.organization?.subscription"
                                 v-model="form.valid_until"
                                 :name="$t('Subscription expiration')"
                                 :error="form.errors.valid_until"
                                 :type="'datetime-local'"
-                                :min="minValidUntil"
+                                :min="props.organization?.subscription ? undefined : minValidUntil"
                                 :class="'sm:col-span-6'"
                             />
-                            <p v-if="props.organization" class="text-xs text-gray-500 sm:col-span-6">{{ $t('Use the Extend subscription or Renew subscription action to change the expiration date.') }}</p>
+                            <p v-if="props.organization" class="text-xs text-gray-500 sm:col-span-6">{{ $t('Choose the expiration date when assigning or changing the plan. To change the date of the same plan, use Extend subscription or Renew subscription.') }}</p>
+                            <p v-if="props.organization" class="text-xs text-gray-500 sm:col-span-6">{{ $t('Dates use this organization timezone') }}: {{ props.subscriptionTimezone }}</p>
                             <FormSelect
                                 v-model="form.subscription_status"
                                 :name="$t('Subscription status')"
@@ -357,6 +357,7 @@
         },
         subscriptionArchives: Object,
         subscriptionTimezone: { type: String, default: 'UTC' },
+        subscriptionExpiration: { type: String, default: null },
         filters: Object, 
         mode: String 
     });
@@ -433,7 +434,9 @@
         name: props.organization?.name,
         plan: initialPlanValue,
         subscription_status: props.organization?.subscription?.status ?? 'trial',
-        valid_until: null,
+        valid_until: formatDatetimeForInput(props.subscriptionExpiration),
+        subscription_id: props.organization?.subscription?.id ?? null,
+        subscription_version: props.organization?.subscription?.period_version ?? null,
         billing_organization_id: props.organization?.billing_organization_id ?? null,
         campaign_phone_mps: campaignPhoneMps(),
         create_user: 1,
@@ -642,6 +645,11 @@
 
         form[props.organization ? 'put' : 'post'](url, {
             preserveScroll: true,
+            onSuccess: () => {
+                form.valid_until = formatDatetimeForInput(props.subscriptionExpiration);
+                form.subscription_id = props.organization?.subscription?.id ?? null;
+                form.subscription_version = props.organization?.subscription?.period_version ?? null;
+            },
         });
     };
 

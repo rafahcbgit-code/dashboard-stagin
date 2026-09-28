@@ -956,6 +956,122 @@ it('preserves the period on ordinary admin edits and rolls back a forged expirat
     expect(DB::table('organizations')->where('id', $org)->value('name'))->toBe('Edited tenant');
 });
 
+it('saves a chosen expiration when assigning or changing a plan without resetting usage', function (bool $hasPaidPlan) {
+    enableSubscriptionNotification('subscription.activated');
+    enableSubscriptionNotification('subscription.upgraded');
+    enableSubscriptionNotification('subscription.renewed');
+    $org = subscriptionNotificationOrg('Tenant', 'Asia/Damascus');
+    $otherOrg = subscriptionNotificationOrg('Other tenant');
+    $oldPlan = subscriptionNotificationPlan('Basic', []);
+    $newPlan = subscriptionNotificationPlan('Higher', ['template_messages_limit' => 200]);
+    $subscription = subscriptionNotificationSubscription($org, $hasPaidPlan ? $oldPlan->id : null,
+        $hasPaidPlan ? 'active' : 'trial', '2026-10-08 00:00:00');
+    $otherSubscription = subscriptionNotificationSubscription($otherOrg, $oldPlan->id, 'active', '2026-10-08 00:00:00');
+    $usage = new SubscriptionUsageService();
+    $usage->recordUsage($org, 'template_messages', 12, 'before-plan-change');
+    $period = $subscription->usagePeriodKey();
+    $start = $subscription->getRawOriginal('start_date');
+    $version = $subscription->fresh()->period_version;
+    $uuid = DB::table('organizations')->where('id', $org)->value('uuid');
+    $input = ['name' => 'Tenant', 'plan' => $newPlan->uuid, 'subscription_status' => 'active',
+        'valid_until' => '2026-11-01T15:30:00', 'subscription_id' => $subscription->id,
+        'subscription_version' => $version];
+    $service = app(App\Services\OrganizationService::class);
+    $service->update(Illuminate\Http\Request::create('/', 'PUT', $input), $uuid);
+    $subscription->refresh();
+    expect($subscription->plan_id)->toBe($newPlan->id)
+        ->and($subscription->getRawOriginal('valid_until'))->toBe('2026-11-01 12:30:00')
+        ->and($subscription->getRawOriginal('start_date'))->toBe($start)
+        ->and($subscription->usagePeriodKey())->toBe($period)
+        ->and($subscription->period_version)->toBe($version + 1)
+        ->and((new SubscriptionUsageService())->summary($org, 'template_messages')['used'])->toBe(12)
+        ->and(DB::table('subscription_period_archives')->count())->toBe(0)
+        ->and($otherSubscription->fresh()->getRawOriginal('valid_until'))->toBe('2026-10-08 00:00:00');
+    app(SubscriptionNotificationScanner::class)->projectEvents();
+    app(SubscriptionNotificationScanner::class)->projectEvents();
+    $type = $hasPaidPlan ? 'subscription.upgraded' : 'subscription.activated';
+    expect(NotificationEvent::where('type_key', $type)->where('organization_id', $org)->count())->toBe(1)
+        ->and(NotificationEvent::where('type_key', $type)->where('organization_id', $org)->value('organization_id'))->toBe($org)
+        ->and(NotificationEvent::where('type_key', 'subscription.renewed')->count())->toBe(0);
+})->with([false, true]);
+
+it('uses the chosen local expiration when adding the first subscription to an existing organization', function (bool $future) {
+    $org = subscriptionNotificationOrg('Tenant', 'Asia/Damascus');
+    $plan = subscriptionNotificationPlan('Paid', []);
+    $uuid = DB::table('organizations')->where('id', $org)->value('uuid');
+    $input = ['name' => 'Assigned tenant', 'plan' => $plan->uuid, 'subscription_status' => 'active',
+        'valid_until' => $future ? '2026-11-01T15:30:00' : '2026-09-28T02:30:00'];
+    $save = fn () => app(App\Services\OrganizationService::class)->update(
+        Illuminate\Http\Request::create('/', 'PUT', $input), $uuid);
+    if (! $future) {
+        expect($save)->toThrow(Illuminate\Validation\ValidationException::class);
+        expect(Subscription::where('organization_id', $org)->count())->toBe(0)
+            ->and(DB::table('organizations')->where('id', $org)->value('name'))->toBe('Tenant');
+        return;
+    }
+    $save();
+    $subscription = Subscription::currentForOrganization($org);
+    expect($subscription->plan_id)->toBe($plan->id)
+        ->and($subscription->getRawOriginal('valid_until'))->toBe('2026-11-01 12:30:00')
+        ->and(Subscription::where('organization_id', $org)->count())->toBe(1);
+})->with([false, true]);
+
+it('preserves an expired subscription when its local expiration is submitted unchanged', function () {
+    $org = subscriptionNotificationOrg('Tenant', 'Asia/Damascus');
+    $plan = subscriptionNotificationPlan('Paid', []);
+    $subscription = subscriptionNotificationSubscription($org, $plan->id, 'active', '2026-09-27 20:00:00');
+    $version = $subscription->refresh()->period_version;
+    $events = SubscriptionEvent::count();
+    $input = ['name' => 'Edited tenant', 'plan' => $plan->uuid, 'subscription_status' => 'active',
+        'valid_until' => '2026-09-27T23:00:00', 'subscription_id' => $subscription->id,
+        'subscription_version' => $version];
+    $uuid = DB::table('organizations')->where('id', $org)->value('uuid');
+    app(App\Services\OrganizationService::class)->update(Illuminate\Http\Request::create('/', 'PUT', $input), $uuid);
+    expect($subscription->fresh()->getRawOriginal('valid_until'))->toBe('2026-09-27 20:00:00')
+        ->and($subscription->fresh()->period_version)->toBe($version)
+        ->and(SubscriptionEvent::count())->toBe($events);
+});
+
+it('rejects a plan assignment with an expiration that has passed in the organization timezone', function () {
+    $org = subscriptionNotificationOrg('Tenant', 'Asia/Damascus');
+    $plan = subscriptionNotificationPlan('Paid', []);
+    $subscription = subscriptionNotificationSubscription($org, null, 'trial', '2026-10-08 00:00:00');
+    $uuid = DB::table('organizations')->where('id', $org)->value('uuid');
+    $input = ['name' => 'Must roll back', 'plan' => $plan->uuid, 'subscription_status' => 'active',
+        'valid_until' => '2026-09-28T02:30:00'];
+    expect(fn () => app(App\Services\OrganizationService::class)->update(
+        Illuminate\Http\Request::create('/', 'PUT', $input), $uuid))
+        ->toThrow(Illuminate\Validation\ValidationException::class);
+    expect($subscription->fresh()->plan_id)->toBeNull()
+        ->and($subscription->fresh()->getRawOriginal('valid_until'))->toBe('2026-10-08 00:00:00')
+        ->and(DB::table('organizations')->where('id', $org)->value('name'))->toBe('Tenant');
+});
+
+it('rejects a stale or another tenant subscription when changing a plan and expiration', function (string $conflict) {
+    $org = subscriptionNotificationOrg('Tenant');
+    $other = subscriptionNotificationOrg('Other tenant');
+    $plan = subscriptionNotificationPlan('Paid', []);
+    $subscription = subscriptionNotificationSubscription($org, null, 'trial', '2026-10-08 00:00:00');
+    $otherSubscription = subscriptionNotificationSubscription($other, null, 'trial', '2026-10-08 00:00:00');
+    $input = ['name' => 'Must roll back', 'plan' => $plan->uuid, 'subscription_status' => 'active',
+        'valid_until' => '2026-11-01T12:00:00', 'subscription_id' => $subscription->id,
+        'subscription_version' => $subscription->period_version];
+    if ($conflict === 'version') {
+        $subscription->update(['valid_until' => '2026-10-10 00:00:00']);
+    } elseif ($conflict === 'other tenant') {
+        $input['subscription_id'] = $otherSubscription->id;
+    } else {
+        subscriptionNotificationSubscription($org, null, 'trial', '2026-10-10 00:00:00');
+    }
+    $uuid = DB::table('organizations')->where('id', $org)->value('uuid');
+    expect(fn () => app(App\Services\OrganizationService::class)->update(
+        Illuminate\Http\Request::create('/', 'PUT', $input), $uuid))
+        ->toThrow(Illuminate\Validation\ValidationException::class);
+    expect(Subscription::currentForOrganization($org)->plan_id)->toBeNull()
+        ->and($otherSubscription->fresh()->plan_id)->toBeNull()
+        ->and(DB::table('organizations')->where('id', $org)->value('name'))->toBe('Tenant');
+})->with(['version', 'other tenant', 'replacement']);
+
 it('keeps threshold deduplication on extension and opens a new usage period on renewal', function () {
     Carbon\Carbon::setTestNow('2026-09-28 12:00:00');
     enableSubscriptionNotification('subscription.resource_warning');

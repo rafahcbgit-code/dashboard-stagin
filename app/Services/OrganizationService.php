@@ -415,19 +415,39 @@ class OrganizationService
 
             $subscription = Subscription::where('organization_id', $organization->id)->orderByDesc('id')->lockForUpdate()->first();
             $plan = SubscriptionPlan::where('uuid', $request->plan)->first();
-            $subscriptionMeta = $this->resolveSubscriptionExpiration($request, $plan);
+            $subscriptionMeta = $this->resolveSubscriptionExpiration($request, $plan, $organization);
 
             if ($subscription) {
-                if ($request->filled('valid_until') && (! $subscription->getRawOriginal('valid_until')
-                    || ! Carbon::parse($request->input('valid_until'))->equalTo(Carbon::parse($subscription->getRawOriginal('valid_until'))))) {
-                    throw ValidationException::withMessages(['valid_until' => __('Use the Extend subscription or Renew subscription action to change the expiration date.')]);
-                }
                 $attributes = [
                     'plan_id' => $plan ? $plan->id : null,
                     'status' => $subscriptionMeta['status'],
                 ];
+                if ($request->filled('valid_until')) {
+                    $expiration = $subscriptionMeta['valid_until'];
+                    $planChanged = (int) $subscription->plan_id !== (int) ($plan?->id);
+                    $expirationChanged = ! $subscription->getRawOriginal('valid_until')
+                        || ! $expiration->equalTo(Carbon::parse($subscription->getRawOriginal('valid_until'), 'UTC'));
+                    if (($planChanged || $expirationChanged) && $request->has('subscription_version')
+                        && ((int) $request->input('subscription_id') !== (int) $subscription->id
+                            || (int) $request->input('subscription_version') !== (int) $subscription->period_version)) {
+                        throw ValidationException::withMessages(['valid_until' => __('The subscription changed. Reload the page before trying again.')]);
+                    }
+                    if ($expirationChanged && ! $planChanged) {
+                        throw ValidationException::withMessages(['valid_until' => __('Use the Extend subscription or Renew subscription action to change the expiration date.')]);
+                    }
+                    if ($planChanged && $expiration->lte(now())) {
+                        throw ValidationException::withMessages(['valid_until' => __('Choose an expiration date in the future.')]);
+                    }
+                    if ($expirationChanged) {
+                        $attributes['valid_until'] = $expiration->toDateTimeString();
+                        $attributes['expiry_notification_processed_at'] = null;
+                    }
+                }
                 $subscription->update($attributes);
             } else {
+                if ($request->filled('valid_until') && $subscriptionMeta['valid_until']->lte(now())) {
+                    throw ValidationException::withMessages(['valid_until' => __('Choose an expiration date in the future.')]);
+                }
                 DB::transaction(fn () => Subscription::create([
                     'organization_id' => $organization->id,
                     'status' => $subscriptionMeta['status'],
@@ -537,13 +557,14 @@ class OrganizationService
             : null;
     }
 
-    private function resolveSubscriptionExpiration($request, ?SubscriptionPlan $plan): array
+    private function resolveSubscriptionExpiration($request, ?SubscriptionPlan $plan, ?Organization $organization = null): array
     {
         $config = Setting::where('key', 'trial_period')->first();
         $trialDays = isset($config->value) && (int) $config->value > 0 ? (int) $config->value : 7;
         $hasTrialConfig = isset($config->value) && (int) $config->value > 0;
         $trialExpiration = now()->addDays($trialDays);
-        $customExpiration = $request->filled('valid_until') ? Carbon::parse($request->input('valid_until')) : null;
+        $customExpiration = $request->filled('valid_until')
+            ? Carbon::parse($request->input('valid_until'), $organization?->effectiveTimezone() ?? 'UTC')->utc() : null;
         $isTrialPlan = $request->plan === 'trial';
         $statusOverride = $request->input('subscription_status');
 

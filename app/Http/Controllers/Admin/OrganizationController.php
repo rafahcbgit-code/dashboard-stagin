@@ -115,6 +115,8 @@ class OrganizationController extends BaseController
             'subscriptionArchives' => \Illuminate\Support\Facades\DB::table('subscription_period_archives')
                 ->where('organization_id', $res['organization']->id)->orderByDesc('id')->paginate(20, ['*'], 'period_page')->withQueryString(),
             'subscriptionTimezone' => app(SubscriptionPeriodService::class)->timezone($res['organization']),
+            'subscriptionExpiration' => ($expiration = $res['organization']->subscription?->getRawOriginal('valid_until'))
+                ? \Carbon\Carbon::parse($expiration, 'UTC')->setTimezone($res['organization']->effectiveTimezone())->toDateTimeString() : null,
             'mode' => $mode,
             'filters' => $request->all()
         ]);

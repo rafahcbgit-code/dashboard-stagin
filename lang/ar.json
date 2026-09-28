@@ -1601,6 +1601,7 @@
     "Extend changes only the expiration date. The period start and resource usage stay unchanged.": "التمديد يغيّر تاريخ الانتهاء فقط، ويحافظ على بداية الفترة واستهلاك الموارد.",
     "Dates use this organization timezone": "التواريخ حسب المنطقة الزمنية لهذه المنظمة",
     "Use the Extend subscription or Renew subscription action to change the expiration date.": "استخدم إجراء تمديد الاشتراك أو تجديد الاشتراك لتغيير تاريخ الانتهاء.",
+    "Choose the expiration date when assigning or changing the plan. To change the date of the same plan, use Extend subscription or Renew subscription.": "حدّد تاريخ الانتهاء عند تعيين الباقة أو تغييرها. لتغيير تاريخ الباقة نفسها، استخدم تمديد الاشتراك أو تجديد الاشتراك.",
     "Manage the subscription of the resource account for this organization.": "هذه المنظمة تستخدم حصة مشتركة. عدّل الاشتراك من صفحة حساب الموارد الذي تتبعه.",
     "This organization has no subscription.": "لا يوجد اشتراك لهذه المنظمة.",
     "This operation key has already been used.": "تم استخدام معرّف هذه العملية سابقًا.",
