@@ -29,6 +29,7 @@ class ManagedNotificationController extends Controller
             ->map(fn ($definition) => [
                 'type_key' => $definition->type_key,
                 'name' => $catalog->get($definition->type_key)['name'],
+                'description' => $catalog->get($definition->type_key)['description'] ?? null,
                 'variables' => $catalog->get($definition->type_key)['variables'],
                 'enabled' => $definition->enabled,
                 'delivery_mode' => $definition->delivery_mode,
@@ -42,15 +43,39 @@ class ManagedNotificationController extends Controller
                 'test_preview' => $this->testPreviewForDisplay($definition, $catalog, $renderer),
             ]);
 
-        $deliveries = DB::table('notification_deliveries as d')
-            ->join('notification_events as e', 'e.id', '=', 'd.event_id')
-            ->select('d.id', 'd.organization_id', 'e.type_key', 'e.is_test', 'd.channel',
-                'd.status', 'd.attempts', 'd.last_error', 'd.created_at', 'd.sent_at')
-            ->orderByDesc('d.id')->paginate(25);
-
         return Inertia::render('Admin/Setting/ManagedNotifications', [
             'definitions' => $definitions,
             'senders' => $catalog->approvedSenders(),
+        ]);
+    }
+
+    public function deliveries()
+    {
+        $deliveries = DB::table('notification_deliveries')
+            ->select('id', 'event_id', 'organization_id', 'channel', 'status',
+                'attempts', 'last_error', 'created_at', 'sent_at')
+            ->orderByDesc('id')->cursorPaginate(25);
+        $eventIds = $deliveries->getCollection()->pluck('event_id')->unique();
+        $events = $eventIds->isEmpty() ? collect() : DB::table('notification_events')
+            ->whereIn('id', $eventIds)->get(['id', 'type_key', 'is_test'])->keyBy('id');
+        $deliveries->getCollection()->transform(function ($delivery) use ($events) {
+            $event = $events->get($delivery->event_id);
+
+            return [
+                'id' => $delivery->id,
+                'organization_id' => $delivery->organization_id,
+                'type_key' => $event?->type_key,
+                'is_test' => $event?->is_test,
+                'channel' => $delivery->channel,
+                'status' => $delivery->status,
+                'attempts' => $delivery->attempts,
+                'last_error' => $delivery->last_error,
+                'created_at' => $delivery->created_at,
+                'sent_at' => $delivery->sent_at,
+            ];
+        });
+
+        return Inertia::render('Admin/Setting/NotificationDeliveries', [
             'deliveries' => $deliveries,
         ]);
     }

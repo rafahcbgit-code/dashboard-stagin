@@ -165,6 +165,8 @@ class SubscriptionUsageService
 
                 $summary = [
                     'resource' => $resource,
+                    'subscription_id' => $subscription?->id,
+                    'period_version' => (int) $subscription?->period_version,
                     'organization_id' => $organizationId,
                     'billing_organization_id' => $billingOrganizationId,
                     'billing_organization_name' => $context['billing_organization_names'][$billingOrganizationId] ?? null,
@@ -205,20 +207,23 @@ class SubscriptionUsageService
         ?CarbonInterface $occurredAt = null
     ): ?SubscriptionUsageEvent {
         $resource = $this->normalizeResource($resource);
-        $subscription = $this->subscription($this->resourceAccountId($organizationId));
-
         try {
-            return SubscriptionUsageEvent::create([
-                'organization_id' => $organizationId,
-                'subscription_id' => $subscription?->id,
-                'resource' => $resource,
-                'quantity' => $quantity,
-                'source_type' => $sourceType,
-                'source_id' => $sourceId,
-                'idempotency_key' => $idempotencyKey,
-                'metadata' => $metadata,
-                'occurred_at' => $occurredAt ?: now(),
-            ]);
+            return DB::transaction(function () use ($organizationId, $resource, $quantity, $idempotencyKey,
+                $sourceType, $sourceId, $metadata, $occurredAt) {
+                $subscription = Subscription::query()->where('organization_id', $this->resourceAccountId($organizationId))
+                    ->orderByDesc('id')->lockForUpdate()->first();
+                return SubscriptionUsageEvent::create([
+                    'organization_id' => $organizationId,
+                    'subscription_id' => $subscription?->id,
+                    'resource' => $resource,
+                    'quantity' => $quantity,
+                    'source_type' => $sourceType,
+                    'source_id' => $sourceId,
+                    'idempotency_key' => $idempotencyKey,
+                    'metadata' => $metadata,
+                    'occurred_at' => $occurredAt ?: now(),
+                ]);
+            });
         } catch (QueryException $exception) {
             if ($exception->getCode() === '23000') {
                 return SubscriptionUsageEvent::where('organization_id', $organizationId)
@@ -234,25 +239,29 @@ class SubscriptionUsageService
     public function ensureConversationWindowForInbound(int $organizationId, int $contactId, ?int $chatId = null, ?Carbon $openedAt = null): ConversationWindow
     {
         $openedAt = $openedAt ?: now();
+        return DB::transaction(function () use ($organizationId, $contactId, $chatId, $openedAt) {
+            Subscription::query()->where('organization_id', $this->resourceAccountId($organizationId))
+                ->orderByDesc('id')->lockForUpdate()->first();
 
-        $activeWindow = ConversationWindow::where('organization_id', $organizationId)
-            ->where('contact_id', $contactId)
-            ->where('opened_at', '<=', $openedAt)
-            ->where('closes_at', '>', $openedAt)
-            ->latest('opened_at')
-            ->first();
+            $activeWindow = ConversationWindow::where('organization_id', $organizationId)
+                ->where('contact_id', $contactId)
+                ->where('opened_at', '<=', $openedAt)
+                ->where('closes_at', '>', $openedAt)
+                ->latest('opened_at')
+                ->first();
 
-        if ($activeWindow) {
-            return $activeWindow;
-        }
+            if ($activeWindow) {
+                return $activeWindow;
+            }
 
-        return ConversationWindow::create([
-            'organization_id' => $organizationId,
-            'contact_id' => $contactId,
-            'opened_at' => $openedAt,
-            'closes_at' => $openedAt->copy()->addHours(24),
-            'source_chat_id' => $chatId,
-        ]);
+            return ConversationWindow::create([
+                'organization_id' => $organizationId,
+                'contact_id' => $contactId,
+                'opened_at' => $openedAt,
+                'closes_at' => $openedAt->copy()->addHours(24),
+                'source_chat_id' => $chatId,
+            ]);
+        });
     }
 
     public function createOrganizationAllowedForUser(int $userId, ?int $anchorOrganizationId = null): array
@@ -409,6 +418,8 @@ class SubscriptionUsageService
                     'organization_id' => $poolOrganizationId,
                     'period_start' => $period['start'],
                     'period_end' => $period['end'],
+                    'usage_event_start_id' => $period['usage_event_start_id'],
+                    'conversation_start_id' => $period['conversation_start_id'],
                 ];
             }
 
@@ -485,7 +496,7 @@ class SubscriptionUsageService
     private function subscriptionPeriodBounds(?Subscription $subscription): array
     {
         if (! $subscription) {
-            return ['start' => null, 'end' => null];
+            return ['start' => null, 'end' => null, 'usage_event_start_id' => 0, 'conversation_start_id' => 0];
         }
 
         $startDate = $subscription->getRawOriginal('start_date') ?: $subscription->start_date;
@@ -494,6 +505,8 @@ class SubscriptionUsageService
         return [
             'start' => $startDate ? Carbon::parse($startDate)->toDateTimeString() : null,
             'end' => $validUntil ? Carbon::parse($validUntil)->toDateTimeString() : null,
+            'usage_event_start_id' => (int) $subscription->usage_event_start_id,
+            'conversation_start_id' => (int) $subscription->conversation_start_id,
         ];
     }
 
@@ -637,6 +650,7 @@ class SubscriptionUsageService
                  FROM subscription_usage_events events
                  INNER JOIN ({$scopeSql}) scope ON scope.organization_id = events.organization_id
                  WHERE events.resource = ?
+                   AND events.id > scope.usage_event_start_id
                    AND (scope.period_start IS NULL OR events.occurred_at >= scope.period_start)
                    AND (scope.period_end IS NULL OR events.occurred_at <= scope.period_end)
                  GROUP BY scope.billing_organization_id, COALESCE(events.source_type, 'unknown')",
@@ -675,6 +689,7 @@ class SubscriptionUsageService
                  FROM conversation_windows windows
                  INNER JOIN ({$scopeSql}) scope ON scope.organization_id = windows.organization_id
                  WHERE (scope.period_start IS NULL OR windows.opened_at >= scope.period_start)
+                   AND windows.id > scope.conversation_start_id
                    AND (scope.period_end IS NULL OR windows.opened_at <= scope.period_end)
                  GROUP BY scope.billing_organization_id",
                 $bindings
@@ -695,11 +710,13 @@ class SubscriptionUsageService
         $bindings = [];
 
         foreach ($scopeRows as $row) {
-            $selects[] = 'SELECT ? AS billing_organization_id, ? AS organization_id, ? AS period_start, ? AS period_end';
+            $selects[] = 'SELECT ? AS billing_organization_id, ? AS organization_id, ? AS period_start, ? AS period_end, ? AS usage_event_start_id, ? AS conversation_start_id';
             $bindings[] = (int) $row['billing_organization_id'];
             $bindings[] = (int) $row['organization_id'];
             $bindings[] = $row['period_start'];
             $bindings[] = $row['period_end'];
+            $bindings[] = $row['usage_event_start_id'];
+            $bindings[] = $row['conversation_start_id'];
         }
 
         return [implode(' UNION ALL ', $selects), $bindings];
@@ -1159,6 +1176,9 @@ class SubscriptionUsageService
         if (! $subscription) {
             return;
         }
+
+        $query->where('id', '>', (int) ($column === 'occurred_at'
+            ? $subscription->usage_event_start_id : $subscription->conversation_start_id));
 
         $startDate = $subscription->getRawOriginal('start_date') ?: $subscription->start_date;
         $validUntil = $subscription->getRawOriginal('valid_until') ?: $subscription->valid_until;

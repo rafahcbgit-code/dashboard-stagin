@@ -156,7 +156,7 @@ class Organization extends Model
 
     public function subscription()
     {
-        return $this->belongsTo(Subscription::class, 'id', 'organization_id');
+        return $this->hasOne(Subscription::class, 'organization_id')->latestOfMany();
     }
 
     public function billingOrganization()

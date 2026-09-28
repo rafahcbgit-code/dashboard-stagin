@@ -33,7 +33,6 @@ class NotificationEventRecorder
             throw new InvalidArgumentException('Notification organization does not exist.');
         }
 
-        $this->catalog->ensureDefinitions();
         $eventKey = hash('sha256', $sourceKey);
 
         return DB::transaction(function () use ($organizationId, $typeKey, $eventKey, $variables) {

@@ -23,6 +23,9 @@ class NotificationDefinitionManager
         if (! in_array($mode, ['dashboard', 'email', 'dashboard_email'], true)) {
             throw new InvalidArgumentException('Invalid delivery mode.');
         }
+        if ($typeKey === 'subscription.resource_warning') {
+            $mode = 'dashboard_email';
+        }
 
         foreach (['dashboard_template', 'email_subject', 'email_body'] as $field) {
             $this->renderer->validate($input[$field], $type['variables']);

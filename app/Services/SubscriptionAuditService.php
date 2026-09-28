@@ -91,10 +91,19 @@ class SubscriptionAuditService
 
     public function recordResourceAddonCreated(ResourceAddon $addon, ?string $source = null): void
     {
+        $snapshot = $this->resourceAddonSnapshot($addon);
+        $summary = app(SubscriptionUsageService::class)->summary((int) $addon->organization_id, (string) $addon->resource);
+        $snapshot['new_limit'] = (int) $summary['limit'];
+        $snapshot['old_limit'] = $snapshot['new_limit'] === -1 ? -1 : $snapshot['new_limit'] - (int) $addon->quantity;
+        $subscription = Subscription::currentForOrganization((int) $summary['billing_organization_id']);
+        $snapshot['subscription_id'] = $subscription?->id;
+        $snapshot['plan_id'] = $subscription?->plan_id;
+        $snapshot['subscription_status'] = $subscription?->status;
+
         $this->record(self::ADD_ON_PURCHASED, (int) $addon->organization_id, [
             'resource_addon_id' => $addon->id,
             'source' => $source,
-            'new_values' => $this->resourceAddonSnapshot($addon),
+            'new_values' => $snapshot,
             'metadata' => [
                 'resource' => $addon->resource,
                 'quantity' => $addon->quantity,
@@ -218,6 +227,8 @@ class SubscriptionAuditService
     {
         $planId = $values['plan_id'] ?? null;
         $plan = $planId ? SubscriptionPlan::find($planId) : null;
+        $metadata = json_decode((string) $plan?->metadata, true);
+        $metadata = is_array($metadata) ? $metadata : [];
 
         return [
             'subscription_id' => $values['id'] ?? null,
@@ -226,6 +237,13 @@ class SubscriptionAuditService
             'plan_name' => $plan?->name,
             'plan_price' => $plan ? (float) $plan->price : null,
             'plan_period' => $plan?->period,
+            'resource_limits' => [
+                'template_messages' => (int) ($metadata['template_messages_limit'] ?? $metadata['message_limit'] ?? -1),
+                'conversations' => (int) ($metadata['conversations_limit'] ?? $metadata['message_limit'] ?? -1),
+                'contacts' => (int) ($metadata['contacts_limit'] ?? -1),
+                'team_members' => (int) ($metadata['team_limit'] ?? -1),
+                'organizations' => (int) ($metadata['organizations_limit'] ?? -1),
+            ],
             'status' => $values['status'] ?? null,
             'start_date' => $values['start_date'] ?? null,
             'valid_until' => $values['valid_until'] ?? null,
@@ -292,6 +310,10 @@ class SubscriptionAuditService
             return self::TRIAL_ENDED;
         }
 
+        if (($old['status'] ?? null) !== 'trial' && ($new['status'] ?? null) === 'trial') {
+            return self::TRIAL_STARTED;
+        }
+
         if (($old['status'] ?? null) !== 'active' && ($new['status'] ?? null) === 'active') {
             return self::SUBSCRIPTION_ACTIVATED;
         }
@@ -324,6 +346,10 @@ class SubscriptionAuditService
 
         if (($old['status'] ?? null) === 'trial' && ($new['status'] ?? null) !== 'trial') {
             $events[] = self::TRIAL_ENDED;
+        }
+
+        if (($old['status'] ?? null) !== 'trial' && ($new['status'] ?? null) === 'trial') {
+            $events[] = self::TRIAL_STARTED;
         }
 
         if (($old['status'] ?? null) !== 'active' && ($new['status'] ?? null) === 'active') {

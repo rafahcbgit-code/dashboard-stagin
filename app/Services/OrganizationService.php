@@ -22,6 +22,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 use Str;
 use Carbon\Carbon;
+use Illuminate\Validation\ValidationException;
 
 class OrganizationService
 {
@@ -390,49 +391,54 @@ class OrganizationService
      */
     public function update($request, $uuid)
     {
-        $organization = Organization::where('uuid', $uuid)->firstOrFail();
+        return DB::transaction(function () use ($request, $uuid) {
+            $organization = Organization::where('uuid', $uuid)->lockForUpdate()->firstOrFail();
 
-        $updateData = [
-            'name' => $request->input('name'),
-            'address' => json_encode([
-                'street' => $request->street,
-                'city' => $request->city,
-                'state' => $request->state,
-                'zip' => $request->zip,
-                'country' => $request->country,
-            ]),
-            'billing_organization_id' => $this->resolveBillingOrganizationId($request, (int) $organization->id),
-        ];
+            $updateData = [
+                'name' => $request->input('name'),
+                'address' => json_encode([
+                    'street' => $request->street,
+                    'city' => $request->city,
+                    'state' => $request->state,
+                    'zip' => $request->zip,
+                    'country' => $request->country,
+                ]),
+                'billing_organization_id' => $this->resolveBillingOrganizationId($request, (int) $organization->id),
+            ];
 
-        $campaignPhoneMps = $this->campaignPhoneMpsFromRequest($request);
-        if ($campaignPhoneMps !== null) {
-            $updateData['metadata'] = $this->metadataWithCampaignPhoneMps($organization->metadata, $campaignPhoneMps);
-        }
+            $campaignPhoneMps = $this->campaignPhoneMpsFromRequest($request);
+            if ($campaignPhoneMps !== null) {
+                $updateData['metadata'] = $this->metadataWithCampaignPhoneMps($organization->metadata, $campaignPhoneMps);
+            }
 
-        $organization->update($updateData);
+            $organization->update($updateData);
 
-        $subscription = Subscription::where('organization_id', $organization->id)->first();
-        $plan = SubscriptionPlan::where('uuid', $request->plan)->first();
-        $subscriptionMeta = $this->resolveSubscriptionExpiration($request, $plan);
+            $subscription = Subscription::where('organization_id', $organization->id)->orderByDesc('id')->lockForUpdate()->first();
+            $plan = SubscriptionPlan::where('uuid', $request->plan)->first();
+            $subscriptionMeta = $this->resolveSubscriptionExpiration($request, $plan);
 
-        if ($subscription) {
-            $subscription->update([
-                'plan_id' => $plan ? $plan->id : null,
-                'status' => $subscriptionMeta['status'],
-                'start_date' => now(),
-                'valid_until' => $subscriptionMeta['valid_until'],
-            ]);
-        } else {
-            Subscription::create([
-                'organization_id' => $organization->id,
-                'status' => $subscriptionMeta['status'],
-                'plan_id' => $plan ? $plan->id : null,
-                'start_date' => now(),
-                'valid_until' => $subscriptionMeta['valid_until'],
-            ]);
-        }
+            if ($subscription) {
+                if ($request->filled('valid_until') && (! $subscription->getRawOriginal('valid_until')
+                    || ! Carbon::parse($request->input('valid_until'))->equalTo(Carbon::parse($subscription->getRawOriginal('valid_until'))))) {
+                    throw ValidationException::withMessages(['valid_until' => __('Use the Extend subscription or Renew subscription action to change the expiration date.')]);
+                }
+                $attributes = [
+                    'plan_id' => $plan ? $plan->id : null,
+                    'status' => $subscriptionMeta['status'],
+                ];
+                $subscription->update($attributes);
+            } else {
+                DB::transaction(fn () => Subscription::create([
+                    'organization_id' => $organization->id,
+                    'status' => $subscriptionMeta['status'],
+                    'plan_id' => $plan ? $plan->id : null,
+                    'start_date' => now(),
+                    'valid_until' => $subscriptionMeta['valid_until'],
+                ]));
+            }
 
-        return $organization;
+            return $organization;
+        });
     }
 
     private function campaignPhoneMpsFromRequest(object $request, bool $useDefaultWhenMissing = false): ?int

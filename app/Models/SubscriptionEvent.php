@@ -18,6 +18,7 @@ class SubscriptionEvent extends Model
         'new_values' => 'array',
         'metadata' => 'array',
         'occurred_at' => 'datetime',
+        'notification_projected_at' => 'datetime',
     ];
 
     public function organization()

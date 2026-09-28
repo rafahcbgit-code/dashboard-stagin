@@ -7,12 +7,12 @@ import { useAdminPermissions } from '@/Composables/useAdminPermissions'
 const props = defineProps({
     definitions: Array,
     senders: Array,
-    deliveries: Object,
 })
 
 const { can } = useAdminPermissions()
 const mayEdit = computed(() => can('notifications', 'edit'))
 const drafts = reactive({})
+const expanded = reactive({})
 const errors = reactive({})
 const saving = reactive({})
 const selectedTestType = ref(props.definitions?.[0]?.type_key || '')
@@ -41,6 +41,7 @@ const draftFrom = (definition) => ({
     webhook_url: definition.webhook_url || '',
     webhook_secret: '',
 })
+const toggleDefinition = (key) => { expanded[key] = !expanded[key] }
 for (const definition of props.definitions || []) {
     drafts[definition.type_key] = draftFrom(definition)
 }
@@ -83,30 +84,42 @@ const testEmail = () => {
             <div>
                 <h1 class="text-2xl font-semibold">{{ $t('Managed notifications') }}</h1>
                 <p class="mt-2 text-sm text-gray-600">{{ $t('Configure the available notification types. Meta alerts begin only when their event sources are connected.') }}</p>
+                <div class="mt-3 flex flex-wrap gap-4 text-sm font-medium text-primary">
+                    <Link href="/admin/settings/notification-senders" class="hover:underline">{{ $t('Notification email senders') }} →</Link>
+                    <Link href="/admin/settings/notification-deliveries" class="hover:underline">{{ $t('Recent delivery status') }} →</Link>
+                </div>
             </div>
 
-            <div v-for="definition in definitions" :key="definition.type_key" class="rounded-lg border bg-white p-5 space-y-4">
-                <div class="flex items-center justify-between gap-3">
-                    <div>
-                        <h2 class="text-lg font-semibold">{{ definition.name }}</h2>
-                        <p class="text-xs text-gray-500">{{ definition.type_key }}</p>
-                    </div>
-                    <label class="flex items-center gap-2 text-sm">
-                        <input v-model="drafts[definition.type_key].enabled" type="checkbox" :disabled="!mayEdit">
-                        {{ $t('Enabled') }}
-                    </label>
+            <div v-for="definition in definitions" :key="definition.type_key" class="rounded-lg border bg-white p-5">
+                <div class="flex items-start justify-between gap-4">
+                    <button type="button" class="min-w-0 flex-1 text-start focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" :aria-expanded="Boolean(expanded[definition.type_key])" :aria-controls="`notification-settings-${definition.type_key}`" @click="toggleDefinition(definition.type_key)">
+                        <span class="block text-lg font-semibold">{{ $t(definition.name) }}</span>
+                        <span v-if="definition.description" class="mt-2 block max-w-2xl text-sm leading-6 text-gray-700">{{ $t(definition.description) }}</span>
+                        <span class="mt-2 inline-flex items-center gap-1 text-sm font-medium text-primary">
+                            <span aria-hidden="true">{{ expanded[definition.type_key] ? '▴' : '▾' }}</span>
+                            {{ expanded[definition.type_key] ? $t('Hide settings') : $t('Show settings') }}
+                        </span>
+                    </button>
+                    <span class="shrink-0 rounded-full px-2 py-1 text-xs font-medium" :class="definition.enabled ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-700'">{{ definition.enabled ? $t('Enabled') : $t('Disabled') }}</span>
                 </div>
 
+                <div v-show="expanded[definition.type_key]" :id="`notification-settings-${definition.type_key}`" class="mt-5 space-y-4 border-t pt-4">
+                <p class="text-xs text-gray-500">{{ definition.type_key }}</p>
+                <label class="flex items-center gap-2 text-sm">
+                    <input v-model="drafts[definition.type_key].enabled" type="checkbox" :disabled="!mayEdit">
+                    {{ $t('Enabled') }}
+                </label>
                 <p class="text-xs text-gray-600">{{ $t('Variables') }}: <code v-for="variable in definition.variables" :key="variable" class="mr-2">{{ '{' + '{' + variable + '}' + '}' }}</code></p>
 
                 <div class="grid md:grid-cols-2 gap-4">
                     <label class="block text-sm">
                         {{ $t('Delivery mode') }}
-                        <select v-model="drafts[definition.type_key].delivery_mode" :disabled="!mayEdit" class="mt-1 block w-full rounded border-gray-300">
+                        <select v-model="drafts[definition.type_key].delivery_mode" :disabled="!mayEdit || definition.type_key === 'subscription.resource_warning'" class="mt-1 block w-full rounded border-gray-300">
                             <option value="dashboard">{{ $t('Dashboard only') }}</option>
                             <option value="email">{{ $t('Email only') }}</option>
                             <option value="dashboard_email">{{ $t('Dashboard and email') }}</option>
                         </select>
+                        <span v-if="definition.type_key === 'subscription.resource_warning'" class="text-xs text-gray-500">70% and 80%: dashboard. 90% and 100%: dashboard and email.</span>
                     </label>
                     <label class="block text-sm">
                         {{ $t('Sender email') }}
@@ -142,6 +155,7 @@ const testEmail = () => {
                 <div v-if="mayEdit" class="flex flex-wrap gap-3 items-center">
                     <button type="button" :disabled="saving[definition.type_key]" @click="save(definition.type_key)" class="rounded bg-primary px-4 py-2 text-sm text-white disabled:opacity-50">{{ $t('Save') }}</button>
                 </div>
+                </div>
             </div>
 
             <section v-if="mayEdit" class="rounded-lg border bg-white p-5 space-y-4">
@@ -151,7 +165,7 @@ const testEmail = () => {
                     <label class="block text-sm">
                         {{ $t('Notification type') }}
                         <select v-model="selectedTestType" class="mt-1 block w-full rounded border-gray-300">
-                            <option v-for="definition in definitions" :key="definition.type_key" :value="definition.type_key">{{ definition.name }}</option>
+                            <option v-for="definition in definitions" :key="definition.type_key" :value="definition.type_key">{{ $t(definition.name) }}</option>
                         </select>
                     </label>
                     <label class="block text-sm">
@@ -177,26 +191,6 @@ const testEmail = () => {
                 <button type="button" :disabled="testing || !selectedTestDefinition || selectedTestDefinition.test_preview?.error || !testRecipientEmail || !testSenderEmail" @click="testEmail" class="rounded bg-primary px-4 py-2 text-sm text-white disabled:opacity-50">{{ $t('Send test email') }}</button>
             </section>
 
-            <section class="rounded-lg border bg-white p-5">
-                <h2 class="mb-4 text-lg font-semibold">{{ $t('Recent delivery status') }}</h2>
-                <div class="overflow-x-auto">
-                    <table class="w-full text-sm text-left">
-                        <thead><tr class="border-b"><th class="p-2">ID</th><th class="p-2">{{ $t('Organization') }}</th><th class="p-2">{{ $t('Type') }}</th><th class="p-2">{{ $t('Channel') }}</th><th class="p-2">{{ $t('Status') }}</th><th class="p-2">{{ $t('Attempts') }}</th><th class="p-2">{{ $t('Error') }}</th></tr></thead>
-                        <tbody>
-                            <tr v-for="delivery in deliveries.data" :key="delivery.id" class="border-b align-top">
-                                <td class="p-2">{{ delivery.id }}</td><td class="p-2">{{ delivery.organization_id }}</td>
-                                <td class="p-2">{{ delivery.type_key }}<span v-if="delivery.is_test"> (test)</span></td>
-                                <td class="p-2">{{ delivery.channel }}</td><td class="p-2">{{ delivery.status }}</td>
-                                <td class="p-2">{{ delivery.attempts }}</td><td class="p-2 break-words">{{ delivery.last_error || '—' }}</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-                <div class="mt-4 flex gap-3 text-sm">
-                    <Link v-if="deliveries.prev_page_url" :href="deliveries.prev_page_url">{{ $t('Previous') }}</Link>
-                    <Link v-if="deliveries.next_page_url" :href="deliveries.next_page_url">{{ $t('Next') }}</Link>
-                </div>
-            </section>
         </div>
     </AppLayout>
 </template>

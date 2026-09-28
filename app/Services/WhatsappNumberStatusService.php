@@ -3,6 +3,7 @@
 namespace App\Services;
 
 use App\Models\Organization;
+use App\Services\ManagedNotifications\NotificationEventRecorder;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -42,14 +43,14 @@ class WhatsappNumberStatusService
                 ->timeout(15)
                 ->get(
                     'https://graph.facebook.com/'.config('graph.api_version').'/'.$phoneNumberId,
-                    ['fields' => 'status']
+                    ['fields' => 'status,quality_rating']
                 );
 
             $responseData = $response->json();
             $status = is_array($responseData) ? ($responseData['status'] ?? null) : null;
 
             if ($response->successful() && is_string($status) && $status !== '') {
-                $this->persistVerifiedStatus($organization->id, $status, $source);
+                $this->persistVerifiedStatus($organization->id, $status, $source, $responseData['quality_rating'] ?? null);
 
                 Log::channel('whatsapp_number_status')->info('Meta phone number status API completed', [
                     'organization_id' => $organization->id,
@@ -125,9 +126,29 @@ class WhatsappNumberStatusService
         }
     }
 
-    private function persistVerifiedStatus(int $organizationId, string $status, string $source): void
+    private function persistVerifiedStatus(int $organizationId, string $status, string $source, mixed $qualityRating): void
     {
-        $this->updateMetadata($organizationId, function (array &$whatsapp) use ($source, $status) {
+        $this->updateMetadata($organizationId, function (array &$whatsapp, Organization $organization) use ($source, $status, $qualityRating) {
+            $oldQuality = strtoupper((string) ($whatsapp['quality_rating'] ?? ''));
+            $newQuality = strtoupper((string) $qualityRating);
+            $rank = ['RED' => 1, 'YELLOW' => 2, 'GREEN' => 3];
+            if (isset($rank[$newQuality])) {
+                $whatsapp['quality_rating'] = $newQuality;
+                if (isset($rank[$oldQuality]) && $rank[$newQuality] < $rank[$oldQuality]) {
+                    $whatsapp['notification_transition_sequence'] = (int) ($whatsapp['notification_transition_sequence'] ?? 0) + 1;
+                    app(NotificationEventRecorder::class)->record(
+                        $organization->id,
+                        'meta.phone_quality_decreased',
+                        'meta-phone-quality:'.($whatsapp['phone_number_id'] ?? '').':'.$whatsapp['notification_transition_sequence'].':'.$oldQuality.':'.$newQuality,
+                        [
+                            'organization_name' => $organization->name,
+                            'phone_number' => (string) ($whatsapp['display_phone_number'] ?? ''),
+                            'old_quality' => $oldQuality,
+                            'new_quality' => $newQuality,
+                        ]
+                    );
+                }
+            }
             $this->rememberLastKnownStatus($whatsapp);
             $whatsapp['number_status'] = $status;
             $whatsapp['number_status_check_state'] = 'verified';
@@ -205,7 +226,7 @@ class WhatsappNumberStatusService
                 ? $metadata['whatsapp']
                 : [];
 
-            $callback($metadata['whatsapp']);
+            $callback($metadata['whatsapp'], $organization);
 
             $organization->metadata = json_encode($metadata);
             $organization->save();

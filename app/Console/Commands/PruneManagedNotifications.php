@@ -7,6 +7,7 @@ use App\Models\NotificationLog;
 use App\Services\ManagedNotifications\NotificationCatalog;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class PruneManagedNotifications extends Command
 {
@@ -52,6 +53,18 @@ class PruneManagedNotifications extends Command
                 break;
             }
             DB::table('notification_events')->whereIn('id', $ids)->delete();
+        }
+
+        if (Schema::hasTable('subscription_plan_notification_changes')) {
+            while (true) {
+                $ids = DB::table('subscription_plan_notification_changes')
+                    ->whereNotNull('processed_at')->where('processed_at', '<', $cutoff)
+                    ->orderBy('id')->limit(500)->pluck('id');
+                if ($ids->isEmpty()) {
+                    break;
+                }
+                DB::table('subscription_plan_notification_changes')->whereIn('id', $ids)->delete();
+            }
         }
 
         return self::SUCCESS;

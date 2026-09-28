@@ -57,6 +57,16 @@
                             <span>{{ $t('Managed notifications') }}</span>
                         </Link>
                     </li>
+                    <li v-if="can('notifications', 'view')" class="hover:bg-primary hover:text-white rounded-[5px] px-2 truncate" :class="$page.url.startsWith('/admin/settings/notification-senders') ? 'bg-primary text-white' : ''">
+                        <Link href="/admin/settings/notification-senders" class="flex items-center p-2 space-x-3 rounded-md">
+                            <span>{{ $t('Notification email senders') }}</span>
+                        </Link>
+                    </li>
+                    <li v-if="can('notifications', 'view')" class="hover:bg-primary hover:text-white rounded-[5px] px-2 truncate" :class="$page.url.startsWith('/admin/settings/notification-deliveries') ? 'bg-primary text-white' : ''">
+                        <Link href="/admin/settings/notification-deliveries" class="flex items-center p-2 space-x-3 rounded-md">
+                            <span>{{ $t('Recent delivery status') }}</span>
+                        </Link>
+                    </li>
                     <li class="hover:bg-primary hover:text-white rounded-[5px] px-2 truncate" :class="$page.url.startsWith('/admin/settings/pages') ? 'bg-primary text-white' : ''">
                         <Link rel="noopener noreferrer" href="/admin/settings/pages" class="flex items-center p-2 space-x-3 rounded-md">
                             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 48 48"><g fill="none" stroke="currentColor" stroke-linejoin="round" stroke-width="4"><rect width="36" height="36" x="6" y="6" rx="3"/><path stroke-linecap="round" d="M6 17h36M17 42V17"/></g></svg>

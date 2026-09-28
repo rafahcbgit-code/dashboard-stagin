@@ -7,6 +7,7 @@ use App\Models\PaymentGateway;
 use App\Models\SubscriptionPlan;
 use App\Services\StripeService;
 use DB;
+use Illuminate\Support\Str;
 
 class SubscriptionPlanService
 {
@@ -104,7 +105,8 @@ class SubscriptionPlanService
     public function update(Object $request, $uuid)
     {
         $plan = SubscriptionPlan::where('uuid', $uuid)->firstOrFail();
-        $metadata = json_decode($plan->metadata, true);
+        $metadata = json_decode($plan->metadata, true) ?: [];
+        $oldMetadata = $metadata;
         $metadata['campaign_limit'] = $request->input('campaign_limit');
         $metadata['message_limit'] = $request->input('message_limit');
         $metadata['template_messages_limit'] = $request->input('template_messages_limit');
@@ -136,7 +138,19 @@ class SubscriptionPlanService
         $plan->period = $request->input('period');
         $plan->status = $request->input('status');
 
-        $plan->save();
+        DB::transaction(function () use ($plan, $oldMetadata, $metadata): void {
+            $plan->save();
+            if ($oldMetadata !== $metadata) {
+                DB::table('subscription_plan_notification_changes')->insert([
+                    'plan_id' => $plan->id,
+                    'change_id' => (string) Str::uuid(),
+                    'old_metadata' => json_encode($oldMetadata, JSON_THROW_ON_ERROR),
+                    'new_metadata' => json_encode($metadata, JSON_THROW_ON_ERROR),
+                    'created_at' => now(),
+                    'updated_at' => now(),
+                ]);
+            }
+        });
 
         $stripe = PaymentGateway::where('name', 'Stripe')->first();
 

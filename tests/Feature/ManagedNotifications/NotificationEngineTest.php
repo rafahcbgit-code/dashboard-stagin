@@ -3,6 +3,7 @@
 use App\Jobs\ResolveNotificationEventJob;
 use App\Models\NotificationDefinition;
 use App\Models\NotificationDelivery;
+use App\Models\NotificationEmailSender;
 use App\Models\NotificationEvent;
 use App\Models\NotificationLog;
 use App\Services\ManagedNotifications\Channels\EmailChannel;
@@ -66,6 +67,9 @@ beforeEach(function () {
         $table->string('module');
         $table->string('action');
     });
+    Schema::create('addons', function (Blueprint $table) {
+        $table->id();
+    });
     Schema::create('notification_logs', function (Blueprint $table) {
         $table->id();
         $table->unsignedBigInteger('user_id');
@@ -78,11 +82,13 @@ beforeEach(function () {
         $table->boolean('clicked')->default(false);
         $table->timestamp('read_at')->nullable();
     });
+    (require base_path('database/migrations/2026_09_27_000005_index_notification_inbox_order.php'))->up();
 
     foreach ([
         '2026_09_26_000001_create_notification_definitions_table.php',
         '2026_09_26_000002_create_notification_events_table.php',
         '2026_09_26_000003_create_notification_deliveries_table.php',
+        '2026_09_27_000004_create_notification_email_senders_table.php',
     ] as $migration) {
         (require base_path('database/migrations/'.$migration))->up();
     }
@@ -138,6 +144,35 @@ function managedNotificationOwner(int $organizationId, int $userId): void
         'status' => 'active',
     ]);
 }
+
+it('synchronizes the notification catalog with one definition write', function () {
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+    app(NotificationCatalog::class)->ensureDefinitions();
+    $writes = collect(DB::getQueryLog())->filter(fn ($query) =>
+        str_contains(strtolower($query['query']), 'insert')
+        && str_contains(strtolower($query['query']), 'notification_definitions'));
+    DB::disableQueryLog();
+
+    expect($writes)->toHaveCount(1)
+        ->and(NotificationDefinition::count())->toBe(count(config('managed_notifications.types')));
+});
+
+it('records events without synchronizing definitions on the webhook path', function () {
+    $organizationId = managedNotificationOrganization('Tenant A');
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+    $event = app(NotificationEventRecorder::class)->record(
+        $organizationId, 'meta.template_status_changed', 'template:123:approved', managedNotificationValues()
+    );
+    $definitionQueries = collect(DB::getQueryLog())->filter(fn ($query) =>
+        str_contains(strtolower($query['query']), 'notification_definitions')
+        || str_contains(strtolower($query['query']), 'notification_email_senders'));
+    DB::disableQueryLog();
+
+    expect($event->exists)->toBeTrue()
+        ->and($definitionQueries)->toBeEmpty();
+});
 
 it('validates only predefined template variables, sender identities, and webhook hosts', function () {
     $definition = NotificationDefinition::where('type_key', 'meta.template_status_changed')->firstOrFail();
@@ -345,23 +380,234 @@ it('shows notification definitions and supported variables only to authorized ad
 
     $this->withHeader('X-Inertia', 'true')
         ->get('/admin/settings/managed-notifications')->assertForbidden();
+    $this->get('/admin/settings/notification-senders')->assertForbidden();
+    $this->get('/admin/settings/notification-deliveries')->assertForbidden();
 
     DB::table('role_permissions')->insert([
         'role_id' => $roleId, 'module' => 'notifications', 'action' => 'view',
     ]);
     $response = $this->get('/admin/settings/managed-notifications')->assertOk()
         ->assertJsonPath('component', 'Admin/Setting/ManagedNotifications')
-        ->assertJsonCount(3, 'props.definitions');
+        ->assertJsonCount(count(config('managed_notifications.types')), 'props.definitions');
+    expect($response->json('props'))->not->toHaveKey('deliveries')
+        ->not->toHaveKey('senderAccounts');
+    $this->get('/admin/settings/notification-senders')->assertOk()
+        ->assertJsonPath('component', 'Admin/Setting/NotificationSenders')
+        ->assertJsonCount(0, 'props.senderAccounts');
+
+    $organizationId = managedNotificationOrganization('Tenant A');
+    $eventId = DB::table('notification_events')->insertGetId([
+        'organization_id' => $organizationId,
+        'type_key' => 'meta.template_rejected',
+        'event_key' => hash('sha256', 'delivery-history-test'),
+        'variables' => json_encode(['organization_name' => 'Tenant A', 'template_name' => 'sample']),
+        'status' => 'resolved',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    $deliveryId = DB::table('notification_deliveries')->insertGetId([
+        'event_id' => $eventId,
+        'organization_id' => $organizationId,
+        'channel' => 'dashboard',
+        'recipient_key' => hash('sha256', 'delivery-history-recipient'),
+        'status' => 'sent',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    $deliveryResponse = $this->get('/admin/settings/notification-deliveries')->assertOk()
+        ->assertJsonPath('component', 'Admin/Setting/NotificationDeliveries')
+        ->assertJsonPath('props.deliveries.data.0.id', $deliveryId)
+        ->assertJsonPath('props.deliveries.data.0.type_key', 'meta.template_rejected');
+    expect($deliveryResponse->json('props.deliveries'))->not->toHaveKey('total');
+
+    foreach (range(1, 25) as $index) {
+        DB::table('notification_deliveries')->insert([
+            'event_id' => $eventId,
+            'organization_id' => $organizationId,
+            'channel' => 'dashboard',
+            'recipient_key' => hash('sha256', 'delivery-history-recipient-'.$index),
+            'status' => 'sent',
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+    $firstPage = $this->get('/admin/settings/notification-deliveries')->assertOk()
+        ->assertJsonCount(25, 'props.deliveries.data');
+    $nextPageUrl = $firstPage->json('props.deliveries.next_page_url');
+    expect($nextPageUrl)->not->toBeNull();
+    $this->get('/admin/settings/notification-deliveries?'.parse_url($nextPageUrl, PHP_URL_QUERY))
+        ->assertOk()->assertJsonCount(1, 'props.deliveries.data')
+        ->assertJsonPath('props.deliveries.data.0.id', $deliveryId);
+
+    expect(collect($response->json('props.definitions'))->pluck('type_key')->all())
+        ->toContain('meta.business_capability_changed')
+        ->not->toContain('meta.messaging_limit_increased', 'meta.messaging_limit_reduced', 'meta.phone_status_changed', 'meta.waba_reinstated');
     $definition = collect($response->json('props.definitions'))
         ->firstWhere('type_key', 'meta.template_status_changed');
+    $accountAlert = collect($response->json('props.definitions'))
+        ->firstWhere('type_key', 'meta.waba_disabled_flagged');
+    $descriptions = collect($response->json('props.definitions'))->pluck('description');
 
     expect($definition['variables'])->toContain('template_name')
+        ->and($descriptions->every(fn ($description) => is_string($description) && $description !== ''))->toBeTrue()
+        ->and($accountAlert['description'])->toContain('flags or disables')
         ->and($definition['enabled'])->toBeFalse()
         ->and($definition['test_preview']['variables']['organization_name'])->toBe('Example Organization')
         ->and($definition['test_preview']['subject'])->toContain('[TEST]')
         ->and($definition['test_preview']['body'])->toContain('example_template')
         ->and($definition)->not->toHaveKey('webhook_secret');
 });
+
+it('lets authorized admins add and update a separate notification SMTP account without exposing its password', function () {
+    $staffId = managedNotificationUser('staff@example.com', 'Viewer');
+    $roleId = DB::table('roles')->insertGetId(['name' => 'Viewer']);
+    DB::table('role_permissions')->insert(['role_id' => $roleId, 'module' => 'notifications', 'action' => 'view']);
+    $this->withoutMiddleware([
+        App\Http\Middleware\CheckAppStatus::class,
+        App\Http\Middleware\HandleInertiaRequests::class,
+        App\Http\Middleware\SetOrganizationFromSession::class,
+        App\Http\Middleware\Localization::class,
+        App\Http\Middleware\VerifyCsrfToken::class,
+    ])->actingAs(App\Models\User::findOrFail($staffId), 'admin');
+
+    $url = '/admin/settings/notification-senders';
+    $input = [
+        'email' => ' Second@Example.com ',
+        'host' => 'smtp.example.com',
+        'port' => 587,
+        'encryption' => 'tls',
+        'username' => 'second@example.com',
+        'password' => 'secret-second-account',
+    ];
+    $this->post($url, $input)->assertForbidden();
+
+    $adminId = managedNotificationUser('admin@example.com', 'admin');
+    $this->actingAs(App\Models\User::findOrFail($adminId), 'admin');
+    $this->post($url, array_merge($input, ['port' => 70000]))->assertSessionHasErrors('port');
+    $this->post($url, array_merge($input, ['encryption' => 'none']))->assertSessionHasErrors('encryption');
+    $this->post($url, array_merge($input, ['password' => '']))->assertSessionHasErrors('password');
+    $this->post($url, $input)->assertRedirect();
+    $sender = NotificationEmailSender::firstOrFail();
+    expect($sender->email)->toBe('second@example.com')
+        ->and($sender->password)->toBe('secret-second-account')
+        ->and(DB::table('notification_email_senders')->value('password'))->not->toContain('secret-second-account')
+        ->and(app(NotificationCatalog::class)->approvedSenders())->toContain('second@example.com');
+
+    $page = $this->withHeader('X-Inertia', 'true')->get($url)->assertOk()
+        ->assertJsonPath('component', 'Admin/Setting/NotificationSenders');
+    expect($page->json('props.senderAccounts.0.email'))->toBe('second@example.com')
+        ->and($page->json('props.senderAccounts.0'))->not->toHaveKey('password');
+    $managedPage = $this->get('/admin/settings/managed-notifications')->assertOk();
+    expect($managedPage->json('props'))->not->toHaveKey('senderAccounts')
+        ->and($managedPage->json('props.senders'))->toContain('second@example.com');
+
+    $definition = NotificationDefinition::where('type_key', 'meta.template_status_changed')->firstOrFail();
+    $this->put('/admin/settings/managed-notifications/'.$definition->type_key,
+        managedNotificationDefinitionInput($definition, ['sender_email' => 'second@example.com']))
+        ->assertRedirect();
+    expect($definition->fresh()->sender_email)->toBe('second@example.com');
+
+    $this->actingAs(App\Models\User::findOrFail($staffId), 'admin')
+        ->put($url.'/'.$sender->id, [
+            'host' => 'smtp2.example.com', 'port' => 465, 'encryption' => 'ssl',
+            'username' => 'new-user', 'password' => '',
+        ])->assertForbidden();
+    $this->actingAs(App\Models\User::findOrFail($adminId), 'admin');
+
+    $this->post($url, $input)->assertSessionHasErrors('email');
+    $this->put($url.'/'.$sender->id, [
+        'host' => 'smtp2.example.com', 'port' => 465, 'encryption' => 'ssl',
+        'username' => 'new-user', 'password' => '',
+    ])->assertRedirect();
+    expect($sender->fresh()->host)->toBe('smtp2.example.com')
+        ->and($sender->fresh()->password)->toBe('secret-second-account');
+
+    $this->put($url.'/'.$sender->id, [
+        'host' => 'smtp2.example.com', 'port' => 465, 'encryption' => 'ssl',
+        'username' => 'new-user', 'password' => 'replacement-secret',
+    ])->assertRedirect();
+    expect($sender->fresh()->password)->toBe('replacement-secret');
+    expect(NotificationEvent::count())->toBe(0);
+});
+
+it('uses the selected account transport for notification email without changing the default mailer', function () {
+    NotificationEmailSender::create([
+        'email' => 'second@example.com', 'host' => 'smtp.second.example',
+        'port' => 465, 'encryption' => 'ssl', 'username' => 'smtp-user',
+        'password' => 'smtp-secret',
+    ]);
+    $defaultMailer = config('mail.default');
+    $manager = Mockery::mock(Illuminate\Mail\MailManager::class, [app()])->makePartial();
+    $manager->shouldReceive('createSymfonyTransport')->once()->andReturnUsing(function ($config) {
+        expect($config['host'])->toBe('smtp.second.example')
+            ->and($config['scheme'])->toBe('smtps')
+            ->and($config['username'])->toBe('smtp-user')
+            ->and($config['password'])->toBe('smtp-secret');
+
+        return new Symfony\Component\Mailer\Transport\NullTransport();
+    });
+    app()->instance('mail.manager', $manager);
+    $messages = [];
+    app('events')->listen(Illuminate\Mail\Events\MessageSending::class, function ($event) use (&$messages) {
+        $messages[] = $event->message;
+    });
+
+    DB::flushQueryLog();
+    DB::enableQueryLog();
+    app(EmailChannel::class)->sendRaw('second@example.com', 'recipient@example.com', 'Test', 'Body');
+    $senderQueries = collect(DB::getQueryLog())->filter(fn ($query) =>
+        str_contains(strtolower($query['query']), 'notification_email_senders'));
+    DB::disableQueryLog();
+
+    expect($messages)->toHaveCount(1)
+        ->and($senderQueries)->toHaveCount(1)
+        ->and($messages[0]->getFrom()[0]->getAddress())->toBe('second@example.com')
+        ->and($messages[0]->getTo()[0]->getAddress())->toBe('recipient@example.com')
+        ->and(config('mail.default'))->toBe($defaultMailer);
+});
+
+it('removes obsolete notification definitions and cancels their pending work', function ($type, $migration) {
+    $organizationId = managedNotificationOrganization('Tenant A');
+    $definition = (array) DB::table('notification_definitions')
+        ->where('type_key', 'meta.business_capability_changed')->first();
+    unset($definition['id']);
+    $definition['type_key'] = $type;
+    DB::table('notification_definitions')->insert($definition);
+
+    $eventIds = [];
+    foreach (['pending', 'resolved'] as $status) {
+        $eventIds[$status] = DB::table('notification_events')->insertGetId([
+            'organization_id' => $organizationId,
+            'type_key' => $type,
+            'event_key' => hash('sha256', $status),
+            'variables' => json_encode(['organization_name' => 'Tenant A']),
+            'status' => $status,
+            'created_at' => now(),
+            'updated_at' => now(),
+        ]);
+    }
+    $deliveryId = DB::table('notification_deliveries')->insertGetId([
+        'event_id' => $eventIds['resolved'],
+        'organization_id' => $organizationId,
+        'channel' => 'webhook',
+        'recipient_key' => hash('sha256', 'test-webhook'),
+        'status' => 'pending',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
+    (require base_path('database/migrations/'.$migration))->up();
+    app(NotificationCatalog::class)->ensureDefinitions();
+
+    expect(config('managed_notifications.types'))->not->toHaveKey($type)
+        ->and(NotificationDefinition::where('type_key', $type)->exists())->toBeFalse()
+        ->and(NotificationEvent::findOrFail($eventIds['pending'])->status)->toBe('canceled')
+        ->and(NotificationEvent::findOrFail($eventIds['resolved'])->status)->toBe('resolved')
+        ->and(NotificationDelivery::findOrFail($deliveryId)->status)->toBe('canceled');
+})->with([
+    'phone status changed' => ['meta.phone_status_changed', '2026_09_27_000002_remove_phone_status_changed_notification.php'],
+    'WABA reinstated' => ['meta.waba_reinstated', '2026_09_27_000003_remove_waba_reinstated_notification.php'],
+]);
 
 it('saves admin settings atomically and rejects stale revisions', function () {
     $adminId = managedNotificationUser('admin@example.com', 'admin');
@@ -621,6 +867,8 @@ it('does not send to an owner after their membership is suspended', function () 
     $event = app(NotificationEventRecorder::class)->record($org, $definition->type_key, 'suspended-owner', managedNotificationValues());
     app(NotificationResolver::class)->resolve($event->id);
     $delivery = NotificationDelivery::where('channel', 'email')->firstOrFail();
+    $replacementOwner = managedNotificationUser('owner@example.com', 'user');
+    managedNotificationOwner($org, $replacementOwner);
     DB::table('teams')->where('organization_id', $org)->where('user_id', $owner)->update(['status' => 'suspended']);
 
     Mail::shouldReceive('raw')->never();
@@ -647,8 +895,11 @@ it('does not deliver to a disabled user account', function () {
     expect($delivery->fresh()->status)->toBe('canceled');
 });
 
-it('includes only staff explicitly allowed to receive and view platform alerts', function () {
+it('delivers managed dashboard and email notifications only to organization owners', function () {
     $org = managedNotificationOrganization('Tenant A');
+    $owner = managedNotificationUser('owner@example.com', 'user');
+    managedNotificationOwner($org, $owner);
+    $admin = managedNotificationUser('admin@example.com', 'admin');
     $allowedRole = DB::table('roles')->insertGetId(['name' => 'Alert operator']);
     DB::table('role_permissions')->insert([
         ['role_id' => $allowedRole, 'module' => 'notifications', 'action' => 'receive'],
@@ -662,19 +913,85 @@ it('includes only staff explicitly allowed to receive and view platform alerts',
     $hidden = managedNotificationUser('hidden@example.com', 'Hidden operator');
     $definition = NotificationDefinition::where('type_key', 'meta.template_status_changed')->firstOrFail();
     app(NotificationDefinitionManager::class)->update($definition->type_key,
-        managedNotificationDefinitionInput($definition, ['delivery_mode' => 'dashboard']), $allowed);
+        managedNotificationDefinitionInput($definition), $allowed);
     $event = app(NotificationEventRecorder::class)->record($org, $definition->type_key, 'staff-permission', managedNotificationValues());
 
     app(NotificationResolver::class)->resolve($event->id);
 
-    expect(NotificationLog::where('user_id', $allowed)->count())->toBe(1)
-        ->and(NotificationLog::where('user_id', $hidden)->count())->toBe(0);
+    expect(NotificationLog::where('user_id', $owner)->count())->toBe(1)
+        ->and(NotificationLog::where('user_id', $admin)->count())->toBe(0)
+        ->and(NotificationLog::where('user_id', $allowed)->count())->toBe(0)
+        ->and(NotificationLog::where('user_id', $hidden)->count())->toBe(0)
+        ->and(NotificationDelivery::where('channel', 'email')->get()->pluck('destination')->all())
+        ->toBe(['owner@example.com']);
+});
+
+it('shows a persistent managed alert to its owner and records dismissal within the current tenant', function () {
+    $orgA = managedNotificationOrganization('Tenant A');
+    $orgB = managedNotificationOrganization('Tenant B');
+    $owner = managedNotificationUser('owner@example.com', 'user');
+    $staff = managedNotificationUser('staff@example.com', 'user');
+    managedNotificationOwner($orgA, $owner);
+    DB::table('teams')->insert([
+        'organization_id' => $orgA, 'user_id' => $staff, 'role' => 'agent', 'status' => 'active',
+    ]);
+    $first = NotificationLog::create([
+        'user_id' => $owner, 'organization_id' => $orgA,
+        'notification_type' => 'meta.template_disabled',
+        'payload' => ['message' => 'Template disabled'], 'delivered' => true,
+    ]);
+    $second = NotificationLog::create([
+        'user_id' => $owner, 'organization_id' => $orgA,
+        'notification_type' => 'meta.template_paused',
+        'payload' => ['message' => 'Template paused'], 'delivered' => true,
+    ]);
+    $otherTenant = NotificationLog::create([
+        'user_id' => $owner, 'organization_id' => $orgB,
+        'notification_type' => 'meta.template_disabled',
+        'payload' => ['message' => 'Other tenant'], 'delivered' => true,
+    ]);
+    $legacyStaff = NotificationLog::create([
+        'user_id' => $staff, 'organization_id' => $orgA,
+        'notification_type' => 'chat_assigned',
+        'payload' => ['message' => 'Chat assigned'], 'delivered' => true,
+    ]);
+    NotificationLog::create([
+        'user_id' => $staff, 'organization_id' => $orgA,
+        'notification_type' => 'meta.template_disabled',
+        'payload' => ['message' => 'Old staff alert'], 'delivered' => true,
+    ]);
+
+    $this->withoutMiddleware()->actingAs(App\Models\User::findOrFail($staff), 'user')
+        ->withSession(['current_organization' => $orgA]);
+    $this->getJson('/notifications/managed-unread')->assertOk()->assertJsonPath('notification', null);
+    $this->getJson('/notifications/unread-count')->assertJsonPath('count', 1);
+    $this->postJson('/notifications/'.$first->id.'/click')->assertNotFound();
+    $this->withHeader('X-Inertia', 'true')->get('/notifications')->assertOk()
+        ->assertJsonCount(1, 'props.notifications.data')
+        ->assertJsonPath('props.notifications.data.0.id', $legacyStaff->id);
+    expect($legacyStaff->fresh()->clicked)->toBeFalse();
+
+    $this->actingAs(App\Models\User::findOrFail($owner), 'user');
+    $this->getJson('/notifications/managed-unread')->assertOk()
+        ->assertJsonPath('notification.id', $first->id)
+        ->assertJsonPath('notification.message', 'Template disabled');
+    $this->postJson('/notifications/'.$otherTenant->id.'/click')->assertNotFound();
+    $this->postJson('/notifications/'.$first->id.'/click')->assertOk();
+    expect($first->fresh()->clicked)->toBeTrue()
+        ->and($first->fresh()->read_at)->not->toBeNull()
+        ->and($otherTenant->fresh()->clicked)->toBeFalse();
+    $this->getJson('/notifications/managed-unread')->assertJsonPath('notification.id', $second->id);
+    DB::table('teams')->where('organization_id', $orgA)->where('user_id', $owner)
+        ->update(['status' => 'suspended']);
+    $this->getJson('/notifications/managed-unread')->assertJsonPath('notification', null);
+    $this->postJson('/notifications/'.$second->id.'/click')->assertNotFound();
 });
 
 it('keeps the user inbox scoped to the selected organization and preserves chat alerts', function () {
     $orgA = managedNotificationOrganization('Tenant A');
     $orgB = managedNotificationOrganization('Tenant B');
     $userId = managedNotificationUser('owner@example.com', 'user');
+    managedNotificationOwner($orgA, $userId);
     $newType = NotificationLog::create([
         'user_id' => $userId, 'organization_id' => $orgA,
         'notification_type' => 'meta.template_status_changed',
@@ -699,6 +1016,38 @@ it('keeps the user inbox scoped to the selected organization and preserves chat 
     $this->postJson('/notifications/'.$otherTenant->id.'/click')->assertNotFound();
     $this->postJson('/notifications/'.$newType->id.'/click')->assertOk();
     expect($otherTenant->fresh()->clicked)->toBeFalse();
+});
+
+it('paginates full notification messages in stable order without mixing tenants', function () {
+    $orgA = managedNotificationOrganization('Tenant A');
+    $orgB = managedNotificationOrganization('Tenant B');
+    $owner = managedNotificationUser('owner@example.com', 'user');
+    managedNotificationOwner($orgA, $owner);
+    $ids = [];
+    foreach (range(1, 23) as $number) {
+        $ids[] = NotificationLog::create([
+            'user_id' => $owner, 'organization_id' => $orgA,
+            'notification_type' => 'meta.template_disabled',
+            'payload' => ['message' => 'Alert '.$number], 'delivered' => true,
+        ])->id;
+    }
+    NotificationLog::create([
+        'user_id' => $owner, 'organization_id' => $orgB,
+        'notification_type' => 'meta.template_disabled',
+        'payload' => ['message' => 'Other tenant'], 'delivered' => true,
+    ]);
+
+    $this->withoutMiddleware()->actingAs(App\Models\User::findOrFail($owner), 'user')
+        ->withSession(['current_organization' => $orgA])
+        ->withHeader('X-Inertia', 'true');
+    $this->get('/notifications')->assertOk()
+        ->assertJsonCount(20, 'props.notifications.data')
+        ->assertJsonPath('props.notifications.data.0.id', end($ids))
+        ->assertJsonPath('props.notifications.data.0.payload.message', 'Alert 23')
+        ->assertJsonPath('props.notifications.total', 23);
+    $this->get('/notifications?page=2')->assertOk()
+        ->assertJsonCount(3, 'props.notifications.data')
+        ->assertJsonPath('props.notifications.data.2.id', $ids[0]);
 });
 
 it('rolls back the outbox event with the source transaction', function () {

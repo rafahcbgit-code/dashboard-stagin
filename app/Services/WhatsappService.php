@@ -12,11 +12,13 @@ use App\Models\Contact;
 use App\Models\Organization;
 use App\Models\Setting;
 use App\Models\Template;
+use App\Services\Meta\WhatsApp\TemplateStatusNotificationRecorder;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\GuzzleException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -3008,6 +3010,10 @@ class WhatsappService
         $client = new Client();
         $responseObject = new \stdClass();
         $organizationId = (int) $this->organizationId;
+        $syncOrganization = Organization::find($organizationId);
+        if (! $syncOrganization || (string) data_get(json_decode($syncOrganization->metadata ?: '{}', true), 'whatsapp.waba_id') !== (string) $this->wabaId) {
+            return (object) ['success' => false, 'message' => 'WhatsApp account does not match the organization.'];
+        }
 
         try {
             do {
@@ -3030,6 +3036,10 @@ class WhatsappService
                         ->where('meta_id', $templateData->id)->first();
 
                     if($template){
+                        DB::transaction(function () use ($organizationId, $templateData, $template) {
+                        $template = Template::where('organization_id', $organizationId)
+                            ->lockForUpdate()->findOrFail($template->id);
+                        $oldStatus = (string) $template->status;
                         // ── Carousel: preserve our carousel_cards before overwriting ──
                         // Meta's response replaces header_handle with CDN URLs and drops
                         // any custom keys we stored. We rebuild carousel_cards from the
@@ -3049,10 +3059,21 @@ class WhatsappService
                         $template->name = $templateData->name ?? $template->name;
                         $template->language = $templateData->language ?? $template->language;
                         $template->status = $templateData->status;
+                        if ($oldStatus !== (string) $template->status) {
+                            $template->notification_transition_sequence++;
+                            $template->last_status_change_at = now();
+                        }
                         $template->category = $templateData->category ?? $template->category;
                         $template->updated_at = now();
                         $template->deleted_at = NULL;
                         $template->save();
+                        if ($oldStatus !== (string) $template->status) {
+                            $organization = Organization::findOrFail($organizationId);
+                            app(TemplateStatusNotificationRecorder::class)->record(
+                                $template, $organization, $oldStatus, (string) $template->status
+                            );
+                        }
+                        });
                     } else {
                         // New template from Meta we don't have locally yet
                         $newMeta = json_decode(json_encode($templateData), true);

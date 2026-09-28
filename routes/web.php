@@ -483,7 +483,14 @@ Route::middleware(['auth:user'])->group(function () {
                         \App\Http\Middleware\Localization::class,
                         \App\Http\Middleware\IsTrial::class,
                     ]);
-                Route::post('/notifications/{id}/click', [App\Http\Controllers\User\NotificationController::class, 'markClicked']);
+                Route::get('/notifications/managed-unread', [App\Http\Controllers\User\NotificationController::class, 'pendingManaged'])
+                    ->withoutMiddleware([
+                        \App\Http\Middleware\HandleInertiaRequests::class,
+                        \App\Http\Middleware\Localization::class,
+                        \App\Http\Middleware\IsTrial::class,
+                    ]);
+                Route::post('/notifications/{id}/click', [App\Http\Controllers\User\NotificationController::class, 'markClicked'])
+                    ->withoutMiddleware(\App\Http\Middleware\IsTrial::class);
                 Route::post('/notifications/mark-all-read', [App\Http\Controllers\User\NotificationController::class, 'markAllRead']);
 
                 //Route::get('/whatsapp/message', [App\Http\Controllers\User\WhatsappController::class, 'sendMessage']);
@@ -509,6 +516,8 @@ Route::prefix('admin')->middleware(['auth:admin', 'admin.permission'])->group(fu
     Route::post('/organizations/sync-whatsapp-number-statuses', [App\Http\Controllers\Admin\OrganizationController::class, 'syncWhatsappNumberStatuses'])
         ->name('admin.organizations.sync-whatsapp-number-statuses');
     Route::resource('organizations', App\Http\Controllers\Admin\OrganizationController::class);
+    Route::post('/organizations/{uuid}/subscription/extend', [App\Http\Controllers\Admin\OrganizationController::class, 'extendSubscription']);
+    Route::post('/organizations/{uuid}/subscription/renew', [App\Http\Controllers\Admin\OrganizationController::class, 'renewSubscription']);
     Route::get('/organizations/{id}/login-as', [App\Http\Controllers\AuthController::class, 'loginAs']);
     /*Route::resource('blog/posts', App\Http\Controllers\Admin\BlogController::class);
     Route::resource('blog/categories', App\Http\Controllers\Admin\BlogCategoryController::class);
@@ -559,6 +568,10 @@ Route::prefix('admin')->middleware(['auth:admin', 'admin.permission'])->group(fu
     Route::match(['get', 'post'], '/settings/timezone', [App\Http\Controllers\Admin\SettingController::class, 'timezone']);
     Route::get('/settings/email-templates', [App\Http\Controllers\Admin\EmailTemplateController::class, 'index']);
     Route::get('/settings/managed-notifications', [App\Http\Controllers\Admin\ManagedNotificationController::class, 'index']);
+    Route::get('/settings/notification-senders', [App\Http\Controllers\Admin\NotificationEmailSenderController::class, 'index']);
+    Route::post('/settings/notification-senders', [App\Http\Controllers\Admin\NotificationEmailSenderController::class, 'store']);
+    Route::put('/settings/notification-senders/{sender}', [App\Http\Controllers\Admin\NotificationEmailSenderController::class, 'update']);
+    Route::get('/settings/notification-deliveries', [App\Http\Controllers\Admin\ManagedNotificationController::class, 'deliveries']);
     Route::put('/settings/managed-notifications/{typeKey}', [App\Http\Controllers\Admin\ManagedNotificationController::class, 'update']);
     Route::post('/settings/managed-notifications/{typeKey}/test-email', [App\Http\Controllers\Admin\ManagedNotificationController::class, 'testEmail'])
         ->middleware('throttle:6,1');

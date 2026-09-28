@@ -15,6 +15,11 @@ class Subscription extends Model {
     protected $appends = ['next_billing_date'];
     public $timestamps = true;
 
+    public static function currentForOrganization(int $organizationId): ?self
+    {
+        return self::where('organization_id', $organizationId)->orderByDesc('id')->first();
+    }
+
     /**
      * Returns true if the given organization currently has an active trial subscription.
      */
@@ -22,7 +27,7 @@ class Subscription extends Model {
     {
         // Use the most recent subscription record for this organization.
         $subscription = self::where('organization_id', $organizationId)
-            ->orderByDesc('created_at')
+            ->orderByDesc('id')
             ->first();
 
         if (! $subscription) {

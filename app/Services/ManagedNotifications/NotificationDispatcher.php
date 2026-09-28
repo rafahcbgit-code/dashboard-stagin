@@ -38,7 +38,9 @@ class NotificationDispatcher
                 ->whereNull('deleted_at')->exists();
 
             $eligible = $delivery->channel !== 'email' || $this->recipients->isEligibleEmail(
-                $delivery->organization_id, (string) $delivery->destination
+                $delivery->organization_id,
+                (string) $delivery->destination,
+                $delivery->recipient_user_id === null ? null : (int) $delivery->recipient_user_id
             );
 
             if (! $event || $event->status !== 'resolved' || (int) $event->organization_id !== (int) $delivery->organization_id

@@ -19,16 +19,15 @@
         class="transform top-0 left-0 w-full bg-white fixed h-full overflow-auto ease-in-out transition-all duration-300 z-30"
         :class="isSidebarOpen ? 'translate-x-0' : '-translate-x-full'">
         <aside class="flex flex-col h-full w-full bg-white">
-            <Menu :isSidebarOpen="isSidebarOpen" :config="props.config" :user="props.user" :organization="props.organization" :organizations="props.organizations" :unreadNotifications="unreadNotifications" @closeSidebar="closeSidebar()"></Menu>
+            <Menu :isSidebarOpen="isSidebarOpen" :config="props.config" :user="props.user" :organization="props.organization" :organizations="props.organizations" :unreadNotifications="props.unreadNotifications" @closeSidebar="closeSidebar()"></Menu>
         </aside>
     </aside>
 
     <ProfileModal :user="props.user" :organization="props.organization" :isOpen="isProfileOpen" role="user" @close="closeModal()"/>
 </template>
 <script setup>
-    import axios from "axios";
     import { Link, useForm } from "@inertiajs/vue3";
-    import { defineProps, ref, onMounted, onUnmounted } from "vue";
+    import { defineProps, ref } from "vue";
     import Menu from "./Menu.vue";
     import ProfileModal from '@/Components/ProfileModal.vue';
 
@@ -59,28 +58,14 @@
             type: Object,
             required: true,
         },
+        unreadNotifications: {
+            type: Number,
+            default: 0,
+        },
     });
 
     const isSidebarOpen = ref(false);
     const isProfileOpen = ref(false);
-    const unreadNotifications = ref(0);
-
-    onMounted(async () => {
-        try {
-            const response = await axios.get('/notifications/unread-count');
-            unreadNotifications.value = response.data.count || 0;
-        } catch (e) {
-            // Silently fail
-        }
-    });
-
-    const incrementUnreadNotifications = () => {
-        unreadNotifications.value = Number(unreadNotifications.value || 0) + 1;
-    };
-
-    onMounted(() => window.addEventListener('notification:received', incrementUnreadNotifications));
-    onUnmounted(() => window.removeEventListener('notification:received', incrementUnreadNotifications));
-
     const closeSidebar = () => {
         isSidebarOpen.value = false;
     }

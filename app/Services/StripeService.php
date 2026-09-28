@@ -377,7 +377,7 @@ class StripeService
                     if($stripeEvent->data->object->mode == 'subscription'){
                         //Save plan id to database
                         if($metadata->plan_id != NULL){
-                            $subscription = Subscription::where('organization_id', $metadata->organization_id)->first();
+                            $subscription = Subscription::currentForOrganization((int) $metadata->organization_id);
                             if ($subscription) {
                                 $subscription->update([
                                     'plan_id' => $metadata->plan_id
@@ -426,7 +426,7 @@ class StripeService
                 $organization = Organization::whereJsonContains('metadata->stripe_id', $customerId)->first();
 
                 if ($organization) {
-                    $subscription = Subscription::where('organization_id', $organization->id)->first();
+                    $subscription = Subscription::currentForOrganization((int) $organization->id);
                     $organizationId = $organization->id;
                     $planId = $subscription->plan_id;
                     $amount = $stripeEvent->data->object->total/100;

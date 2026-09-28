@@ -14,7 +14,7 @@ use App\Services\SubscriptionUsageService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Str;
 
-uses(RefreshDatabase::class);
+uses(Tests\TestCase::class, RefreshDatabase::class);
 
 function createUsageContext(array $limits = []): array
 {

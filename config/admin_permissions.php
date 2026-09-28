@@ -34,6 +34,8 @@ return [
      * method/URI pair wins; every admin route for a non-super-admin must map.
      */
     'routes' => [
+        ['POST', 'admin/organizations/*/subscription/extend', 'organizations', 'edit'],
+        ['POST', 'admin/organizations/*/subscription/renew', 'organizations', 'edit'],
         ['GET', 'admin/chatbot-studio*', 'organizations', 'view'],
         ['POST', 'admin/chatbot-studio*', 'organizations', 'edit'],
         ['PUT', 'admin/chatbot-studio*', 'organizations', 'edit'],
@@ -58,6 +60,10 @@ return [
         ['GET', 'admin/settings', 'settings', 'view'], ['GET', 'admin/settings/general', 'settings', 'general'], ['POST', 'admin/settings/general', 'settings', 'general'], ['GET', 'admin/settings/timezone', 'settings', 'timezone'], ['POST', 'admin/settings/timezone', 'settings', 'timezone'], ['GET', 'admin/settings/broadcast-drivers', 'settings', 'broadcast_driver'], ['GET', 'admin/settings/smtp', 'settings', 'smtp'], ['GET', 'admin/settings/billing', 'settings', 'billing'], ['POST', 'admin/settings/billing', 'settings', 'billing'], ['GET', 'admin/settings/storage', 'settings', 'storage'], ['GET', 'admin/settings/socials', 'settings', 'socials'], ['GET', 'admin/settings/subscription', 'settings', 'subscription'], ['GET', 'admin/settings/email-template*', 'settings', 'email_templates'], ['PUT', 'admin/settings/email-template/*', 'settings', 'email_templates'], ['GET', 'admin/settings/page*', 'settings', 'frontend'], ['POST', 'admin/settings/pages', 'settings', 'frontend'], ['PUT', 'admin/settings/page/*', 'settings', 'frontend'], ['DELETE', 'admin/settings/page/*', 'settings', 'frontend'], ['PUT', 'admin/settings', 'settings', 'edit'],
         ['GET', 'admin/updates*', 'updates', 'view'], ['POST', 'admin/update', 'updates', 'edit'],
         ['GET', 'admin/settings/managed-notifications', 'notifications', 'view'],
+        ['GET', 'admin/settings/notification-senders', 'notifications', 'view'],
+        ['POST', 'admin/settings/notification-senders', 'notifications', 'edit'],
+        ['PUT', 'admin/settings/notification-senders/*', 'notifications', 'edit'],
+        ['GET', 'admin/settings/notification-deliveries', 'notifications', 'view'],
         ['PUT', 'admin/settings/managed-notifications/*', 'notifications', 'edit'],
         ['POST', 'admin/settings/managed-notifications/*/test-email', 'notifications', 'edit'],
         ['GET', 'admin/notifications', 'notifications', 'view'],

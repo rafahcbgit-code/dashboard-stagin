@@ -41,7 +41,9 @@ class NotificationResolver
                 $allowed = $this->catalog->get($event->type_key)['variables'];
                 $values = $event->variables;
                 $this->renderer->validateValues($values, $allowed);
-                $mode = $definition->delivery_mode;
+                $mode = $event->type_key === 'subscription.resource_warning'
+                    ? ((int) ($event->variables['threshold'] ?? 0) >= 90 ? 'dashboard_email' : 'dashboard')
+                    : $definition->delivery_mode;
                 $rendered = [
                     'dashboard' => $this->renderer->render($definition->dashboard_template, $values, $allowed),
                     'subject' => $this->renderer->render($definition->email_subject, $values, $allowed),

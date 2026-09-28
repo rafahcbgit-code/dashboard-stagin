@@ -2,6 +2,7 @@
 
 namespace App\Services\ManagedNotifications;
 
+use App\Models\NotificationEmailSender;
 use Illuminate\Support\Facades\DB;
 use InvalidArgumentException;
 
@@ -15,6 +16,21 @@ class NotificationCatalog
         'old_limit' => '250',
         'new_limit' => '1000',
         'phone_number' => '+1 555 0100',
+        'waba_id' => '1234567890',
+        'ban_state' => 'FLAGGED',
+        'old_quality' => 'GREEN',
+        'new_quality' => 'YELLOW',
+        'requested_name' => 'Example Brand',
+        'trial_end_date' => '2026-10-10',
+        'subscription_end_date' => '2026-10-10',
+        'days_remaining' => '3',
+        'plan_name' => 'Business',
+        'old_plan_name' => 'Starter',
+        'new_plan_name' => 'Business',
+        'resource_name' => 'Template messages',
+        'usage' => '90',
+        'limit' => '100',
+        'threshold' => '90',
     ];
 
     public function all(): array
@@ -43,25 +59,43 @@ class NotificationCatalog
     {
         return array_values(array_unique(array_filter(array_map(
             fn ($email) => strtolower(trim((string) $email)),
-            array_merge([config('mail.from.address')], config('managed_notifications.allowed_senders', []))
+            array_merge($this->configuredSenders(), NotificationEmailSender::query()->pluck('email')->all())
         ), fn ($email) => filter_var($email, FILTER_VALIDATE_EMAIL))));
+    }
+
+    public function isConfiguredSender(string $email): bool
+    {
+        return in_array(strtolower(trim($email)), $this->configuredSenders(), true);
+    }
+
+    private function configuredSenders(): array
+    {
+        return array_values(array_filter(array_map(
+            fn ($email) => strtolower(trim((string) $email)),
+            array_merge([config('mail.from.address')], config('managed_notifications.allowed_senders', []))
+        ), fn ($email) => filter_var($email, FILTER_VALIDATE_EMAIL)));
     }
 
     public function ensureDefinitions(): void
     {
+        $defaultSender = $this->approvedSenders()[0] ?? null;
+        $rows = [];
         foreach ($this->all() as $key => $type) {
-            DB::table('notification_definitions')->insertOrIgnore([
+            $rows[] = [
                 'type_key' => $key,
                 'enabled' => false,
-                'delivery_mode' => 'dashboard',
+                'delivery_mode' => $type['delivery_mode'] ?? 'dashboard',
                 'dashboard_template' => $type['dashboard'],
                 'email_subject' => $type['subject'],
                 'email_body' => $type['email'],
-                'sender_email' => $this->approvedSenders()[0] ?? null,
+                'sender_email' => $defaultSender,
                 'revision' => 1,
                 'created_at' => now(),
                 'updated_at' => now(),
-            ]);
+            ];
+        }
+        if ($rows) {
+            DB::table('notification_definitions')->insertOrIgnore($rows);
         }
     }
 }

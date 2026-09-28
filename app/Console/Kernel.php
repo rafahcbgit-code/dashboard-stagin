@@ -66,6 +66,14 @@ class Kernel extends ConsoleKernel
             ->everyMinute()
             ->withoutOverlapping();
 
+        $schedule->command('notifications:subscription-scan')
+            ->everyMinute()
+            ->withoutOverlapping();
+
+        $schedule->command('notifications:subscription-scan --usage')
+            ->hourly()
+            ->withoutOverlapping();
+
         $schedule->command('notifications:prune')
             ->daily()
             ->withoutOverlapping();

@@ -1,1 +1,0 @@
-import{ad as r}from"./index-cfdb8afd.js";import{H as s,f as t,g as n,b6 as p,aP as i,u as c,o as l,E as d}from"./app-e1678b12.js";const _=s({__name:"ToastProvider",props:{label:{},duration:{},swipeDirection:{},swipeThreshold:{}},setup(e){const o=e;return(a,u)=>(l(),t(c(r),p(i(o)),{default:n(()=>[d(a.$slots,"default")]),_:3},16))}});export{_};
