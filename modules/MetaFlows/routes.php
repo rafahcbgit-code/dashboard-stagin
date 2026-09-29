@@ -31,6 +31,7 @@ Route::middleware(['auth:user'])->prefix('/automation/meta-flows')->group(functi
     Route::post('/{uuid}/publish',   [MetaFlowController::class, 'publish']);
     Route::post('/{uuid}/deprecate', [MetaFlowController::class, 'deprecate']);
     Route::post('/{uuid}/sync',      [MetaFlowController::class, 'sync']);
+    Route::get('/{uuid}/responses/export', [MetaFlowController::class, 'exportResponses']);
     Route::get('/{uuid}/responses',  [MetaFlowController::class, 'responses']);
 
     // Google Sheets per-flow routes

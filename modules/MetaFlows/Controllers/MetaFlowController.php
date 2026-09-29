@@ -230,6 +230,7 @@ class MetaFlowController extends BaseController
 
         $responses = MetaFlowResponse::where('meta_flow_id', $flow->id)
             ->where('organization_id', $orgId)
+            ->whereNotNull('response_json')
             ->orderByDesc('created_at')
             ->paginate(20)
             ->withQueryString();
@@ -238,6 +239,106 @@ class MetaFlowController extends BaseController
             'flow'      => $flow,
             'responses' => $responses,
         ]);
+    }
+
+    // Export all completed responses for a specific flow, independently of the current page.
+    public function exportResponses(Request $request, string $uuid)
+    {
+        if (!CustomHelper::isModuleEnabled('Meta Flows')) {
+            abort(404);
+        }
+
+        $orgId = session()->get('current_organization');
+
+        $flow = MetaFlow::where('uuid', $uuid)
+            ->where('organization_id', $orgId)
+            ->firstOrFail();
+
+        $query = MetaFlowResponse::where('meta_flow_id', $flow->id)
+            ->where('organization_id', $orgId)
+            ->whereNotNull('response_json')
+            ->orderByDesc('created_at')
+            ->orderByDesc('id');
+
+        // The response fields are dynamic, so discover the complete header set before
+        // opening the download stream. The query is then streamed a second time for rows.
+        $fieldKeys = [];
+        foreach ((clone $query)->cursor() as $response) {
+            foreach (array_keys($this->parseResponseData($response->response_json)) as $key) {
+                $fieldKeys[$key] = true;
+            }
+        }
+        $fieldKeys = array_keys($fieldKeys);
+
+        $filename = preg_replace('/[^A-Za-z0-9\-_]+/', '-', strtolower($flow->name ?: 'meta-flow'));
+        $filename = trim($filename, '-') ?: 'meta-flow';
+        $filename .= '-responses.csv';
+
+        return response()->streamDownload(function () use ($query, $fieldKeys) {
+            $handle = fopen('php://output', 'w');
+
+            fputcsv($handle, ['Submitted At', 'Contact', 'Flow Token', ...$fieldKeys]);
+
+            foreach ((clone $query)->cursor() as $response) {
+                $data = $this->parseResponseData($response->response_json);
+
+                fputcsv($handle, [
+                    $response->created_at?->toDateTimeString() ?? '',
+                    $response->contact_id ?? '',
+                    $response->flow_token ?? '',
+                    ...array_map(
+                        fn ($key) => $this->formatCsvValue($data[$key] ?? null),
+                        $fieldKeys
+                    ),
+                ]);
+            }
+
+            fclose($handle);
+        }, $filename, [
+            'Content-Type' => 'text/csv; charset=UTF-8',
+        ]);
+    }
+
+    private function parseResponseData(?string $raw): array
+    {
+        if (!$raw) {
+            return [];
+        }
+
+        $decoded = json_decode($raw, true);
+
+        if (!is_array($decoded)) {
+            return [];
+        }
+
+        $data = $decoded;
+
+        if (is_array($decoded['response_payload'] ?? null) && array_key_exists('data', $decoded['response_payload'])) {
+            $data = $decoded['response_payload']['data'];
+        } elseif (array_key_exists('data', $decoded)) {
+            $data = $decoded['data'];
+        }
+
+        return is_array($data) ? $data : [];
+    }
+
+    private function formatCsvValue(mixed $value): string
+    {
+        if ($value === null || is_scalar($value)) {
+            return (string) ($value ?? '');
+        }
+
+        if (is_array($value)) {
+            return implode(', ', array_map(function ($item) {
+                if ($item === null || is_scalar($item)) {
+                    return (string) ($item ?? '');
+                }
+
+                return json_encode($item, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '';
+            }, $value));
+        }
+
+        return json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '';
     }
 
     // Return the Google OAuth connection status for the current organization
