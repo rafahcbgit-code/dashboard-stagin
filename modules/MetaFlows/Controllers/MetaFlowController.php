@@ -5,6 +5,7 @@ namespace Modules\MetaFlows\Controllers;
 use App\Http\Controllers\Controller as BaseController;
 use App\Helpers\CustomHelper;
 use App\Helpers\DateTimeHelper;
+use App\Models\Contact;
 use App\Models\Organization;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -257,6 +258,12 @@ class MetaFlowController extends BaseController
         $query = MetaFlowResponse::where('meta_flow_id', $flow->id)
             ->where('organization_id', $orgId)
             ->whereNotNull('response_json')
+            ->addSelect([
+                'contact_phone' => Contact::withTrashed()->select('phone')
+                    ->whereColumn('contacts.id', 'meta_flow_responses.contact_id')
+                    ->where('contacts.organization_id', $orgId)
+                    ->limit(1),
+            ])
             ->orderByDesc('created_at')
             ->orderByDesc('id');
 
@@ -277,14 +284,14 @@ class MetaFlowController extends BaseController
         return response()->streamDownload(function () use ($query, $fieldKeys) {
             $handle = fopen('php://output', 'w');
 
-            fputcsv($handle, ['Submitted At', 'Contact', 'Flow Token', ...$fieldKeys]);
+            fputcsv($handle, ['Submitted At', 'Contact Number', 'Flow Token', ...$fieldKeys]);
 
             foreach ((clone $query)->cursor() as $response) {
                 $data = $this->parseResponseData($response->response_json);
 
                 fputcsv($handle, [
                     $response->created_at?->toDateTimeString() ?? '',
-                    $response->contact_id ?? '',
+                    $response->contact_phone ?? '',
                     $response->flow_token ?? '',
                     ...array_map(
                         fn ($key) => $this->formatCsvValue($data[$key] ?? null),
