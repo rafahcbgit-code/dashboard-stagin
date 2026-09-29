@@ -16,6 +16,7 @@ use App\Services\Meta\WhatsApp\TemplateStatusNotificationRecorder;
 use GuzzleHttp\Client;
 use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\GuzzleException;
+use GuzzleHttp\Exception\RequestException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
@@ -260,10 +261,13 @@ class WhatsappService
             event(new NewChatEvent($chatArray, $contact->organization_id));
         }
 
-        // Trigger webhook
-        WebhookHelper::triggerWebhookEvent('message.sent', [
-            'data' => $responseObject,
-        ], $contact->organization_id);
+        // A failed provider request must never be advertised to integrations
+        // as message.sent.
+        if (($responseObject->success ?? false) === true) {
+            WebhookHelper::triggerWebhookEvent('message.sent', [
+                'data' => $responseObject,
+            ], $contact->organization_id);
+        }
 
         return $responseObject;
     }
@@ -503,10 +507,11 @@ class WhatsappService
             }
         }
 
-        // Trigger webhook
-        WebhookHelper::triggerWebhookEvent('message.sent', [
-            'data' => $responseObject,
-        ], $contact->organization_id);
+        if (($responseObject->success ?? false) === true) {
+            WebhookHelper::triggerWebhookEvent('message.sent', [
+                'data' => $responseObject,
+            ], $contact->organization_id);
+        }
 
         return $responseObject;
     }
@@ -1797,10 +1802,11 @@ class WhatsappService
 
         //Log::info(json_encode($responseObject, true));
 
-        // Trigger webhook
-        WebhookHelper::triggerWebhookEvent('message.sent', [
-            'data' => $responseObject,
-        ], $contact->organization_id);
+        if (($responseObject->success ?? false) === true) {
+            WebhookHelper::triggerWebhookEvent('message.sent', [
+                'data' => $responseObject,
+            ], $contact->organization_id);
+        }
 
         return $responseObject;
     }
@@ -3849,10 +3855,11 @@ class WhatsappService
             }
         }
 
-        // Trigger webhook
-        WebhookHelper::triggerWebhookEvent('message.sent', [
-            'data' => $responseObject,
-        ], $organizationId ?? $contact->organization_id);
+        if (($responseObject->success ?? false) === true) {
+            WebhookHelper::triggerWebhookEvent('message.sent', [
+                'data' => $responseObject,
+            ], $organizationId ?? $contact->organization_id);
+        }
 
         return ['chat' => $chat, 'responseObject' => $responseObject];
     }
@@ -3916,6 +3923,8 @@ class WhatsappService
     {
         $client = self::getSharedClient();
         $responseObject = new \stdClass();
+        $correlationId = (string) \Illuminate\Support\Str::uuid();
+        $startedAt = microtime(true);
 
         try {
             $requestOptions = [
@@ -3927,7 +3936,29 @@ class WhatsappService
             }
 
             $response = $client->request($method, $url, $requestOptions);
-            $body = json_decode($response->getBody()->getContents());
+            $rawBody = (string) $response->getBody();
+            $body = $rawBody !== '' ? json_decode($rawBody) : null;
+
+            $responseObject->correlation_id = $correlationId;
+            $responseObject->http_status = $response->getStatusCode();
+            $responseObject->meta_request_id = $response->getHeaderLine('x-fb-request-id') ?: null;
+            $responseObject->meta_trace_id = $response->getHeaderLine('x-fb-trace-id') ?: null;
+            $responseObject->duration_ms = (int) round((microtime(true) - $startedAt) * 1000);
+
+            if (! is_object($body)) {
+                $responseObject->success = false;
+                $responseObject->data = (object) [
+                    'error' => (object) ['message' => 'WhatsApp returned an empty or unexpected JSON response.'],
+                ];
+                $responseObject->message = 'WhatsApp returned an empty or unexpected JSON response.';
+                $responseObject->failure_kind = 'invalid_response';
+                $responseObject->json_error = $body === null ? json_last_error_msg() : 'Unexpected JSON shape';
+                $responseObject->response_excerpt = mb_substr($rawBody, 0, 2000);
+
+                $this->logHttpFailure($method, $responseObject, $responseObject->json_error, [], $data['type'] ?? null);
+
+                return $responseObject;
+            }
 
             // Meta can return HTTP 200 with an error object in the body
             // (e.g. rate limit 130429). Treat these as failures.
@@ -3937,32 +3968,139 @@ class WhatsappService
                 $responseObject->message = $body->error->error_user_msg
                     ?? $body->error->message
                     ?? 'Unknown error';
+                $responseObject->error_code = $body->error->code ?? null;
+                $responseObject->error_subcode = $body->error->error_subcode ?? null;
+                $responseObject->failure_kind = 'meta_error';
+                $responseObject->response_excerpt = mb_substr($rawBody, 0, 2000);
+                $this->logHttpFailure($method, $responseObject, null, [], $data['type'] ?? null);
             } else {
                 $responseObject->success = true;
                 $responseObject->data = $body;
             }
         } catch (ConnectException $e) {
-            $responseObject->success = false;
-            $responseObject->data = new \stdClass();
-            $responseObject->data->error = new \stdClass();
-            $responseObject->data->error->message = $e->getMessage();
-        } catch (GuzzleException $e) {
+            $handlerContext = $e->getHandlerContext();
+            $responseObject = $this->buildHttpExceptionResponse(
+                $e,
+                null,
+                '',
+                $correlationId,
+                $startedAt,
+                'connection_error'
+            );
+            $responseObject->curl_errno = $handlerContext['errno'] ?? null;
+            $responseObject->curl_error = $handlerContext['error'] ?? null;
+            $this->logHttpFailure($method, $responseObject, null, $handlerContext, $data['type'] ?? null);
+        } catch (RequestException $e) {
             $response = $e->getResponse();
-            $responseObject->success = false;
-            $responseObject->data = json_decode($response->getBody()->getContents());
-
-            if (isset($responseObject->data->error->error_user_msg)) {
-                $responseObject->message = $responseObject->data->error->error_user_msg;
-            } else {
-                $responseObject->message = $responseObject->data->error->message;
-            }
-        } catch (Exception $e) {
-            $responseObject->success = false;
-            $responseObject->data = new \stdClass();
-            $responseObject->data->error = new \stdClass();
-            $responseObject->data->error->message = $e->getMessage();
+            $rawBody = $response ? (string) $response->getBody() : '';
+            $responseObject = $this->buildHttpExceptionResponse(
+                $e,
+                $response,
+                $rawBody,
+                $correlationId,
+                $startedAt,
+                $response ? 'http_error' : 'delivery_unknown'
+            );
+            $handlerContext = $e->getHandlerContext();
+            $jsonError = $rawBody !== '' && json_decode($rawBody) === null ? json_last_error_msg() : null;
+            $responseObject->curl_errno = $handlerContext['errno'] ?? null;
+            $responseObject->curl_error = $handlerContext['error'] ?? null;
+            $responseObject->json_error = $jsonError;
+            $this->logHttpFailure(
+                $method,
+                $responseObject,
+                $jsonError,
+                $handlerContext,
+                $data['type'] ?? null
+            );
+        } catch (GuzzleException $e) {
+            $responseObject = $this->buildHttpExceptionResponse(
+                $e,
+                null,
+                '',
+                $correlationId,
+                $startedAt,
+                'guzzle_error'
+            );
+            $this->logHttpFailure($method, $responseObject, null, [], $data['type'] ?? null);
+        } catch (\Throwable $e) {
+            $responseObject = $this->buildHttpExceptionResponse(
+                $e,
+                null,
+                '',
+                $correlationId,
+                $startedAt,
+                'unexpected_error'
+            );
+            $this->logHttpFailure($method, $responseObject, null, [], $data['type'] ?? null);
         }
 
         return $responseObject;
+    }
+
+    private function buildHttpExceptionResponse(
+        \Throwable $exception,
+        $response,
+        string $rawBody,
+        string $correlationId,
+        float $startedAt,
+        string $failureKind
+    ): \stdClass {
+        $decodedBody = $rawBody !== '' ? json_decode($rawBody) : null;
+        $message = $decodedBody?->error?->error_user_msg
+            ?? $decodedBody?->error?->message
+            ?? $decodedBody?->message
+            ?? $exception->getMessage()
+            ?? 'WhatsApp request failed.';
+
+        $result = new \stdClass();
+        $result->success = false;
+        $result->correlation_id = $correlationId;
+        $result->http_status = $response?->getStatusCode();
+        $result->meta_request_id = $response?->getHeaderLine('x-fb-request-id') ?: null;
+        $result->meta_trace_id = $response?->getHeaderLine('x-fb-trace-id') ?: null;
+        $result->duration_ms = (int) round((microtime(true) - $startedAt) * 1000);
+        $result->message = $message;
+        $result->error_code = $decodedBody?->error?->code ?? null;
+        $result->error_subcode = $decodedBody?->error?->error_subcode ?? null;
+        $result->exception_class = get_class($exception);
+        $result->failure_kind = $failureKind;
+        $result->response_excerpt = mb_substr($rawBody, 0, 2000);
+        $result->data = $decodedBody ?? (object) [
+            'error' => (object) ['message' => $message],
+        ];
+
+        return $result;
+    }
+
+    private function logHttpFailure(
+        string $method,
+        \stdClass $response,
+        ?string $jsonError = null,
+        array $handlerContext = [],
+        ?string $messageType = null
+    ): void {
+        Log::error('WhatsApp HTTP request failed', [
+            'correlation_id' => $response->correlation_id ?? null,
+            'organization_id' => $this->organizationId,
+            'phone_number_id' => $this->phoneNumberId,
+            'method' => $method,
+            'message_type' => $messageType,
+            'failure_kind' => $response->failure_kind ?? 'unknown',
+            'http_status' => $response->http_status ?? null,
+            'error_code' => $response->error_code ?? null,
+            'error_subcode' => $response->error_subcode ?? null,
+            'message' => $response->message ?? 'Unknown error',
+            'meta_request_id' => $response->meta_request_id ?? null,
+            'meta_trace_id' => $response->meta_trace_id ?? null,
+            'exception_class' => $response->exception_class ?? null,
+            'duration_ms' => $response->duration_ms ?? null,
+            'json_error' => $jsonError,
+            'curl_errno' => $handlerContext['errno'] ?? null,
+            'curl_error' => $handlerContext['error'] ?? null,
+            'connect_time' => $handlerContext['connect_time'] ?? null,
+            'total_time' => $handlerContext['total_time'] ?? null,
+            'response_excerpt' => $response->response_excerpt ?? null,
+        ]);
     }
 }

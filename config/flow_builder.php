@@ -14,4 +14,8 @@ return [
         'intval',
         explode(',', (string) env('FLOW_STALE_PORTAL_REENTRY_ORGANIZATIONS', ''))
     ))),
+
+    // Failures are always persisted. Successful attempts are opt-in to avoid
+    // unbounded write volume on high-throughput organizations.
+    'persist_successful_send_attempts' => env('FLOW_PERSIST_SUCCESSFUL_SEND_ATTEMPTS', false),
 ];
