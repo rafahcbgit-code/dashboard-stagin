@@ -4,8 +4,10 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller as BaseController;
 use App\Http\Requests\StoreOrganization;
+use App\Http\Requests\ManageSubscriptionPeriod;
 use App\Jobs\SyncWhatsappNumberStatusJob;
 use App\Services\OrganizationService;
+use App\Services\SubscriptionPeriodService;
 use Illuminate\Http\Request;
 use Inertia\Inertia;
 
@@ -110,6 +112,11 @@ class OrganizationController extends BaseController
             'resourceAccounts' => $res['resource_accounts'],
             'invoices' => $res['billing'],
             'subscriptionEvents' => $res['subscription_events'],
+            'subscriptionArchives' => \Illuminate\Support\Facades\DB::table('subscription_period_archives')
+                ->where('organization_id', $res['organization']->id)->orderByDesc('id')->paginate(20, ['*'], 'period_page')->withQueryString(),
+            'subscriptionTimezone' => app(SubscriptionPeriodService::class)->timezone($res['organization']),
+            'subscriptionExpiration' => ($expiration = $res['organization']->subscription?->getRawOriginal('valid_until'))
+                ? \Carbon\Carbon::parse($expiration, 'UTC')->setTimezone($res['organization']->effectiveTimezone())->toDateTimeString() : null,
             'mode' => $mode,
             'filters' => $request->all()
         ]);
@@ -170,6 +177,18 @@ class OrganizationController extends BaseController
                 'message' => __('Organization updated successfully!')
             ]
         );
+    }
+
+    public function extendSubscription(ManageSubscriptionPeriod $request, string $uuid, SubscriptionPeriodService $periods)
+    {
+        $periods->manage($uuid, 'extend', $request->validated(), (int) $request->user('admin')->id);
+        return back()->with('status', ['type' => 'success', 'message' => __('Subscription extended successfully.')]);
+    }
+
+    public function renewSubscription(ManageSubscriptionPeriod $request, string $uuid, SubscriptionPeriodService $periods)
+    {
+        $periods->manage($uuid, 'renew', $request->validated(), (int) $request->user('admin')->id);
+        return back()->with('status', ['type' => 'success', 'message' => __('Subscription renewed and previous usage archived successfully.')]);
     }
 
     /**

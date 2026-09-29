@@ -1,12 +1,13 @@
 <template>
     <div :class="rtlClass">
         <MobileSidebar :user="user" :config="config" :organization="organization" :organizations="organizations"
-            :title="currentPageTitle" :displayCreateBtn="displayCreateBtn" :displayTopBar="viewTopBar"></MobileSidebar>
+            :title="currentPageTitle" :displayCreateBtn="displayCreateBtn" :displayTopBar="viewTopBar"
+            :unreadNotifications="unreadNotifications"></MobileSidebar>
 
         <div class="md:mt-0 md:pt-0 flex md:h-screen md:overflow-hidden w-full tracking-[0.3px] bg-gray-300/10"
             :class="viewTopBar === false ? 'mt-0 pt-0' : ''">
             <Sidebar :user="user" :config="config" :organization="organization" :organizations="organizations"
-                :unreadMessages="unreadMessages"></Sidebar>
+                :unreadMessages="unreadMessages" :unreadNotifications="unreadNotifications"></Sidebar>
 
             <div class="flex flex-col w-full min-w-0 md:h-screen md:min-h-0 md:overflow-hidden">
 
@@ -50,6 +51,7 @@
         </div>
 
         <audio ref="audioPlayer" allow="autoplay"></audio>
+        <ManagedNotificationAlert v-if="isCurrentOwner" :key="organization?.id" />
     </div>
 </template>
 <script setup>
@@ -57,7 +59,9 @@
     import Sidebar from "./Sidebar.vue";
     import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
     import { toast } from 'vue3-toastify';
+    import axios from 'axios';
     import MobileSidebar from "./MobileSidebar.vue";
+    import ManagedNotificationAlert from "./ManagedNotificationAlert.vue";
     import 'vue3-toastify/dist/index.css';
     import { getEchoInstance } from '../../../echo';
     import { useRtl } from '@/Composables/useRtl';
@@ -68,10 +72,28 @@
     const user = computed(() => usePage().props.auth.user);
     const config = computed(() => usePage().props.config);
     const organization = computed(() => usePage().props.organization);
+    const isCurrentOwner = computed(() => user.value?.teams?.some(team =>
+        Number(team.organization_id) === Number(organization.value?.id)
+        && team.role === 'owner' && team.status === 'active'
+    ) ?? false);
     const organizations = computed(() => usePage().props.organizations);
     const currentPageTitle = computed(() => usePage().props.title);
     const displayCreateBtn = computed(() => usePage().props.allowCreate);
     const unreadMessages = ref(Number(usePage().props.unreadMessages) || 0);
+    const unreadNotifications = ref(0);
+
+    const refreshUnreadNotifications = async () => {
+        try {
+            const response = await axios.get('/notifications/unread-count');
+            unreadNotifications.value = Number(response.data.count) || 0;
+        } catch (e) {
+            // The badge is non-critical.
+        }
+    };
+
+    const incrementUnreadNotifications = () => {
+        unreadNotifications.value += 1;
+    };
     
     const isTrial = computed(() => usePage().props.is_trial); 
     const whatsapp_link = computed(() => usePage().props.whatsapp_link);
@@ -147,6 +169,9 @@
 
     onMounted(() => {
         window.addEventListener('chat:unread-adjusted', adjustUnreadMessages);
+        window.addEventListener('notification:received', incrementUnreadNotifications);
+        window.addEventListener('notification:changed', refreshUnreadNotifications);
+        refreshUnreadNotifications();
         setupSound();
         const pusherKey = getValueByKey('pusher_app_key');
         const pusherCluster = getValueByKey('pusher_app_cluster');
@@ -169,5 +194,7 @@
 
     onUnmounted(() => {
         window.removeEventListener('chat:unread-adjusted', adjustUnreadMessages);
+        window.removeEventListener('notification:received', incrementUnreadNotifications);
+        window.removeEventListener('notification:changed', refreshUnreadNotifications);
     });
 </script>

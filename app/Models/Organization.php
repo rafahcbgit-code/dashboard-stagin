@@ -19,6 +19,14 @@ class Organization extends Model
 
     public $timestamps = true;
 
+    public function effectiveTimezone(): string
+    {
+        $metadata = json_decode((string) $this->metadata, true);
+        $timezone = $metadata['timezone'] ?? $this->timezone ?? 'UTC';
+
+        return is_string($timezone) && in_array($timezone, timezone_identifiers_list(), true) ? $timezone : 'UTC';
+    }
+
     /**
      * Boot the model.
      * Story 2.2: AC-2.2.2 - Cache invalidation when organization metadata is updated.
@@ -156,7 +164,7 @@ class Organization extends Model
 
     public function subscription()
     {
-        return $this->belongsTo(Subscription::class, 'id', 'organization_id');
+        return $this->hasOne(Subscription::class, 'organization_id')->latestOfMany();
     }
 
     public function billingOrganization()

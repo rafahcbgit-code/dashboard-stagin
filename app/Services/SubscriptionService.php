@@ -58,7 +58,7 @@ class SubscriptionService
 
     public static function isSubscriptionActive(string $organizationId)
     {
-        $subscription = Subscription::where('organization_id', $organizationId)->first();
+        $subscription = Subscription::currentForOrganization((int) $organizationId);
 
         /*if($subscription->status != 'trial'){
             $billingDetails = self::calculateSubscriptionBillingDetails($organizationId, $subscription->plan_id);
@@ -97,7 +97,7 @@ class SubscriptionService
 
     public static function activateSubscriptionIfInactiveAndExpiredWithCredits($organizationId, $userId = 0)
     {
-        $subscription = Subscription::where('organization_id', $organizationId)->first();
+        $subscription = Subscription::currentForOrganization((int) $organizationId);
 
         if($subscription->valid_until < now()){
             if($subscription->plan_id){
@@ -108,12 +108,6 @@ class SubscriptionService
                 if($billingDetails['amountDue'] == 0){
                     self::createBillingInvoice($billingDetails, $organizationId, $planId, $userId);
 
-                    $team = Team::where('organization_id', $organizationId)->where('role', 'owner')->first();
-                    $user = User::where('id', $team->user_id)->first();
-                    $plan = SubscriptionPlan::where('id', $planId)->first();
-
-                    //Send subscription email
-                    Email::sendSubscriptionEmail('Subscription Renewal', $user, $plan);
                 }
             } 
         }
@@ -131,12 +125,6 @@ class SubscriptionService
             if($billingDetails['amountDue'] == 0){
                 self::createBillingInvoice($billingDetails, $organizationId, $planId, $userId);
 
-                $team = Team::where('organization_id', $organizationId)->where('role', 'owner')->first();
-                $user = User::where('id', $team->user_id)->first();
-                $plan = SubscriptionPlan::where('id', $planId)->first();
-
-                //Send subscription email
-                Email::sendSubscriptionEmail('Subscription Plan Purchase', $user, $plan);
             }
         }
     }
@@ -196,7 +184,7 @@ class SubscriptionService
             //Update subscription
             $plan = SubscriptionPlan::where('id', $planId)->first();
             
-            $subscription = Subscription::where('organization_id', $organizationId)->first();
+            $subscription = Subscription::currentForOrganization((int) $organizationId);
             if ($subscription) {
                 $subscription->update([
                     'plan_id' => $planId,
@@ -212,7 +200,7 @@ class SubscriptionService
 
     public static function calculateSubscriptionBillingDetails($organizationId, $selectedPlanId)
     {
-        $currentSubscription = Subscription::where('organization_id', $organizationId)->first();
+        $currentSubscription = Subscription::currentForOrganization((int) $organizationId);
         $subscriptionStatus = $currentSubscription->status;
 
         $selectedSubscriptionPlan = SubscriptionPlan::where('id', $selectedPlanId)->first();
@@ -358,7 +346,7 @@ class SubscriptionService
 
     private static function subscriptionPeriodInDays($organizationId)
     {
-        $subscription = Subscription::where('organization_id', $organizationId)->first();
+        $subscription = Subscription::currentForOrganization((int) $organizationId);
         $subscriptionStartDate = Carbon::parse($subscription->start_date);
         $subscriptionEndDate = Carbon::parse($subscription->valid_until);
 
@@ -367,7 +355,7 @@ class SubscriptionService
 
     private static function subscriptionPeriodRemainingDays($organizationId)
     {
-        $subscription = Subscription::where('organization_id', $organizationId)->first();
+        $subscription = Subscription::currentForOrganization((int) $organizationId);
 
         if ($subscription) {
             $subscriptionEndDate = Carbon::parse($subscription->valid_until)->endOfDay();
@@ -395,7 +383,7 @@ class SubscriptionService
             return ! (new SubscriptionUsageService())->canUse((int) $organizationId, $resource)['allowed'];
         }
 
-        $subscription = Subscription::where('organization_id', $organizationId)->first();
+        $subscription = Subscription::currentForOrganization((int) $organizationId);
 
         if (!$subscription) {
             return true;
@@ -485,7 +473,8 @@ class SubscriptionService
 
     public static function isSubscriptionLimitReachedForInboundMessages($organizationId)
     {
-        $subscription = Subscription::with('plan')->where('organization_id', $organizationId)->first();
+        $subscription = Subscription::with('plan')->where('organization_id', $organizationId)
+            ->orderByDesc('id')->first();
 
         // If no subscription is found, assume the limit is reached
         if (!$subscription) {

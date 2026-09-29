@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Helpers\DateTimeHelper;
 use App\Http\Traits\HasUuid;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Carbon\Carbon;
@@ -15,6 +16,27 @@ class Subscription extends Model {
     protected $appends = ['next_billing_date'];
     public $timestamps = true;
 
+    public static function currentForOrganization(int $organizationId): ?self
+    {
+        return self::where('organization_id', $organizationId)->orderByDesc('id')->first();
+    }
+
+    public function usagePeriodKey(): string
+    {
+        $start = $this->getRawOriginal('start_date') ?: $this->getRawOriginal('created_at');
+        return hash('sha256', $this->id.':'.$start.':'.(int) $this->usage_event_start_id.':'.(int) $this->conversation_start_id);
+    }
+
+    public function scopeLatestPerOrganization(Builder $query): Builder
+    {
+        // Seek the last entry of the tenant index instead of inspecting its history.
+        return $query->where('subscriptions.id', '=', function ($latest): void {
+            $latest->select('latest.id')->from('subscriptions as latest')
+                ->whereColumn('latest.organization_id', 'subscriptions.organization_id')
+                ->orderByDesc('latest.id')->limit(1);
+        });
+    }
+
     /**
      * Returns true if the given organization currently has an active trial subscription.
      */
@@ -22,7 +44,7 @@ class Subscription extends Model {
     {
         // Use the most recent subscription record for this organization.
         $subscription = self::where('organization_id', $organizationId)
-            ->orderByDesc('created_at')
+            ->orderByDesc('id')
             ->first();
 
         if (! $subscription) {

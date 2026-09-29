@@ -25,7 +25,7 @@
             <!-- Export CSV button -->
             <button
                 @click="exportCsv"
-                :disabled="!responses.data?.length"
+                :disabled="!responses.total"
                 class="rounded-lg border border-slate-200 px-3 py-1.5 text-sm text-slate-600 hover:bg-slate-50 disabled:opacity-40 transition-colors flex items-center gap-1.5"
             >
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
@@ -227,33 +227,8 @@
 
     // ── Export CSV ────────────────────────────────────────────────────────────
     const exportCsv = () => {
-        if (!props.responses.data?.length) return;
+        if (!props.responses.total) return;
 
-        // Collect all unique keys across all responses
-        const allKeys = new Set();
-        props.responses.data.forEach(r => {
-            const data = parsedResponse(r.response_json);
-            if (data) Object.keys(data).forEach(k => allKeys.add(k));
-        });
-
-        const headers = ['Submitted At', 'Contact', 'Flow Token', ...allKeys];
-        const rows = props.responses.data.map(r => {
-            const data = parsedResponse(r.response_json) ?? {};
-            return [
-                r.created_at,
-                r.contact_id ?? '',
-                r.flow_token ?? '',
-                ...[...allKeys].map(k => formatValue(data[k])),
-            ].map(v => `"${String(v).replace(/"/g, '""')}"`).join(',');
-        });
-
-        const csv  = [headers.join(','), ...rows].join('\n');
-        const blob = new Blob([csv], { type: 'text/csv' });
-        const url  = URL.createObjectURL(blob);
-        const a    = document.createElement('a');
-        a.href     = url;
-        a.download = `${props.flow.name}_responses.csv`;
-        a.click();
-        URL.revokeObjectURL(url);
+        window.location.href = `/automation/meta-flows/${props.flow.uuid}/responses/export`;
     };
 </script>

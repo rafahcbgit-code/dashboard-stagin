@@ -23,6 +23,24 @@ return [
     'cachePath'          => storage_path('app/purifier'),
     'cacheFileMode'      => 0755,
     'settings'      => [
+        'notification_email' => [
+            'HTML.Doctype' => 'HTML 4.01 Transitional',
+            'HTML.Allowed' => 'div[style|dir],p[style|dir],span[style|dir],br,hr[style],'
+                .'h1[style|dir],h2[style|dir],h3[style|dir],h4[style|dir],h5[style|dir],h6[style|dir],'
+                .'b,strong,i,em,u,s,small,sub,sup,blockquote[style|dir],pre[style|dir],code,'
+                .'a[href|title|style],img[src|alt|width|height|style],ul[style|dir],ol[style|dir],li[style|dir],'
+                .'table[style|width|align|border|cellpadding|cellspacing|bgcolor|dir],thead,tbody,tfoot,'
+                .'tr[style|align|valign|bgcolor],td[style|width|height|align|valign|colspan|rowspan|bgcolor|dir],'
+                .'th[style|width|height|align|valign|colspan|rowspan|bgcolor|dir]',
+            'CSS.AllowedProperties' => 'background-color,border,border-top,border-right,border-bottom,border-left,'
+                .'border-color,border-style,border-width,border-collapse,border-spacing,color,font,font-family,'
+                .'font-size,font-style,font-weight,height,line-height,margin,margin-top,margin-right,margin-bottom,'
+                .'margin-left,padding,padding-top,padding-right,padding-bottom,padding-left,text-align,text-decoration,'
+                .'vertical-align,white-space,width',
+            'URI.AllowedSchemes' => ['https' => true, 'http' => true, 'mailto' => true, 'tel' => true],
+            'AutoFormat.AutoParagraph' => false,
+            'AutoFormat.RemoveEmpty' => false,
+        ],
         'default' => [
             'HTML.Doctype'             => 'HTML 4.01 Transitional',
             'HTML.Allowed'             => 'div,b,strong,i,em,u,a[href|title],ul,ol,li,p[style],br,span[style],img[width|height|alt|src]',

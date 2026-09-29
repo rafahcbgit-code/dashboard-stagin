@@ -33,6 +33,17 @@
                     <Link href="/admin/organizations" class="rounded-md h-9 bg-black px-3 py-2 text-sm text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">{{ $t('Back') }}</Link>
                 </div>
             </div>
+            <div v-if="props.organization?.subscription && can('organizations', 'edit')" class="mb-5 rounded-md border bg-white p-4">
+                <p v-if="props.organization.billing_organization_id && props.organization.resource_account_sharing_enabled" class="text-sm">
+                    {{ $t('Manage the subscription of the resource account for this organization.') }}
+                    <Link :href="`/admin/organizations/${props.organization.billing_organization?.uuid}`" class="text-indigo-600 underline">{{ props.organization.billing_organization?.name }}</Link>
+                </p>
+                <div v-else class="flex flex-wrap items-center gap-3">
+                    <button type="button" @click="openPeriodAction('extend')" class="rounded-md border px-4 py-2 text-sm">{{ $t('Extend subscription') }}</button>
+                    <button v-if="props.organization.subscription.plan_id && props.organization.subscription.status !== 'trial'" type="button" @click="openPeriodAction('renew')" class="rounded-md bg-indigo-600 px-4 py-2 text-sm text-white">{{ $t('Renew subscription') }}</button>
+                    <p class="text-xs text-gray-500">{{ $t('Extend keeps current usage. Renew archives the current period and starts periodic usage again. Neither action records a payment.') }}</p>
+                </div>
+            </div>
             <div v-if="props.organization" class="flex border-b space-x-4 text-sm">
                 <div @click="changeTab('organization')" class="cursor-pointer px-2 py-2" :class="tab === 'organization' ? 'bg-white' : ''">{{ $t('User details') }}</div>
                 <div @click="changeTab('team')" class="cursor-pointer px-2 py-2" :class="tab === 'team' ? 'bg-white' : ''">{{ $t('Team') }}</div>
@@ -46,6 +57,24 @@
                 <BillingTable :rows="props.invoices" :filters="props.filters" :uuid="props.organization.uuid"/>
             </div>
             <div v-if="props.organization && tab === 'subscription_history'" class="pt-5">
+                <h3 class="mb-3 font-medium">{{ $t('Previous subscription periods') }}</h3>
+                <div class="mb-6 overflow-x-auto rounded-md border bg-white">
+                    <table class="min-w-full text-sm">
+                        <thead class="bg-slate-50 text-left"><tr>
+                            <th class="p-3">{{ $t('Start date') }}</th><th class="p-3">{{ $t('Valid until') }}</th>
+                            <th class="p-3">{{ $t('Archived at') }}</th><th class="p-3">{{ $t('Subscription plan') }}</th><th class="p-3">{{ $t('Resource usage') }}</th>
+                        </tr></thead>
+                        <tbody class="divide-y">
+                            <tr v-if="!props.subscriptionArchives?.data?.length"><td colspan="5" class="p-3 text-gray-500">{{ $t('No archived subscription periods yet.') }}</td></tr>
+                            <tr v-for="period in props.subscriptionArchives?.data ?? []" :key="period.id">
+                                <td class="p-3">{{ period.started_at }}</td><td class="p-3">{{ period.scheduled_end_at }}</td><td class="p-3">{{ period.closed_at }}</td>
+                                <td class="p-3">{{ parseSnapshot(period.plan_snapshot).plan_name }}</td>
+                                <td class="p-3"><div v-for="(usage, resource) in parseSnapshot(period.usage_snapshot)" :key="resource">{{ $t(resourceLabels[resource]) }}: {{ usage.pool_used ?? usage.used }} / {{ Number(usage.limit) === -1 ? $t('Unlimited') : usage.limit }}</div></td>
+                            </tr>
+                        </tbody>
+                    </table>
+                    <div class="flex gap-4 p-3"><Link v-if="props.subscriptionArchives?.prev_page_url" :href="props.subscriptionArchives.prev_page_url" preserve-scroll preserve-state>{{ $t('Previous') }}</Link><Link v-if="props.subscriptionArchives?.next_page_url" :href="props.subscriptionArchives.next_page_url" preserve-scroll preserve-state>{{ $t('Next') }}</Link></div>
+                </div>
                 <div class="overflow-x-auto rounded-md border bg-white">
                     <table class="min-w-full divide-y divide-gray-200 text-sm">
                         <thead class="bg-slate-50 text-left text-xs text-gray-500">
@@ -94,10 +123,11 @@
                                 :name="$t('Subscription expiration')"
                                 :error="form.errors.valid_until"
                                 :type="'datetime-local'"
-                                :min="minValidUntil"
+                                :min="props.organization?.subscription ? undefined : minValidUntil"
                                 :class="'sm:col-span-6'"
                             />
-                            <p class="text-xs text-gray-500 sm:col-span-6">{{ $t('Set this to a future date to extend or shorten the subscription expiry as needed.') }}</p>
+                            <p v-if="props.organization" class="text-xs text-gray-500 sm:col-span-6">{{ $t('Choose the expiration date when assigning or changing the plan. To change the date of the same plan, use Extend subscription or Renew subscription.') }}</p>
+                            <p v-if="props.organization" class="text-xs text-gray-500 sm:col-span-6">{{ $t('Dates use this organization timezone') }}: {{ props.subscriptionTimezone }}</p>
                             <FormSelect
                                 v-model="form.subscription_status"
                                 :name="$t('Subscription status')"
@@ -245,6 +275,14 @@
             </form>
         </div>
     </AppLayout>
+    <Modal :label="$t(periodAction === 'renew' ? 'Renew subscription' : 'Extend subscription')" :isOpen="periodModalOpen" @close="!periodForm.processing && (periodModalOpen = false)">
+        <form @submit.prevent="submitPeriodAction" class="space-y-4 py-4">
+            <p class="text-sm">{{ $t(periodAction === 'renew' ? 'Renew starts a new period now and archives the previous usage. Template messages and conversations start from zero; contacts and team members stay unchanged.' : 'Extend changes only the expiration date. The period start and resource usage stay unchanged.') }}</p>
+            <p class="text-xs text-gray-500">{{ $t('Dates use this organization timezone') }}: {{ props.subscriptionTimezone }}</p>
+            <FormInput v-model="periodForm.valid_until" :name="$t('Subscription expiration')" :error="periodForm.errors.valid_until" type="datetime-local" />
+            <div class="flex gap-3"><button type="submit" :disabled="periodForm.processing" class="rounded bg-indigo-600 px-4 py-2 text-white">{{ $t('Save') }}</button><button type="button" :disabled="periodForm.processing" @click="periodModalOpen = false" class="rounded border px-4 py-2">{{ $t('Cancel') }}</button></div>
+        </form>
+    </Modal>
     <Modal :label="$t('Create transaction')" :isOpen=isOpenFormModal>
         <div class="mt-5 grid grid-cols-1 gap-x-6 gap-y-4">
             <form @submit.prevent="submitForm1()" class="">
@@ -294,6 +332,9 @@
     import Modal from '@/Components/Modal.vue';
     import UserTable from '@/Components/Tables/UserTable.vue';
     import { trans } from 'laravel-vue-i18n';
+    import { useAdminPermissions } from '@/Composables/useAdminPermissions';
+
+    const { can } = useAdminPermissions();
 
     const props = defineProps({ 
         showAddBtn: {
@@ -314,6 +355,9 @@
             type: Array,
             default: () => [],
         },
+        subscriptionArchives: Object,
+        subscriptionTimezone: { type: String, default: 'UTC' },
+        subscriptionExpiration: { type: String, default: null },
         filters: Object, 
         mode: String 
     });
@@ -367,12 +411,32 @@
     };
 
     const minValidUntil = getLocalDatetimeLocalValue();
+    const periodModalOpen = ref(false);
+    const periodAction = ref('extend');
+    const periodForm = useForm({ valid_until: '', subscription_id: null, version: 1, operation_key: '' });
+    const openPeriodAction = (action) => {
+        periodAction.value = action;
+        periodForm.clearErrors();
+        periodForm.valid_until = '';
+        periodForm.subscription_id = props.organization.subscription.id;
+        periodForm.version = props.organization.subscription.period_version;
+        periodForm.operation_key = crypto.randomUUID();
+        periodModalOpen.value = true;
+    };
+    const submitPeriodAction = () => periodForm.post(`/admin/organizations/${props.organization.uuid}/subscription/${periodAction.value}`, {
+        preserveScroll: true,
+        onSuccess: () => { periodModalOpen.value = false; },
+    });
+    const parseSnapshot = (value) => typeof value === 'string' ? JSON.parse(value) : (value ?? {});
+    const resourceLabels = { template_messages: 'Template messages', conversations: 'Conversations', contacts: 'Contacts', team_members: 'Team members', organizations: 'Organizations' };
 
     const form = useForm({
         name: props.organization?.name,
         plan: initialPlanValue,
         subscription_status: props.organization?.subscription?.status ?? 'trial',
-        valid_until: formatDatetimeForInput(props.organization?.subscription?.valid_until),
+        valid_until: formatDatetimeForInput(props.subscriptionExpiration),
+        subscription_id: props.organization?.subscription?.id ?? null,
+        subscription_version: props.organization?.subscription?.period_version ?? null,
         billing_organization_id: props.organization?.billing_organization_id ?? null,
         campaign_phone_mps: campaignPhoneMps(),
         create_user: 1,
@@ -581,6 +645,11 @@
 
         form[props.organization ? 'put' : 'post'](url, {
             preserveScroll: true,
+            onSuccess: () => {
+                form.valid_until = formatDatetimeForInput(props.subscriptionExpiration);
+                form.subscription_id = props.organization?.subscription?.id ?? null;
+                form.subscription_version = props.organization?.subscription?.period_version ?? null;
+            },
         });
     };
 

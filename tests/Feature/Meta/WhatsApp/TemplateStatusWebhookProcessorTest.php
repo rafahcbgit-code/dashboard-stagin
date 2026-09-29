@@ -3,14 +3,19 @@
 use App\Jobs\Webhook\ProcessWebhookJob;
 use App\Models\Organization;
 use App\Services\Meta\WhatsApp\TemplateStatusMapper;
+use App\Services\Meta\WhatsApp\TemplateStatusNotificationRecorder;
 use App\Services\Meta\WhatsApp\TemplateStatusWebhookProcessor;
+
+uses(Tests\TestCase::class);
 
 it('triggers a full template sync for a template category update', function () {
     $organization = new Organization();
     $organization->id = 42;
+    $organization->metadata = json_encode(['whatsapp' => ['waba_id' => 'waba-123']]);
 
     $processor = Mockery::mock(TemplateStatusWebhookProcessor::class, [
         new TemplateStatusMapper(),
+        app(TemplateStatusNotificationRecorder::class),
     ])->makePartial()->shouldAllowMockingProtectedMethods();
 
     $processor->shouldReceive('findOrganizationByWabaId')

@@ -74,6 +74,8 @@ const secondaryItems = [
     { href: '/admin/faqs', label: 'FAQs', module: 'settings', action: 'frontend' },
     { href: '/admin/testimonials', label: 'Reviews', module: 'settings', action: 'frontend' },
     { href: '/admin/settings/general', label: 'Settings', module: 'settings', action: 'general' },
+    { href: '/admin/settings/managed-notifications', label: 'Managed notifications', module: 'notifications', action: 'view' },
+    { href: '/admin/notifications', label: 'Notification inbox', module: 'notifications', action: 'view' },
     { href: '/admin/salla/app-installations', label: 'Salla App Installations', module: 'logs' },
 ];
 

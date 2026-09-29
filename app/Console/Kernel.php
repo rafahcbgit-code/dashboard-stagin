@@ -62,6 +62,22 @@ class Kernel extends ConsoleKernel
             ->timezone('Asia/Damascus')
             ->withoutOverlapping();
 
+        $schedule->command('notifications:reconcile')
+            ->everyMinute()
+            ->withoutOverlapping();
+
+        $schedule->command('notifications:subscription-scan')
+            ->everyMinute()
+            ->withoutOverlapping();
+
+        $schedule->command('notifications:subscription-scan --usage')
+            ->hourly()
+            ->withoutOverlapping();
+
+        $schedule->command('notifications:prune')
+            ->daily()
+            ->withoutOverlapping();
+
         // Send flow rejoin reminders every 5 minutes
         $schedule->job(new SendFlowRejoinRemindersJob)
             ->everyFiveMinutes()

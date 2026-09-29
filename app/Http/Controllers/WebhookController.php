@@ -301,33 +301,49 @@ class WebhookController extends BaseController
 
         $res = $entry[0]['changes'][0];
         $webhookType = $res['field'] ?? 'unknown';
+        $currentWabaId = $entry[0]['id'] ?? null;
 
         // Dispatch to background job for async processing (AC-1.1.3, AC-1.1.4, AC-1.1.5)
         // Only acknowledge the webhook after the queue accepts the job.
         try {
-            ProcessWebhookJob::dispatch(
-                $res,
-                $organization->id,
-                $webhookType,
-                [
-                    'waba_id' => $entry[0]['id'] ?? null,
-                    'raw_payload' => $payload,
-                ]
-            );
+            $firstChange = true;
+            $notificationFields = [
+                'account_update', 'account_review_update', 'phone_number_name_update',
+                'phone_number_quality_update', 'business_capability_update',
+                'message_template_status_update', 'template_category_update',
+            ];
+            foreach ($entry as $webhookEntry) {
+                foreach ($webhookEntry['changes'] ?? [] as $change) {
+                    $field = $change['field'] ?? 'unknown';
+                    $wabaId = $webhookEntry['id'] ?? null;
+                    if (! $firstChange && (! in_array($field, $notificationFields, true)
+                        || (string) $wabaId !== (string) ($entry[0]['id'] ?? null))) {
+                        continue;
+                    }
+                    $firstChange = false;
+                    $res = $change;
+                    $webhookType = $field;
+                    $currentWabaId = $wabaId;
+                    ProcessWebhookJob::dispatch($change, $organization->id, $field, [
+                        'waba_id' => $wabaId,
+                        'raw_payload' => $payload,
+                    ]);
+                }
+            }
         } catch (\Throwable $e) {
             $this->recordWebhookDispatchFailure(
                 $res,
                 $payload,
                 $organization->id,
                 $webhookType,
-                $entry[0]['id'] ?? null,
+                $currentWabaId,
                 $e
             );
 
             Log::channel('webhook_dispatch_failures')->critical('Failed to dispatch webhook processing job', [
                 'organization_id' => $organization->id,
                 'webhook_type' => $webhookType,
-                'waba_id' => $entry[0]['id'] ?? null,
+                'waba_id' => $currentWabaId,
                 'error' => $e->getMessage(),
                 'exception' => $e,
             ]);

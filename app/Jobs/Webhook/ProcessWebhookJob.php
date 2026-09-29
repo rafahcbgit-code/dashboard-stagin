@@ -26,7 +26,6 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\Middleware\WithoutOverlapping;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 use Modules\MetaFlows\Services\MetaFlowService;
 
@@ -2391,113 +2390,9 @@ class ProcessWebhookJob implements ShouldQueue
      */
     protected function processAccountUpdate(): void
     {
-        Log::channel('webhook')->info('Account update received', [
-            'organization_id' => $this->organizationId,
-            'webhook_type' => $this->webhookType,
-            'waba_id' => $this->context['waba_id'] ?? null,
-            'event' => data_get($this->payload, 'value.event'),
-        ]);
-
-        if ($this->webhookType !== 'business_capability_update') {
-            return;
-        }
-
-        $value = is_array($this->payload['value'] ?? null) ? $this->payload['value'] : [];
-
-        if (! array_key_exists('max_daily_conversations_per_business', $value)) {
-            Log::channel('webhook')->warning('Business capability update missing daily conversations tier', [
-                'organization_id' => $this->organizationId,
-                'payload' => $this->payload,
-            ]);
-
-            return;
-        }
-
-        $organization = Organization::find($this->organizationId);
-
-        if (! $organization) {
-            Log::channel('webhook')->warning('Business capability update organization not found', [
-                'organization_id' => $this->organizationId,
-            ]);
-
-            return;
-        }
-
-        $metadata = json_decode($organization->metadata ?: '{}', true);
-
-        if (! is_array($metadata)) {
-            $metadata = [];
-        }
-
-        if (! isset($metadata['whatsapp']) || ! is_array($metadata['whatsapp'])) {
-            $metadata['whatsapp'] = [];
-        }
-
-        $oldValue = $metadata['whatsapp']['max_daily_conversations_per_business'] ?? null;
-        $oldMessagingLimitTier = $metadata['whatsapp']['messaging_limit_tier'] ?? null;
-        $newValue = $value['max_daily_conversations_per_business'];
-        $dailyConversationLimitChanged = $oldValue !== $newValue;
-
-        //$metadata['whatsapp']['max_daily_conversations_per_business'] = $newValue;
-        $metadata['whatsapp']['whatsapp_business_manager_messaging_limit'] = $newValue;
-    
-        $metadata['whatsapp']['messaging_limit_tier'] = $newValue;
-        $organization->metadata = json_encode($metadata);
-        $organization->save();
-
-        Log::channel('webhook')->info('Business capability metadata updated', [
-            'organization_id' => $this->organizationId,
-            'field' => 'metadata.whatsapp.max_daily_conversations_per_business',
-            'old_value' => $oldValue,
-            'new_value' => $newValue,
-            'messaging_limit_tier_old_value' => $oldMessagingLimitTier,
-            'messaging_limit_tier_new_value' => $newValue,
-        ]);
-
-        if ($dailyConversationLimitChanged) {
-            $this->sendBusinessCapabilityUpdateEmail($organization, $oldValue, $newValue);
-        }
-    }
-
-    protected function sendBusinessCapabilityUpdateEmail(Organization $organization, mixed $oldValue, mixed $newValue): void
-    {
-        $recipients = ['rafah@chatberry.net', 'info@chatberry.net'];
-        $organizationName = $organization->name ?: 'Unknown organization';
-
-        $message = implode("\n", [
-            'This is a notification from Chatberry.',
-            '',
-            'A WhatsApp business capability webhook updated the daily conversations tier.',
-            "Organization ID: {$organization->id}",
-            "Organization: {$organizationName}",
-            'Field: metadata.whatsapp.max_daily_conversations_per_business',
-            'Old value: ' . ($oldValue ?? 'null'),
-            'New value: ' . ($newValue ?? 'null'),
-            '',
-            'Chatberry Notification',
-        ]);
-
-        try {
-            Mail::raw($message, function ($mail) use ($recipients, $organizationName, $newValue) {
-                $mail->to($recipients)
-                    ->subject("Chatberry business capability update: {$organizationName} - {$newValue}");
-            });
-
-            Log::channel('webhook')->info('Business capability email notification sent', [
-                'organization_id' => $organization->id,
-                'recipients' => $recipients,
-                'old_value' => $oldValue,
-                'new_value' => $newValue,
-            ]);
-        } catch (\Throwable $e) {
-            Log::channel('webhook')->error('Business capability email notification failed', [
-                'organization_id' => $organization->id,
-                'recipients' => $recipients,
-                'old_value' => $oldValue,
-                'new_value' => $newValue,
-                'error' => $e->getMessage(),
-            ]);
-        }
+        app(\App\Services\Meta\WhatsApp\AccountUpdateWebhookProcessor::class)->process(
+            $this->organizationId, $this->webhookType, $this->payload, $this->context
+        );
     }
 
     /**

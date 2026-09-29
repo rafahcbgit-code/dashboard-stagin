@@ -12,7 +12,8 @@ use Illuminate\Support\Facades\Log;
 class TemplateStatusWebhookProcessor
 {
     public function __construct(
-        private readonly TemplateStatusMapper $mapper
+        private readonly TemplateStatusMapper $mapper,
+        private readonly TemplateStatusNotificationRecorder $notifications
     ) {
     }
 
@@ -61,6 +62,10 @@ class TemplateStatusWebhookProcessor
                 return;
             }
 
+            if ($wabaId !== null && (string) data_get(json_decode($organization->metadata ?: '{}', true), 'whatsapp.waba_id') !== (string) $wabaId) {
+                return;
+            }
+
             if ($isCategoryUpdate) {
                 $this->syncTemplates($organization, $requestId);
 
@@ -101,14 +106,25 @@ class TemplateStatusWebhookProcessor
                 }
             }
 
-            DB::transaction(function () use ($template, $mapping, $value, $templateCategory, $hasKnownStatus) {
+            DB::transaction(function () use ($template, $organization, $mapping, $value, $templateCategory, $hasKnownStatus, $wabaId) {
+                $organization = Organization::query()->lockForUpdate()->find($organization->id);
+                if (! $organization || ($wabaId !== null
+                    && (string) data_get(json_decode($organization->metadata ?: '{}', true), 'whatsapp.waba_id') !== (string) $wabaId)) {
+                    return;
+                }
+                $template = Template::query()->where('organization_id', $organization->id)
+                    ->lockForUpdate()->findOrFail($template->id);
+                $oldStatus = (string) $template->status;
                 if ($templateCategory) {
                     $template->category = $templateCategory;
                 }
 
                 if ($hasKnownStatus) {
                     $template->status = $mapping['template_status'] ?? $template->status;
-                    $template->last_status_change_at = now();
+                    if ($oldStatus !== $template->status) {
+                        $template->last_status_change_at = now();
+                        $template->notification_transition_sequence++;
+                    }
 
                     if (($mapping['event'] ?? null) === 'REJECTED') {
                         $template->last_rejection_reason = $value['reason'] ?? null;
@@ -134,6 +150,9 @@ class TemplateStatusWebhookProcessor
 
                 $template->updated_at = now();
                 $template->save();
+                if ($hasKnownStatus) {
+                    $this->notifications->record($template, $organization, $oldStatus, (string) $template->status);
+                }
             });
 
             $this->log()->info('Template status webhook processed', [
