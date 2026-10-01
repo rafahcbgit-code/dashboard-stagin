@@ -21,7 +21,7 @@ function normalizerResponse(array $value): array
 
 beforeEach(function () {
     Http::preventStrayRequests();
-    config(['chatbot_studio.api_key' => 'test-key', 'chatbot_studio.free_tier_confirmed' => true, 'chatbot_studio.model' => 'gemini-3.5-flash-lite']);
+    config(['chatbot_studio.provider' => 'gemini', 'chatbot_studio.api_key' => 'test-key', 'chatbot_studio.free_tier_confirmed' => true, 'chatbot_studio.model' => 'gemini-3.5-flash-lite']);
 });
 
 it('normalizes the bilingual CTA return-button pattern without losing messages destinations or questions', function () {

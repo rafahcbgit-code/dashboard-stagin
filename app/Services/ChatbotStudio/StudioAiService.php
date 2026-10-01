@@ -12,18 +12,44 @@ class StudioAiService
 {
     public function configuration(): array
     {
-        return ['provider' => 'Gemini API', 'model' => config('chatbot_studio.model'),
-            'configured' => trim(config('chatbot_studio.api_key', '')) !== '' && config('chatbot_studio.free_tier_confirmed'),
-            'free_tier_confirmed' => config('chatbot_studio.free_tier_confirmed')];
+        $deepseek = $this->provider() === 'deepseek';
+        return ['provider' => $deepseek ? 'DeepSeek API' : 'Gemini API', 'provider_id' => $this->provider(),
+            'model' => config('chatbot_studio.model'),
+            'configured' => in_array($this->provider(), ['gemini', 'deepseek'], true)
+                && trim($this->apiKey()) !== ''
+                && (bool) config('chatbot_studio.'.($deepseek ? 'paid_usage_confirmed' : 'free_tier_confirmed'))
+                && in_array(config('chatbot_studio.model'), $this->allowedModels(), true),
+            'free_tier_confirmed' => !$deepseek && (bool) config('chatbot_studio.free_tier_confirmed'),
+            'paid_usage_confirmed' => $deepseek && (bool) config('chatbot_studio.paid_usage_confirmed')];
+    }
+
+    public function provider(): string
+    {
+        return (string) config('chatbot_studio.provider', 'gemini');
+    }
+
+    public function allowedModels(): array
+    {
+        return config('chatbot_studio.'.($this->provider() === 'deepseek' ? 'deepseek_allowed_models' : 'allowed_models'), []);
+    }
+
+    private function apiKey(): string
+    {
+        return (string) config('chatbot_studio.'.($this->provider() === 'deepseek' ? 'deepseek_api_key' : 'api_key'), '');
     }
 
     public function assertConfigured(): void
     {
-        if (!$this->configuration()['configured']) {
-            throw ValidationException::withMessages(['generation' => 'Configure CHATBOT_STUDIO_GEMINI_API_KEY from a Free Tier project with billing disabled, and set CHATBOT_STUDIO_FREE_TIER_CONFIRMED=true.']);
+        if (!in_array($this->provider(), ['gemini', 'deepseek'], true)) {
+            throw ValidationException::withMessages(['generation' => 'Unsupported Chatbot Studio provider. Select gemini or deepseek explicitly.']);
         }
-        if (!in_array(config('chatbot_studio.model'), config('chatbot_studio.allowed_models'), true)) {
-            throw ValidationException::withMessages(['generation' => 'The configured model is not on the Chatbot Studio Free Tier allowlist.']);
+        if (!in_array(config('chatbot_studio.model'), $this->allowedModels(), true)) {
+            throw ValidationException::withMessages(['generation' => 'The configured model is not on the selected Chatbot Studio provider allowlist.']);
+        }
+        if (!$this->configuration()['configured']) {
+            throw ValidationException::withMessages(['generation' => $this->provider() === 'deepseek'
+                ? 'Configure CHATBOT_STUDIO_DEEPSEEK_API_KEY and explicitly set CHATBOT_STUDIO_PAID_USAGE_CONFIRMED=true. DeepSeek API usage is billed.'
+                : 'Configure CHATBOT_STUDIO_GEMINI_API_KEY from a Free Tier project with billing disabled, and set CHATBOT_STUDIO_FREE_TIER_CONFIRMED=true.']);
         }
     }
 
@@ -31,6 +57,8 @@ class StudioAiService
     {
         $this->assertConfigured();
         $model = config('chatbot_studio.model');
+        $deepseek = $this->provider() === 'deepseek';
+        $providerName = $deepseek ? 'DeepSeek' : 'Gemini';
         $generationConfig = [
             'responseMimeType' => 'application/json',
             'maxOutputTokens' => min(65536, max(256, (int) ($options['max_tokens'] ?? config('chatbot_studio.output_tokens')))),
@@ -38,6 +66,26 @@ class StudioAiService
         ];
         if (isset($options['schema'])) {
             $generationConfig['responseJsonSchema'] = $options['schema'];
+        }
+        $endpoint = 'https://generativelanguage.googleapis.com/v1beta/models/'.$model.':generateContent';
+        $headers = ['x-goog-api-key' => $this->apiKey()];
+        $payload = [
+            'systemInstruction' => ['parts' => [['text' => $systemPrompt]]],
+            'contents' => [['role' => 'user', 'parts' => [['text' => $userMessage]]]],
+            'generationConfig' => $generationConfig,
+        ];
+        if ($deepseek) {
+            $endpoint = 'https://api.deepseek.com/chat/completions';
+            $headers = ['Authorization' => 'Bearer '.$this->apiKey()];
+            // JSON mode is not schema enforcement. Compiler validation/repair remains mandatory.
+            $systemPrompt .= "\nReturn only a JSON object, without Markdown.";
+            if (isset($options['schema'])) {
+                $systemPrompt .= "\nRequired JSON schema:\n".json_encode($options['schema'], JSON_UNESCAPED_UNICODE | JSON_THROW_ON_ERROR);
+            }
+            $payload = ['model' => $model, 'stream' => false, 'thinking' => ['type' => 'disabled'],
+                'messages' => [['role' => 'system', 'content' => $systemPrompt], ['role' => 'user', 'content' => $userMessage]],
+                'response_format' => ['type' => 'json_object'], 'max_tokens' => $generationConfig['maxOutputTokens'],
+                'temperature' => $options['temperature'] ?? 0.1];
         }
         // Retries share one request budget so JSON repair still fits the queue timeout.
         $budget = max(0.001, min(240, (float) ($options['timeout'] ?? config('chatbot_studio.request_timeout'))));
@@ -54,14 +102,10 @@ class StudioAiService
                 }
                 $response = Http::acceptJson()->asJson()->timeout($remaining)
                     ->connectTimeout(min(15, $remaining))->withOptions(['allow_redirects' => false])
-                    ->withHeaders(['x-goog-api-key' => config('chatbot_studio.api_key')])
-                    ->post('https://generativelanguage.googleapis.com/v1beta/models/'.$model.':generateContent', [
-                        'systemInstruction' => ['parts' => [['text' => $systemPrompt]]],
-                        'contents' => [['role' => 'user', 'parts' => [['text' => $userMessage]]]],
-                        'generationConfig' => $generationConfig,
-                    ]);
+                    ->withHeaders($headers)->post($endpoint, $payload);
+                $usage = $deepseek ? $this->deepseekUsage($response->json('usage')) : $response->json('usageMetadata');
                 if (!empty($options['usage_draft_id'])) {
-                    app(TokenUsageTracker::class)->completed($options['usage_draft_id'], $response->json('usageMetadata'));
+                    app(TokenUsageTracker::class)->completed($options['usage_draft_id'], $usage);
                 }
                 if (!in_array($response->status(), [500, 502, 503, 504], true) || $attempt === 2) {
                     break;
@@ -84,22 +128,33 @@ class StudioAiService
                 'CONNECT' => 'Gemini connection failed (CONNECT). Check outbound HTTPS access from the production server.',
                 default => 'Gemini could not be reached. The draft is preserved; retry later.',
             };
-            throw ValidationException::withMessages(['generation' => $message]);
+            throw ValidationException::withMessages(['generation' => str_replace('Gemini', $providerName, $message)]);
         }
         if (!isset($response) || in_array($response->status(), [500, 502, 503, 504], true)) {
-            throw ValidationException::withMessages(['generation' => 'Gemini is temporarily unavailable'.(isset($response) ? ' (HTTP '.$response->status().')' : '').'. Please wait a few minutes and generate again. The draft is preserved; no model or provider was changed.']);
+            throw ValidationException::withMessages(['generation' => $providerName.' is temporarily unavailable'.(isset($response) ? ' (HTTP '.$response->status().')' : '').'. Please wait a few minutes and generate again. The draft is preserved; no model or provider was changed.']);
         }
         if ($response->status() === 429) {
-            throw ValidationException::withMessages(['generation' => 'Gemini quota is exhausted or rate-limited. Retry after your free quota resets. No paid or local fallback was used.']);
+            throw ValidationException::withMessages(['generation' => $deepseek
+                ? 'DeepSeek is rate-limited (HTTP 429). Wait before retrying. No model or provider was changed.'
+                : 'Gemini quota is exhausted or rate-limited. Retry after your free quota resets. No paid or local fallback was used.']);
+        }
+        if ($deepseek && $response->status() === 402) {
+            throw ValidationException::withMessages(['generation' => 'DeepSeek balance is insufficient (HTTP 402). Check your API account balance. The draft is preserved.']);
         }
         if (!$response->successful()) {
-            throw ValidationException::withMessages(['generation' => 'Gemini rejected the request (HTTP '.$response->status().'). Check the API key, model availability and supported region.']);
+            throw ValidationException::withMessages(['generation' => $providerName.' rejected the request (HTTP '.$response->status().'). Check the API key, model availability and supported region.']);
         }
         $candidate = $response->json('candidates.0');
+        if ($deepseek) {
+            $choice = $response->json('choices.0');
+            $candidate = is_array($choice) ? ['finishReason' => match ($choice['finish_reason'] ?? null) {
+                'stop' => 'STOP', 'length' => 'MAX_TOKENS', 'content_filter' => 'SAFETY',
+                'insufficient_system_resource' => 'OTHER', default => 'UNKNOWN',
+            }, 'content' => ['parts' => [['text' => is_string($choice['message']['content'] ?? null) ? $choice['message']['content'] : '']]]] : null;
+        }
         if (!$candidate || ($candidate['finishReason'] ?? '') !== 'STOP') {
             $reason = $candidate['finishReason'] ?? $response->json('promptFeedback.blockReason') ?? 'NO_CANDIDATE';
             $reason = is_string($reason) && preg_match('/^[A-Z_]{1,80}$/', $reason) ? $reason : 'UNKNOWN';
-            $usage = $response->json('usageMetadata', []);
             Log::notice('Chatbot Studio incomplete generation', [
                 'model' => $model, 'finish_reason' => $reason,
                 'output_limit' => $generationConfig['maxOutputTokens'],
@@ -112,14 +167,29 @@ class StudioAiService
                 'SAFETY', 'RECITATION', 'BLOCKLIST', 'PROHIBITED_CONTENT', 'SPII' => 'Gemini blocked the response ('.$reason.'). Review the source for sensitive or restricted content. No chatbot was published.',
                 default => 'Gemini returned no complete result ('.$reason.'). The draft is preserved. Retry generation; contact support with this reason if it persists.',
             };
-            throw new IncompleteGenerationException($reason, $message);
+            throw new IncompleteGenerationException($reason, str_replace('Gemini', $providerName, $message));
         }
         $parts = array_filter($candidate['content']['parts'] ?? [], fn ($part) => isset($part['text']) && empty($part['thought']));
         $text = implode('', array_column($parts, 'text'));
         if (trim($text) === '') {
-            throw new IncompleteGenerationException('EMPTY_OUTPUT', 'Gemini returned an empty result (EMPTY_OUTPUT). The draft is preserved; retry generation.');
+            throw new IncompleteGenerationException('EMPTY_OUTPUT', $providerName.' returned an empty result (EMPTY_OUTPUT). The draft is preserved; retry generation.');
         }
         return $text;
+    }
+
+    private function deepseekUsage(mixed $usage): ?array
+    {
+        if (!is_array($usage)) {
+            return null;
+        }
+        $completion = $usage['completion_tokens'] ?? null;
+        $reasoning = $usage['completion_tokens_details']['reasoning_tokens'] ?? 0;
+        $reasoning = is_int($completion) && is_int($reasoning) ? min(max(0, $reasoning), max(0, $completion)) : 0;
+        // Completion includes reasoning; avoid double counting in the existing UI breakdown.
+        return ['totalTokenCount' => $usage['total_tokens'] ?? null, 'promptTokenCount' => $usage['prompt_tokens'] ?? null,
+            'candidatesTokenCount' => is_int($completion) ? max(0, $completion - $reasoning) : null,
+            'thoughtsTokenCount' => $reasoning,
+            'cachedContentTokenCount' => $usage['prompt_cache_hit_tokens'] ?? $usage['prompt_tokens_details']['cached_tokens'] ?? 0];
     }
 
     public function connectionFailureDetails(ConnectionException $exception): array

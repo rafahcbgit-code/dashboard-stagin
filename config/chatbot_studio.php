@@ -1,10 +1,14 @@
 <?php
 
 return [
+    'provider' => env('CHATBOT_STUDIO_AI_PROVIDER', 'gemini'),
+    'deepseek_api_key' => env('CHATBOT_STUDIO_DEEPSEEK_API_KEY', ''),
+    'paid_usage_confirmed' => (bool) env('CHATBOT_STUDIO_PAID_USAGE_CONFIRMED', false),
+    'deepseek_allowed_models' => ['deepseek-flash', 'deepseek-v4-pro'],
     // Use a dedicated Free Tier project with Cloud Billing disabled.
     'api_key' => env('CHATBOT_STUDIO_GEMINI_API_KEY', ''),
     'free_tier_confirmed' => (bool) env('CHATBOT_STUDIO_FREE_TIER_CONFIRMED', false),
-    'model' => env('CHATBOT_STUDIO_AI_MODEL', 'gemini-3.8-flash'),
+    'model' => env('CHATBOT_STUDIO_AI_MODEL', env('CHATBOT_STUDIO_AI_PROVIDER', 'gemini') === 'deepseek' ? 'deepseek-flash' : 'gemini-3.8-flash'),
     // Text generation only; media, agent and embedding endpoints are not blueprint generators.
     'allowed_models' => [
         'gemini-3.8-flash',

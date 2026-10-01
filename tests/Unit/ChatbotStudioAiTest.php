@@ -9,7 +9,7 @@ use Illuminate\Validation\ValidationException;
 uses(Tests\TestCase::class);
 
 beforeEach(function () {
-    config(['chatbot_studio.api_key' => 'private-test-key', 'chatbot_studio.free_tier_confirmed' => true, 'chatbot_studio.model' => 'gemini-3.8-flash']);
+    config(['chatbot_studio.provider' => 'gemini', 'chatbot_studio.api_key' => 'private-test-key', 'chatbot_studio.free_tier_confirmed' => true, 'chatbot_studio.model' => 'gemini-3.8-flash']);
     Http::preventStrayRequests();
     Sleep::fake();
 });

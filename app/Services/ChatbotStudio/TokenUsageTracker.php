@@ -30,7 +30,7 @@ class TokenUsageTracker
         }
         $this->update($draftId, function (array $summary) use ($metadata) {
             $summary['reported_requests']++;
-            // Use Google's total, not a sum: cached tokens are already part of the input.
+            // Use the provider's total, not a sum: cached tokens are already part of the input.
             foreach (['total_tokens' => 'totalTokenCount', 'input_tokens' => 'promptTokenCount',
                 'output_tokens' => 'candidatesTokenCount', 'thinking_tokens' => 'thoughtsTokenCount',
                 'cached_input_tokens' => 'cachedContentTokenCount', 'tool_input_tokens' => 'toolUsePromptTokenCount'] as $field => $key) {

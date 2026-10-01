@@ -63,10 +63,41 @@ function studioMeteredResponse(array $data, string $reason = 'STOP'): array
     ]]);
 }
 
+it('tracks DeepSeek usage through staged generation without mixing providers', function () {
+    config(['chatbot_studio.provider' => 'deepseek', 'chatbot_studio.deepseek_api_key' => 'deepseek-test-secret',
+        'chatbot_studio.paid_usage_confirmed' => true, 'chatbot_studio.model' => 'deepseek-flash']);
+    Queue::fake();
+    $bot = studioBlueprint();
+    $response = fn ($data, $finish = 'stop') => ['choices' => [['finish_reason' => $finish, 'message' => ['content' => json_encode($data)]]],
+        'usage' => ['prompt_tokens' => 100, 'completion_tokens' => 30, 'total_tokens' => 130,
+            'prompt_cache_hit_tokens' => 40, 'completion_tokens_details' => ['reasoning_tokens' => 10]]];
+    Http::fake(['api.deepseek.com/*' => Http::sequence()->push($response([], 'length'))
+        ->push($response(studioRecoveryPlan($bot)))->push($response(['screens' => $bot['screens'], 'issues' => []]))]);
+    $draft = studioDraft(['status' => 'generating', 'conversation' => [['role' => 'user', 'content' => 'Build']]]);
+    (new GenerateChatbotStudioDraft($draft->id, 1))->handle(app(BlueprintGenerator::class));
+    expect($draft->fresh()->generation_state['provider'])->toBe('deepseek');
+    (new GenerateChatbotStudioDraft($draft->id, 1, 1))->handle(app(BlueprintGenerator::class));
+    (new GenerateChatbotStudioDraft($draft->id, 1, 2))->handle(app(BlueprintGenerator::class));
+    expect($draft->fresh()->status)->toBe('draft');
+    expect($draft->fresh()->token_usage)->toMatchArray(['requests' => 3, 'reported_requests' => 3,
+        'input_tokens' => 300, 'output_tokens' => 60, 'thinking_tokens' => 30, 'total_tokens' => 390, 'cached_input_tokens' => 120]);
+    Http::assertSentCount(3);
+});
+
+it('refuses legacy Gemini checkpoints after a provider switch before making a request', function () {
+    config(['chatbot_studio.provider' => 'deepseek', 'chatbot_studio.model' => 'deepseek-flash']);
+    $draft = studioDraft(['status' => 'generating', 'conversation' => [['role' => 'user', 'content' => 'Build']],
+        'generation_state' => ['stage' => 'plan', 'model' => 'deepseek-flash', 'limit' => 24000, 'step' => 1]]);
+    (new GenerateChatbotStudioDraft($draft->id, 1, 1))->handle(app(BlueprintGenerator::class));
+    expect($draft->fresh()->status)->toBe('failed');
+    expect($draft->fresh()->errors['generation'][0])->toContain('provider changed');
+    Http::assertNothingSent();
+});
+
 beforeEach(function () {
     Http::preventStrayRequests();
     config(['database.default' => 'sqlite', 'database.connections.sqlite.database' => ':memory:', 'cache.default' => 'array', 'session.driver' => 'array']);
-    config(['chatbot_studio.api_key' => 'test-only-key', 'chatbot_studio.free_tier_confirmed' => true]);
+    config(['chatbot_studio.provider' => 'gemini', 'chatbot_studio.model' => 'gemini-3.8-flash', 'chatbot_studio.api_key' => 'test-only-key', 'chatbot_studio.free_tier_confirmed' => true]);
     DB::purge('sqlite');
     Schema::create('organizations', function (Blueprint $table) {
         $table->id(); $table->uuid('uuid')->unique(); $table->string('name'); $table->softDeletes();

@@ -48,6 +48,9 @@ class GenerateChatbotStudioDraft implements ShouldQueue
             if ($state && ($state['model'] ?? config('chatbot_studio.model')) !== config('chatbot_studio.model')) {
                 throw ValidationException::withMessages(['generation' => 'The model changed during generation. Start a new revision to use the new model consistently.']);
             }
+            if ($state && ($state['provider'] ?? 'gemini') !== config('chatbot_studio.provider', 'gemini')) {
+                throw ValidationException::withMessages(['generation' => 'The provider changed during generation. Start a new revision to use the new provider consistently.']);
+            }
             if (($state['stage'] ?? 'direct') === 'plan') {
                 $plan = app(BlueprintRecovery::class)->plan($draft->source, $instruction, $draft->blueprint, $state['limit'], $draft->id);
                 $state = array_merge($state, ['stage' => 'batch', 'plan' => $plan, 'completed' => [],
@@ -113,7 +116,7 @@ class GenerateChatbotStudioDraft implements ShouldQueue
 
     private function recoveryState(string $stage = 'plan'): array
     {
-        return ['stage' => $stage, 'model' => config('chatbot_studio.model'), 'limit' => min(65536, max(256, (int) config('chatbot_studio.output_tokens'))), 'empty_retries' => 0];
+        return ['stage' => $stage, 'provider' => config('chatbot_studio.provider', 'gemini'), 'model' => config('chatbot_studio.model'), 'limit' => min(65536, max(256, (int) config('chatbot_studio.output_tokens'))), 'empty_retries' => 0];
     }
 
     private function isCurrent(?ChatbotStudioDraft $draft): bool
