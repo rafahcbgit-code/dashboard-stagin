@@ -18,6 +18,7 @@ use Illuminate\Support\Str;
 use Modules\FlowBuilder\Models\Flow;
 use Modules\FlowBuilder\Models\FlowInteractiveMessage;
 use Modules\FlowBuilder\Models\FlowLog;
+use Modules\FlowBuilder\Models\FlowMessageAttempt;
 use Modules\FlowBuilder\Models\FlowPortalReplyTransition;
 use Modules\FlowBuilder\Models\FlowSubmission;
 use Modules\FlowBuilder\Models\FlowUserData;
@@ -513,7 +514,19 @@ class FlowExecutionService
                 }
 
                 $questionText = $this->replacePlaceholders($contact->uuid, $questionText, $flowData->variables ?? []);
-                $this->whatsappService->sendMessage($contact->uuid, $questionText, 0, 'text');
+                $response = $this->whatsappService->sendMessage($contact->uuid, $questionText, 0, 'text');
+                $sent = $this->isSuccessfulSendResponse($response);
+                $this->recordFlowMessageAttempt($response, $contact, $flowData, $chat, $currentNodeId, 'question');
+
+                if (! $sent) {
+                    $this->endFlow($chat->contact_id, 'error', $chat->id ?? null);
+
+                    // The inbound message was handled by this flow, but the
+                    // outbound delivery failed. Returning a handled marker
+                    // prevents AutoReplyService from sending an AI/fallback
+                    // response for the same inbound message.
+                    return 'send_failed';
+                }
 
                 // Store question config for validation on resume
                 $flowData->setVariable('_question_config', [
@@ -698,7 +711,7 @@ class FlowExecutionService
             }
 
             // Send the message (first visit to this node, no user input yet)
-            $sent = $this->sendNodeMessage($node, $contact, $flowData->variables ?? []);
+            $sent = $this->sendNodeMessage($node, $contact, $flowData, $chat);
 
             Log::info('FlowExecution: message node send result', [
                 'node_id' => $currentNodeId,
@@ -706,6 +719,12 @@ class FlowExecutionService
                 'needs_user_input' => $needsUserInput,
                 'sent' => $sent ? 'true' : 'false',
             ]);
+
+            if (! $sent) {
+                $this->endFlow($chat->contact_id, 'error', $chat->id ?? null);
+
+                return 'send_failed';
+            }
 
             if ($needsUserInput) {
                 if ($sent) {
@@ -809,8 +828,9 @@ class FlowExecutionService
 
     // ─── Message Sending ────────────────────────────────────────
 
-    private function sendNodeMessage(array $node, Contact $contact, array $flowVariables = []): bool
+    private function sendNodeMessage(array $node, Contact $contact, FlowUserData $flowData, $chat): bool
     {
+        $flowVariables = $flowData->variables ?? [];
         $this->lastSentInteractiveWamId = null;
         $fields = \Arr::get($node, 'data.metadata.fields', []);
         $type = $fields['type'] ?? null;
@@ -884,7 +904,15 @@ class FlowExecutionService
                 return false;
         }
 
-        $sent = $response !== null && $response !== false;
+        $sent = $this->isSuccessfulSendResponse($response);
+        $this->recordFlowMessageAttempt(
+            $response,
+            $contact,
+            $flowData,
+            $chat,
+            (string) ($node['id'] ?? ''),
+            (string) $type
+        );
 
         if ($sent && in_array($type, ['interactive buttons', 'interactive list'], true)) {
             $wamId = data_get($response, 'data.chat.wam_id')
@@ -1444,7 +1472,7 @@ class FlowExecutionService
                 'flow'
             );
 
-            return $response !== null && $response !== false;
+            return $response;
         } catch (\Throwable $e) {
             Log::error('FlowExecution: failed to send template message', [
                 'template_uuid' => $templateUuid,
@@ -2053,10 +2081,125 @@ class FlowExecutionService
 
         if (! empty($retryMessage)) {
             $retryText = $this->replacePlaceholders($contact->uuid, $retryMessage, $flowData->variables ?? []);
-            $this->whatsappService->sendMessage($contact->uuid, $retryText, 0, 'text');
+            $response = $this->whatsappService->sendMessage($contact->uuid, $retryText, 0, 'text');
+            $this->recordFlowMessageAttempt(
+                $response,
+                $contact,
+                $flowData,
+                $chat,
+                (string) ($config['node_id'] ?? ''),
+                'question_retry'
+            );
+
+            if (! $this->isSuccessfulSendResponse($response)) {
+                $this->endFlow($chat->contact_id, 'error', $chat->id ?? null);
+
+                // The answer belongs to this question flow. Consume it even
+                // when the retry message could not be delivered, otherwise
+                // the same answer could fall through to triggers or AI.
+                return true;
+            }
         }
 
         return true;
+    }
+
+    private function isSuccessfulSendResponse($response): bool
+    {
+        if (is_bool($response)) {
+            return $response;
+        }
+
+        if (is_object($response) && property_exists($response, 'success')) {
+            return $response->success === true;
+        }
+
+        if (is_array($response) && array_key_exists('success', $response)) {
+            return $response['success'] === true;
+        }
+
+        // Preserve compatibility with legacy senders that return a non-null
+        // message object without the standard success property.
+        return $response !== null && $response !== false;
+    }
+
+    private function recordFlowMessageAttempt(
+        $response,
+        Contact $contact,
+        FlowUserData $flowData,
+        $chat,
+        string $nodeId,
+        string $messageType
+    ): void {
+        try {
+            $success = $this->isSuccessfulSendResponse($response);
+            $failureKind = (string) data_get($response, 'failure_kind', '');
+            $result = $success
+                ? 'sent'
+                : ($failureKind === 'delivery_unknown' ? 'delivery_unknown' : 'failed');
+            $correlationId = (string) data_get($response, 'correlation_id', Str::uuid());
+            $variables = $flowData->variables ?? [];
+
+            if (! $success) {
+                Log::error('FlowExecution: WhatsApp message send failed', [
+                    'correlation_id' => $correlationId,
+                    'organization_id' => $this->organizationId,
+                    'contact_id' => $contact->id,
+                    'chat_id' => $chat->id ?? null,
+                    'flow_id' => $flowData->flow_id,
+                    'flow_run_uuid' => $variables['_flow_run_uuid'] ?? null,
+                    'node_id' => $nodeId,
+                    'message_type' => $messageType,
+                    'failure_kind' => $failureKind ?: null,
+                    'http_status' => data_get($response, 'http_status'),
+                    'error_code' => data_get($response, 'error_code'),
+                    'error_subcode' => data_get($response, 'error_subcode'),
+                    'error_message' => data_get($response, 'message', 'Unknown send failure'),
+                    'meta_request_id' => data_get($response, 'meta_request_id'),
+                    'duration_ms' => data_get($response, 'duration_ms'),
+                ]);
+            }
+
+            if ($success && ! config('flow_builder.persist_successful_send_attempts', false)) {
+                return;
+            }
+
+            FlowMessageAttempt::create([
+                'correlation_id' => $correlationId,
+                'organization_id' => $this->organizationId,
+                'contact_id' => $contact->id,
+                'flow_id' => $flowData->flow_id,
+                'chat_id' => $chat->id ?? null,
+                'flow_run_uuid' => $variables['_flow_run_uuid'] ?? null,
+                'node_id' => $nodeId !== '' ? $nodeId : null,
+                'message_type' => $messageType,
+                'result' => $result,
+                'failure_kind' => $failureKind ?: null,
+                'http_status' => data_get($response, 'http_status'),
+                'provider_message_id' => data_get($response, 'data.messages.0.id'),
+                'meta_error_code' => data_get($response, 'error_code'),
+                'meta_error_subcode' => data_get($response, 'error_subcode'),
+                'meta_request_id' => data_get($response, 'meta_request_id'),
+                'meta_trace_id' => data_get($response, 'meta_trace_id'),
+                'exception_class' => data_get($response, 'exception_class'),
+                'curl_errno' => data_get($response, 'curl_errno'),
+                'curl_error' => data_get($response, 'curl_error'),
+                'json_error' => data_get($response, 'json_error'),
+                'duration_ms' => data_get($response, 'duration_ms'),
+                'error_message' => $success ? null : data_get($response, 'message', 'Unknown send failure'),
+                'response_excerpt' => data_get($response, 'response_excerpt'),
+            ]);
+        } catch (\Throwable $e) {
+            // Observability must never break message processing during a rolling
+            // deploy or if the diagnostics table is temporarily unavailable.
+            Log::warning('FlowExecution: failed to persist message attempt', [
+                'organization_id' => $this->organizationId,
+                'contact_id' => $contact->id,
+                'flow_id' => $flowData->flow_id,
+                'node_id' => $nodeId,
+                'error' => $e->getMessage(),
+            ]);
+        }
     }
 
     private function appendQuestionAnswerToVariable(array $variables, array $config, string $answer): array
