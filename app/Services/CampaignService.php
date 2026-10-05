@@ -40,6 +40,17 @@ class CampaignService
             ]);
         }
 
+        // Server-side readiness gate — this is business logic, not a disabled button:
+        // a campaign cannot be created while the WhatsApp number is known to be
+        // disconnected. Organizations with unknown/empty metadata stay unaffected.
+        $readiness = (new CampaignReadinessService())->check($organizationMetadata);
+
+        if (! $readiness['ready']) {
+            throw ValidationException::withMessages([
+                'contacts' => $readiness['blockers'][0]['message'],
+            ]);
+        }
+
         // Enforce messaging_limit_tier: selected group size must be <= allowed tier value
         $tierLimit = $this->resolveTierLimit($organizationMetadata);
 
@@ -116,6 +127,19 @@ class CampaignService
         }
 
         $template = Template::where('uuid', $request->template)->first();
+
+        // An unapproved (or paused/rejected) template can never be sent, so fail
+        // before anything is written instead of letting the job fail later.
+        if ($template) {
+            $templateReadiness = (new CampaignReadinessService())->check($organizationMetadata, $template->status);
+
+            if (! $templateReadiness['ready']) {
+                throw ValidationException::withMessages([
+                    'template' => $templateReadiness['blockers'][0]['message'],
+                ]);
+            }
+        }
+
         $contactGroup = ContactGroup::where('uuid', $request->contacts)->first();
 
         $shouldStartImmediately = false;

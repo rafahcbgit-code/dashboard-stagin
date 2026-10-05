@@ -193,7 +193,7 @@ onBeforeUnmount(() => { disposed = true; clearTimeout(pollTimer); clearTimeout(s
                     <button class="command primary" :disabled="!canPublish" @click="confirmPublish = true"><Upload :size="16" />{{ $t('Publish') }}</button>
                 </div>
             </header>
-            <div v-if="!ai.configured" class="setup-notice" role="status"><span>{{ $t('Gemini API key required') }}</span><a href="https://aistudio.google.com/api-keys" target="_blank" rel="noopener noreferrer">{{ $t('Google AI Studio') }}</a></div>
+            <div v-if="!ai.configured" class="setup-notice" role="status"><span>{{ $t(ai.provider_id === 'deepseek' ? 'DeepSeek API key and paid usage confirmation required' : 'Gemini API key required') }}</span><a :href="ai.provider_id === 'deepseek' ? 'https://platform.deepseek.com/' : 'https://aistudio.google.com/api-keys'" target="_blank" rel="noopener noreferrer">{{ ai.provider_id === 'deepseek' ? 'DeepSeek' : $t('Google AI Studio') }}</a></div>
             <div v-if="errors.length" class="error-banner" role="alert"><ul><li v-for="(error, index) in errors" :key="index">{{ error }}</li></ul><button :aria-label="$t('Dismiss')" :title="$t('Dismiss')" @click="errors = []"><X :size="18" /></button></div>
             <div v-if="published" class="success-banner" role="status"><Check :size="18" /><span>{{ draft.result.organization_name }} · {{ draft.result.flows }} {{ $t('Flows') }} · {{ draft.result.triggers }} {{ $t('Triggers') }} · {{ $t('Start flow') }} #{{ draft.result.start_flow_id }}</span></div>
             <div class="workspace">

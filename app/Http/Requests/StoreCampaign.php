@@ -51,6 +51,13 @@ class StoreCampaign extends FormRequest
 
             $headerSelection = $this->input('header.parameters.0.selection');
 
+            // Every static header variable needs a value, not just the first one.
+            foreach (is_array($headerParams) ? $headerParams : [] as $index => $parameter) {
+                if ($format === 'TEXT' && ($parameter['selection'] ?? null) === 'static') {
+                    $rules["header.parameters.$index.value"] = 'required|max:60';
+                }
+            }
+
             if ($format === 'IMAGE' && $headerSelection === 'upload') {
                 $rules['header.parameters.0.value'] = 'required|image|mimes:png,jpg|max:5120'; // Max 5MB
             }
@@ -70,6 +77,15 @@ class StoreCampaign extends FormRequest
 
         if(!empty($bodyParams)){
             $rules['body.parameters.0.value'] = 'required|max:1028';
+        }
+
+        // Every *static* body variable must carry a value, not only the first one.
+        // Previously variables 2..N could be submitted empty and reached the
+        // customer as a blank placeholder in an otherwise approved template.
+        foreach (is_array($bodyParams) ? $bodyParams : [] as $index => $parameter) {
+            if (($parameter['selection'] ?? null) === 'static') {
+                $rules["body.parameters.$index.value"] = 'required|max:1028';
+            }
         }
 
 

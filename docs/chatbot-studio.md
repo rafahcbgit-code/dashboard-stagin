@@ -1,5 +1,8 @@
 # Chatbot Studio
 
+For the optional paid DeepSeek provider, see [DeepSeek deployment](chatbot-studio-deepseek.md).
+The Gemini free-only instructions below continue to apply when Gemini is selected.
+
 Admin route: `/admin/chatbot-studio`.
 
 The tool selects an organization, keeps a private draft and conversation for the

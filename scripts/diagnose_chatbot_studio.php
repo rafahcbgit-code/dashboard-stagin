@@ -16,17 +16,19 @@ if (PHP_SAPI !== 'cli') {
 require __DIR__.'/../vendor/autoload.php';
 $app = require __DIR__.'/../bootstrap/app.php';
 $app->make(Illuminate\Contracts\Console\Kernel::class)->bootstrap();
+$service = app(StudioAiService::class);
+$deepseek = $service->provider() === 'deepseek';
 
 if (in_array('--list-models', $argv, true)) {
     echo json_encode(['configured_model' => config('chatbot_studio.model'),
-        'allowed_models' => config('chatbot_studio.allowed_models', [])], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES).PHP_EOL;
+        'provider' => $service->provider(), 'allowed_models' => $service->allowedModels()], JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES).PHP_EOL;
     exit(0);
 }
 
 foreach ($argv as $argument) {
     if (str_starts_with($argument, '--model=')) {
         $candidate = substr($argument, strlen('--model='));
-        if (!in_array($candidate, config('chatbot_studio.allowed_models', []), true)) {
+        if (!in_array($candidate, $service->allowedModels(), true)) {
             fwrite(STDERR, "Diagnostic model must be on the configured allowlist.\n");
             exit(1);
         }
@@ -34,10 +36,9 @@ foreach ($argv as $argument) {
     }
 }
 
-$service = app(StudioAiService::class);
 $report = ['configuration' => $service->configuration()];
 $exitCode = 0;
-$key = (string) config('chatbot_studio.api_key', '');
+$key = (string) config('chatbot_studio.'.($deepseek ? 'deepseek_api_key' : 'api_key'), '');
 
 // Only sanitized provider diagnostics are printed, never headers or exception dumps.
 $summarize = static function ($response) use ($key): array {
@@ -66,33 +67,52 @@ try {
     }
     $service->assertConfigured();
     $model = config('chatbot_studio.model');
-    $endpoint = 'https://generativelanguage.googleapis.com/v1beta/models/'.$model;
+    $endpoint = $deepseek ? 'https://api.deepseek.com/models' : 'https://generativelanguage.googleapis.com/v1beta/models/'.$model;
     $request = static fn () => Http::acceptJson()->asJson()
-        ->withHeaders(['x-goog-api-key' => $key])
+        ->withHeaders($deepseek ? ['Authorization' => 'Bearer '.$key] : ['x-goog-api-key' => $key])
         ->withOptions(['allow_redirects' => false])->connectTimeout(10)->timeout(60);
 
     $response = $request()->get($endpoint);
     $report['model_lookup'] = $summarize($response);
     if ($response->successful()) {
-        $methods = $response->json('supportedGenerationMethods', []);
-        $report['model_lookup']['supports_generate_content'] = is_array($methods) && in_array('generateContent', $methods, true);
+        if ($deepseek) {
+            $report['model_lookup']['model_available'] = in_array($model, array_column($response->json('data', []), 'id'), true);
+            if (!$report['model_lookup']['model_available']) {
+                $exitCode = 1;
+            }
+        } else {
+            $methods = $response->json('supportedGenerationMethods', []);
+            $report['model_lookup']['supports_generate_content'] = is_array($methods) && in_array('generateContent', $methods, true);
+        }
     } else {
         $exitCode = 1;
     }
 
-    if (in_array('--probe', $argv, true)) {
+    if (in_array('--probe', $argv, true) && $exitCode === 0) {
         // This opt-in probe sends synthetic text only and does not read or publish drafts.
-        $response = $request()->post($endpoint.':generateContent', [
+        $response = $request()->post($deepseek ? 'https://api.deepseek.com/chat/completions' : $endpoint.':generateContent', $deepseek ? [
+            'model' => $model, 'stream' => false, 'thinking' => ['type' => 'disabled'],
+            'messages' => [['role' => 'user', 'content' => 'Return the JSON object {"ready":true}.']],
+            'response_format' => ['type' => 'json_object'], 'max_tokens' => 256,
+        ] : [
             'contents' => [['role' => 'user', 'parts' => [['text' => 'Return the JSON object {"ready":true}.']]]],
             'generationConfig' => ['responseMimeType' => 'application/json', 'maxOutputTokens' => 1024],
         ]);
         $report['generation_probe'] = $summarize($response);
-        $report['generation_probe']['completed'] = $response->successful() && $response->json('candidates.0.finishReason') === 'STOP';
+        $report['generation_probe']['completed'] = $response->successful() && ($deepseek
+            ? $response->json('choices.0.finish_reason') === 'stop' && json_decode((string) $response->json('choices.0.message.content'), true) === ['ready' => true]
+            : $response->json('candidates.0.finishReason') === 'STOP');
+        if ($deepseek) {
+            foreach (['prompt_tokens', 'completion_tokens', 'total_tokens'] as $field) {
+                $value = $response->json('usage.'.$field);
+                $report['generation_probe'][$field] = is_int($value) && $value >= 0 ? $value : null;
+            }
+        }
         if (!$report['generation_probe']['completed']) {
             $exitCode = 1;
         }
     } else {
-        $report['generation_probe'] = 'Not requested. Pass --probe for one synthetic generation request.';
+        $report['generation_probe'] = 'Not requested or model lookup failed. Pass --probe for one synthetic generation request; DeepSeek usage is billed.';
     }
 } catch (ValidationException $e) {
     $report['validation_error'] = 'Check the source URL, source size, API configuration and model allowlist.';
