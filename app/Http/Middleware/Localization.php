@@ -27,10 +27,10 @@ class Localization
                 $locale = Cache::remember(
                     'settings:default_language',
                     now()->addMinutes(10),
-                    fn () => Setting::where('key', 'default_language')->value('value') ?? 'en'
+                    fn () => Setting::where('key', 'default_language')->value('value') ?? 'ar'
                 );
             } else {
-                $locale = 'en';
+                $locale = 'ar';
             }
             
             App::setLocale(strtolower($locale));

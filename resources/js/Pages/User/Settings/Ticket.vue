@@ -1,123 +1,59 @@
 <template>
     <SettingLayout :modules="props.modules">
-        <div class="md:h-[90vh] overflow-y-auto pb-20">
-            <div class="flex justify-center items-center">
-                <div class="md:w-[60em]">
+        <div class="pb-20">
+            <main class="mx-auto w-full max-w-4xl px-3 sm:px-5">
+                <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-6">
+                <header class="mb-5">
+                    <h1 class="text-xl font-semibold text-slate-900">{{ $t('Ticketing settings') }}</h1>
+                    <p class="mt-1 text-sm leading-6 text-slate-600">{{ $t('Ticketing settings introduction') }}</p>
+                </header>
 
                     <!-- Enable ticketing -->
-                    <div class="bg-white border border-slate-200 rounded-lg pt-2 text-sm mb-4 px-4 mb-3">
-                        <div class="w-full py-2 mb-4 mt-2">
-                            <div class="flex w-full">
-                                <div class="text-md">
-                                    <h4 class="text-[16px]">{{ $t('Enable ticketing') }}</h4>
-                                    <div class="mb-1 text-slate-500">
-                                        {{ $t('Activate ticketing workflow in your conversations') }}
-                                    </div>
+                    <section class="mb-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5" aria-labelledby="ticketing-enabled-title">
+                        <div class="flex items-start justify-between gap-4">
+                            <div class="min-w-0">
+                                <div class="flex flex-wrap items-center gap-2">
+                                    <h2 id="ticketing-enabled-title" class="font-semibold text-slate-900">{{ $t('Enable ticketing') }}</h2>
+                                    <span class="rounded-full px-2.5 py-1 text-xs font-medium" :class="form.active ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-600'">{{ $t(form.active ? 'Enabled' : 'Disabled') }}</span>
                                 </div>
-                                <div class="ml-auto">
-                                    <div class="w-12 h-6 flex items-center bg-gray-300 rounded-full p-1 cursor-pointer transition-colors duration-300"
-                                        :class="{ 'bg-primary': form.active }" @click="toggleState1">
-                                        <div class="bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out"
-                                            :class="{ 'ltr:translate-x-6 rtl:translate-x-[-24px]': form.active }"></div>
-                                    </div>
-                                </div>
+                                <p class="mt-1 text-sm leading-6 text-slate-600">{{ $t('Ticketing workflow explanation') }}</p>
                             </div>
+                            <button type="button" role="switch" :aria-checked="form.active" :aria-label="$t('Enable ticketing')" class="relative mt-1 inline-flex h-6 w-12 shrink-0 items-center rounded-full p-1 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700" :class="form.active ? 'bg-primary' : 'bg-slate-300'" @click="toggleState1">
+                                <span class="sr-only">{{ $t('Enable ticketing') }}</span>
+                                <span class="absolute start-1 size-4 rounded-full bg-white shadow transition-transform" :class="form.active ? 'ltr:translate-x-6 rtl:translate-x-[-24px]' : ''" aria-hidden="true"></span>
+                            </button>
                         </div>
-                    </div>
+                    </section>
 
                     <!-- Auto assignment -->
-                    <div v-if="form.active"
-                        class="bg-white border border-slate-200 rounded-lg py-2 text-sm mb-4 pb-4 px-4 mb-3">
-
-
-                        <div class="w-full py-2 mb-2 mt-2">
-                            <div class="flex w-full mb-4">
-                                <div class="text-md">
-                                    <h4 class="text-[16px]">{{ $t('Auto assignment') }}</h4>
-                                    <span class="flex items-center mt-1 text-slate-500">
-                                        {{ $t('Use auto-assignment rules to evenly distribute chats among agent automatically.') }}
-                                    </span>
-                                </div>
-                            </div>
-                            <div class="w-5/5">
-                                <div class="grid grid-cols-3 gap-x-4">
-                                    <div class="border rounded-xl p-4">
-                                        <div class="flex space-s-2">
-                                            <div>
-                                                <div class="flex mt-[1px]">
-                                                    <label @click="toggleAutoAssignment('off')" class="cursor-pointer">
-                                                        <div class="w-4 h-4 border border-gray-400 rounded-md flex items-center justify-center"
-                                                            :class="!form.auto_assignment && !form.auto_robinhood ? 'bg-[#000]' : ''">
-                                                            <svg v-if="!form.auto_assignment && !form.auto_robinhood"
-                                                                class="w-4 h-4" fill="none" stroke="currentColor"
-                                                                viewBox="0 0 24 24">
-                                                                <path stroke-linecap="round" stroke-linejoin="round"
-                                                                    stroke-width="2" d="M5 13l4 4L19 7" />
-                                                            </svg>
-                                                        </div>
-                                                    </label>
-                                                </div>
-                                            </div>
-                                            <div @click="toggleAutoAssignment('off')" class="cursor-pointer">
-                                                <div>{{ $t('Off') }}</div>
-                                                <div>{{ $t('Team members pick conversations manually from Unassigned folder.') }}</div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="border rounded-xl p-4">
-                                        <div class="flex space-s-2">
-                                            <div>
-                                                <div class="flex mt-[1px]">
-                                                    <label @click="toggleAutoAssignment('auto')" class="cursor-pointer">
-                                                        <div class="w-4 h-4 border border-gray-400 rounded-md flex items-center justify-center"
-                                                            :class="form.auto_assignment ? 'bg-[#000]' : ''">
-                                                            <svg v-if="form.auto_assignment" class="w-4 h-4" fill="none"
-                                                                stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path stroke-linecap="round" stroke-linejoin="round"
-                                                                    stroke-width="2" d="M5 13l4 4L19 7" />
-                                                            </svg>
-                                                        </div>
-                                                    </label>
-                                                </div>
-                                            </div>
-                                            <div @click="toggleAutoAssignment('auto')" class="cursor-pointer">
-                                                <div>{{ $t('Auto') }}</div>
-                                                <div>{{ $t('Distribute conversations among all your available team members.') }}</div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                    <div class="border rounded-xl p-4">
-                                        <div class="flex space-s-2">
-                                            <div>
-                                                <div class="flex mt-[1px]">
-                                                    <label @click="toggleAutoAssignment('auto_robinhood')"
-                                                        class="cursor-pointer">
-                                                        <div class="w-4 h-4 border border-gray-400 rounded-md flex items-center justify-center"
-                                                            :class="form.auto_robinhood ? 'bg-[#000]' : ''">
-                                                            <svg v-if="form.auto_robinhood" class="w-4 h-4" fill="none"
-                                                                stroke="currentColor" viewBox="0 0 24 24">
-                                                                <path stroke-linecap="round" stroke-linejoin="round"
-                                                                    stroke-width="2" d="M5 13l4 4L19 7" />
-                                                            </svg>
-                                                        </div>
-                                                    </label>
-                                                </div>
-                                            </div>
-                                            <div class="cursor-pointer">
-                                                <div>{{ $t('Auto Robinhood') }}</div>
-                                                <div>{{ $t('Round-robin assignment distributes chats equally among available agents.') }}</div>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                    <section v-if="form.active" class="mb-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5" aria-labelledby="auto-assignment-title">
+                        <div class="mb-4">
+                            <h2 id="auto-assignment-title" class="font-semibold text-slate-900">{{ $t('Auto assignment') }}</h2>
+                            <p class="mt-1 text-sm leading-6 text-slate-600">{{ $t('Use auto-assignment rules to evenly distribute chats among agent automatically.') }}</p>
                         </div>
-                    </div>
+                        <fieldset>
+                            <legend class="sr-only">{{ $t('Choose assignment method') }}</legend>
+                            <div class="grid grid-cols-1 gap-3 md:grid-cols-3">
+                                <label class="flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition focus-within:ring-2 focus-within:ring-primary" :class="assignmentMode === 'off' ? 'border-primary bg-emerald-50/50' : 'border-slate-200 hover:bg-slate-50'">
+                                    <input v-model="assignmentMode" type="radio" name="assignment_mode" value="off" class="mt-1 size-4 shrink-0 accent-emerald-700 focus:ring-primary" />
+                                    <span><span class="block font-medium text-slate-900">{{ $t('Off') }}</span><span class="mt-1 block text-sm leading-5 text-slate-600">{{ $t('Team members pick conversations manually from Unassigned folder.') }}</span></span>
+                                </label>
+                                <label class="flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition focus-within:ring-2 focus-within:ring-primary" :class="assignmentMode === 'auto' ? 'border-primary bg-emerald-50/50' : 'border-slate-200 hover:bg-slate-50'">
+                                    <input v-model="assignmentMode" type="radio" name="assignment_mode" value="auto" class="mt-1 size-4 shrink-0 accent-emerald-700 focus:ring-primary" />
+                                    <span><span class="block font-medium text-slate-900">{{ $t('Auto') }}</span><span class="mt-1 block text-sm leading-5 text-slate-600">{{ $t('Distribute conversations among all your available team members.') }}</span></span>
+                                </label>
+                                <label class="flex cursor-pointer items-start gap-3 rounded-lg border p-4 transition focus-within:ring-2 focus-within:ring-primary" :class="assignmentMode === 'round_robin' ? 'border-primary bg-emerald-50/50' : 'border-slate-200 hover:bg-slate-50'">
+                                    <input v-model="assignmentMode" type="radio" name="assignment_mode" value="round_robin" class="mt-1 size-4 shrink-0 accent-emerald-700 focus:ring-primary" />
+                                    <span><span class="block font-medium text-slate-900">{{ $t('Round-robin assignment') }}</span><span class="mt-1 block text-sm leading-5 text-slate-600">{{ $t('Round-robin assignment distributes chats equally among available agents.') }}</span></span>
+                                </label>
+                            </div>
+                        </fieldset>
+                    </section>
 
 
                     <!-- Assigned to specific agents -->
                     <div v-if="form.active && (form.auto_assignment || form.auto_robinhood)"
-                        class="bg-white border border-slate-200 rounded-lg pt-2 text-sm mb-4 px-4">
+                        class="mb-4 rounded-xl border border-slate-200 bg-white p-4 text-sm shadow-sm sm:p-5">
                         <div class="w-full py-2 mb-2 mt-2">
                             <div class="flex w-full mb-4">
                                 <div class="text-md">
@@ -129,219 +65,107 @@
                             </div>
                         </div>
                         <div class="mb-4">
-                            <div :dir="$page.props.locale === 'ar' ? 'rtl' : 'ltr'"
-                                class="bg-white border border-slate-200 rounded-lg p-4">
+                            <div class="rounded-lg border border-slate-200 p-4">
                                 <h4 class="text-lg font-semibold mb-3">{{ $t('Select Agents') }}</h4>
-                                <ul class="space-y-2 max-h-64 overflow-y-auto">
+                                <ul v-if="props.agents?.length" class="grid max-h-64 grid-cols-1 gap-2 overflow-y-auto sm:grid-cols-2">
                                     <li v-for="agent in props.agents" :key="agent.id"
-                                        class="flex items-center p-2 border rounded-md bg-gray-50">
-                                        <input type="checkbox" class="mx-2"
+                                        class="flex items-center gap-3 rounded-md border border-slate-200 bg-slate-50 p-3">
+                                        <input type="checkbox" class="size-4 shrink-0 rounded accent-emerald-700 focus:ring-primary"
                                             :checked="form.selected_agents.includes(Number(agent.id))"
                                             @change="toggleAgent(agent.id)" :id="'agent_' + agent.id">
-                                        <label :for="'agent_' + agent.id" class="cursor-pointer">
+                                        <label :for="'agent_' + agent.id" class="min-w-0 cursor-pointer text-slate-800">
                                             {{ agent.first_name }} {{ agent.last_name }}
                                         </label>
                                     </li>
                                 </ul>
+                                <p v-else class="rounded-md bg-slate-50 p-3 text-sm leading-6 text-slate-600">{{ $t('No agents available for assignment') }}</p>
                             </div>
-                        </div>
-                        <div class="mb-4 flex justify-end">
-                            <button @click="submitForm" :disabled="form.selected_agents.length === 0"
-                                :class="form.selected_agents.length === 0 ? 'bg-gray-300 cursor-not-allowed' : 'bg-primary hover:bg-primary-dark'"
-                                class="px-6 py-2 text-white rounded-lg transition-colors duration-200">
-                                {{ $t('Save') }}
-                            </button>
                         </div>
                     </div>
 
                     <!-- Reassign reopened chats -->
-                    <div v-if="form.active"
-                        class="bg-white border border-slate-200 rounded-lg pt-2 text-sm mb-4 px-4 mb-3">
-                        <div class="w-full py-2 mb-4 mt-2">
-                            <div class="flex w-full">
-                                <div class="w-3/4 text-md">
-                                    <h4 class="text-[16px]">{{ $t('Reassign chats that have been reopened') }}</h4>
-                                    <div class="mb-1 text-slate-500">
-                                        {{ $t('Enable this option to reassign chats when a contact re-opens closed conversation.') }}
-                                    </div>
-                                </div>
-                                <div class="w-1/4">
-                                    <div class="ml-auto w-12 h-6 flex items-center bg-gray-300 rounded-full p-1 cursor-pointer transition-colors duration-300"
-                                        :class="{ 'bg-primary': form.reassign_reopened_chats }" @click="toggleState2">
-                                        <div class="bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out"
-                                            :class="{ 'ltr:translate-x-6 rtl:translate-x-[-24px]': form.reassign_reopened_chats }">
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                    <section v-if="form.active" class="mb-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                        <div class="flex items-start justify-between gap-4">
+                            <div class="min-w-0"><h2 class="font-semibold text-slate-900">{{ $t('Reassign chats that have been reopened') }}</h2><p class="mt-1 text-sm leading-6 text-slate-600">{{ $t('Enable this option to reassign chats when a contact re-opens closed conversation.') }}</p></div>
+                            <button type="button" role="switch" :aria-checked="form.reassign_reopened_chats" :aria-label="$t('Reassign chats that have been reopened')" class="relative mt-1 inline-flex h-6 w-12 shrink-0 items-center rounded-full p-1 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700" :class="form.reassign_reopened_chats ? 'bg-primary' : 'bg-slate-300'" @click="toggleState2"><span class="sr-only">{{ $t('Reassign chats that have been reopened') }}</span><span class="absolute start-1 size-4 rounded-full bg-white shadow transition-transform" :class="form.reassign_reopened_chats ? 'ltr:translate-x-6 rtl:translate-x-[-24px]' : ''" aria-hidden="true"></span></button>
                         </div>
-                    </div>
+                    </section>
 
 
                     <!-- Allow agents to view all chats -->
-                    <div v-if="form.active" class="bg-white border border-slate-200 rounded-lg pt-2 text-sm mb-4 px-4">
-                        <div class="w-full py-2 mb-4 mt-2">
-                            <div class="flex w-full items-start gap-4">
-                                <div class="flex-1 text-md">
-                                    <h4 class="text-[16px] leading-relaxed">
-                                        {{ $t('Grant agents access to view all chats not assigned to them') }}
-                                    </h4>
-                                    <div class="mb-1 text-slate-500 mt-1">
-                                        {{ $t('Disable this option, if you want live chat agents to have access only to new conversations.') }}
-                                    </div>
-                                </div>
-                                <div class="flex-shrink-0">
-                                    <div class="w-12 h-6 flex items-center bg-gray-300 rounded-full p-1 cursor-pointer transition-colors duration-300"
-                                        :class="{ 'bg-primary': form.allow_agents_to_view_all_chats }"
-                                        @click="toggleState3">
-                                        <div class="bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out"
-                                            :class="{ 'ltr:translate-x-6 rtl:translate-x-[-24px]': form.allow_agents_to_view_all_chats }">
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                    <section v-if="form.active" class="mb-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                        <div class="flex items-start justify-between gap-4">
+                            <div class="min-w-0"><h2 class="font-semibold text-slate-900">{{ $t('Grant agents access to view all chats not assigned to them') }}</h2><p class="mt-1 text-sm leading-6 text-slate-600">{{ $t('Disable this option, if you want live chat agents to have access only to new conversations.') }}</p></div>
+                            <button type="button" role="switch" :aria-checked="form.allow_agents_to_view_all_chats" :aria-label="$t('Grant agents access to view all chats not assigned to them')" class="relative mt-1 inline-flex h-6 w-12 shrink-0 items-center rounded-full p-1 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700" :class="form.allow_agents_to_view_all_chats ? 'bg-primary' : 'bg-slate-300'" @click="toggleState3"><span class="sr-only">{{ $t('Grant agents access to view all chats not assigned to them') }}</span><span class="absolute start-1 size-4 rounded-full bg-white shadow transition-transform" :class="form.allow_agents_to_view_all_chats ? 'ltr:translate-x-6 rtl:translate-x-[-24px]' : ''" aria-hidden="true"></span></button>
                         </div>
-                    </div>
+                    </section>
 
                     <!-- Mask phone numbers for agents -->
-                    <div v-if="form.active" class="bg-white border border-slate-200 rounded-lg pt-2 text-sm mb-4 px-4">
-                        <div class="w-full py-2 mb-4 mt-2">
-                            <div class="flex w-full items-start gap-4">
-                                <div class="flex-1 text-md">
-                                    <h4 class="text-[16px] leading-relaxed">
-                                        {{ $t('Mask phone numbers for agents') }}
-                                    </h4>
-                                    <div class="mb-1 text-slate-500 mt-1">
-                                        {{ $t('When enabled, agents can only see the first 3 and last 2 digits of phone numbers.') }}
-                                    </div>
-                                </div>
-                                <div class="flex-shrink-0">
-                                    <div class="w-12 h-6 flex items-center bg-gray-300 rounded-full p-1 cursor-pointer transition-colors duration-300"
-                                        :class="{ 'bg-primary': form.mask_agent_phone_numbers }"
-                                        @click="toggleState4">
-                                        <div class="bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out"
-                                            :class="{ 'ltr:translate-x-6 rtl:translate-x-[-24px]': form.mask_agent_phone_numbers }">
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                    <section v-if="form.active" class="mb-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
+                        <div class="flex items-start justify-between gap-4">
+                            <div class="min-w-0"><h2 class="font-semibold text-slate-900">{{ $t('Mask phone numbers for agents') }}</h2><p class="mt-1 text-sm leading-6 text-slate-600">{{ $t('When enabled, agents can only see the first 3 and last 2 digits of phone numbers.') }}</p></div>
+                            <button type="button" role="switch" :aria-checked="form.mask_agent_phone_numbers" :aria-label="$t('Mask phone numbers for agents')" class="relative mt-1 inline-flex h-6 w-12 shrink-0 items-center rounded-full p-1 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700" :class="form.mask_agent_phone_numbers ? 'bg-primary' : 'bg-slate-300'" @click="toggleState4"><span class="sr-only">{{ $t('Mask phone numbers for agents') }}</span><span class="absolute start-1 size-4 rounded-full bg-white shadow transition-transform" :class="form.mask_agent_phone_numbers ? 'ltr:translate-x-6 rtl:translate-x-[-24px]' : ''" aria-hidden="true"></span></button>
                         </div>
-                    </div>
+                    </section>
 
                     <!-- Note email notifications -->
-                    <div v-if="form.active" class="bg-white border border-slate-200 rounded-lg pt-2 text-sm mb-4 px-4">
-                        <div class="w-full py-2 mb-4 mt-2">
-                            <div class="flex w-full items-start gap-4">
-                                <div class="flex-1 text-md">
-                                    <h4 class="text-[16px] leading-relaxed">
-                                        {{ $t('Email notification when a note is added') }}
-                                    </h4>
-                                    <div class="mb-1 text-slate-500 mt-1">
-                                        {{ $t('Send an email after a team member adds a note to a conversation.') }}
-                                    </div>
-                                </div>
-                                <div class="flex-shrink-0">
-                                    <div class="w-12 h-6 flex items-center bg-gray-300 rounded-full p-1 cursor-pointer transition-colors duration-300"
-                                        :class="{ 'bg-primary': form.note_email_notifications_enabled }"
-                                        @click="toggleState5">
-                                        <div class="bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out"
-                                            :class="{ 'ltr:translate-x-6 rtl:translate-x-[-24px]': form.note_email_notifications_enabled }">
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div v-if="form.note_email_notifications_enabled" class="grid grid-cols-2 gap-x-4 mt-4">
-                                <div class="border rounded-xl p-4 cursor-pointer"
-                                    :class="form.note_email_notifications_recipient_scope === 'assigned_agent' ? 'border-primary bg-slate-50' : ''"
-                                    @click="selectNoteEmailRecipientScope('assigned_agent')">
-                                    <div class="flex space-s-2">
-                                        <div class="mt-[1px]">
-                                            <div class="w-4 h-4 border border-gray-400 rounded-md flex items-center justify-center"
-                                                :class="form.note_email_notifications_recipient_scope === 'assigned_agent' ? 'bg-[#000]' : ''">
-                                                <svg v-if="form.note_email_notifications_recipient_scope === 'assigned_agent'"
-                                                    class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round"
-                                                        stroke-width="2" d="M5 13l4 4L19 7" />
-                                                </svg>
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <div>{{ $t('Assigned agent only') }}</div>
-                                            <div class="text-slate-500">{{ $t('Notify only the team member assigned to the conversation.') }}</div>
-                                        </div>
-                                    </div>
-                                </div>
-                                <div class="border rounded-xl p-4 cursor-pointer"
-                                    :class="form.note_email_notifications_recipient_scope === 'all_team' ? 'border-primary bg-slate-50' : ''"
-                                    @click="selectNoteEmailRecipientScope('all_team')">
-                                    <div class="flex space-s-2">
-                                        <div class="mt-[1px]">
-                                            <div class="w-4 h-4 border border-gray-400 rounded-md flex items-center justify-center"
-                                                :class="form.note_email_notifications_recipient_scope === 'all_team' ? 'bg-[#000]' : ''">
-                                                <svg v-if="form.note_email_notifications_recipient_scope === 'all_team'"
-                                                    class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                                                    <path stroke-linecap="round" stroke-linejoin="round"
-                                                        stroke-width="2" d="M5 13l4 4L19 7" />
-                                                </svg>
-                                            </div>
-                                        </div>
-                                        <div>
-                                            <div>{{ $t('All team members') }}</div>
-                                            <div class="text-slate-500">{{ $t('Notify every active team member in this organization.') }}</div>
-                                        </div>
-                                    </div>
-                                </div>
-                            </div>
+                    <section v-if="form.active" class="mb-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5" aria-labelledby="email-note-notification-title">
+                        <div class="flex items-start justify-between gap-4">
+                            <div class="min-w-0"><h2 id="email-note-notification-title" class="font-semibold text-slate-900">{{ $t('Email notification when a note is added') }}</h2><p class="mt-1 text-sm leading-6 text-slate-600">{{ $t('Send an email after a team member adds a note to a conversation.') }}</p></div>
+                            <button type="button" role="switch" :aria-checked="form.note_email_notifications_enabled" :aria-label="$t('Email notification when a note is added')" class="relative mt-1 inline-flex h-6 w-12 shrink-0 items-center rounded-full p-1 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700" :class="form.note_email_notifications_enabled ? 'bg-primary' : 'bg-slate-300'" @click="toggleState5"><span class="sr-only">{{ $t('Email notification when a note is added') }}</span><span class="absolute start-1 size-4 rounded-full bg-white shadow transition-transform" :class="form.note_email_notifications_enabled ? 'ltr:translate-x-6 rtl:translate-x-[-24px]' : ''" aria-hidden="true"></span></button>
                         </div>
-                    </div>
+                        <fieldset v-if="form.note_email_notifications_enabled" class="mt-4">
+                            <legend class="mb-2 text-sm font-medium text-slate-700">{{ $t('Who should receive the email?') }}</legend>
+                            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                <label class="flex cursor-pointer items-start gap-3 rounded-lg border p-3 focus-within:ring-2 focus-within:ring-primary" :class="form.note_email_notifications_recipient_scope === 'assigned_agent' ? 'border-primary bg-emerald-50/50' : 'border-slate-200'">
+                                    <input v-model="form.note_email_notifications_recipient_scope" type="radio" name="note_email_recipient_scope" value="assigned_agent" class="mt-1 size-4 shrink-0 accent-emerald-700 focus:ring-primary" />
+                                    <span><span class="block font-medium text-slate-900">{{ $t('Assigned agent only') }}</span><span class="mt-1 block text-sm leading-5 text-slate-600">{{ $t('Notify only the team member assigned to the conversation.') }}</span></span>
+                                </label>
+                                <label class="flex cursor-pointer items-start gap-3 rounded-lg border p-3 focus-within:ring-2 focus-within:ring-primary" :class="form.note_email_notifications_recipient_scope === 'all_team' ? 'border-primary bg-emerald-50/50' : 'border-slate-200'">
+                                    <input v-model="form.note_email_notifications_recipient_scope" type="radio" name="note_email_recipient_scope" value="all_team" class="mt-1 size-4 shrink-0 accent-emerald-700 focus:ring-primary" />
+                                    <span><span class="block font-medium text-slate-900">{{ $t('All team members') }}</span><span class="mt-1 block text-sm leading-5 text-slate-600">{{ $t('Notify every active team member in this organization.') }}</span></span>
+                                </label>
+                            </div>
+                        </fieldset>
+                    </section>
 
                     <!-- Note platform notifications -->
-                    <div v-if="form.active" class="bg-white border border-slate-200 rounded-lg pt-2 text-sm mb-4 px-4">
-                        <div class="w-full py-2 mb-4 mt-2">
-                            <div class="flex w-full items-start gap-4">
-                                <div class="flex-1 text-md">
-                                    <h4 class="text-[16px] leading-relaxed">{{ $t('Platform notification when a note is added') }}</h4>
-                                    <div class="mb-1 text-slate-500 mt-1">{{ $t('Show an in-app notification with sound after a team member adds a note.') }}</div>
-                                </div>
-                                <div class="flex-shrink-0">
-                                    <div class="w-12 h-6 flex items-center bg-gray-300 rounded-full p-1 cursor-pointer transition-colors duration-300"
-                                        :class="{ 'bg-primary': form.note_platform_notifications_enabled }" @click="toggleState6">
-                                        <div class="bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out"
-                                            :class="{ 'ltr:translate-x-6 rtl:translate-x-[-24px]': form.note_platform_notifications_enabled }"></div>
-                                    </div>
-                                </div>
-                            </div>
-                            <div v-if="form.note_platform_notifications_enabled" class="grid grid-cols-2 gap-x-4 mt-4">
-                                <div class="border rounded-xl p-4 cursor-pointer"
-                                    :class="form.note_platform_notifications_recipient_scope === 'assigned_agent' ? 'border-primary bg-slate-50' : ''"
-                                    @click="selectNotePlatformRecipientScope('assigned_agent')">
-                                    <div class="flex space-s-2">
-                                        <div class="mt-[1px]"><div class="w-4 h-4 border border-gray-400 rounded-md flex items-center justify-center" :class="form.note_platform_notifications_recipient_scope === 'assigned_agent' ? 'bg-[#000]' : ''"><svg v-if="form.note_platform_notifications_recipient_scope === 'assigned_agent'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg></div></div>
-                                        <div><div>{{ $t('Assigned agent only') }}</div><div class="text-slate-500">{{ $t('Notify only the team member assigned to the conversation.') }}</div></div>
-                                    </div>
-                                </div>
-                                <div class="border rounded-xl p-4 cursor-pointer"
-                                    :class="form.note_platform_notifications_recipient_scope === 'all_team' ? 'border-primary bg-slate-50' : ''"
-                                    @click="selectNotePlatformRecipientScope('all_team')">
-                                    <div class="flex space-s-2">
-                                        <div class="mt-[1px]"><div class="w-4 h-4 border border-gray-400 rounded-md flex items-center justify-center" :class="form.note_platform_notifications_recipient_scope === 'all_team' ? 'bg-[#000]' : ''"><svg v-if="form.note_platform_notifications_recipient_scope === 'all_team'" class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg></div></div>
-                                        <div><div>{{ $t('All team members') }}</div><div class="text-slate-500">{{ $t('Notify every active team member in this organization.') }}</div></div>
-                                    </div>
-                                </div>
-                            </div>
+                    <section v-if="form.active" class="mb-4 rounded-xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5" aria-labelledby="platform-note-notification-title">
+                        <div class="flex items-start justify-between gap-4">
+                            <div class="min-w-0"><h2 id="platform-note-notification-title" class="font-semibold text-slate-900">{{ $t('Platform notification when a note is added') }}</h2><p class="mt-1 text-sm leading-6 text-slate-600">{{ $t('Show an in-app notification with sound after a team member adds a note.') }}</p></div>
+                            <button type="button" role="switch" :aria-checked="form.note_platform_notifications_enabled" :aria-label="$t('Platform notification when a note is added')" class="relative mt-1 inline-flex h-6 w-12 shrink-0 items-center rounded-full p-1 transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-emerald-700" :class="form.note_platform_notifications_enabled ? 'bg-primary' : 'bg-slate-300'" @click="toggleState6"><span class="sr-only">{{ $t('Platform notification when a note is added') }}</span><span class="absolute start-1 size-4 rounded-full bg-white shadow transition-transform" :class="form.note_platform_notifications_enabled ? 'ltr:translate-x-6 rtl:translate-x-[-24px]' : ''" aria-hidden="true"></span></button>
                         </div>
-                    </div>
+                        <fieldset v-if="form.note_platform_notifications_enabled" class="mt-4">
+                            <legend class="mb-2 text-sm font-medium text-slate-700">{{ $t('Who should receive the notification?') }}</legend>
+                            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                <label class="flex cursor-pointer items-start gap-3 rounded-lg border p-3 focus-within:ring-2 focus-within:ring-primary" :class="form.note_platform_notifications_recipient_scope === 'assigned_agent' ? 'border-primary bg-emerald-50/50' : 'border-slate-200'">
+                                    <input v-model="form.note_platform_notifications_recipient_scope" type="radio" name="note_platform_recipient_scope" value="assigned_agent" class="mt-1 size-4 shrink-0 accent-emerald-700 focus:ring-primary" />
+                                    <span><span class="block font-medium text-slate-900">{{ $t('Assigned agent only') }}</span><span class="mt-1 block text-sm leading-5 text-slate-600">{{ $t('Notify only the team member assigned to the conversation.') }}</span></span>
+                                </label>
+                                <label class="flex cursor-pointer items-start gap-3 rounded-lg border p-3 focus-within:ring-2 focus-within:ring-primary" :class="form.note_platform_notifications_recipient_scope === 'all_team' ? 'border-primary bg-emerald-50/50' : 'border-slate-200'">
+                                    <input v-model="form.note_platform_notifications_recipient_scope" type="radio" name="note_platform_recipient_scope" value="all_team" class="mt-1 size-4 shrink-0 accent-emerald-700 focus:ring-primary" />
+                                    <span><span class="block font-medium text-slate-900">{{ $t('All team members') }}</span><span class="mt-1 block text-sm leading-5 text-slate-600">{{ $t('Notify every active team member in this organization.') }}</span></span>
+                                </label>
+                            </div>
+                        </fieldset>
+                    </section>
 
+                    <footer class="sticky bottom-0 z-10 mt-5 flex flex-col-reverse gap-3 border-t border-slate-200 bg-white/95 py-4 backdrop-blur sm:flex-row sm:items-center sm:justify-between">
+                        <p class="text-sm text-slate-600" aria-live="polite">{{ form.isDirty ? $t('Unsaved ticketing changes') : (form.wasSuccessful ? $t('Ticketing changes saved') : $t('No unsaved ticketing changes')) }}</p>
+                        <button type="button" :disabled="form.processing || !form.isDirty" @click="submitForm" class="inline-flex min-h-10 items-center justify-center gap-2 rounded-lg bg-primary px-5 py-2 text-sm font-medium text-white shadow-sm hover:opacity-90 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50">
+                            <svg v-if="form.processing" class="size-4 animate-spin" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"/><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z"/></svg>
+                            {{ form.processing ? $t('Saving...') : $t('Save ticketing settings') }}
+                        </button>
+                    </footer>
                 </div>
-            </div>
+            </main>
         </div>
     </SettingLayout>
 </template>
 
 <script setup>
 import SettingLayout from "./Layout.vue";
-import { ref, watch } from 'vue';
+import { computed, ref } from 'vue';
 import { useForm } from "@inertiajs/vue3";
 
 const props = defineProps(['rows', 'filters', 'settings', 'modules', 'agents', 'oldSelectedAgents']);
@@ -373,9 +197,17 @@ const form = useForm({
     })()
 });
 
-watch(() => form.selected_agents, (curr) => {
-    console.log('Ticket.vue - form.selected_agents changed to:', curr);
-}, { deep: true });
+const assignmentMode = computed({
+    get: () => form.auto_robinhood ? 'round_robin' : (form.auto_assignment ? 'auto' : 'off'),
+    set: (mode) => {
+        form.auto_assignment = mode === 'auto';
+        form.auto_robinhood = mode === 'round_robin';
+
+        if (mode === 'off') {
+            form.selected_agents = [];
+        }
+    },
+});
 
 const toggleAgent = (agentId) => {
     const id = Number(agentId);
@@ -386,50 +218,17 @@ const toggleAgent = (agentId) => {
     } else {
         form.selected_agents.push(id);
     }
-    console.log('Agent toggled. ID:', id, 'New selection:', form.selected_agents);
 };
 
-const toggleState1 = () => { form.active = !form.active; submitForm(); }
-const toggleAutoAssignment = (el) => {
-    // Reset both options first
-    form.auto_assignment = false;
-    form.auto_robinhood = false;
+const toggleState1 = () => { form.active = !form.active; };
+const toggleState2 = () => { form.reassign_reopened_chats = !form.reassign_reopened_chats; };
+const toggleState3 = () => { form.allow_agents_to_view_all_chats = !form.allow_agents_to_view_all_chats; };
+const toggleState4 = () => { form.mask_agent_phone_numbers = !form.mask_agent_phone_numbers; };
+const toggleState5 = () => { form.note_email_notifications_enabled = !form.note_email_notifications_enabled; };
+const toggleState6 = () => { form.note_platform_notifications_enabled = !form.note_platform_notifications_enabled; };
 
-    if (el === 'auto') {
-        form.auto_assignment = true;
-    } else if (el === 'auto_robinhood') {
-        form.auto_robinhood = true;
-    } else if (el === 'off') {
-        form.selected_agents = [];
-        submitForm();
-    }
-
-}
-const toggleState2 = () => {
-    form.reassign_reopened_chats = !form.reassign_reopened_chats;
-    submitForm();
-}
-const toggleState3 = () => { form.allow_agents_to_view_all_chats = !form.allow_agents_to_view_all_chats; submitForm(); }
-const toggleState4 = () => { form.mask_agent_phone_numbers = !form.mask_agent_phone_numbers; submitForm(); }
-const toggleState5 = () => {
-    form.note_email_notifications_enabled = !form.note_email_notifications_enabled;
-    submitForm();
-}
-const selectNoteEmailRecipientScope = (scope) => {
-    form.note_email_notifications_recipient_scope = scope;
-    submitForm();
-}
-const toggleState6 = () => {
-    form.note_platform_notifications_enabled = !form.note_platform_notifications_enabled;
-    submitForm();
-}
-const selectNotePlatformRecipientScope = (scope) => {
-    form.note_platform_notifications_recipient_scope = scope;
-    submitForm();
-}
-
-const submitForm = async () => {
-    console.log('SUBMITTING POST TO SERVER:', form.data());
-    form.post('/settings/tickets', { preserveScroll: true });
-}
+const submitForm = () => form.post('/settings/tickets', {
+    preserveScroll: true,
+    onSuccess: () => form.defaults(),
+});
 </script>

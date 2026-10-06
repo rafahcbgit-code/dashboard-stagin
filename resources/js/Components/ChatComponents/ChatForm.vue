@@ -71,6 +71,9 @@ const typingTabId = typeof crypto !== 'undefined' && crypto.randomUUID
 const typingExpiryMs = 4500;
 const typingIdleMs = 2500;
 const typingHeartbeatMs = 2000;
+const replyWindowNow = ref(Date.now());
+const replyWindowTimeout = ref(null);
+const showReplyWindowHelp = ref(false);
 
 const currentUser = computed(() => usePage().props.auth?.user);
 const currentUserId = computed(() => Number(currentUser.value?.id || 0));
@@ -498,36 +501,6 @@ const handleEnterKey = (event) => {
     }
 };
 
-const isInboundChatWithin24Hours = computed(() => {
-    const latestInboundFromThread = latestInboundChatTimeFromThread();
-
-    if (latestInboundFromThread) {
-        return isWithin24Hours(latestInboundFromThread);
-    }
-
-    if (typeof props.contact.can_send_session_message === 'boolean') {
-        return props.contact.can_send_session_message;
-    }
-
-    if (props.contact.last_inbound_chat_at) {
-        return isWithin24Hours(new Date(props.contact.last_inbound_chat_at));
-    }
-
-    if (props.contact.last_inbound_chat) {
-        return isWithin24Hours(new Date(props.contact.last_inbound_chat.created_at));
-    }
-
-    return false;
-});
-
-const isWithin24Hours = (date) => {
-    if (!(date instanceof Date) || Number.isNaN(date.getTime())) {
-        return false;
-    }
-
-    return new Date() - date < 24 * 60 * 60 * 1000;
-};
-
 const latestInboundChatTimeFromThread = () => {
     if (!Array.isArray(props.chatThread)) {
         return null;
@@ -556,6 +529,85 @@ const latestInboundChatTimeFromThread = () => {
 
     return latestTime;
 };
+
+const latestInboundAt = computed(() => {
+    const threadTimestamp = latestInboundChatTimeFromThread();
+
+    if (threadTimestamp) {
+        return threadTimestamp;
+    }
+
+    const contactTimestamp = props.contact?.last_inbound_chat_at || props.contact?.last_inbound_chat?.created_at;
+    if (!contactTimestamp) {
+        return null;
+    }
+
+    const parsed = new Date(contactTimestamp);
+    return Number.isNaN(parsed.getTime()) ? null : parsed;
+});
+
+const replyWindowExpiresAt = computed(() => {
+    const serverExpiry = props.contact?.reply_window_expires_at;
+    let parsedServerExpiry = null;
+    if (serverExpiry) {
+        const parsed = new Date(serverExpiry);
+        if (!Number.isNaN(parsed.getTime())) {
+            parsedServerExpiry = parsed;
+        }
+    }
+
+    const inferredExpiry = latestInboundAt.value
+        ? new Date(latestInboundAt.value.getTime() + (24 * 60 * 60 * 1000))
+        : null;
+
+    if (parsedServerExpiry && inferredExpiry) {
+        return inferredExpiry > parsedServerExpiry ? inferredExpiry : parsedServerExpiry;
+    }
+
+    return inferredExpiry || parsedServerExpiry;
+});
+
+const replyWindowRemainingMs = computed(() => replyWindowExpiresAt.value
+    ? Math.max(0, replyWindowExpiresAt.value.getTime() - replyWindowNow.value)
+    : 0);
+const replyWindowRemainingMinutes = computed(() => Math.ceil(replyWindowRemainingMs.value / 60000));
+const replyWindowHours = computed(() => Math.floor(replyWindowRemainingMinutes.value / 60));
+const replyWindowMinutes = computed(() => replyWindowRemainingMinutes.value % 60);
+const replyWindowElapsedPercent = computed(() => {
+    if (!replyWindowExpiresAt.value) return 0;
+
+    const elapsed = replyWindowNow.value - (replyWindowExpiresAt.value.getTime() - (24 * 60 * 60 * 1000));
+    return Math.min(100, Math.max(0, Math.round((elapsed / (24 * 60 * 60 * 1000)) * 100)));
+});
+const isInboundChatWithin24Hours = computed(() => {
+    if (replyWindowExpiresAt.value) {
+        return replyWindowExpiresAt.value.getTime() > replyWindowNow.value;
+    }
+
+    return typeof props.contact?.can_send_session_message === 'boolean'
+        ? props.contact.can_send_session_message
+        : false;
+});
+const isReplyWindowExpiringSoon = computed(() => replyWindowRemainingMs.value <= (4 * 60 * 60 * 1000));
+
+const scheduleReplyWindowClock = () => {
+    if (replyWindowTimeout.value) {
+        clearTimeout(replyWindowTimeout.value);
+        replyWindowTimeout.value = null;
+    }
+
+    replyWindowNow.value = Date.now();
+    const expiresAt = replyWindowExpiresAt.value?.getTime();
+    if (!expiresAt || expiresAt <= replyWindowNow.value) {
+        return;
+    }
+
+    const remaining = expiresAt - replyWindowNow.value;
+    const untilNextDisplayedMinute = remaining % 60000 || 60000;
+    replyWindowTimeout.value = setTimeout(scheduleReplyWindowClock, Math.min(remaining, untilNextDisplayedMinute));
+};
+
+watch(() => replyWindowExpiresAt.value?.getTime() ?? null, scheduleReplyWindowClock);
 
 const handleFileUpload = (event) => {
     if (isContactBlocked.value) {
@@ -818,6 +870,7 @@ onMounted(() => {
         bitRate: 128
     });
     joinTypingChannel();
+    scheduleReplyWindowClock();
 });
 
 onBeforeUnmount(() => {
@@ -825,6 +878,10 @@ onBeforeUnmount(() => {
     document.removeEventListener('click', handleClickOutside);
     stopTimer();
     stopPlaybackTimer();
+    if (replyWindowTimeout.value) {
+        clearTimeout(replyWindowTimeout.value);
+        replyWindowTimeout.value = null;
+    }
     if (audioPreviewUrl.value) {
         URL.revokeObjectURL(audioPreviewUrl.value);
     }
@@ -872,32 +929,62 @@ onBeforeUnmount(() => {
             </div>
         </div>
     </div>
-    <div v-if="!isContactBlocked && !isInboundChatWithin24Hours && !props.chatLimitReached"
-        class="flex justify-center items-center w-full px-6 md:px-4">
-        <div class="flex items-center justify-between space-x-4 bg-orange-100 rounded-lg p-2 mb-2 px-4">
-            <div class="flex items-start justify-between space-x-4">
-                <span class="text-red-700">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 36 36">
-                        <path fill="currentColor"
-                            d="M18 21.32a1.3 1.3 0 0 0 1.3-1.3V14a1.3 1.3 0 1 0-2.6 0v6a1.3 1.3 0 0 0 1.3 1.32Z"
-                            class="clr-i-outline clr-i-outline-path-1" />
-                        <circle cx="17.95" cy="24.27" r="1.5" fill="currentColor"
-                            class="clr-i-outline clr-i-outline-path-2" />
-                        <path fill="currentColor"
-                            d="M30.33 25.54L20.59 7.6a3 3 0 0 0-5.27 0L5.57 25.54A3 3 0 0 0 8.21 30h19.48a3 3 0 0 0 2.64-4.43Zm-1.78 1.94a1 1 0 0 1-.86.49H8.21a1 1 0 0 1-.88-1.48l9.74-17.94a1 1 0 0 1 1.76 0l9.74 17.94a1 1 0 0 1-.02.99Z"
-                            class="clr-i-outline clr-i-outline-path-3" />
-                        <path fill="none" d="M0 0h36v36H0z" />
-                    </svg>
-                </span>
-                <div>
-                    <div class="text-sm">{{ $t('24 hour limit') }}</div>
-                    <div class="text-sm">{{ $t('Whatsapp does not allow sending messages 24 hours after they last messaged you.However, you can send them a template message') }}</div>
+    <div v-if="!isContactBlocked && !props.chatLimitReached" class="w-full px-2 pb-2 md:px-10">
+        <section class="rounded-xl border p-3 shadow-sm sm:p-4" :class="isInboundChatWithin24Hours ? (isReplyWindowExpiringSoon ? 'border-amber-300 bg-amber-50/80' : 'border-emerald-200 bg-emerald-50/70') : 'border-slate-300 bg-slate-50'" :aria-label="$t('Free reply window')">
+            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                <div class="flex min-w-0 items-start gap-3">
+                    <span class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full" :class="isInboundChatWithin24Hours ? (isReplyWindowExpiringSoon ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-700') : 'bg-slate-200 text-slate-700'" aria-hidden="true">
+                        <svg v-if="isInboundChatWithin24Hours" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-5"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" d="M12 7v5l3 2"/></svg>
+                        <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-5"><rect x="4" y="5" width="16" height="15" rx="2"/><path stroke-linecap="round" d="M8 3v4m8-4v4M4 10h16"/></svg>
+                    </span>
+                    <div class="min-w-0 flex-1">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <h3 class="font-semibold" :class="isInboundChatWithin24Hours ? (isReplyWindowExpiringSoon ? 'text-amber-950' : 'text-emerald-950') : 'text-slate-900'">
+                                {{ $t(isInboundChatWithin24Hours ? 'You can reply to this customer now' : (latestInboundAt ? 'Regular reply time has ended' : 'The customer has not messaged yet')) }}
+                            </h3>
+                            <span class="rounded-full px-2.5 py-1 text-xs font-semibold" :class="isInboundChatWithin24Hours ? (isReplyWindowExpiringSoon ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-900') : 'bg-slate-200 text-slate-800'">
+                                {{ $t(isInboundChatWithin24Hours ? 'You can reply now' : (latestInboundAt ? '24 hours passed — approved message needed' : 'Approved message needed to start')) }}
+                            </span>
+                        </div>
+                        <p v-if="isInboundChatWithin24Hours && replyWindowExpiresAt" class="mt-1 text-sm leading-6" :class="isReplyWindowExpiringSoon ? 'text-amber-900' : 'text-emerald-900'">
+                            {{ replyWindowRemainingMinutes === 0
+                                ? $t('Less than one minute remains in the reply window.')
+                                : (replyWindowHours === 0
+                                    ? $t('Reply window minutes remaining', { minutes: replyWindowMinutes })
+                                    : (replyWindowMinutes === 0
+                                        ? $t('Reply window hours remaining', { hours: replyWindowHours })
+                                        : $t('Reply window time remaining', { hours: replyWindowHours, minutes: replyWindowMinutes }))) }}
+                        </p>
+                        <p v-else-if="isInboundChatWithin24Hours" class="mt-1 text-sm leading-6 text-emerald-900">{{ $t('You can write and send a normal message now.') }}</p>
+                        <p v-else-if="latestInboundAt" class="mt-1 text-sm leading-6 text-slate-700">{{ $t('More than 24 hours have passed since the customer messaged you. Choose an approved WhatsApp message to contact them now.') }}</p>
+                        <p v-else class="mt-1 text-sm leading-6 text-slate-700">{{ $t('The customer has not sent a message yet. Choose an approved WhatsApp message to start the conversation.') }}</p>
+                    </div>
+                </div>
+                <div class="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
+                    <button type="button" class="inline-flex min-h-9 items-center justify-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" :aria-expanded="showReplyWindowHelp" aria-controls="reply-window-explanation" @click="showReplyWindowHelp = !showReplyWindowHelp">
+                        {{ $t(showReplyWindowHelp ? 'Hide explanation' : 'How does reply time work?') }}
+                    </button>
+                    <button v-if="!isInboundChatWithin24Hours" type="button" @click="viewTemplate()" class="inline-flex min-h-9 items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+                        {{ $t(latestInboundAt ? 'Send an approved message after 24 hours' : 'Choose an approved message to start') }}
+                    </button>
                 </div>
             </div>
-            <button @click="viewTemplate()"
-                class="rounded-md bg-primary px-3 py-1 text-sm text-white shadow-sm w-[25%]">{{ $t('Send Template')
-                }}</button>
-        </div>
+
+            <div v-if="isInboundChatWithin24Hours && replyWindowExpiresAt" class="mt-3" role="progressbar" :aria-valuenow="replyWindowElapsedPercent" aria-valuemin="0" aria-valuemax="100" :aria-label="$t('Reply window elapsed')">
+                <div class="mb-1.5 flex items-center justify-between gap-3 text-xs font-medium" :class="isReplyWindowExpiringSoon ? 'text-amber-900' : 'text-emerald-900'">
+                    <span>{{ $t('Reply time (24 hours)') }}</span><span>{{ 100 - replyWindowElapsedPercent }}% {{ $t('left') }}</span>
+                </div>
+                <div class="h-2 overflow-hidden rounded-full bg-white/80">
+                    <div class="h-full rounded-full transition-[width] duration-500" :class="isReplyWindowExpiringSoon ? 'bg-amber-500' : 'bg-emerald-600'" :style="{ width: `${100 - replyWindowElapsedPercent}%` }"></div>
+                </div>
+            </div>
+
+            <div v-if="showReplyWindowHelp" id="reply-window-explanation" class="mt-3 rounded-lg border border-slate-200 bg-white p-3 text-sm leading-6 text-slate-700">
+                <p>{{ $t('When the customer messages you, you can reply with your own message for 24 hours.') }}</p>
+                <p class="mt-1">{{ $t('If the customer sends another message, the 24 hours start again.') }}</p>
+                <p class="mt-1">{{ $t('After the 24-hour period ends, send a message approved by WhatsApp to contact the customer.') }}</p>
+            </div>
+        </section>
     </div>
     <form v-if="!isContactBlocked && isInboundChatWithin24Hours && !props.chatLimitReached" @submit.prevent="sendMessage()"
         class="flex items-center px-2 md:px-10 space-x-2">

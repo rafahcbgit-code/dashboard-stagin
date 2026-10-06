@@ -51,7 +51,7 @@ class HandleInertiaRequests extends Middleware
         $organization = [];
         $organizations = [];
         $user = $request->user('admin') ?? $request->user('user') ?? $request->user();
-        $language = session('locale') ?? 'en';
+        $language = session('locale') ?? App::getLocale();
         $unreadMessages = 0;
         $secret = '';
         $qrcode = '';

@@ -1,5 +1,5 @@
 <script setup>
-import { nextTick, ref, watch } from 'vue';
+import { nextTick, onUnmounted, ref, watch } from 'vue';
 import { default as axios } from 'axios';
 import ChatBubble from '@/Components/ChatComponents/ChatBubble.vue';
 
@@ -8,6 +8,8 @@ const props = defineProps({
         type: Number,
         required: true
     },
+    contactUuid: { type: String, required: true },
+    searchTarget: { type: Object, default: null },
     initialMessages: {
         type: Array,
         required: true
@@ -30,6 +32,14 @@ const nextPage = ref(props.initialNextPage);
 const hasMore = ref(props.hasMoreMessages);
 const messageElements = ref({});
 const highlightedWamId = ref(null);
+const highlightedChatId = ref(null);
+const windowMode = ref(false);
+const windowHasOlder = ref(false);
+const windowHasNewer = ref(false);
+const windowError = ref(false);
+let windowRequestId = 0;
+let windowController = null;
+let windowHighlightTimer = null;
 let highlightTimer = null;
 
 const parseMetadata = (metadata) => {
@@ -122,6 +132,81 @@ const setMessageElement = (key, element) => {
     }
 };
 
+const restoreLatest = () => {
+    windowRequestId++;
+    windowController?.abort();
+    windowMode.value = false;
+    windowError.value = false;
+    messages.value = props.initialMessages;
+    hasMore.value = props.hasMoreMessages;
+    nextPage.value = props.initialNextPage;
+    highlightedChatId.value = null;
+    clearTimeout(windowHighlightTimer);
+};
+
+const openSearchResult = async (target) => {
+    const current = ++windowRequestId;
+    windowController?.abort();
+    windowController = new AbortController();
+    windowError.value = false;
+    try {
+        const response = await axios.get(`/chats/${encodeURIComponent(props.contactUuid)}/messages/around/${target.log_id}`, { signal: windowController.signal });
+        if (current !== windowRequestId) return;
+        windowMode.value = true;
+        messages.value = response.data.messages;
+        windowHasOlder.value = response.data.hasOlder;
+        windowHasNewer.value = response.data.hasNewer;
+        highlightedChatId.value = target.chat_id;
+        clearTimeout(windowHighlightTimer);
+        windowHighlightTimer = setTimeout(() => { highlightedChatId.value = null; }, 2200);
+        await nextTick();
+        const item = messages.value.find((row) => row?.[0]?.value?.id === target.chat_id);
+        const key = item && messageKey(item, messages.value.indexOf(item));
+        messageElements.value[key]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+    } catch (error) {
+        if (current === windowRequestId && error.code !== 'ERR_CANCELED') windowError.value = true;
+    }
+};
+
+const extendWindow = async (direction) => {
+    if (loading.value || !messages.value.length) return;
+    const edge = direction === 'older' ? messages.value[0] : messages.value[messages.value.length - 1];
+    const logId = edge?.[0]?.log_id;
+    if (!logId) return;
+    loading.value = true;
+    const current = windowRequestId;
+    windowController?.abort();
+    windowController = new AbortController();
+    try {
+        const response = await axios.get(`/chats/${encodeURIComponent(props.contactUuid)}/messages/around/${logId}`, { signal: windowController.signal });
+        if (current !== windowRequestId) return;
+        const viewport = direction === 'older' ? document.querySelector('[data-chat-scroll-container]') : null;
+        const previousHeight = viewport?.scrollHeight ?? 0;
+        const previousTop = viewport?.scrollTop ?? 0;
+        const existing = new Set(messages.value.map((row) => row?.[0]?.log_id));
+        const additional = response.data.messages.filter((row) => !existing.has(row?.[0]?.log_id));
+        messages.value = direction === 'older' ? [...additional, ...messages.value] : [...messages.value, ...additional];
+        if (direction === 'older') windowHasOlder.value = response.data.hasOlder;
+        else windowHasNewer.value = response.data.hasNewer;
+        if (viewport) {
+            await nextTick();
+            viewport.scrollTop = previousTop + viewport.scrollHeight - previousHeight;
+        }
+    } catch (error) {
+        if (current === windowRequestId && error.code !== 'ERR_CANCELED') windowError.value = true;
+    } finally {
+        loading.value = false;
+    }
+};
+
+watch(() => props.searchTarget, (target) => target ? openSearchResult(target) : restoreLatest(), { immediate: true });
+watch(() => props.contactId, restoreLatest);
+onUnmounted(() => {
+    windowController?.abort();
+    clearTimeout(windowHighlightTimer);
+    clearTimeout(highlightTimer);
+});
+
 const findMessageByWamId = (wamId) => messages.value.find((item) => (
     item?.[0]?.type === 'chat'
     && item?.[0]?.value?.wam_id === wamId
@@ -143,9 +228,29 @@ const highlightMessage = (wamId) => {
 const scrollToReply = async (wamId) => {
     let target = findMessageByWamId(wamId);
 
+    if (!target && windowMode.value) {
+        const current = ++windowRequestId;
+        windowController?.abort();
+        windowController = new AbortController();
+        windowError.value = false;
+        try {
+            const response = await axios.get(`/chats/${encodeURIComponent(props.contactUuid)}/messages/around-reply`, {
+                params: { wam_id: wamId }, signal: windowController.signal,
+            });
+            if (current !== windowRequestId) return;
+            messages.value = response.data.messages;
+            windowHasOlder.value = response.data.hasOlder;
+            windowHasNewer.value = response.data.hasNewer;
+            target = findMessageByWamId(wamId);
+        } catch (error) {
+            if (current === windowRequestId && error.code !== 'ERR_CANCELED') windowError.value = true;
+            return;
+        }
+    }
+
     // The original message may be on an older page. Load pages lazily only
     // when the user asks to open that reply, keeping the initial UI fast.
-    while (!target && hasMore.value) {
+    while (!target && !windowMode.value && hasMore.value) {
         const previousCount = messages.value.length;
         const previousPage = nextPage.value;
         const loaded = await loadMoreMessages();
@@ -173,7 +278,7 @@ const scrollToReply = async (wamId) => {
 watch(
     () => props.initialMessages,
     (newMessages) => {
-        messages.value = newMessages;
+        if (!windowMode.value) messages.value = newMessages;
     },
     { deep: true }
 );
@@ -193,7 +298,7 @@ watch(
 );
 
 const loadMoreMessages = async () => {
-    if (loading.value || !hasMore.value) return false;
+    if (loading.value || !hasMore.value || windowMode.value) return false;
     
     loading.value = true;
     try {
@@ -213,7 +318,12 @@ const loadMoreMessages = async () => {
 
 <template>
     <div class="py-4 md:py-4 relative px-6 md:px-10">
-        <div v-if="hasMore" 
+        <div v-if="windowMode" class="mb-3 flex flex-wrap items-center justify-center gap-2 text-sm">
+            <button v-if="windowHasOlder" type="button" class="rounded border bg-white px-3 py-1.5" :disabled="loading" @click="extendWindow('older')">{{ $t('Older messages') }}</button>
+            <button type="button" class="rounded border bg-white px-3 py-1.5" @click="restoreLatest">{{ $t('Back to latest messages') }}</button>
+        </div>
+        <p v-if="windowError" role="alert" class="mb-2 text-center text-sm text-red-700">{{ $t('Could not open this message') }}</p>
+        <div v-if="hasMore && !windowMode"
              class="text-center py-2">
             <div v-if="loading" 
                  class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 rounded-md text-sm text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-25 transition ease-in-out duration-150">
@@ -239,7 +349,8 @@ const loadMoreMessages = async () => {
              class="flex flex-grow flex-col"
              :class="[
                  chat[0].type === 'ticket' ? 'justify-center' : 'justify-end',
-                 highlightedWamId === chat?.[0]?.value?.wam_id
+                 (highlightedWamId && highlightedWamId === chat?.[0]?.value?.wam_id)
+                     || (windowMode && highlightedChatId === chat?.[0]?.value?.id)
                      ? 'rounded-lg bg-[#e9fff7] ring-2 ring-[#00a884] transition duration-300'
                      : ''
              ]">
@@ -265,6 +376,9 @@ const loadMoreMessages = async () => {
                     </div>
                 </div>
             </div>
+        </div>
+        <div v-if="windowMode && windowHasNewer" class="mt-3 text-center">
+            <button type="button" class="rounded border bg-white px-3 py-1.5 text-sm" :disabled="loading" @click="extendWindow('newer')">{{ $t('Newer messages') }}</button>
         </div>
     </div>
 </template>

@@ -8,13 +8,16 @@ import { ref, computed, onMounted } from "vue";
 import { Link, useForm } from "@inertiajs/vue3";
 import "vue3-toastify/dist/index.css";
 import { trans } from "laravel-vue-i18n";
+import { useI18n } from "vue-i18n";
+
+const { t } = useI18n();
 
 const props = defineProps({
   templates: Object,
   contactGroups: Object,
   settings: Array,
   contact: {
-    type: String,
+    type: [String, Object],
     default: null,
   },
   displayTitle: {
@@ -66,23 +69,39 @@ const carouselCards = ref([]);
 // Holds the top-level carousel_message_body text for preview.
 const carouselMessageBody = ref("");
 
-const variableOptions = ref([
-  { value: "static", label: trans("static") },
-  { value: "dynamic", label: trans("dynamic") },
+const variableOptions = computed(() => [
+  {
+    value: "static",
+    label: t("static"),
+    description: t("A fixed value is used for every recipient."),
+  },
+  {
+    value: "dynamic",
+    label: t("Use contact information"),
+    description: t("A value is filled from each recipient's contact details."),
+  },
 ]);
 
-const mediaHeaderOptions = ref([
-  { value: "default", label: trans("Template media") },
-  { value: "upload", label: trans("Upload new file") },
+const mediaHeaderOptions = computed(() => [
+  {
+    value: "default",
+    label: t("Use template media"),
+    description: t("Use the image, video, or document already attached to this template."),
+  },
+  {
+    value: "upload",
+    label: t("Upload a new file"),
+    description: t("Choose a file from your device to use instead of the template media for this message."),
+  },
 ]);
 
-const baseDynamicOptions = [
-  { value: "first name", label: trans("contact first name") },
-  { value: "last name", label: trans("contact last name") },
-  { value: "name", label: trans("contact full name") },
-  { value: "phone", label: trans("contact phone") },
-  { value: "email", label: trans("contact email") },
-];
+const baseDynamicOptions = computed(() => [
+  { value: "first name", label: t("contact first name") },
+  { value: "last name", label: t("contact last name") },
+  { value: "name", label: t("contact full name") },
+  { value: "phone", label: t("contact phone") },
+  { value: "email", label: t("contact email") },
+]);
 
 const hasButtonVariables = computed(() => {
   return form.buttons.some(
@@ -102,10 +121,30 @@ const isTemplateReady = computed(() => {
 
 const isSubmitDisabled = computed(() => isLoading.value || !isTemplateReady.value);
 
-const submitLabel = computed(() => {
-  if (isTemplateLoading.value) return trans("Loading template...");
+const contactUuid = computed(() => {
+  return typeof props.contact === "object" ? props.contact?.uuid : props.contact;
+});
 
-  return props.sendText ? trans(props.sendText) : trans("Send");
+const resolveContactValue = (field) => {
+  const contact = typeof props.contact === "object" ? props.contact : null;
+  if (!contact) return null;
+
+  const normalizedField = String(field || "").trim().toLowerCase();
+  const standardFields = {
+    "first name": contact.first_name,
+    "last name": contact.last_name,
+    name: contact.full_name || [contact.first_name, contact.last_name].filter(Boolean).join(" "),
+    phone: contact.formatted_phone_number || contact.phone,
+    email: contact.email,
+  };
+
+  return standardFields[normalizedField] ?? contact[normalizedField] ?? null;
+};
+
+const submitLabel = computed(() => {
+  if (isTemplateLoading.value) return t("Loading template...");
+
+  return props.sendText ? t(props.sendText) : t("Send");
 });
 
 const requiredCampaignMessages = computed(() => {
@@ -132,8 +171,26 @@ const hasVisibleHeaderVariables = computed(() => {
   return form.header.parameters.some(isHeaderParameterVisible);
 });
 
+const previewParameters = computed(() => ({
+  ...form,
+  body: {
+    ...form.body,
+    text: (form.body.text || "").replace(/\{\{\s*(\d+)\s*\}\}/g, (match, number) => {
+      const parameter = form.body.parameters[Number(number) - 1];
+
+      if (!parameter) return match;
+
+      if (parameter.selection === "dynamic") {
+        return resolveContactValue(parameter.value) || parameter.value || match;
+      }
+
+      return parameter.value || match;
+    }),
+  },
+}));
+
 const dynamicOptions = computed(() => {
-  let options = [...baseDynamicOptions];
+  let options = [...baseDynamicOptions.value];
   if (props.contactFields) {
     let fieldsArray = [];
 
@@ -513,12 +570,22 @@ const validateGroupLimit = () => {
 };
 
 const transformOptions = (options) => {
-  return options.map((option) => ({
-    value: option.uuid,
-    label: option.language
-      ? option.name + " [" + option.language + "]"
-      : option.name,
-  }));
+  return options.map((option) => {
+    const name = String(option.name || '')
+      .replace(/[_-]+/g, ' ')
+      .replace(/\s+/g, ' ')
+      .trim()
+      .replace(/\b\w/g, (letter) => letter.toLocaleUpperCase());
+    const languageCode = String(option.language || '').split(/[-_]/)[0].toLowerCase();
+    const language = languageCode === 'ar'
+      ? trans('Arabic')
+      : (languageCode === 'en' ? trans('English') : option.language);
+
+    return {
+      value: option.uuid,
+      label: language ? `${name} (${language})` : name,
+    };
+  });
 };
 
 const submitForm = () => {
@@ -642,7 +709,7 @@ const submitForm = () => {
     // ── CAROUSEL SEND (chat context only for now) ───────────────
     // Hits the dedicated carousel endpoint. Only needs the template UUID.
     axios
-      .post("/chat/" + props.contact + "/send/carousel-template", {
+      .post("/chat/" + contactUuid.value + "/send/carousel-template", {
         template: form.template,
       })
       .then((response) => {
@@ -662,7 +729,7 @@ const submitForm = () => {
   form.post(
     props.isCampaignFlow
       ? "/campaigns"
-      : "/chat/" + props.contact + "/send/template",
+      : "/chat/" + contactUuid.value + "/send/template",
     {
       onFinish: () => {
         isLoading.value = false;
@@ -690,7 +757,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="md:flex md:h-screen">
+  <div :class="isCampaignFlow ? 'md:flex md:h-screen' : 'flex h-full min-h-0 md:flex-row'">
     <div
       v-if="!settings?.whatsapp"
       class="md:w-[50%] p-4 md:p-8 overflow-y-auto h-[90vh]"
@@ -734,8 +801,8 @@ onMounted(() => {
     <form
       v-else
       @submit.prevent="submitForm()"
-      class="md:w-[50%] overflow-y-auto"
-      :class="isCampaignFlow ? 'p-4 md:p-8' : ''"
+      class="min-h-0 min-w-0 overflow-y-auto overscroll-contain"
+      :class="isCampaignFlow ? 'md:w-[50%] p-4 md:p-8' : 'w-full flex-1 md:w-[50%]'"
     >
       <div
         v-if="displayTitle"
@@ -743,10 +810,11 @@ onMounted(() => {
       >
         <h3 class="text-[15px]">{{ $t("Send Template Message") }}</h3>
         <button
+          type="button"
           @click="viewTemplate()"
           class="text-sm md:inline-flex hidden justify-center rounded-md border border-transparent bg-red-800 px-4 py-1 text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2"
         >
-          Cancel
+          {{ $t("Cancel") }}
         </button>
       </div>
 
@@ -932,9 +1000,9 @@ onMounted(() => {
             class="bg-slate-100 p-3 mt-4 text-sm"
           >
             <h2
-              class="flex items-center justify-between space-x-2 pb-2 border-b"
+              class="flex items-center justify-between gap-2 pb-2 border-b"
             >
-              <div class="flex items-center space-x-2">
+              <div class="flex items-center gap-2">
                 <span>{{ $t("Header variables") }}</span>
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -966,7 +1034,7 @@ onMounted(() => {
               v-for="(item, index) in form.header.parameters"
               :key="index"
               v-show="isHeaderParameterVisible(item)"
-              class="mt-2 flex items-center space-x-4"
+              class="mt-2 flex items-center gap-4"
             >
               <div
                 v-if="form.header.parameters[index].type === 'text'"
@@ -988,6 +1056,7 @@ onMounted(() => {
                   :name="$t('Value')"
                   :required="true"
                   :error="form.errors['header.parameters.0.value']"
+                  :placeholder="$t('Type a value')"
                   v-model="form.header.parameters[index].value"
                   :type="'text'"
                   :class="'sm:col-span-6'"
@@ -999,6 +1068,8 @@ onMounted(() => {
                   :error="form.errors['header.parameters.0.value']"
                   v-model="form.header.parameters[index].value"
                   :options="dynamicOptions"
+                  :placeholder="$t('Choose contact information')"
+                  :native="true"
                   :class="'sm:col-span-6'"
                 />
               </div>
@@ -1018,7 +1089,7 @@ onMounted(() => {
                   @update:modelValue="(value) => handleHeaderMediaSelectionChange(index, value)"
                 />
                 <div v-if="form.header.parameters[index].selection === 'default'">
-                  <div class="flex items-center space-x-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
+                  <div class="flex items-center gap-3 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
                     <span class="font-medium">{{ $t("Template media") }}</span>
                     <span class="max-w-[24rem] truncate">
                       {{ form.header.parameters[index].url || form.header.parameters[index].value }}
@@ -1026,7 +1097,7 @@ onMounted(() => {
                   </div>
                 </div>
                 <div v-else>
-                  <div class="flex items-center space-x-4">
+                  <div class="flex items-center gap-4">
                     <label
                       class="cursor-pointer flex justify-center px-2 py-2 w-[30%] bg-slate-200 shadow-sm rounded-lg border"
                       :class="
@@ -1064,14 +1135,14 @@ onMounted(() => {
                   </div>
                   <p
                     v-if="form.header.parameters[index].type === 'IMAGE'"
-                    class="text-left text-xs mt-2"
+                    class="text-start text-xs mt-2"
                   >
                     {{ $t("Max file upload size is") }} <b>5MB</b> <br />
                     {{ $t("Supported file extensions") }}: .png, jpg
                   </p>
                   <p
                     v-if="form.header.parameters[index].type === 'DOCUMENT'"
-                    class="text-left text-xs mt-2"
+                    class="text-start text-xs mt-2"
                   >
                     {{ $t("Max file upload size is") }} <b>30MB</b> <br />
                     {{ $t("Supported file extensions") }}: .pdf, .txt, .ppt,
@@ -1079,7 +1150,7 @@ onMounted(() => {
                   </p>
                   <p
                     v-if="form.header.parameters[index].type === 'VIDEO'"
-                    class="text-left text-xs mt-2"
+                    class="text-start text-xs mt-2"
                   >
                     {{ $t("Max file upload size is") }} <b>16MB</b> <br />
                     {{ $t("Supported file extensions") }}: .mp4
@@ -1100,9 +1171,9 @@ onMounted(() => {
             class="bg-slate-100 p-3 mt-1 text-sm"
           >
             <h2
-              class="flex items-center justify-between space-x-2 pb-2 border-b"
+              class="flex items-center justify-between gap-2 pb-2 border-b"
             >
-              <div class="flex items-center space-x-2">
+              <div class="flex items-center gap-2">
                 <span>{{ $t("Body variables") }}</span>
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -1130,37 +1201,44 @@ onMounted(() => {
                 </svg>
               </span>
             </h2>
+            <p class="mt-2 text-xs leading-5 text-slate-600">{{ $t('For each message value, choose whether to type it yourself or use information saved for the contact.') }}</p>
             <div
               v-for="(item, index) in form.body.parameters"
               :key="index"
-              class="mt-2 flex items-center space-x-4"
+              class="mt-3 grid min-w-0 grid-cols-1 items-end gap-3 rounded-lg border border-slate-200 bg-white p-3 lg:grid-cols-[4rem_minmax(0,1fr)_minmax(0,1fr)]"
             >
-              <div class="w-[30%]">
-                <span v-text="'{{' + (index + 1) + '}}'"></span>
+              <div class="flex items-center">
+                <span class="rounded-md bg-slate-100 px-2.5 py-2 text-sm font-semibold text-slate-700" v-text="'{{' + (index + 1) + '}}'"></span>
               </div>
-              <div class="w-full">
+              <div class="min-w-0">
                 <FormSelect
                   v-model="form.body.parameters[index].selection"
+                  :name="$t('Value source')"
                   :options="variableOptions"
-                  :class="'sm:col-span-6'"
+                  :className="'w-full'"
                 />
               </div>
-              <div class="w-full">
+              <div class="min-w-0">
                 <FormInput
                   v-if="form.body.parameters[index].selection === 'static'"
+                  :name="$t('Value')"
                   v-model="form.body.parameters[index].value"
                   :required="true"
                   :error="form.errors['body.parameters.' + index + '.value']"
+                  :placeholder="$t('Type a value')"
                   :type="'text'"
-                  :class="'sm:col-span-6'"
+                  :class="'w-full'"
                 />
                 <FormSelect
                   v-if="form.body.parameters[index].selection === 'dynamic'"
+                  :name="$t('Value')"
                   v-model="form.body.parameters[index].value"
                   :required="true"
                   :error="form.errors['body.parameters.' + index + '.value']"
                   :options="dynamicOptions"
-                  :class="'sm:col-span-6'"
+                  :placeholder="$t('Choose contact information')"
+                  :native="true"
+                  :className="'w-full'"
                 />
               </div>
             </div>
@@ -1168,9 +1246,9 @@ onMounted(() => {
 
           <div v-if="hasButtonVariables" class="bg-slate-100 p-3 mt-1 text-sm">
             <h2
-              class="flex items-center justify-between space-x-2 pb-2 border-b"
+              class="flex items-center justify-between gap-2 pb-2 border-b"
             >
-              <div class="flex items-center space-x-2">
+              <div class="flex items-center gap-2">
                 <span>{{ $t("Button variables") }}</span>
                 <svg
                   xmlns="http://www.w3.org/2000/svg"
@@ -1198,28 +1276,29 @@ onMounted(() => {
                 </svg>
               </span>
             </h2>
+            <p class="mt-2 text-xs leading-5 text-slate-600">{{ $t('For each button value, type a value yourself or choose information saved for the contact.') }}</p>
             <div v-for="(item, index) in form.buttons" :key="index">
               <div
                 v-if="item.parameters.length > 0"
                 class="mt-4 bg-slate-50 p-3"
               >
                 <div class="w-[100%] mb-1">
-                  <span>{{ $t("Label") }}: {{ item.text }}</span>
+                  <span>{{ $t("Button text") }}: {{ item.text }}</span>
                 </div>
                 <div
                   v-for="(value, key) in item.parameters"
                   :key="key"
-                  class="flex items-center space-x-4"
+                  class="grid min-w-0 grid-cols-1 gap-3 lg:grid-cols-2"
                 >
-                  <div class="w-full">
+                  <div class="min-w-0">
                     <FormSelect
                       v-model="value.type"
-                      :name="$t('Button type')"
+                      :name="$t('Value source')"
                       :options="variableOptions"
-                      :class="'sm:col-span-6'"
+                      :className="'w-full'"
                     />
                   </div>
-                  <div class="w-full">
+                  <div class="min-w-0">
                     <FormInput
                       v-if="value.type === 'static'"
                       v-model="value.value"
@@ -1228,8 +1307,9 @@ onMounted(() => {
                       :error="
                         form.errors['buttons.' + index + '.parameters.0.value']
                       "
+                      :placeholder="$t('Type the value to use on every message.')"
                       :type="'text'"
-                      :class="'sm:col-span-6'"
+                      :class="'w-full'"
                     />
                     <FormSelect
                       v-if="value.type === 'dynamic'"
@@ -1240,7 +1320,9 @@ onMounted(() => {
                         form.errors['buttons.' + index + '.parameters.0.value']
                       "
                       :options="dynamicOptions"
-                      :class="'sm:col-span-6'"
+                      :placeholder="$t('Choose contact information')"
+                      :native="true"
+                      :className="'w-full'"
                     />
                   </div>
                 </div>
@@ -1301,18 +1383,18 @@ onMounted(() => {
     </form>
 
     <!-- ── RIGHT PANEL: Preview ─────────────────────────────────────────── -->
-    <div class="hidden md:block md:w-[50%] py-10 px-10 overflow-y-auto chat-bg">
+    <div class="hidden min-h-0 md:block md:w-[50%] py-10 px-10 overflow-y-auto overscroll-contain chat-bg">
       <div class="flex justify-center items-start min-h-full">
         <!-- Carousel preview -->
         <div v-if="isCarouselTemplate && form.template" class="w-full max-w-md">
           <!-- Top-level message body bubble -->
           <div
-            class="mr-auto rounded-lg rounded-tl-none my-1 p-1 text-sm bg-white flex flex-col relative speech-bubble-left w-[25em] mb-2"
+            class="ms-auto rounded-lg rounded-ss-none my-1 p-1 text-sm bg-white flex flex-col relative speech-bubble-left w-[25em] mb-2"
           >
             <p class="px-2 normal-case whitespace-pre-wrap">
               {{ carouselMessageBody }}
             </p>
-            <div class="text-[#8c8c8c] mt-1 px-2 text-right">
+            <div class="text-[#8c8c8c] mt-1 px-2 text-end">
               <span class="text-xs leading-none">9:15</span>
             </div>
           </div>
@@ -1323,7 +1405,7 @@ onMounted(() => {
         <!-- Standard template preview (unchanged) -->
         <div v-else>
           <WhatsappTemplate
-            :parameters="form"
+            :parameters="previewParameters"
             :placeholder="false"
             :visible="form.template ? true : false"
           />

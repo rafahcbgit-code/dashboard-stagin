@@ -1,5 +1,6 @@
 <script setup>
     import {ref, computed, watch} from "vue";
+    import {trans} from 'laravel-vue-i18n';
     import {
         Combobox,
         ComboboxInput,
@@ -18,7 +19,7 @@
         className: String,
         placeholder: {
             type: String, 
-            default: 'Select option'
+            default: () => trans('Select option')
         },
         options: {
             type: Array,
@@ -95,14 +96,15 @@
             @update:model-value="handleUpdateModelValue">
                 <div class="relative">
                     <div 
-                    class="relative w-full cursor-default overflow-hidden rounded-lg bg-white text-left ring-1 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-opacity-75 focus-visible:ring-offset-2 focus-visible:ring-offset-teal-300 sm:text-sm"
+                    class="relative w-full cursor-default overflow-hidden rounded-lg bg-white text-start ring-1 shadow-sm focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-opacity-75 focus-visible:ring-offset-2 focus-visible:ring-offset-teal-300 sm:text-sm"
                     :class="error ? 'ring-[#b91c1c]' : 'ring-gray-300'">
                         <ComboboxInput
-                        class="w-full border-none py-2 pl-3 pr-10 text-sm leading-5 text-gray-900 focus:outline-none focus:ring-0"
+                        class="w-full border-none py-2 ltr:pl-3 rtl:pr-3 ltr:pr-10 rtl:pl-10 text-start text-sm leading-5 text-gray-900 focus:outline-none focus:ring-0"
                         :displayValue="option => option?.label"
+                        dir="auto"
                         @change="query = $event.target.value"
                         />
-                        <ComboboxButton class="absolute inset-y-0 right-0 flex items-center pr-2">
+                        <ComboboxButton class="absolute inset-y-0 ltr:right-0 rtl:left-0 flex items-center ltr:pr-2 rtl:pl-2">
                             <ChevronUpDownIcon class="h-5 w-5 text-gray-400" aria-hidden="true"/>
                         </ComboboxButton>
                     </div>
@@ -144,7 +146,7 @@
                             v-slot="{active}"
                             >
                             <li
-                                class="relative cursor-default select-none py-2 pl-10 pr-4"
+                                class="relative cursor-default select-none py-2 ltr:pl-10 rtl:pr-10 ltr:pr-4 rtl:pl-4"
                                 :class="{
                                 'bg-teal-600 text-white': active,
                                 'text-gray-900': !active,
@@ -161,7 +163,7 @@
                             v-slot="{selected, active}"
                             >
                                 <li
-                                    class="relative cursor-default select-none py-2 pl-10 pr-4"
+                                    class="relative cursor-default select-none py-2 ltr:pl-10 rtl:pr-10 ltr:pr-4 rtl:pl-4"
                                     :class="{
                                     'bg-teal-600 text-white': active,
                                     'text-gray-900': !active,
@@ -175,7 +177,7 @@
                                     </span>
                                     <span
                                     v-if="selected"
-                                    class="absolute inset-y-0 left-0 flex items-center pl-3"
+                                    class="absolute inset-y-0 ltr:left-0 rtl:right-0 flex items-center ltr:pl-3 rtl:pr-3"
                                     :class="{'text-white': active, 'text-teal-600': !active}"
                                     >
                                         <CheckIcon class="h-5 w-5" aria-hidden="true"/>

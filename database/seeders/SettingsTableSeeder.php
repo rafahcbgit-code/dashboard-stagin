@@ -38,6 +38,7 @@ class SettingsTableSeeder extends Seeder
             ['key' => 'company_name', 'value' => null],
             ['key' => 'currency', 'value' => 'USD'],
             ['key' => 'date_format', 'value' => 'd-M-y'],
+            ['key' => 'default_language', 'value' => 'ar'],
             ['key' => 'default_image_api', 'value' => null],
             ['key' => 'email', 'value' => null],
             ['key' => 'facebook_login', 'value' => null],

@@ -26,7 +26,7 @@ class LanguageController extends BaseController
         return Inertia::render('Admin/Setting/Language/Index', [
             'title' => __('Languages'),
             'rows' => $this->langService->get($request), 
-            'default_language' => Setting::where('key', 'default_language')->value('value') ?? 'en',
+            'default_language' => Setting::where('key', 'default_language')->value('value') ?? 'ar',
             'filters' => $request->all()
         ]);
     }

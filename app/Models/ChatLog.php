@@ -23,6 +23,22 @@ class ChatLog extends Model
     protected $guarded = [];
     public $timestamps = false;
 
+    protected static function booted(): void
+    {
+        static::created(function (self $log): void {
+            try {
+                app(\App\Services\ChatMessageSearchService::class)->attachLog($log);
+            } catch (\Throwable $exception) {
+                report($exception);
+                try {
+                    \App\Jobs\RepairChatSearchIndexJob::dispatch((int) $log->entity_id)->afterCommit();
+                } catch (\Throwable $dispatchException) {
+                    report($dispatchException);
+                }
+            }
+        });
+    }
+
     // Accessor to format created_at with organization's timezone
     public function getCreatedAtAttribute($value)
     {

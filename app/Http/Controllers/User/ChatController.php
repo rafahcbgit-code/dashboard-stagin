@@ -324,6 +324,70 @@ class ChatController extends BaseController
         return response()->json($messages);
     }
 
+    public function searchMessages(Request $request, string $contactUuid, \App\Services\ChatMessageSearchService $search)
+    {
+        $data = $request->validate([
+            'q' => ['required', 'string', 'min:3', 'max:120'],
+            'before' => ['nullable', 'string', 'max:100'],
+        ]);
+        $contact = $this->searchableContact($request, $contactUuid);
+
+        if (! $search->isReady()) {
+            return response()->json(['code' => 'index_not_ready', 'message' => __('Conversation search is preparing')], 503);
+        }
+
+        return response()->json($search->search(
+            (int) $contact->organization_id,
+            (int) $contact->id,
+            $data['q'],
+            $data['before'] ?? null
+        ));
+    }
+
+    public function messagesAround(Request $request, string $contactUuid, int $logId)
+    {
+        $contact = $this->searchableContact($request, $contactUuid);
+        abort_unless(\Illuminate\Support\Facades\DB::table('chat_message_search')
+            ->where('organization_id', $contact->organization_id)
+            ->where('contact_id', $contact->id)
+            ->whereIn('chat_id', function ($query) use ($contact, $logId) {
+                $query->from('chat_logs')->select('entity_id')->where('id', $logId)
+                    ->where('contact_id', $contact->id)->where('entity_type', 'chat')->whereNull('deleted_at');
+            })->exists(), 404);
+
+        return response()->json($this->chatService()->getMessagesAround((int) $contact->id, $logId));
+    }
+
+    public function messagesAroundReply(Request $request, string $contactUuid)
+    {
+        $data = $request->validate(['wam_id' => ['required', 'string', 'max:128']]);
+        $contact = $this->searchableContact($request, $contactUuid);
+        $message = Chat::query()->where('organization_id', $contact->organization_id)
+            ->where('contact_id', $contact->id)->where('wam_id', $data['wam_id'])
+            ->whereNull('deleted_at')->first(['id']);
+        if (! $message) {
+            $message = \App\Models\ChatArchive::query()->where('organization_id', $contact->organization_id)
+                ->where('contact_id', $contact->id)->where('wam_id', $data['wam_id'])
+                ->whereNull('deleted_at')->first(['id']);
+        }
+        abort_unless($message, 404);
+        $logId = \App\Models\ChatLog::query()->where('contact_id', $contact->id)
+            ->where('entity_type', 'chat')->where('entity_id', $message->id)
+            ->whereNull('deleted_at')->value('id');
+        abort_unless($logId, 404);
+
+        return response()->json($this->chatService()->getMessagesAround((int) $contact->id, (int) $logId));
+    }
+
+    private function searchableContact(Request $request, string $uuid): Contact
+    {
+        $contact = Contact::query()->where('uuid', $uuid)
+            ->where('organization_id', session()->get('current_organization'))
+            ->whereNull('deleted_at')->firstOrFail();
+        abort_unless(app(ConversationAccessService::class)->canAccess($request->user(), $contact), 403);
+        return $contact;
+    }
+
     public function getLabelsForFilter()
     {
         $organizationId = session()->get('current_organization');

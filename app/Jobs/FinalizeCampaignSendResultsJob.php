@@ -189,7 +189,7 @@ class FinalizeCampaignSendResultsJob implements ShouldQueue
             return;
         }
 
-        ChatLog::insert([
+        ChatLog::create([
             'contact_id' => $chat->contact_id,
             'entity_type' => 'chat',
             'entity_id' => $chat->id,

@@ -92,6 +92,7 @@ class CleanOldChats extends Command
             DB::beginTransaction();
 
             $this->deleteRelatedRecords($chat->id);
+            DB::table('chat_message_search')->where('chat_id', $chat->id)->delete();
             $this->deleteMedia($chat->media_id);
             
             $chat->delete();

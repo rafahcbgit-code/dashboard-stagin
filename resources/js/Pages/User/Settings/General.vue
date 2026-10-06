@@ -13,46 +13,69 @@
                                 </span>
                             </div>
                         </div>
-                        <div class="flex space-s-10 border-b w-full px-4 py-6">
-                            <div class="w-[40%]">
+                        <div class="flex w-full flex-col gap-4 border-b px-4 py-6 sm:flex-row sm:space-s-10">
+                            <div class="w-full sm:w-2/5">
                                 <span class="text-slate-600">{{ $t('Organization name') }}</span>
                                 <div class="text-xs text-slate-700 flex items-center">
                                     <svg class="mr-1" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11v5m0 5a9 9 0 1 1 0-18a9 9 0 0 1 0 18Zm.05-13v.1h-.1V8h.1Z"/></svg>
                                     <span>{{ $t('Specify the name of your business/organization') }}</span>
                                 </div>
                             </div>
-                            <div class="w-[60%]">
+                            <div class="w-full min-w-0 sm:w-3/5">
                                 <FormInput v-model="form2.organization_name" :error="form2.errors.organization_name" :name="''" :type="'text'" :class="'col-span-4'"/>
                             </div>
                         </div>
-                        <div class="flex space-s-10 w-full px-4 py-6">
-                            <div class="w-[40%]">
+                        <div class="flex w-full flex-col gap-4 px-4 py-6 sm:flex-row sm:space-s-10">
+                            <div class="w-full sm:w-2/5">
                                 <span class="text-slate-600">{{ $t('Address details') }}</span>
                                 <div class="text-xs text-slate-700 flex items-center">
                                     <svg class="mr-1" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11v5m0 5a9 9 0 1 1 0-18a9 9 0 0 1 0 18Zm.05-13v.1h-.1V8h.1Z"/></svg>
                                     <span>{{ $t('Specify your physical business address') }}</span>
                                 </div>
                             </div>
-                            <div class="w-[60%] grid grid-cols-4 gap-x-4 gap-y-4">
-                                <FormInput v-model="form2.address" :error="form2.errors.address" :name="$t('Physical address')" :type="'text'" :class="'col-span-4'"/>
-                                <FormInput v-model="form2.city" :error="form2.errors.city" :name="$t('City')" :type="'text'" :class="'col-span-2'"/>
-                                <FormInput v-model="form2.state" :error="form2.errors.state" :name="$t('State')" :type="'text'" :class="'col-span-2'"/>
-                                <FormInput v-model="form2.zip" :error="form2.errors.zip" :name="$t('Zip code')" :type="'text'" :class="'col-span-2'"/>
-                                <FormSelect v-model="form2.country" :name="$t('Country')" :type="'text'" :optionClassName="'h-40'" :options="props.countries" :error="form2.errors.country" :class="'col-span-2'"/>
+                            <div class="grid w-full min-w-0 grid-cols-1 gap-x-4 gap-y-4 sm:w-3/5 sm:grid-cols-2">
+                                <FormInput v-model="form2.address" :error="form2.errors.address" :name="$t('Physical address')" :type="'text'" :class="'col-span-1 sm:col-span-2'"/>
+                                <FormInput v-model="form2.city" :error="form2.errors.city" :name="$t('City')" :type="'text'" :class="'col-span-1'"/>
+                                <FormInput v-model="form2.state" :error="form2.errors.state" :name="$t('State')" :type="'text'" :class="'col-span-1'"/>
+                                <FormInput v-model="form2.zip" :error="form2.errors.zip" :name="$t('Zip code')" :type="'text'" :class="'col-span-1'"/>
+                                <SearchableSelect
+                                    v-model="form2.country"
+                                    :name="$t('Country')"
+                                    :options="countryOptions"
+                                    :placeholder="$t('Search by country name')"
+                                    :searchPlaceholder="$t('Search by country name')"
+                                    :searchLabel="$t('Search by country name')"
+                                    :emptyLabel="$t('Nothing found')"
+                                    :error="form2.errors.country"
+                                    :className="'col-span-1 sm:col-span-2'"
+                                />
                             </div>
                         </div>
                     </div>
 
                     <div class="bg-white border border-slate-200 rounded-lg py-2 text-sm mb-4">
-                        <div class="flex items-center px-4 pt-2 pb-4">
-                            <div class="w-[60%]">
+                        <div class="flex flex-col gap-4 px-4 pt-2 pb-4 sm:flex-row sm:items-center">
+                            <div class="min-w-0 flex-1">
                                 <h2 class="text-[17px]">{{ $t('Timezone') }}</h2>
                                 <span class="flex items-center mt-1">
                                     {{ $t('All your data will be processed according to this timezone') }}
                                 </span>
                             </div>
-                            <div class="w-[40%] ml-auto">
-                                <FormSelect v-model="form2.timezone" :name="''" :type="'text'"  :options="props.timezones" :error="form2.errors.timezone" :class="'col-span-2'"/>
+                            <div class="w-full sm:w-2/5 sm:ms-auto">
+                                <SearchableSelect
+                                    v-model="form2.timezone"
+                                    :options="timezoneOptions"
+                                    :placeholder="$t('Search timezones')"
+                                    :searchPlaceholder="$t('Search timezones')"
+                                    :searchLabel="$t('Search timezones')"
+                                    :emptyLabel="$t('Nothing found')"
+                                    :error="form2.errors.timezone"
+                                    :className="'col-span-2'"
+                                />
+                                <p v-if="!settings?.timezone && props.suggestedTimezone && form2.timezone === props.suggestedTimezone" class="mt-2 text-xs leading-5 text-slate-600">
+                                    {{ $t('Timezone suggested from linked WhatsApp number') }}:
+                                    <span dir="ltr" class="font-medium">{{ props.suggestedTimezone }}</span>
+                                </p>
                             </div>
                         </div>
                     </div>
@@ -65,38 +88,52 @@
                                 {{ $t('Set your business working hours') }}
                             </span>
                         </div>
-                        <div class="flex space-s-10 w-full px-4 py-6 border-b">
-                            <div class="w-[80%]">
+                        <div class="flex w-full flex-col gap-4 px-4 py-6 border-b sm:flex-row sm:items-center">
+                            <div class="min-w-0 flex-1">
                                 <span class="text-slate-600">{{ $t('Enable working hours') }}</span>
                                 <div class="text-xs text-slate-700 flex items-center">
                                     <svg class="mr-1" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11v5m0 5a9 9 0 1 1 0-18a9 9 0 0 1 0 18Zm.05-13v.1h-.1V8h.1Z"/></svg>
                                     <span>{{ $t('Define your business operating hours') }}</span>
                                 </div>
                             </div>
-                            <div class="w-[20%] flex justify-end">
+                            <div class="flex justify-start sm:justify-end">
                                 <FormToggleSwitch v-model="form2.enable_working_hours" />
                             </div>
-                        </div>÷
-                        <div v-if="form2.enable_working_hours === true" class="w-full px-4 py-6">
-                            <div class="space-y-4">÷
-                                <div v-for="(day, index) in workingDays" :key="index" class="flex items-center space-x-4 pb-4 border-b last:border-b-0">
-                                    <div class="w-[15%]">
-                                        <div class="flex items-center">
-                                            <input type="checkbox" :id="`day-${index}`" v-model="form2.working_hours[index].active" class="rounded border-gray-300" />
-                                            <label :for="`day-${index}`" class="ml-2 text-slate-600 cursor-pointer font-medium">{{ $t(day) }}</label>
+                        </div>
+                        <div v-if="form2.enable_working_hours === true" class="w-full px-4 py-5">
+                            <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                <section
+                                    v-for="(day, index) in workingDays"
+                                    :key="day"
+                                    class="min-w-0 rounded-lg border p-3 transition-colors"
+                                    :class="form2.working_hours[index].active ? 'border-emerald-200 bg-emerald-50/50' : 'border-slate-200 bg-slate-50'"
+                                >
+                                    <div class="flex min-h-8 items-center justify-between gap-3">
+                                        <div class="flex min-w-0 items-center gap-2">
+                                            <input
+                                                :id="`working-day-${day}`"
+                                                type="checkbox"
+                                                v-model="form2.working_hours[index].active"
+                                                class="size-4 rounded border-gray-300 text-emerald-700 focus:ring-emerald-600"
+                                            />
+                                            <label :for="`working-day-${day}`" class="cursor-pointer font-medium text-slate-800">{{ $t(day) }}</label>
+                                        </div>
+                                        <span
+                                            class="shrink-0 rounded-full px-2 py-1 text-xs font-medium"
+                                            :class="form2.working_hours[index].active ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-200 text-slate-600'"
+                                        >{{ $t(form2.working_hours[index].active ? 'Working day' : 'Day off') }}</span>
+                                    </div>
+                                    <div v-if="form2.working_hours[index].active" class="mt-3 grid grid-cols-2 gap-3">
+                                        <div class="min-w-0">
+                                            <label :for="`working-from-${day}`" class="mb-1 block text-xs text-slate-600">{{ $t('From') }}</label>
+                                            <input :id="`working-from-${day}`" type="time" v-model="form2.working_hours[index].from" class="w-full rounded-md border border-slate-300 bg-white px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
+                                        </div>
+                                        <div class="min-w-0">
+                                            <label :for="`working-to-${day}`" class="mb-1 block text-xs text-slate-600">{{ $t('To') }}</label>
+                                            <input :id="`working-to-${day}`" type="time" v-model="form2.working_hours[index].to" class="w-full rounded-md border border-slate-300 bg-white px-2 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" />
                                         </div>
                                     </div>
-                                    <div v-if="form2.working_hours[index].active" class="flex-1 flex items-center space-x-4">
-                                        <div class="flex-1">
-                                            <label class="block text-xs text-slate-600 mb-1">{{ $t('From') }}</label>
-                                            <input type="time" v-model="form2.working_hours[index].from" class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"/>
-                                        </div>
-                                        <div class="flex-1">
-                                            <label class="block text-xs text-slate-600 mb-1">{{ $t('To') }}</label>
-                                            <input type="time" v-model="form2.working_hours[index].to" class="w-full px-3 py-2 border border-slate-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-primary"/>
-                                        </div>
-                                    </div>
-                                </div>
+                                </section>
                             </div>
                         </div>
                     </div>
@@ -142,7 +179,7 @@
                         </div>
                     </div>
 
-                    <div class="bg-white border border-slate-200 rounded-lg py-2 text-sm mb-4">
+                    <div v-if="showCampaignRetrySettings" class="bg-white border border-slate-200 rounded-lg py-2 text-sm mb-4">
                         <div class="px-4 pt-2 pb-4">
                             <h2 class="text-[17px]">{{ $t('Failed Message Retry Settings (Campaigns)') }}</h2>
                             <span class="flex items-center mt-1">
@@ -219,22 +256,55 @@
 </template>
 <script setup>
     import SettingLayout from "./Layout.vue";
-    import { ref } from 'vue';
+    import { computed, ref } from 'vue';
     import EmbeddedSignupBtn from '@/Components/EmbeddedSignupBtn.vue';
     import FormModal from '@/Components/FormModal.vue';
     import FormInput from '@/Components/FormInput.vue';
     import FormSelect from '@/Components/FormSelect.vue';
+    import SearchableSelect from '@/Components/SearchableSelect.vue';
     import FormTextArea from '@/Components/FormTextArea.vue';
     import FormToggleSwitch from '@/Components/FormToggleSwitch.vue';
     import Modal from '@/Components/Modal.vue';
     import { trans } from 'laravel-vue-i18n';
     import { router, useForm } from "@inertiajs/vue3";
+    import countryDialCodes from '@/Data/countryDialCodes.json';
+    import { timezoneSearchAliases } from '@/Data/timezoneSearchAliases';
 
-    const props = defineProps(['contactGroups', 'settings', 'timezones', 'modules', 'organization', 'countries', 'sounds']);
+    const props = defineProps(['contactGroups', 'settings', 'timezones', 'modules', 'organization', 'countries', 'sounds', 'suggestedTimezone']);
+    const showCampaignRetrySettings = false; // Temporarily hidden until the retry settings are ready to return.
     const statusView = ref(false);
     const config = ref(props.settings.metadata);
     const settings = ref(config.value ? JSON.parse(config.value) : null);
     const audioPlayer = ref(null);
+    const locale = document.documentElement.lang || 'en';
+    const regionNames = typeof Intl.DisplayNames === 'function'
+        ? new Intl.DisplayNames([locale], { type: 'region' })
+        : null;
+    const countryByName = new Map(countryDialCodes.map((entry) => [String(entry.country).toLocaleLowerCase(), entry]));
+    const countryOptions = computed(() => (props.countries ?? []).map((country) => {
+        const englishName = country.label ?? country.value;
+        const phoneCountry = countryByName.get(String(country.value).toLocaleLowerCase());
+        const localizedName = locale.startsWith('ar') && phoneCountry?.region
+            ? regionNames?.of(phoneCountry.region)
+            : null;
+
+        return {
+            value: country.value,
+            label: localizedName || englishName,
+            searchText: `${englishName} ${country.value}`,
+        };
+    }));
+    const timezoneOptions = computed(() => (props.timezones ?? []).map((timezone) => {
+        const aliases = timezoneSearchAliases[timezone.value];
+        const cityName = timezone.value.split('/').at(-1).replaceAll('_', ' ');
+        const localizedCity = aliases?.city?.[locale.startsWith('ar') ? 'ar' : 'en'] ?? cityName;
+
+        return {
+            ...timezone,
+            label: `${localizedCity} (${timezone.value})`,
+            searchText: [timezone.value, cityName, ...(aliases?.aliases ?? []), ...(aliases ? Object.values(aliases.city) : [])].join(' '),
+        };
+    }));
 
     const reduceVolume = () => {
         if (form2.volume > 0) {
@@ -299,7 +369,7 @@
         state: getAddressDetail(props.settings?.address, 'state'),
         zip: getAddressDetail(props.settings?.address, 'zip'),
         country: getAddressDetail(props.settings?.address, 'country'),
-        timezone:  settings.value && settings.value.timezone ? settings.value.timezone : 'UTC',
+        timezone: settings.value?.timezone || props.suggestedTimezone || 'UTC',
         enable_working_hours: settings.value && settings.value.enable_working_hours ? true : false,
         working_hours: initializeWorkingHours(),
         enable_sound_notification: settings.value && settings.value.notifications ? settings.value.notifications.enable_sound : false,

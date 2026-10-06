@@ -70,6 +70,28 @@ class Chat extends Model {
             static::rememberStatusRank((int) $chat->id, (string) $chat->status);
         });
 
+        static::updated(function ($chat) {
+            if ($chat->wasChanged(['metadata', 'deleted_at'])) {
+                try {
+                    app(\App\Services\ChatMessageSearchService::class)->index($chat);
+                } catch (\Throwable $exception) {
+                    report($exception);
+                    try {
+                        \App\Jobs\RepairChatSearchIndexJob::dispatch((int) $chat->id)->afterCommit();
+                    } catch (\Throwable $dispatchException) {
+                        report($dispatchException);
+                    }
+                }
+            }
+        });
+
+        static::deleted(function ($chat) {
+            if (\Illuminate\Support\Facades\Schema::hasTable('chat_message_search')) {
+                \Illuminate\Support\Facades\DB::table('chat_message_search')
+                    ->where('chat_id', $chat->id)->delete();
+            }
+        });
+
         /*static::updated(function ($chat) {
             $contact = $chat->contact;
             if ($contact) {

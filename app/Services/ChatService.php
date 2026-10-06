@@ -974,12 +974,12 @@ class ChatService
             (int) $chat->id
         );
 
-        $chatlogId = ChatLog::insertGetId([
+        $chatlogId = ChatLog::create([
             'contact_id'  => $contact->id,
             'entity_type' => 'chat',
             'entity_id'   => $chat->id,
             'created_at'  => now(),
-        ]);
+        ])->id;
 
         $chatLogEntry = ChatLog::where('id', $chatlogId)->whereNull('deleted_at')->first();
 
@@ -1499,27 +1499,40 @@ class ChatService
 
     public function clearMessage($uuid)
     {
-        Chat::where('uuid', $uuid)
-            ->update([
+        $organizationId = session()->get('current_organization');
+        DB::transaction(function () use ($uuid, $organizationId) {
+            $chat = Chat::where('uuid', $uuid)->where('organization_id', $organizationId)->firstOrFail();
+            Chat::whereKey($chat->id)->update([
                 'deleted_by' => auth()->user()->id,
                 'deleted_at' => now()
             ]);
+            ChatLog::where('entity_type', 'chat')->where('entity_id', $chat->id)
+                ->where('contact_id', $chat->contact_id)->update([
+                    'deleted_by' => auth()->id(), 'deleted_at' => now(),
+                ]);
+            DB::table('chat_message_search')->where('chat_id', $chat->id)->delete();
+        });
     }
 
     public function clearContactChat($uuid)
     {
-        $contact = Contact::with('lastChat')->where('uuid', $uuid)->firstOrFail();
-        Chat::where('contact_id', $contact->id)->update([
+        $contact = Contact::where('uuid', $uuid)
+            ->where('organization_id', session()->get('current_organization'))->firstOrFail();
+        DB::transaction(function () use ($contact) {
+            Chat::where('organization_id', $contact->organization_id)->where('contact_id', $contact->id)->update([
             'deleted_by' => auth()->user()->id,
             'deleted_at' => now()
-        ]);
+            ]);
 
-        ChatLog::where('contact_id', $contact->id)->where('entity_type', 'chat')->update([
+            ChatLog::where('contact_id', $contact->id)->where('entity_type', 'chat')->update([
             'deleted_by' => auth()->user()->id,
             'deleted_at' => now()
-        ]);
+            ]);
+            DB::table('chat_message_search')->where('organization_id', $contact->organization_id)
+                ->where('contact_id', $contact->id)->delete();
+        });
 
-        $chat = Chat::with('contact', 'media')->where('id', $contact->lastChat->id)->first();
+        $chat = null;
 
         //event(new NewChatEvent($chat, $contact->organization_id));
     }
@@ -1603,6 +1616,45 @@ class ChatService
             'messages' => $this->markRevokedMessagesForDisplay(array_reverse($chats), $contactId),
             'hasMoreMessages' => $chatLogs->hasMorePages(),
             'nextPage' => $chatLogs->currentPage() + 1
+        ];
+    }
+
+    public function getMessagesAround(int $contactId, int $logId): array
+    {
+        $anchor = ChatLog::query()->where('contact_id', $contactId)
+            ->whereNull('deleted_at')->where('entity_type', 'chat')->findOrFail($logId);
+
+        $older = ChatLog::query()->where('contact_id', $contactId)->whereNull('deleted_at')
+            ->where(function ($query) use ($anchor) {
+                $query->where('created_at', '<', $anchor->getRawOriginal('created_at'))
+                    ->orWhere(function ($query) use ($anchor) {
+                        $query->where('created_at', $anchor->getRawOriginal('created_at'))->where('id', '<', $anchor->id);
+                    });
+            })->orderByDesc('created_at')->orderByDesc('id')->limit(11)->get();
+
+        $newer = ChatLog::query()->where('contact_id', $contactId)->whereNull('deleted_at')
+            ->where(function ($query) use ($anchor) {
+                $query->where('created_at', '>', $anchor->getRawOriginal('created_at'))
+                    ->orWhere(function ($query) use ($anchor) {
+                        $query->where('created_at', $anchor->getRawOriginal('created_at'))->where('id', '>', $anchor->id);
+                    });
+            })->orderBy('created_at')->orderBy('id')->limit(11)->get();
+
+        $hasOlder = $older->count() > 10;
+        $hasNewer = $newer->count() > 10;
+        $logs = $older->take(10)->reverse()->values()->concat([$anchor])->concat($newer->take(10));
+        $relatedEntities = $this->loadRelatedEntitiesForChatLogs($logs);
+        $messages = [];
+        foreach ($logs as $log) {
+            $entity = $relatedEntities[$log->entity_type][$log->entity_id] ?? null;
+            if ($entity === null || $entity->deleted_at !== null) continue;
+            $messages[] = [['type' => $log->entity_type, 'value' => $entity, 'log_id' => $log->id]];
+        }
+
+        return [
+            'messages' => $this->markRevokedMessagesForDisplay($messages, $contactId),
+            'hasOlder' => $hasOlder,
+            'hasNewer' => $hasNewer,
         ];
     }
 

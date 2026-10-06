@@ -2,12 +2,8 @@
 
 namespace App\Http\Controllers\User;
 
-use Carbon\Carbon;
-use DB;
 use App\Http\Controllers\Controller as BaseController;
 use App\Helpers\CustomHelper;
-use App\Helpers\SubscriptionHelper;
-use App\Models\Addon;
 use App\Models\Chat;
 use App\Models\Campaign;
 use App\Models\Contact;
@@ -15,23 +11,30 @@ use App\Models\Organization;
 use App\Models\Setting;
 use App\Models\Subscription;
 use App\Models\Template;
-use App\Services\SubscriptionService;
 use App\Services\SubscriptionUsageService;
+use App\Services\DashboardChartService;
+use App\Services\DashboardReadinessService;
+use App\Services\PreSetupService;
+use App\Services\SubscriptionService;
 use App\Models\OtpConfig;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Cache;
 use Inertia\Inertia;
 use App\Models\Team;
 
 class DashboardController extends BaseController
 {
-    protected $subscriptionService;
-    public function __construct()
-    {
-        $this->subscriptionService = new SubscriptionService();
-    }
+    public function __construct(
+        private readonly DashboardReadinessService $readinessService,
+        private readonly DashboardChartService $chartService,
+        private readonly PreSetupService $preSetupService,
+        private readonly SubscriptionUsageService $subscriptionUsageService,
+    ) {}
 
     public function index(Request $request)
     {
+        $validated = $request->validate(['days' => ['sometimes', 'integer', 'in:7,30,90']]);
+        $days = (int) ($validated['days'] ?? 7);
         $organizationId = session()->get('current_organization');
         $team = Team::where('organization_id', $organizationId)->where('user_id', auth()->user()->id)->first();
         $data['role'] = $team->role;
@@ -46,39 +49,66 @@ class DashboardController extends BaseController
         $data['subscriptionDetails'] = SubscriptionService::calculateSubscriptionBillingDetails($organizationId, $data['subscription']->plan_id);
         $data['subscriptionIsActive'] = SubscriptionService::isSubscriptionActive($organizationId);
 
-        $data['chatCount'] = \Illuminate\Support\Facades\Cache::remember("org_{$organizationId}_chat_count", 300, function () use ($organizationId) {
+        $data['chatCount'] = Cache::remember("org_{$organizationId}_chat_count", 300, function () use ($organizationId) {
             return $this->chatCount($organizationId);
         });
 
-        $data['campaignCount'] = \Illuminate\Support\Facades\Cache::remember("org_{$organizationId}_campaign_count", 300, function () use ($organizationId) {
+        $data['campaignCount'] = Cache::remember("org_{$organizationId}_campaign_count", 300, function () use ($organizationId) {
             return Campaign::where('organization_id', $organizationId)->whereNull('deleted_at')->count();
         });
 
-        $data['contactCount'] = \Illuminate\Support\Facades\Cache::remember("org_{$organizationId}_contact_count", 300, function () use ($organizationId) {
+        $data['contactCount'] = Cache::remember("org_{$organizationId}_contact_count", 300, function () use ($organizationId) {
             return Contact::where('organization_id', $organizationId)->whereNull('deleted_at')->count();
         });
 
-        $data['templateCount'] = \Illuminate\Support\Facades\Cache::remember("org_{$organizationId}_template_count", 300, function () use ($organizationId) {
+        $data['templateCount'] = Cache::remember("org_{$organizationId}_template_count", 300, function () use ($organizationId) {
             return Template::where('organization_id', $organizationId)->whereNull('deleted_at')->count();
+        });
+        $approvedTemplateCount = Cache::remember("org_{$organizationId}_approved_template_count", 300, function () use ($organizationId) {
+            return Template::where('organization_id', $organizationId)
+                ->whereNull('deleted_at')
+                ->whereIn('status', ['APPROVED', 'ACTIVE'])
+                ->count();
         });
         $data['graphAPIVersion'] = config('graph.api_version');
 
-        $organization = Organization::where('id', $organizationId)->first();
-        $config = $organization->metadata ? json_decode($organization->metadata, true) : [];
+        $organization = Organization::query()->select(['id', 'metadata'])->findOrFail($organizationId);
+        $config = json_decode((string) $organization->metadata, true);
+        $config = is_array($config) ? $config : [];
         $settings = Setting::whereIn('key', ['is_embedded_signup_active', 'whatsapp_client_id', 'whatsapp_config_id'])
             ->pluck('value', 'key');
 
-        $data['organization'] = $organization;
         $data['campaigns'] = Campaign::where('organization_id', $organizationId)
             ->whereNull('deleted_at')
             ->whereIn('status', ['pending', 'scheduled'])
             ->limit(5)
             ->get();
-        $data['setupWhatsapp'] = isset($config['whatsapp']) ? false : true;;
-        $data['period'] = $this->period();
-        $data['inbound'] = $this->getChatCounts('inbound');
-        $data['outbound'] = $this->getChatCounts('outbound');
-        $data['resourceUsage'] = (new SubscriptionUsageService())->summaries((int) $organizationId, auth()->id());
+        $data['setupWhatsapp'] = ! is_array($config['whatsapp'] ?? null);
+        $data['whatsappReadiness'] = $this->readinessService->check($config);
+        $chart = $this->chartService->forOrganization((int) $organizationId, $days);
+        $data['period'] = $chart['period'];
+        $data['inbound'] = $chart['inbound'];
+        $data['outbound'] = $chart['outbound'];
+        $data['chartDays'] = $days;
+
+        $preSetup = $this->preSetupService->forOrganization(
+            (int) $organizationId,
+            $data['role'] === 'agent',
+            data_get($config, 'pre_setup.dismissed', false) === true,
+            $config,
+            [
+                'contacts' => $data['contactCount'],
+                'templates' => $data['templateCount'],
+                'approved_templates' => $approvedTemplateCount,
+                'campaigns' => $data['campaignCount'],
+            ]
+        );
+        $data['preSetup'] = $preSetup['steps'];
+        $data['preSetupSummary'] = $preSetup['summary'];
+        $data['mandatoryReady'] = $preSetup['mandatoryReady'];
+        $data['preSetupDismissed'] = $preSetup['dismissed'];
+        $data['welcomeKey'] = ((int) $data['chatCount'] === 0 && (int) $data['campaignCount'] === 0) ? 'Welcome' : 'Welcome back';
+        $data['resourceUsage'] = $this->subscriptionUsageService->summaries((int) $organizationId, auth()->id());
 
         $data['embeddedSignupActive'] = CustomHelper::isModuleEnabled('Embedded Signup');
         $data['appId'] = $settings->get('whatsapp_client_id', null);
@@ -113,63 +143,19 @@ class DashboardController extends BaseController
         );
     }
 
-    private function period()
+    public function updatePreSetupState(Request $request)
     {
-        $currentDate = Carbon::now();
-        $dateArray = [];
+        $validated = $request->validate(['dismissed' => ['required', 'boolean']]);
+        $organizationId = (int) session()->get('current_organization');
+        $organization = Organization::query()->findOrFail($organizationId);
+        $metadata = json_decode((string) $organization->metadata, true);
+        $metadata = is_array($metadata) ? $metadata : [];
+        $metadata['pre_setup'] = is_array($metadata['pre_setup'] ?? null) ? $metadata['pre_setup'] : [];
+        $metadata['pre_setup']['dismissed'] = (bool) $validated['dismissed'];
+        $organization->metadata = json_encode($metadata, JSON_UNESCAPED_UNICODE);
+        $organization->save();
 
-        for ($i = 0; $i < 7; $i++) {
-            $currentDate->startOfDay();
-            $dateArray[] = $currentDate->format('Y-m-d\TH:i:s.000\Z');
-            $currentDate->subDay();
-        }
-
-        $dateArray = array_reverse($dateArray);
-
-        return $dateArray;
-    }
-
-    /*private function getChatCounts($type){
-        $organizationId = session()->get('current_organization');
-        $chatCounts = [];
-
-        foreach ($this->period() as $dateString) {
-            $date = Carbon::parse($dateString);
-            $chatCount = Chat::where('organization_id', $organizationId)
-                ->where('type', $type)
-                ->whereNull('deleted_at')
-                ->whereDate('created_at', $date->toDateString())
-                ->count();
-            $chatCounts[] = $chatCount;
-        }
-
-        return $chatCounts;
-    }*/
-
-    private function getChatCounts($type)
-    {
-        $organizationId = session()->get('current_organization');
-        $period = $this->period();
-
-        $startDate = Carbon::parse($period[0])->startOfDay();
-        $endDate   = Carbon::parse(end($period))->endOfDay();
-
-        $stats = Chat::where('organization_id', $organizationId)
-            ->where('type', $type)
-            ->whereNull('deleted_at')
-            ->whereBetween('created_at', [$startDate, $endDate])
-            ->selectRaw('DATE(created_at) as date, COUNT(*) as count')
-            ->groupBy('date')
-            ->pluck('count', 'date');
-
-        $chatCounts = [];
-        foreach ($period as $dateString) {
-            $dateKey = Carbon::parse($dateString)->format('Y-m-d');
-
-            $chatCounts[] = $stats[$dateKey] ?? 0;
-        }
-
-        return $chatCounts;
+        return back();
     }
 
     private function chatCount($organizationId)
@@ -181,11 +167,5 @@ class DashboardController extends BaseController
             ->whereNull('contacts.deleted_at')
             ->count();
 
-        /*Chat::where('organization_id', $organizationId)
-            ->whereNull('deleted_at')
-            ->whereHas('contact', function ($query) {
-                $query->whereNull('deleted_at');
-            })
-            ->count();*/
     }
 }

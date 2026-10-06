@@ -6,6 +6,7 @@ use App\Helpers\CustomHelper;
 use App\Http\Controllers\Controller as BaseController;
 use App\Http\Requests\StoreWhatsappProfile;
 use App\Http\Requests\StoreWhatsappSettings;
+use App\Jobs\SyncWhatsappTemplatesJob;
 use App\Models\Addon;
 use App\Models\Contact;
 use App\Models\ContactContactGroup;
@@ -17,18 +18,40 @@ use App\Models\Template;
 use App\Services\ContactFieldService;
 use App\Services\ContactGroupCountService;
 use App\Services\WhatsappService;
+use App\Services\WhatsappTimezoneSuggestionService;
 use App\Support\ContactPageCache;
+use App\Support\WhatsappTemplateSyncStatus;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Inertia\Inertia;
 
 class SettingController extends BaseController
 {
-    protected $contactFieldService;
+    private const SYNC_TEMPLATES_ON_WHATSAPP_REFRESH = false;
 
-    public function __construct(ContactFieldService $contactFieldService)
-    {
+    protected $contactFieldService;
+    protected $whatsappTimezoneSuggestionService;
+
+    public function __construct(
+        ContactFieldService $contactFieldService,
+        WhatsappTimezoneSuggestionService $whatsappTimezoneSuggestionService
+    ) {
         $this->contactFieldService = $contactFieldService;
+        $this->whatsappTimezoneSuggestionService = $whatsappTimezoneSuggestionService;
+    }
+
+    private function suggestedTimezoneForOrganization(?Organization $organization): ?string
+    {
+        $metadata = json_decode($organization?->metadata ?? '{}', true) ?: [];
+
+        if (is_string(data_get($metadata, 'timezone')) && trim(data_get($metadata, 'timezone')) !== '') {
+            return null;
+        }
+
+        return $this->whatsappTimezoneSuggestionService->fromPhoneNumber(
+            data_get($metadata, 'whatsapp.display_phone_number')
+        );
     }
 
     public function index(Request $request, $display = null)
@@ -39,6 +62,7 @@ class SettingController extends BaseController
             $data['settings'] = Organization::where('id', $organizationId)->first();
             $data['timezones'] = config('formats.timezones');
             $data['countries'] = config('formats.countries');
+            $data['suggestedTimezone'] = $this->suggestedTimezoneForOrganization($data['settings']);
             $data['sounds'] = config('sounds');
             $data['modules'] = Addon::get();
             $contactModel = new Contact;
@@ -75,6 +99,9 @@ class SettingController extends BaseController
         $organizationId = session()->get('current_organization');
         $data['title'] = __('Settings');
         $data['settings'] = Organization::where('id', session()->get('current_organization'))->first();
+        $data['timezones'] = config('formats.timezones');
+        $data['countries'] = config('formats.countries');
+        $data['suggestedTimezone'] = $this->suggestedTimezoneForOrganization($data['settings']);
         $data['modules'] = Addon::get();
         $data['contactGroups'] = $contactModel->getAllContactGroups($organizationId);
 
@@ -83,15 +110,22 @@ class SettingController extends BaseController
 
     public function viewWhatsappSettings(Request $request)
     {
+        $organization = Organization::where('id', session()->get('current_organization'))->first();
         $settings = Setting::whereIn('key', ['is_embedded_signup_active', 'whatsapp_client_id', 'whatsapp_config_id'])
             ->pluck('value', 'key');
+        $metadata = json_decode($organization?->metadata ?: '{}', true) ?: [];
+        $wabaId = (string) data_get($metadata, 'whatsapp.waba_id', '');
 
         $data = [
             'embeddedSignupActive' => CustomHelper::isModuleEnabled('Embedded Signup'),
             'graphAPIVersion' => config('graph.api_version'),
             'appId' => $settings->get('whatsapp_client_id', null),
             'configId' => $settings->get('whatsapp_config_id', null),
-            'settings' => Organization::where('id', session()->get('current_organization'))->first(),
+            'settings' => $organization,
+            'templateSyncEnabled' => self::SYNC_TEMPLATES_ON_WHATSAPP_REFRESH,
+            'templateSyncStatus' => self::SYNC_TEMPLATES_ON_WHATSAPP_REFRESH && $wabaId !== ''
+                ? WhatsappTemplateSyncStatus::get((int) $organization->id, $wabaId)
+                : ['status' => 'idle'],
             'modules' => Addon::get(),
             'title' => __('Settings'),
         ];
@@ -133,23 +167,38 @@ class SettingController extends BaseController
 
     public function refreshWhatsappData()
     {
+        $requestStartedAt = hrtime(true);
+        $preflightStartedAt = hrtime(true);
         $organizationId = session()->get('current_organization');
         $config = Organization::findOrFail($organizationId)->metadata;
         $config = $config ? json_decode($config, true) : [];
-
-        if ($config['whatsapp']['is_embedded_signup'] && $config['whatsapp']['is_embedded_signup'] == 1) {
-            if (class_exists(\Modules\EmbeddedSignup\Services\MetaService::class)) {
-                $embeddedSetup = new \Modules\EmbeddedSignup\Services\MetaService();
-                $embeddedSetup->overrideWabaCallbackUrl($organizationId);
-            }
-        }
+        $preflightDurationMs = (int) round((hrtime(true) - $preflightStartedAt) / 1_000_000);
 
         return $this->saveWhatsappSettings(
             $config['whatsapp']['access_token'] ?? null,
             $config['whatsapp']['app_id'] ?? null,
             $config['whatsapp']['phone_number_id'] ?? null,
-            $config['whatsapp']['waba_id'] ?? null
+            $config['whatsapp']['waba_id'] ?? null,
+            false,
+            self::SYNC_TEMPLATES_ON_WHATSAPP_REFRESH ? 'queued' : 'skip',
+            $requestStartedAt,
+            $preflightDurationMs,
+            true
         );
+    }
+
+    public function whatsappTemplateSyncStatus()
+    {
+        $organizationId = (int) session()->get('current_organization');
+        $organization = Organization::findOrFail($organizationId);
+        $metadata = json_decode($organization->metadata ?: '{}', true) ?: [];
+        $wabaId = (string) data_get($metadata, 'whatsapp.waba_id', '');
+
+        if ($wabaId === '') {
+            return response()->json(['status' => 'idle']);
+        }
+
+        return response()->json(WhatsappTemplateSyncStatus::get($organizationId, $wabaId));
     }
 
     public function campaign(Request $request)
@@ -383,58 +432,80 @@ class SettingController extends BaseController
         );
     }
 
-    private function saveWhatsappSettings($accessToken, $appId, $phoneNumberId, $wabaId, $subscribeToWebhook = false)
+    private function saveWhatsappSettings(
+        $accessToken,
+        $appId,
+        $phoneNumberId,
+        $wabaId,
+        $subscribeToWebhook = false,
+        string $templateSyncMode = 'sync',
+        ?int $requestStartedAt = null,
+        int $preflightDurationMs = 0,
+        bool $useConfiguredPhoneNumber = false
+    )
     {
+        $requestStartedAt ??= hrtime(true);
         $organizationId = session()->get('current_organization');
         $apiVersion = config('graph.api_version');
 
+        $serviceInitStartedAt = hrtime(true);
         $whatsappService = new WhatsappService($accessToken, $apiVersion, $appId, $phoneNumberId, $wabaId, $organizationId);
+        $serviceInitDurationMs = (int) round((hrtime(true) - $serviceInitStartedAt) / 1_000_000);
 
-        $phoneNumberResponse = $whatsappService->getPhoneNumberId($accessToken, $wabaId);
+        $phoneLookupDurationMs = 0;
+        if (! $useConfiguredPhoneNumber) {
+            $phoneLookupStartedAt = hrtime(true);
+            $phoneNumberResponse = $whatsappService->getPhoneNumberId($accessToken, $wabaId);
+            $phoneLookupDurationMs = (int) round((hrtime(true) - $phoneLookupStartedAt) / 1_000_000);
 
-        if (! $phoneNumberResponse->success) {
+            if (! $phoneNumberResponse->success) {
+                return back()->with(
+                    'status', [
+                        'type' => 'error',
+                        'message' => $phoneNumberResponse->data->error->message,
+                    ]
+                );
+            }
+
+            $resolvedPhoneNumberId = (string) $phoneNumberResponse->data->id;
+            $phoneNumberData = $phoneNumberResponse->data;
+        } else {
+            $resolvedPhoneNumberId = trim((string) $phoneNumberId);
+            if ($resolvedPhoneNumberId === '') {
+                return back()->with(
+                    'status', [
+                        'type' => 'error',
+                        'message' => __('Phone number unavailable'),
+                    ]
+                );
+            }
+
+            $phoneNumberData = null;
+        }
+
+        // These resources depend on the resolved phone number but are independent
+        // from each other, so fetch them concurrently.
+        $syncDataStartedAt = hrtime(true);
+        $syncDataResponse = $whatsappService->getPhoneNumberSyncData(
+            $resolvedPhoneNumberId,
+            (string) $wabaId
+        );
+        $syncDataDurationMs = (int) round((hrtime(true) - $syncDataStartedAt) / 1_000_000);
+
+        if (! $syncDataResponse->success) {
             return back()->with(
                 'status', [
                     'type' => 'error',
-                    'message' => $phoneNumberResponse->data->error->message,
+                    'message' => $syncDataResponse->message,
                 ]
             );
         }
 
-        //Get Phone Number Status
-        $phoneNumberStatusResponse = $whatsappService->getPhoneNumberStatus($accessToken, $phoneNumberResponse->data->id);
-
-        if (! $phoneNumberStatusResponse->success) {
-            return back()->with(
-                'status', [
-                    'type' => 'error',
-                    'message' => $phoneNumberStatusResponse->data->error->message,
-                ]
-            );
-        }
-
-        //Get Account Review Status
-        $accountReviewStatusResponse = $whatsappService->getAccountReviewStatus($accessToken, $wabaId);
-
-        if (! $accountReviewStatusResponse->success) {
-            return back()->with(
-                'status', [
-                    'type' => 'error',
-                    'message' => $accountReviewStatusResponse->data->error->message,
-                ]
-            );
-        }
-
-        //Get business profile
-        $businessProfileResponse = $whatsappService->getBusinessProfile($accessToken, $phoneNumberResponse->data->id);
-
-        if (! $businessProfileResponse->success) {
-            return back()->with(
-                'status', [
-                    'type' => 'error',
-                    'message' => $businessProfileResponse->data->error->message,
-                ]
-            );
+        $phoneNumberStatus = $syncDataResponse->data->phone_status;
+        $accountReviewStatus = $syncDataResponse->data->account_review;
+        $businessProfile = $syncDataResponse->data->business_profile;
+        if ($useConfiguredPhoneNumber) {
+            $phoneNumberData = $phoneNumberStatus;
         }
         $organizationConfig = Organization::where('id', $organizationId)->first();
 
@@ -448,40 +519,89 @@ class SettingController extends BaseController
         $metadataArray['whatsapp']['access_token'] = $accessToken;
         $metadataArray['whatsapp']['app_id'] = $appId;
         $metadataArray['whatsapp']['waba_id'] = $wabaId;
-        $metadataArray['whatsapp']['phone_number_id'] = $phoneNumberResponse->data->id;
-        $metadataArray['whatsapp']['display_phone_number'] = $phoneNumberResponse->data->display_phone_number;
-        $metadataArray['whatsapp']['verified_name'] = $phoneNumberResponse->data->verified_name ?? null;
-        $metadataArray['whatsapp']['quality_rating'] = $phoneNumberResponse->data->quality_rating ?? null;
-        $metadataArray['whatsapp']['name_status'] = $phoneNumberResponse->data->name_status ?? null;
-        $metadataArray['whatsapp']['messaging_limit_tier'] = $phoneNumberStatusResponse->data->whatsapp_business_manager_messaging_limit ?? null;
+        $metadataArray['whatsapp']['phone_number_id'] = $resolvedPhoneNumberId;
+        $metadataArray['whatsapp']['display_phone_number'] = $phoneNumberData->display_phone_number ?? null;
+        $metadataArray['whatsapp']['verified_name'] = $phoneNumberData->verified_name ?? null;
+        $metadataArray['whatsapp']['quality_rating'] = $phoneNumberData->quality_rating ?? null;
+        $metadataArray['whatsapp']['name_status'] = $phoneNumberData->name_status ?? null;
+        $metadataArray['whatsapp']['messaging_limit_tier'] = $phoneNumberStatus->whatsapp_business_manager_messaging_limit ?? null;
         $metadataArray['whatsapp']['max_daily_conversation_per_phone'] = null;
         $metadataArray['whatsapp']['max_phone_numbers_per_business'] = null;
-        $metadataArray['whatsapp']['whatsapp_business_manager_messaging_limit'] = $phoneNumberStatusResponse->data->whatsapp_business_manager_messaging_limit ?? null;
-        $metadataArray['whatsapp']['number_status'] = $phoneNumberStatusResponse->data->status;
-        $metadataArray['whatsapp']['code_verification_status'] = $phoneNumberStatusResponse->data->code_verification_status;
+        $metadataArray['whatsapp']['whatsapp_business_manager_messaging_limit'] = $phoneNumberStatus->whatsapp_business_manager_messaging_limit ?? null;
+        $metadataArray['whatsapp']['number_status'] = $phoneNumberStatus->status ?? null;
+        $metadataArray['whatsapp']['code_verification_status'] = $phoneNumberStatus->code_verification_status ?? null;
         $metadataArray['whatsapp']['business_verification'] = '';
-        $metadataArray['whatsapp']['account_review_status'] = $accountReviewStatusResponse->data->account_review_status;
+        $metadataArray['whatsapp']['account_review_status'] = $accountReviewStatus->account_review_status ?? null;
 
         if (! isset($metadataArray['whatsapp']['business_profile']) || ! is_array($metadataArray['whatsapp']['business_profile'])) {
             $metadataArray['whatsapp']['business_profile'] = [];
         }
 
-        $metadataArray['whatsapp']['business_profile']['about'] = $businessProfileResponse->data->about ?? null;
-        $metadataArray['whatsapp']['business_profile']['address'] = $businessProfileResponse->data->address ?? null;
-        $metadataArray['whatsapp']['business_profile']['description'] = $businessProfileResponse->data->description ?? null;
-        $metadataArray['whatsapp']['business_profile']['industry'] = $businessProfileResponse->data->vertical ?? null;
-        $metadataArray['whatsapp']['business_profile']['email'] = $businessProfileResponse->data->email ?? null;
+        $metadataArray['whatsapp']['business_profile']['about'] = $businessProfile->about ?? null;
+        $metadataArray['whatsapp']['business_profile']['address'] = $businessProfile->address ?? null;
+        $metadataArray['whatsapp']['business_profile']['description'] = $businessProfile->description ?? null;
+        $metadataArray['whatsapp']['business_profile']['industry'] = $businessProfile->vertical ?? null;
+        $metadataArray['whatsapp']['business_profile']['email'] = $businessProfile->email ?? null;
 
         $updatedMetadataJson = json_encode($metadataArray);
         $organizationConfig->metadata = $updatedMetadataJson;
 
+        $metadataSaveStartedAt = hrtime(true);
         if ($organizationConfig->save()) {
-            $whatsappService->syncTemplates($accessToken, $wabaId);
+            $metadataSaveDurationMs = (int) round((hrtime(true) - $metadataSaveStartedAt) / 1_000_000);
+            $templateSyncQueued = false;
+            if ($templateSyncMode === 'queued') {
+                WhatsappTemplateSyncStatus::update((int) $organizationId, (string) $wabaId, 'queued');
+                try {
+                    SyncWhatsappTemplatesJob::dispatch((int) $organizationId, (string) $wabaId)
+                        ->onConnection('redis')
+                        ->onQueue('whatsapp-number-status');
+                    $templateSyncQueued = true;
+                } catch (\Throwable $exception) {
+                    WhatsappTemplateSyncStatus::update((int) $organizationId, (string) $wabaId, 'failed');
+                    report($exception);
+                }
+            } elseif ($templateSyncMode === 'sync') {
+                $whatsappService->syncTemplates($accessToken, $wabaId);
+            }
+
+            $webhookSyncQueued = false;
+            if ($templateSyncMode === 'skip' && (int) ($metadataArray['whatsapp']['is_embedded_signup'] ?? 0) === 1) {
+                try {
+                    \App\Jobs\OverrideWhatsappWabaCallbackJob::dispatch((int) $organizationId)
+                        ->onConnection('redis')
+                        ->onQueue('whatsapp-number-status');
+                    $webhookSyncQueued = true;
+                } catch (\Throwable $exception) {
+                    report($exception);
+                }
+            }
+
+            if ($templateSyncMode === 'skip') {
+                Log::info('WhatsApp settings refresh performance', [
+                    'organization_id' => (int) $organizationId,
+                    'total_ms' => (int) round((hrtime(true) - $requestStartedAt) / 1_000_000),
+                    'embedded_preflight_ms' => $preflightDurationMs,
+                    'service_init_ms' => $serviceInitDurationMs,
+                    'phone_number_lookup_ms' => $phoneLookupDurationMs,
+                    'parallel_meta_requests_ms' => $syncDataDurationMs,
+                    'meta_request_timings_ms' => $syncDataResponse->request_timings_ms ?? [],
+                    'metadata_save_ms' => $metadataSaveDurationMs,
+                    'webhook_sync' => $webhookSyncQueued ? 'queued' : 'not_queued',
+                    'template_sync' => 'skipped',
+                ]);
+            }
 
             return back()->with(
                 'status', [
                     'type' => 'success',
-                    'message' => __('Whatsapp settings updated successfully'),
+                    'message' => match ($templateSyncMode) {
+                        'queued' => $templateSyncQueued
+                            ? __('WhatsApp details updated. Templates are syncing in the background.')
+                            : __('WhatsApp details updated, but template synchronization could not be queued.'),
+                        'skip' => __('Whatsapp settings updated successfully'),
+                        default => __('Whatsapp settings updated successfully'),
+                    },
                 ]
             );
         } else {
@@ -596,14 +716,17 @@ class SettingController extends BaseController
 
         if ($request->isMethod('get')) {
             $labels = $organization->labels()->latest()->get();
+            $contactCounts = DB::table('contact_label')
+                ->join('contacts', 'contacts.id', '=', 'contact_label.contact_id')
+                ->where('contacts.organization_id', $organizationId)
+                ->whereNull('contacts.deleted_at')
+                ->whereIn('contact_label.label_id', $labels->modelKeys())
+                ->select('contact_label.label_id', DB::raw('COUNT(DISTINCT contact_label.contact_id) as contact_count'))
+                ->groupBy('contact_label.label_id')
+                ->pluck('contact_count', 'label_id');
 
-            // Add contact count for each label
-            $labels->each(function ($label) use ($organizationId) {
-                $label->contact_count = Contact::where('organization_id', $organizationId)
-                    ->whereHas('labels', function ($query) use ($label) {
-                        $query->where('labels.id', $label->id);
-                    })
-                    ->count();
+            $labels->each(function ($label) use ($contactCounts) {
+                $label->contact_count = (int) ($contactCounts[$label->id] ?? 0);
             });
 
             return Inertia::render('User/Settings/Label', [
@@ -736,10 +859,15 @@ class SettingController extends BaseController
     public function emailSettings(Request $request)
     {
         $settings = Organization::where('id', session()->get('current_organization'))->first();
+        $metadata = $settings?->metadata ? json_decode($settings->metadata, true) : [];
+        $emailSettings = is_array($metadata['email_settings'] ?? null) ? $metadata['email_settings'] : [];
+        $hasSavedEmailPassword = ! empty($emailSettings['password']);
+        unset($emailSettings['password']);
 
         return Inertia::render('User/Settings/Email', [
             'title' => __('Settings'),
-            'settings' => $settings,
+            'emailSettings' => $emailSettings,
+            'hasSavedEmailPassword' => $hasSavedEmailPassword,
             'modules' => Addon::get(),
         ]);
     }

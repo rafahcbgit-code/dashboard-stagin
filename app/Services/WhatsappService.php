@@ -18,6 +18,8 @@ use GuzzleHttp\Exception\ConnectException;
 use GuzzleHttp\Exception\GuzzleException;
 use GuzzleHttp\Exception\RequestException;
 use Illuminate\Http\Request;
+use Illuminate\Http\Client\Pool;
+use Illuminate\Http\Client\Response as HttpResponse;
 use Illuminate\Support\Facades\Config;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Http;
@@ -245,12 +247,12 @@ class WhatsappService
             $chat = Chat::with('contact','media', 'replyTo')->where('id', $chat->id)->first();
             $responseObject->data->chat = $chat;
 
-            $chatlogId = ChatLog::insertGetId([
+            $chatlogId = ChatLog::create([
                 'contact_id' => $contact->id,
                 'entity_type' => 'chat',
                 'entity_id' => $chat->id,
                 'created_at' => now()
-            ]);
+            ])->id;
 
             $chatLogArray = ChatLog::where('id', $chatlogId)->where('deleted_at', null)->first();
             $chatArray = array([
@@ -445,12 +447,12 @@ class WhatsappService
 
             $responseObject->data->chat = $chat;
 
-            $chatlogId = ChatLog::insertGetId([
+            $chatlogId = ChatLog::create([
                 'contact_id' => $contact->id,
                 'entity_type' => 'chat',
                 'entity_id' => $chat->id,
                 'created_at' => now()
-            ]);
+            ])->id;
 
             $chatLogArray = ChatLog::where('id', $chatlogId)->where('deleted_at', null)->first();
             $chatArray = array([
@@ -1781,12 +1783,12 @@ class WhatsappService
 
             $this->recordConversationWindowForOutbound($chat, $contact);
 
-            $chatlogId = ChatLog::insertGetId([
+            $chatlogId = ChatLog::create([
                 'contact_id' => $contact->id,
                 'entity_type' => 'chat',
                 'entity_id' => $chat->id,
                 'created_at' => now()
-            ]);
+            ])->id;
 
             $chat = Chat::with('contact','media')->where('id', $chat->id)->first();
             $responseObject->data->chat = $chat;
@@ -3658,6 +3660,75 @@ class WhatsappService
         return $responseObject;
     }
 
+    /** Fetch independent WhatsApp account details concurrently after resolving the phone number. */
+    public function getPhoneNumberSyncData(string $phoneNumberId, string $wabaId): \stdClass
+    {
+        try {
+            $responses = Http::pool(fn (Pool $pool) => [
+                'phone_status' => $pool->as('phone_status')
+                    ->withToken($this->accessToken)
+                    ->connectTimeout(10)
+                    ->timeout(30)
+                    ->get("https://graph.facebook.com/{$this->apiVersion}/{$phoneNumberId}", [
+                        'fields' => 'display_phone_number,verified_name,quality_rating,name_status,messaging_limit_tier,status,code_verification_status,quality_score,health_status,whatsapp_business_manager_messaging_limit',
+                    ]),
+                'account_review' => $pool->as('account_review')
+                    ->withToken($this->accessToken)
+                    ->connectTimeout(10)
+                    ->timeout(30)
+                    ->get("https://graph.facebook.com/{$this->apiVersion}/{$wabaId}", [
+                        'fields' => 'account_review_status',
+                    ]),
+                'business_profile' => $pool->as('business_profile')
+                    ->withToken($this->accessToken)
+                    ->connectTimeout(10)
+                    ->timeout(30)
+                    ->get("https://graph.facebook.com/{$this->apiVersion}/{$phoneNumberId}/whatsapp_business_profile", [
+                        'fields' => 'about,address,description,email,profile_picture_url,websites,vertical',
+                    ]),
+            ]);
+
+            foreach ($responses as $response) {
+                if (! $response instanceof HttpResponse || ! $response->successful()) {
+                    return (object) [
+                        'success' => false,
+                        'message' => data_get($response?->json(), 'error.message')
+                            ?? 'Unable to retrieve WhatsApp account details from Meta.',
+                    ];
+                }
+            }
+
+            $profile = $responses['business_profile']->json();
+            $requestTimingsMs = [];
+            foreach ($responses as $name => $response) {
+                $totalTime = $response->handlerStats()['total_time'] ?? null;
+                $requestTimingsMs[$name] = $totalTime === null
+                    ? null
+                    : (int) round($totalTime * 1000);
+            }
+
+            return (object) [
+                'success' => true,
+                'request_timings_ms' => $requestTimingsMs,
+                'data' => (object) [
+                    'phone_status' => (object) $responses['phone_status']->json(),
+                    'account_review' => (object) $responses['account_review']->json(),
+                    'business_profile' => (object) ($profile['data'][0] ?? []),
+                ],
+            ];
+        } catch (\Throwable $exception) {
+            Log::warning('WhatsApp settings data fetch failed', [
+                'organization_id' => $this->organizationId,
+                'exception' => $exception->getMessage(),
+            ]);
+
+            return (object) [
+                'success' => false,
+                'message' => 'Unable to retrieve WhatsApp account details from Meta.',
+            ];
+        }
+    }
+
     function viewMedia($mediaId)
     {
         $response = $this->getMedia($mediaId);
@@ -3813,12 +3884,12 @@ class WhatsappService
 
         $responseObject->data->chat = $chat;
 
-        $chatlogId = ChatLog::insertGetId([
+        $chatlogId = ChatLog::create([
             'contact_id' => $contact->id,
             'entity_type' => 'chat',
             'entity_id' => $chat->id,
             'created_at' => now(),
-        ]);
+        ])->id;
 
         $chatLogArray = ChatLog::where('id', $chatlogId)->where('deleted_at', null)->first();
         $chatArray = array([

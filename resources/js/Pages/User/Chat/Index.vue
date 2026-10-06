@@ -12,9 +12,12 @@
           :displayContactInfo="displayContactInfo" :labelColors="labelColors" :ticket="ticket" :addon="addon"
           :teamRole="props.teamRole" :currentPage="rows.meta?.current_page" @toggleView="toggleContactView"
           @deleteThread="deleteThread" @closeThread="closeThread" @labelsUpdated="handleLabelsUpdated"
-          @noteCreated="handleNoteCreated" @messageMarkedUnread="handleMessageMarkedUnread" />
-        <div v-if="contact && !displayTemplate" class="flex-1 min-h-0 overflow-y-auto" ref="scrollContainer2">
+          @noteCreated="handleNoteCreated" @messageMarkedUnread="handleMessageMarkedUnread" @search="openConversationSearch" />
+        <ChatSearchPanel v-if="contact && searchOpen && !displayTemplate && !displayContactInfo"
+          :key="contact.uuid" :contact-uuid="contact.uuid" :refresh-token="searchRefreshToken" @close="closeConversationSearch" @select="selectSearchResult" />
+        <div v-if="contact && !displayTemplate" class="flex-1 min-h-0 overflow-y-auto" ref="scrollContainer2" data-chat-scroll-container>
           <ChatThread v-if="!displayContactInfo && !loadingThread && !displayTemplate" :contactId="contact.id"
+            :contactUuid="contact.uuid" :searchTarget="searchTarget"
             :initialMessages="chatThread" :hasMoreMessages="hasMoreMessages" :initialNextPage="nextPage"
             @reply-selected="replyingTo = $event" />
           <Contact v-if="displayContactInfo && !displayTemplate" class="bg-white h-full" :fields="props.fields"
@@ -30,7 +33,7 @@
             @reply-cleared="replyingTo = null"
             @viewTemplate="displayTemplate = true" />
         </div>
-        <div v-if="displayTemplate" class="flex-1 overflow-y-hidden">
+        <div v-if="displayTemplate" class="min-h-0 flex-1 overflow-hidden">
           <div v-if="isContactBlocked" class="h-full bg-white flex items-center justify-center p-6">
             <div class="max-w-md text-center border border-red-200 bg-red-50 rounded-xl p-6">
               <h3 class="text-base font-semibold text-red-700 mb-2">{{ $t('Blocked contact') }}</h3>
@@ -41,7 +44,7 @@
               </button>
             </div>
           </div>
-          <CampaignForm v-else class="bg-white h-full" :contact="contact.uuid" :templates="templates"
+          <CampaignForm v-else class="bg-white h-full min-h-0 min-w-0" :contact="contact" :templates="templates"
             :contactGroups="[]" :settings="props.settings" :displayCancelBtn="false" :displayTitle="true"
             :isCampaignFlow="false" :scheduleTemplate="false" :sendText="'Send Message'"
             @viewTemplate="displayTemplate = false" :contactFields="contactFields" />
@@ -63,6 +66,7 @@ import ChatForm from "@/Components/ChatComponents/ChatForm.vue";
 import ChatHeader from "@/Components/ChatComponents/ChatHeader.vue";
 import ChatTable from "@/Components/ChatComponents/ChatTable.vue";
 import ChatThread from "@/Components/ChatComponents/ChatThread.vue";
+import ChatSearchPanel from "@/Components/ChatComponents/ChatSearchPanel.vue";
 import ChatContact from "@/Components/ChatComponents/ChatContact.vue";
 import Contact from "@/Components/ContactInfo.vue";
 import { getEchoInstance } from "../../../echo";
@@ -101,6 +105,26 @@ const props = defineProps({
 const rows = ref(props.rows);
 const rowCount = ref(props.rowCount);
 const scrollContainer2 = ref(null);
+const searchOpen = ref(false);
+const searchTarget = ref(null);
+const searchRefreshToken = ref(0);
+let searchSelectionId = 0;
+
+const openConversationSearch = () => {
+  displayContactInfo.value = false;
+  displayTemplate.value = false;
+  searchOpen.value = true;
+};
+
+const closeConversationSearch = () => {
+  searchOpen.value = false;
+  searchTarget.value = null;
+  setTimeout(scrollToBottom, 100);
+};
+
+const selectSearchResult = (result) => {
+  searchTarget.value = { ...result, selectionId: ++searchSelectionId };
+};
 const loadingThread = ref(false);
 const displayContactInfo = ref(false);
 const displayTemplate = ref(false);
@@ -256,6 +280,8 @@ watch(
   (newContact) => {
     if (newContact?.uuid !== contact.value?.uuid) {
       replyingTo.value = null;
+      searchOpen.value = false;
+      searchTarget.value = null;
     }
 
     contact.value = newContact;
@@ -272,6 +298,10 @@ const toggleDropdown = () => {
 
 function toggleContactView(value) {
   displayContactInfo.value = value;
+  if (value) {
+    searchOpen.value = false;
+    searchTarget.value = null;
+  }
 }
 
 const scrollToBottom = () => {
@@ -374,7 +404,8 @@ const updateChatThread = (chat) => {
     chatThread.value.splice(existingIndex, 1, chat);
   } else if (chat[0].value.deleted_at == null) {
     chatThread.value.push(chat);
-    setTimeout(scrollToBottom, 100);
+    searchRefreshToken.value++;
+    if (!searchOpen.value) setTimeout(scrollToBottom, 100);
   }
 };
 

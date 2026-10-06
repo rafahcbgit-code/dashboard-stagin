@@ -43,7 +43,7 @@ watch(
     { immediate: true, deep: true }
 );
 
-const emit = defineEmits(['toggleView', 'deleteThread', 'closeThread', 'labelsUpdated', 'noteCreated', 'messageMarkedUnread']);
+const emit = defineEmits(['toggleView', 'deleteThread', 'closeThread', 'labelsUpdated', 'noteCreated', 'messageMarkedUnread', 'search']);
 
 const closeThread = () => {
     emit('closeThread', true);
@@ -348,23 +348,28 @@ onUnmounted(() => {
             <div class="flex items-center w-full gap-x-8">
                 <div>
                     <div class="flex items-center" @click="toggleView">
-                        <span class="whitespace-nowrap">{{ contact.full_name }}</span>
+                        <span dir="auto" class="whitespace-nowrap">{{ contact.full_name }}</span>
                     </div>
                     <div class="w-full flex items-center text-xs">
-                        <span @click="toggleView">{{ contact.formatted_phone_number }}</span>
+                        <span dir="ltr" class="whitespace-nowrap tabular-nums" @click="toggleView">{{ contact.formatted_phone_number }}</span>
                     </div>
                 </div>
                 <FormSelectCombo v-if="ticketingIsEnabled" v-model="user"
                     :name="''" :loadOptions="loadUsers" :class="'col-span-1 md:block hidden'"
-                    :placeholder="'Select Agent'" @update:modelValue="changeTicketAgent" />
+                    :placeholder="t('Select Agent')" @update:modelValue="changeTicketAgent" />
             </div>
 
         </div>
         <div class="relative">
-            <div class="flex items-center space-x-4">
+            <div class="flex items-center gap-4">
+                <button v-if="!displayContact" type="button" @click="emit('search')"
+                    class="rounded-full p-2 text-slate-700 hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary"
+                    :aria-label="$t('Search this conversation')" :title="$t('Search this conversation')">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-4-4"/></svg>
+                </button>
 
                 <!-- Label Color Icons -->
-                <div class="flex items-center space-x-1 ml-2 shrink min-w-0">
+                <div class="flex items-center gap-1 ms-2 shrink min-w-0">
                     <svg v-for="(color, index) in props.labelColors" :key="index" xmlns="http://www.w3.org/2000/svg"
                         class="w-6 h-6 shrink" viewBox="0 0 24 24">
                         <path :fill="color" :stroke="color" stroke-linecap="round" stroke-linejoin="round"
@@ -454,7 +459,7 @@ onUnmounted(() => {
             </div>
         </div>
     </div>
-    <div v-if="addon == 1" class="flex justify-between items-center bg-white border-b border-1 py-2 px-4 md:px-4">
+    <div v-if="addon == 1" class="flex flex-col gap-2 bg-white border-b border-1 py-2 px-4 sm:flex-row sm:items-center sm:justify-between md:px-4">
         <div class="text-sm py-1 px-3 rounded-md flex items-center gap-x-2 w-[fit-content]"
             :class="form3.ai_assistant ? 'bg-green-50' : 'bg-red-50'">
             <span :class="form3.ai_assistant ? 'text-green-500' : 'text-red-500'">
@@ -467,16 +472,17 @@ onUnmounted(() => {
         </div>
         <div class="flex items-center gap-x-2">
             <span class="text-[13px]">{{ $t('Enable/disable AI assistant') }}</span>
-            <div class="w-12 h-6 flex items-center bg-gray-300 rounded-full p-1 cursor-pointer"
-                :class="{ 'bg-primary': form3.ai_assistant }" @click="submitForm3()">
-                <div class="bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out"
-                    :class="{ 'translate-x-6': form3.ai_assistant }"></div>
-            </div>
+            <button type="button" role="switch" :aria-checked="Boolean(form3.ai_assistant)" :aria-label="$t('Enable/disable AI assistant')" :disabled="form3.processing"
+                class="relative inline-flex h-6 w-12 shrink-0 items-center rounded-full p-1 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-wait disabled:opacity-60"
+                :class="form3.ai_assistant ? 'bg-primary' : 'bg-gray-300'" @click="submitForm3()">
+                <span class="size-4 rounded-full bg-white shadow-md transition-transform duration-300 ease-in-out"
+                    :class="form3.ai_assistant ? 'ltr:translate-x-6 rtl:-translate-x-6' : ''"></span>
+            </button>
         </div>
     </div>
 
     <!-- Bot Status Bar -->
-    <div class="flex justify-between items-center bg-white border-b border-1 py-2 px-4 md:px-4">
+    <div class="flex flex-col gap-2 bg-white border-b border-1 py-2 px-4 sm:flex-row sm:items-center sm:justify-between md:px-4">
         <div class="text-sm py-1 px-3 rounded-md flex items-center gap-x-2 w-[fit-content]"
             :class="form4.bot_enable ? 'bg-green-50' : 'bg-amber-50'">
             <span :class="form4.bot_enable ? 'text-green-500' : 'text-amber-500'">
@@ -487,13 +493,14 @@ onUnmounted(() => {
             </span>
             <span>{{ form4.bot_enable ? $t('Bot Active') : $t('Bot Paused') }}</span>
         </div>
-        <div class="flex items-center gap-x-2">
+        <div class="flex min-w-0 items-center justify-between gap-x-3 sm:justify-start">
             <span class="text-[13px]">{{ $t('Enable/disable chatbot') }}</span>
-            <div class="w-12 h-6 flex items-center bg-gray-300 rounded-full p-1 cursor-pointer"
-                :class="{ 'bg-primary': form4.bot_enable }" @click="toggleBot()">
-                <div class="bg-white w-4 h-4 rounded-full shadow-md transform duration-300 ease-in-out"
-                    :class="{ 'translate-x-6': form4.bot_enable }"></div>
-            </div>
+            <button type="button" role="switch" :aria-checked="Boolean(form4.bot_enable)" :aria-label="$t('Enable/disable chatbot')" :disabled="form4.processing"
+                class="relative inline-flex h-6 w-12 shrink-0 items-center rounded-full p-1 transition focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-wait disabled:opacity-60"
+                :class="form4.bot_enable ? 'bg-primary' : 'bg-gray-300'" @click="toggleBot()">
+                <span class="size-4 rounded-full bg-white shadow-md transition-transform duration-300 ease-in-out"
+                    :class="form4.bot_enable ? 'ltr:translate-x-6 rtl:-translate-x-6' : ''"></span>
+            </button>
         </div>
     </div>
 
@@ -527,7 +534,7 @@ onUnmounted(() => {
                     <div v-if="selectedLabelsList.length > 0" class="mb-6">
                         <h4 class="text-sm font-medium text-gray-900 mb-3 flex items-center">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-                                class="mr-2">
+                                class="me-2">
                                 <path fill="currentColor"
                                     d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10s10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5l1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z" />
                             </svg>
@@ -535,12 +542,12 @@ onUnmounted(() => {
                         </h4>
                         <div class="space-y-2">
                             <div v-for="label in selectedLabelsList" :key="`selected-${label.id}`"
-                                class="flex items-center space-x-3 p-2 bg-green-50 border border-green-200 rounded-md">
+                                class="flex items-center gap-3 p-2 bg-green-50 border border-green-200 rounded-md">
                                 <input type="checkbox" :id="`selected-label-${label.id}`" :checked="true"
                                     @change="toggleLabel(label.id)"
                                     class="w-4 h-4 text-green-600 bg-gray-100 border-gray-300 rounded focus:ring-green-500 focus:ring-2" />
                                 <label :for="`selected-label-${label.id}`"
-                                    class="flex items-center space-x-2 cursor-pointer flex-1">
+                                    class="flex items-center gap-2 cursor-pointer flex-1">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24">
                                         <path fill="none" :stroke="label.color" stroke-linecap="round"
                                             stroke-linejoin="round" stroke-width="2"
@@ -564,7 +571,7 @@ onUnmounted(() => {
                     <div v-if="unselectedLabelsList.length > 0">
                         <h4 class="text-sm font-medium text-gray-900 mb-3 flex items-center">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-                                class="mr-2">
+                                class="me-2">
                                 <path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"
                                     stroke-width="2" d="M20.59 13.41 12 22 4 14V4h10l8.59 8.59zM7 7h.01" />
                             </svg>
@@ -572,12 +579,12 @@ onUnmounted(() => {
                         </h4>
                         <div class="space-y-2">
                             <div v-for="label in unselectedLabelsList" :key="`unselected-${label.id}`"
-                                class="flex items-center space-x-3 p-2 bg-gray-50 border border-gray-200 rounded-md hover:bg-gray-100 transition-colors">
+                                class="flex items-center gap-3 p-2 bg-gray-50 border border-gray-200 rounded-md hover:bg-gray-100 transition-colors">
                                 <input type="checkbox" :id="`unselected-label-${label.id}`" :checked="false"
                                     @change="toggleLabel(label.id)"
                                     class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2" />
                                 <label :for="`unselected-label-${label.id}`"
-                                    class="flex items-center space-x-2 cursor-pointer flex-1">
+                                    class="flex items-center gap-2 cursor-pointer flex-1">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24">
                                         <path fill="none" :stroke="label.color" stroke-linecap="round"
                                             stroke-linejoin="round" stroke-width="2"
@@ -613,7 +620,7 @@ onUnmounted(() => {
                     <div class="text-sm text-gray-600">
                         {{ $t('Total selected') }}: {{ labelsForm.labels.length }}
                     </div>
-                    <div class="flex space-x-2">
+                    <div class="flex gap-2">
                         <button type="button" @click="isOpenLabelsModal = false"
                             class="inline-flex justify-center rounded-md border border-transparent bg-slate-50 px-4 py-2 text-sm text-slate-500 hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2">
                             {{ $t('Cancel') }}

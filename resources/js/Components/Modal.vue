@@ -48,7 +48,7 @@
                 >
                     <DialogPanel
                     tabindex="0"
-                    class="w-full max-w-md transform overflow-hidden rounded-2xl bg-white text-left align-middle shadow-xl transition-all"
+                    class="w-full max-w-md transform overflow-hidden rounded-2xl bg-white text-start align-middle shadow-xl transition-all"
                     >
                     <div v-if="props.showHeader != false" class="flex justify-between items-center bg-gray-50 px-4 py-3">
                         <DialogTitle as="h3" class="text-lg font-medium leading-6 text-gray-900">

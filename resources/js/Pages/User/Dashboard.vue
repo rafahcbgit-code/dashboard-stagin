@@ -5,10 +5,36 @@
                 <div>
                     <h2 class="md:block hidden text-xl mb-1">{{ $t('Dashboard') }}</h2>
                     <p class="mb-6 flex items-center leading-6">
-                        <span class="mt-1 font-semibold md:font-normal text-xl">{{ $t('Welcome back') }}, {{ props.auth.user.first_name }} 👋</span>
+                        <span class="mt-1 font-semibold md:font-normal text-xl">{{ $t(props.welcomeKey) }}, {{ props.auth.user.first_name }} 👋</span>
                     </p>
                 </div>
             </div>
+            <div v-if="props.whatsappReadiness && (props.whatsappReadiness.blockers.length || props.whatsappReadiness.warnings.length)" role="status" aria-live="polite" class="mb-6 overflow-hidden rounded-2xl border shadow-sm" :class="props.whatsappReadiness.blockers.length ? 'border-red-200 bg-white' : 'border-amber-200 bg-white'">
+                <div class="flex items-start gap-3 p-4 sm:p-5" :class="props.whatsappReadiness.blockers.length ? 'bg-red-50/70' : 'bg-amber-50/70'">
+                    <span class="flex size-10 shrink-0 items-center justify-center rounded-xl" :class="props.whatsappReadiness.blockers.length ? 'bg-red-100 text-red-700' : 'bg-amber-100 text-amber-800'" aria-hidden="true">
+                        <svg v-if="props.whatsappReadiness.blockers.length" viewBox="0 0 20 20" fill="currentColor" class="size-5"><path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.72-1.36 3.486 0l6.518 11.59c.75 1.334-.214 2.986-1.743 2.986H3.482c-1.53 0-2.493-1.652-1.743-2.987l6.518-11.589ZM11 13a1 1 0 1 1-2 0 1 1 0 0 1 2 0Zm-1-7a.75.75 0 0 0-.75.75v3.5a.75.75 0 0 0 1.5 0v-3.5A.75.75 0 0 0 10 6Z" clip-rule="evenodd" /></svg>
+                        <svg v-else viewBox="0 0 20 20" fill="currentColor" class="size-5"><path fill-rule="evenodd" d="M10 18a8 8 0 1 0 0-16 8 8 0 0 0 0 16Zm.75-11.5a.75.75 0 0 0-1.5 0v4a.75.75 0 0 0 1.5 0v-4ZM10 14a1 1 0 1 0 0-2 1 1 0 0 0 0 2Z" clip-rule="evenodd" /></svg>
+                    </span>
+                    <div class="min-w-0 flex-1">
+                        <div class="flex flex-wrap items-center gap-2">
+                            <h2 class="font-semibold" :class="props.whatsappReadiness.blockers.length ? 'text-red-950' : 'text-amber-950'">{{ $t('WhatsApp readiness') }}</h2>
+                            <StatusBadge :tone="props.whatsappReadiness.blockers.length ? 'error' : 'warning'" :label="$t(props.whatsappReadiness.blockers.length ? 'Action required' : 'Needs attention')" />
+                        </div>
+                        <ul class="mt-3 space-y-2">
+                            <li v-for="item in [...props.whatsappReadiness.blockers, ...props.whatsappReadiness.warnings]" :key="item.key" class="flex items-start gap-2 text-sm leading-6" :class="props.whatsappReadiness.blockers.length ? 'text-red-950' : 'text-amber-950'">
+                                <span class="mt-2 size-1.5 shrink-0 rounded-full bg-current" aria-hidden="true"></span><span>{{ item.message }}</span>
+                            </li>
+                        </ul>
+                    </div>
+                </div>
+                <div class="flex flex-col gap-3 border-t border-slate-100 px-4 py-3 sm:flex-row sm:items-center sm:justify-between sm:px-5">
+                    <p class="text-xs leading-5 text-slate-500">{{ $t('Review your WhatsApp connection before sending a campaign.') }}</p>
+                    <Link v-if="props.whatsappReadiness.blockers[0] || props.whatsappReadiness.warnings[0]" :href="(props.whatsappReadiness.blockers[0] || props.whatsappReadiness.warnings[0]).action.path" class="inline-flex min-h-10 items-center justify-center rounded-lg px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" :class="props.whatsappReadiness.blockers.length ? 'bg-red-700' : 'bg-amber-700'">
+                        {{ (props.whatsappReadiness.blockers[0] || props.whatsappReadiness.warnings[0]).action.label }}
+                    </Link>
+                </div>
+            </div>
+            <PreSetupChecklist :steps="props.preSetup" :summary="props.preSetupSummary" :mandatory-ready="props.mandatoryReady" :dismissed="props.preSetupDismissed" />
             <div v-if="props.role !== 'agent'" class="flex space-s-2 mb-8 text-xs md:text-sm">
                 <Link href="/contacts/add" class="bg-primary py-2 px-3 rounded-lg text-white">{{ $t('Add contact') }}</Link>
                 <Link href="/campaigns/create" class="bg-primary py-2 px-3 rounded-lg text-white">{{ $t('Create campaign') }}</Link>
@@ -18,8 +44,11 @@
                 <div class="bg-slate-100 md:bg-white col-span-2 md:col-span-1 rounded-lg p-3">
                     <div class="flex justify-between items-center">
                         <div>
-                            <h2>{{ $t('Contacts') }}</h2>
-                            <h2 class="text-xl text-gray-600">{{ props.contactCount }}</h2>
+                            <Link href="/contacts" class="rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+                                <h2>{{ $t('Contacts') }}</h2>
+                                <h2 class="text-xl text-gray-600">{{ props.contactCount }}</h2>
+                                <p class="text-xs text-slate-600">{{ $t('All non-deleted contacts in this organization, including unsubscribed') }}</p>
+                            </Link>
                         </div>
                         <div class="flex">
                             <span class="bg-secondary/10 p-3 rounded-full self-start">
@@ -37,8 +66,11 @@
                 <div class="bg-slate-100 md:bg-white col-span-1 rounded-lg p-3" v-if="props.role !== 'agent'">
                     <div class="flex justify-between items-center">
                         <div>
-                            <h2>{{ $t('Campaigns') }}</h2>
-                            <h2 class="text-xl text-gray-600">{{ props.campaignCount }}</h2>
+                            <Link href="/campaigns" class="rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+                                <h2>{{ $t('Campaigns') }}</h2>
+                                <h2 class="text-xl text-gray-600">{{ props.campaignCount }}</h2>
+                                <p class="text-xs text-slate-600">{{ $t('All non-deleted campaigns in this organization') }}</p>
+                            </Link>
                         </div>
                         <div class="flex">
                             <span class="bg-secondary/10 p-3 rounded-full self-start">
@@ -56,8 +88,11 @@
                 <div class="bg-slate-100 md:bg-white rounded-lg p-3">
                     <div class="flex justify-between items-center">
                         <div>
-                            <h2>{{ $t('Templates') }}</h2>
-                            <h2 class="text-xl text-gray-600">{{ props.templateCount }}</h2>
+                            <Link href="/templates" class="rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+                                <h2>{{ $t('Templates') }}</h2>
+                                <h2 class="text-xl text-gray-600">{{ props.templateCount }}</h2>
+                                <p class="text-xs text-slate-600">{{ $t('All non-deleted templates in this organization') }}</p>
+                            </Link>
                         </div>
                         <div class="flex">
                             <span class="bg-secondary/10 p-3 rounded-full self-start">
@@ -75,8 +110,11 @@
                 <div class="bg-slate-100 col-span-2 md:col-span-1 md:bg-white rounded-lg p-3">
                     <div class="flex justify-between items-center">
                         <div>
-                            <h2>{{ $t('All chats') }}</h2>
-                            <h2 class="text-xl text-gray-600">{{ props.chatCount }}</h2>
+                            <Link href="/chats" class="rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+                                <h2>{{ $t('All chats') }}</h2>
+                                <h2 class="text-xl text-gray-600">{{ props.chatCount }}</h2>
+                                <p class="text-xs text-slate-600">{{ $t('Non-deleted messages linked to non-deleted contacts') }}</p>
+                            </Link>
                         </div>
                         <div class="flex">
                             <span class="bg-secondary/10 p-3 rounded-full self-start">
@@ -93,9 +131,22 @@
                 </div>
             </div>
             <div class="md:grid md:grid-cols-2 gap-x-4 mt-4">
-                <div class="md:block hidden">
-                    <div id="chart">
-                        <apexchart type="area" height="350" :options="chartOptions" :series="series"></apexchart>
+                <div class="min-w-0">
+                    <div id="chart" class="rounded-lg bg-white p-3 md:p-4">
+                        <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
+                            <h2 class="font-semibold">{{ $t('Message activity') }}</h2>
+                            <div class="flex gap-1" role="group" :aria-label="$t('Chart period')">
+                                <Link v-for="days in [7, 30, 90]" :key="days" :href="`/dashboard?days=${days}`" preserve-scroll class="rounded-md px-3 py-1.5 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" :class="props.chartDays === days ? 'bg-primary text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'" :aria-current="props.chartDays === days ? 'page' : undefined">
+                                    {{ days }} {{ $t('days') }}
+                                </Link>
+                            </div>
+                        </div>
+                        <div v-if="chartIsEmpty" class="flex min-h-64 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-slate-300 p-6 text-center">
+                            <p class="text-slate-700">{{ $t('No messages in this period') }}</p>
+                            <Link v-if="props.chartDays < 30" href="/dashboard?days=30" preserve-scroll class="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">{{ $t('View 30 days') }}</Link>
+                            <Link v-else-if="props.chartDays < 90" href="/dashboard?days=90" preserve-scroll class="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">{{ $t('View 90 days') }}</Link>
+                        </div>
+                        <apexchart v-else type="area" height="320" :options="chartOptions" :series="series"></apexchart>
                     </div>
                 </div>
                 <div class="space-y-5">
@@ -181,28 +232,6 @@
                             </span>
                         </div>
                     </div>
-                    <div v-if="props.auth.user.teams[0].role === 'owner' && displayTeamNotification() === true" class="bg-slate-100 md:bg-white rounded-lg py-4 px-4">
-                        <div class="flex justify-between">
-                            <div>
-                                <h2>{{ $t('Setup team') }}</h2>
-                                <p class="text-sm">{{ $t('Add other people to your team') }}</p>
-                            </div>
-                            <div class="flex">
-                                <span class="bg-[#ffe5b4] h-16 w-16 p-3 flex justify-center items-center rounded-full self-start">
-                                    <svg class="text-slate-600" xmlns="http://www.w3.org/2000/svg" width="40" height="40" viewBox="0 0 20 20"><g fill="currentColor"><g opacity=".2"><path d="M9.75 7.75a3 3 0 1 1-6 0a3 3 0 0 1 6 0Z"/><path fill-rule="evenodd" d="M6.75 8.75a1 1 0 1 0 0-2a1 1 0 0 0 0 2Zm0 2a3 3 0 1 0 0-6a3 3 0 0 0 0 6Z" clip-rule="evenodd"/><path fill-rule="evenodd" d="M6.8 11.5A1.5 1.5 0 0 0 5.3 13v1.5a1 1 0 0 1-2 0V13a3.5 3.5 0 0 1 7 0v.5a1 1 0 1 1-2 0V13a1.5 1.5 0 0 0-1.5-1.5Z" clip-rule="evenodd"/><path d="M12.75 7.75a3 3 0 1 0 6 0a3 3 0 0 0-6 0Z"/><path fill-rule="evenodd" d="M15.75 8.75a1 1 0 1 1 0-2a1 1 0 0 1 0 2Zm0 2a3 3 0 1 1 0-6a3 3 0 0 1 0 6Z" clip-rule="evenodd"/><path fill-rule="evenodd" d="M15.7 11.5a1.5 1.5 0 0 1 1.5 1.5v1.5a1 1 0 1 0 2 0V13a3.5 3.5 0 0 0-7 0v.5a1 1 0 1 0 2 0V13a1.5 1.5 0 0 1 1.5-1.5Z" clip-rule="evenodd"/><path fill-rule="evenodd" d="M11.3 14.25a1.5 1.5 0 0 0-1.5 1.5v1.5a1 1 0 0 1-2 0v-1.5a3.5 3.5 0 0 1 7 0v1.5a1 1 0 1 1-2 0v-1.5a1.5 1.5 0 0 0-1.5-1.5Z" clip-rule="evenodd"/><path d="M14.25 10.5a3 3 0 1 1-6 0a3 3 0 0 1 6 0Z"/><path fill-rule="evenodd" d="M11.25 11.5a1 1 0 1 0 0-2a1 1 0 0 0 0 2Zm0 2a3 3 0 1 0 0-6a3 3 0 0 0 0 6Z" clip-rule="evenodd"/><path d="M4.25 11.5h5v4h-5v-4Zm9 0h5v4h-5v-4Z"/><path d="M9.25 13.5h4l.5 4.75h-5l.5-4.75Z"/></g><path fill-rule="evenodd" d="M5 9a2 2 0 1 0 0-4a2 2 0 0 0 0 4Zm0 1a3 3 0 1 0 0-6a3 3 0 0 0 0 6Z" clip-rule="evenodd"/><path fill-rule="evenodd" d="M3.854 8.896a.5.5 0 0 1 0 .708l-.338.337A3.47 3.47 0 0 0 2.5 12.394v1.856a.5.5 0 1 1-1 0v-1.856a4.47 4.47 0 0 1 1.309-3.16l.337-.338a.5.5 0 0 1 .708 0Zm11.792-.3a.5.5 0 0 0 0 .708l.338.337A3.469 3.469 0 0 1 17 12.094v2.156a.5.5 0 0 0 1 0v-2.156a4.47 4.47 0 0 0-1.309-3.16l-.337-.338a.5.5 0 0 0-.708 0Z" clip-rule="evenodd"/><path fill-rule="evenodd" d="M14 9a2 2 0 1 1 0-4a2 2 0 0 1 0 4Zm0 1a3 3 0 1 1 0-6a3 3 0 0 1 0 6Zm-4.5 3.25a2.5 2.5 0 0 0-2.5 2.5v1.3a.5.5 0 0 1-1 0v-1.3a3.5 3.5 0 0 1 7 0v1.3a.5.5 0 1 1-1 0v-1.3a2.5 2.5 0 0 0-2.5-2.5Z" clip-rule="evenodd"/><path fill-rule="evenodd" d="M9.5 11.75a2 2 0 1 0 0-4a2 2 0 0 0 0 4Zm0 1a3 3 0 1 0 0-6a3 3 0 0 0 0 6Z" clip-rule="evenodd"/></g></svg>
-                                </span>
-                            </div>
-                        </div>
-                        <div class="flex justify-between space-s-3">
-                            <Link href="team" class="bg-[#ffe5b4] p-2 rounded-lg text-sm flex px-3 capitalize">
-                                {{ $t('Add users') }}
-                                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20"><g fill="currentColor" fill-rule="evenodd" clip-rule="evenodd"><g opacity=".2"><path d="M12.206 5.848a1.5 1.5 0 0 1 2.113.192l3.333 4a1.5 1.5 0 1 1-2.304 1.92l-3.334-4a1.5 1.5 0 0 1 .192-2.112Z"/><path d="M12.206 16.152a1.5 1.5 0 0 1-.192-2.112l3.334-4a1.5 1.5 0 0 1 2.304 1.92l-3.333 4a1.5 1.5 0 0 1-2.113.192Z"/><path d="M16 11a1.5 1.5 0 0 1-1.5 1.5h-8a1.5 1.5 0 0 1 0-3h8A1.5 1.5 0 0 1 16 11Z"/></g><path d="M11.347 5.616a.5.5 0 0 1 .704.064l3.333 4a.5.5 0 0 1-.768.64l-3.333-4a.5.5 0 0 1 .064-.704Z"/><path d="M11.347 14.384a.5.5 0 0 1-.064-.704l3.333-4a.5.5 0 0 1 .768.64l-3.333 4a.5.5 0 0 1-.704.064Z"/><path d="M15.5 10a.5.5 0 0 1-.5.5H5a.5.5 0 0 1 0-1h20a.5.5 0 0 1 .5.5Z"/></g></svg>
-                            </Link>
-                            <div class="self-end">
-                                <span @click="dismissNotification()" class="text-sm underline cursor-pointer">{{ $t('Dismiss notification') }}</span>
-                            </div>
-                        </div>
-                    </div>
                     <div class="bg-white rounded-lg py-4 md:px-4">
                         <div v-if="props.role !== 'agent'">
                             <h2>{{ $t('Campaigns') }}</h2>
@@ -242,10 +271,11 @@
 </template>
 <script setup>
     import AppLayout from "./Layout/App.vue";
-    import { Link, router } from "@inertiajs/vue3";
-    import { ref, onMounted } from 'vue';
+    import { Link } from "@inertiajs/vue3";
+    import { computed } from 'vue';
     import { trans } from 'laravel-vue-i18n';
-    import EmbeddedSignupBtn from '@/Components/EmbeddedSignupBtn.vue';
+    import PreSetupChecklist from '@/Components/PreSetupChecklist.vue';
+    import StatusBadge from '@/Components/StatusBadge.vue';
 
     const props = defineProps({ 
         user: Object, 
@@ -258,11 +288,17 @@
         campaignCount: Number, 
         templateCount: Number, 
         setupWhatsapp: Boolean, 
-        organization: Object, 
-        campaigns: Object, 
-        period: Object, 
-        inbound: Object, 
-        outbound: Object,
+        whatsappReadiness: { type: Object, default: null },
+        preSetup: { type: Array, default: () => [] },
+        preSetupSummary: { type: Object, default: () => ({ total: 0, completed: 0, mandatoryPending: 0 }) },
+        mandatoryReady: Boolean,
+        preSetupDismissed: Boolean,
+        welcomeKey: { type: String, default: 'Welcome back' },
+        chartDays: { type: Number, default: 7 },
+        campaigns: Array,
+        period: Array,
+        inbound: Array,
+        outbound: Array,
         embeddedSignupActive: Number,
         appId: String,
         configId: String,
@@ -278,7 +314,8 @@
         role : String
     });
 
-    const chartOptions = {
+    const chartIsEmpty = computed(() => [...(props.inbound || []), ...(props.outbound || [])].every((count) => Number(count) === 0));
+    const chartOptions = computed(() => ({
         chart: {
             height: 350,
             type: 'area',
@@ -306,42 +343,29 @@
             width: 1,
             curve: 'smooth'
         },
+        yaxis: {
+            title: { text: trans('Messages') },
+        },
         xaxis: {
             type: 'datetime',
-            categories: props.period
+            categories: props.period,
+            labels: { datetimeUTC: false },
         },
         tooltip: {
             x: {
                 format: 'dd/MM/yy HH:mm'
             },
         },
-    };
+    }));
 
-    const series = [
+    const series = computed(() => [
         {
-            name: trans('Inbound chats'),
+            name: trans('Inbound messages'),
             data: props.inbound
         }, 
         {
-            name: trans('Outbound chats'),
+            name: trans('Outbound messages'),
             data: props.outbound
         }
-    ];
-
-    const teamNotification = ref(true);
-    const displayTeamNotification = () => {
-        try {
-            teamNotification.value = props.organization?.metadata
-                ? JSON.parse(props.organization.metadata)?.notification?.team ?? true
-                : true;
-        } catch (error) {
-            teamNotification.value = true;
-        }
-
-        return teamNotification.value;
-    }
-
-    const dismissNotification = () => {
-        router.delete('/dismiss-notification/team', {})
-    }
+    ]);
 </script>

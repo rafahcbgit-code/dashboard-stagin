@@ -1,4 +1,4 @@
-import { createApp, h, watchEffect } from 'vue';
+import { createApp, h, watch } from 'vue';
 import { createInertiaApp, router } from '@inertiajs/vue3';
 import VueApexCharts from 'vue3-apexcharts';
 import VueTelInput from 'vue-tel-input';
@@ -34,13 +34,7 @@ router.on('invalid', (event) => {
 
 // Function to load locale messages via API
 async function loadLocaleMessages(locale) {
-  const response = await axios.get(`/translations/${locale}`);
-  return response.data;
-}
-
-// Function to fetch available locales from Laravel backend
-async function fetchAvailableLocales() {
-  const response = await axios.get('/locales');
+  const response = await axios.get(`/translations/${encodeURIComponent(locale)}`);
   return response.data;
 }
 
@@ -72,46 +66,68 @@ createInertiaApp({
     
     throw new Error(`Page not found: ${name}`);
   },
-  setup({ el, App, props, plugin }) {
-    // Fetch the current locale and available locales from the Laravel backend
-    axios.get('/current-locale').then(async (response) => {
-      const currentLocale = response.data.locale;
-      const availableLocales = await fetchAvailableLocales();
+  async setup({ el, App, props, plugin }) {
+    const pageProps = props.initialPage?.props ?? {};
+    const currentLocale = String(
+      pageProps.currentLanguage || document.documentElement.lang || 'ar',
+    ).toLowerCase();
 
-      const i18n = createI18n({
-        legacy: false,
-        locale: currentLocale, // Default locale
-        fallbackLocale: 'en', // Fallback locale
-        messages: {}, // Initial empty messages
-      });
+    // Load translations before Vue mounts so the first visible render is already
+    // in the selected language instead of flashing untranslated English keys.
+    const [currentMessagesResult, fallbackMessagesResult] = await Promise.allSettled([
+      loadLocaleMessages(currentLocale),
+      currentLocale === 'en' ? Promise.resolve(null) : loadLocaleMessages('en'),
+    ]);
+    const currentMessages = currentMessagesResult.status === 'fulfilled'
+      ? currentMessagesResult.value
+      : {};
+    const fallbackMessages = currentLocale === 'en'
+      ? currentMessages
+      : fallbackMessagesResult.status === 'fulfilled'
+        ? fallbackMessagesResult.value
+        : {};
 
-      const app = createApp({ render: () => h(App, props) });
+    if (currentMessagesResult.status === 'rejected') {
+      console.error(`Unable to load translations for locale "${currentLocale}"`, currentMessagesResult.reason);
+    }
 
-      app.config.errorHandler = (error, instance, info) => {
-        console.error('Vue runtime error', error, info, instance);
-      };
+    document.documentElement.lang = currentLocale;
+    document.documentElement.dir = currentLocale === 'ar' ? 'rtl' : 'ltr';
 
-      app.use(plugin)
-        .use(VueApexCharts)
-        .use(VueTelInput)
-        .use(i18n)
-        .mount(el);
+    const i18n = createI18n({
+      legacy: false,
+      locale: currentLocale,
+      fallbackLocale: 'en',
+      messages: {
+        [currentLocale]: currentMessages,
+        ...(currentLocale === 'en' ? {} : { en: fallbackMessages }),
+      },
+    });
 
-      // Load the default locale messages
-      if (availableLocales.includes(currentLocale)) {
-        loadLocaleMessages(currentLocale).then(messages => {
-          i18n.global.setLocaleMessage(currentLocale, messages);
-        });
+    const app = createApp({ render: () => h(App, props) });
+
+    app.config.errorHandler = (error, instance, info) => {
+      console.error('Vue runtime error', error, info, instance);
+    };
+
+    app.use(plugin)
+      .use(VueApexCharts)
+      .use(VueTelInput)
+      .use(i18n)
+      .mount(el);
+
+    // Keep dynamically selected locales ready before rendering their strings.
+    watch(i18n.global.locale, async (newLocale) => {
+      if (i18n.global.availableLocales.includes(newLocale)) {
+        return;
       }
 
-      // Watch for locale changes and dynamically load new locale messages
-      watchEffect(async () => {
-        const newLocale = i18n.global.locale.value;
-        if (!i18n.global.availableLocales.includes(newLocale) && availableLocales.includes(newLocale)) {
-          const messages = await loadLocaleMessages(newLocale);
-          i18n.global.setLocaleMessage(newLocale, messages);
-        }
-      });
+      try {
+        const messages = await loadLocaleMessages(newLocale);
+        i18n.global.setLocaleMessage(newLocale, messages);
+      } catch (error) {
+        console.error(`Unable to load translations for locale "${newLocale}"`, error);
+      }
     });
   },
   progress: {

@@ -191,6 +191,7 @@ Route::middleware(['auth:user'])->group(function () {
         Route::group(['middleware' => ['check.organization', 'isTrial']], function () {
             //User Panel Routes
             Route::match(['get', 'post'], '/dashboard', [App\Http\Controllers\User\DashboardController::class, 'index'])->name('dashboard');
+            Route::post('/dashboard/pre-setup-state', [App\Http\Controllers\User\DashboardController::class, 'updatePreSetupState'])->name('dashboard.pre-setup-state');
 
             Route::group(['middleware' => 'check.client.role'], function () {
                 Route::delete('dismiss-notification/{type}', [App\Http\Controllers\User\DashboardController::class, 'dismissNotification'])->name('dashboard.team.notification.dismiss');
@@ -217,6 +218,9 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::post('/chat/{uuid}/send/meta-flow', [App\Http\Controllers\User\ChatController::class, 'sendMetaFlowMessage']);
                 Route::post('/chats/update-sort-direction', [App\Http\Controllers\User\ChatController::class, 'updateChatSortDirection']);
                 Route::get('/chats/{contactId}/messages', [App\Http\Controllers\User\ChatController::class, 'loadMoreMessages']);
+                Route::get('/chats/{contactUuid}/search', [App\Http\Controllers\User\ChatController::class, 'searchMessages'])->middleware('throttle:120,1');
+                Route::get('/chats/{contactUuid}/messages/around/{logId}', [App\Http\Controllers\User\ChatController::class, 'messagesAround'])->middleware('throttle:120,1');
+                Route::get('/chats/{contactUuid}/messages/around-reply', [App\Http\Controllers\User\ChatController::class, 'messagesAroundReply'])->middleware('throttle:120,1');
                 Route::get('/chats/labels/filter-data', [App\Http\Controllers\User\ChatController::class, 'getLabelsForFilter']);
                 Route::get('/chats/team-members/filter-data', [App\Http\Controllers\User\ChatController::class, 'getTeamMembersForFilter']);
                 Route::post('/chats/mark-all-read', [App\Http\Controllers\User\ChatController::class, 'markAllAsRead']);
@@ -444,7 +448,8 @@ Route::middleware(['auth:user'])->group(function () {
                     Route::get('/settings/woocommerce', [App\Http\Controllers\User\PluginController::class, 'wooCommerceSettings'])->name('settings.woocommerce');
                     Route::get('/settings/zid', [App\Http\Controllers\User\PluginController::class, 'zidSettings'])->name('settings.zid');
                     Route::get('/plugin/download/{name}', [App\Http\Controllers\User\PluginController::class, 'download'])->name('plugin.download');
-                    Route::get('/settings/whatsapp/refresh', [App\Http\Controllers\User\SettingController::class, 'refreshWhatsappData']);
+                    Route::post('/settings/whatsapp/refresh', [App\Http\Controllers\User\SettingController::class, 'refreshWhatsappData']);
+                    Route::get('/settings/whatsapp/template-sync-status', [App\Http\Controllers\User\SettingController::class, 'whatsappTemplateSyncStatus']);
                     Route::post('/settings/whatsapp/token', [App\Http\Controllers\User\SettingController::class, 'updateToken']);
                     Route::post('/settings/whatsapp', [App\Http\Controllers\User\SettingController::class, 'storeWhatsappSettings']);
                     Route::post('/settings/whatsapp/business-profile', [App\Http\Controllers\User\SettingController::class, 'whatsappBusinessProfileUpdate']);

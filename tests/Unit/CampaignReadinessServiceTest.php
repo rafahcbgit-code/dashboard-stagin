@@ -1,8 +1,9 @@
 <?php
 
 use App\Services\CampaignReadinessService;
+use Tests\TestCase;
 
-// tests/Pest.php already binds Tests\TestCase to the Unit suite.
+uses(TestCase::class);
 
 it('blocks a campaign when the WhatsApp number is disconnected', function () {
     $result = (new CampaignReadinessService())->check(['whatsapp' => ['number_status' => 'DISCONNECTED']]);

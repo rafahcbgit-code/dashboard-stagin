@@ -436,10 +436,14 @@ class ContactService
                     ->where('is_read', 0)
                     ->update(['is_read' => 1]);
 
-                $deletedCount += Contact::where('organization_id', $this->organizationId)
-                    ->whereNull('deleted_at')
-                    ->whereIn('id', $contactIds)
-                    ->update(['deleted_at' => $deletedAt]);
+                $deletedCount += DB::transaction(function () use ($contactIds, $deletedAt) {
+                    $count = Contact::where('organization_id', $this->organizationId)
+                        ->whereNull('deleted_at')->whereIn('id', $contactIds)
+                        ->update(['deleted_at' => $deletedAt]);
+                    DB::table('chat_message_search')->where('organization_id', $this->organizationId)
+                        ->whereIn('contact_id', $contactIds)->delete();
+                    return $count;
+                });
 
                 foreach ($contacts as $contact) {
                     $webhookContacts[] = [
