@@ -14,7 +14,8 @@
           @deleteThread="deleteThread" @closeThread="closeThread" @labelsUpdated="handleLabelsUpdated"
           @noteCreated="handleNoteCreated" @messageMarkedUnread="handleMessageMarkedUnread" @search="openConversationSearch" />
         <ChatSearchPanel v-if="contact && searchOpen && !displayTemplate && !displayContactInfo"
-          :key="contact.uuid" :contact-uuid="contact.uuid" :refresh-token="searchRefreshToken" @close="closeConversationSearch" @select="selectSearchResult" />
+          :key="contact.uuid" :contact-uuid="contact.uuid" :refresh-token="searchRefreshToken"
+          @close="closeConversationSearch" @select="selectSearchResult" @reset-selection="clearSearchSelection" />
         <div v-if="contact && !displayTemplate" class="flex-1 min-h-0 overflow-y-auto" ref="scrollContainer2" data-chat-scroll-container>
           <ChatThread v-if="!displayContactInfo && !loadingThread && !displayTemplate" :contactId="contact.id"
             :contactUuid="contact.uuid" :searchTarget="searchTarget"
@@ -124,6 +125,11 @@ const closeConversationSearch = () => {
 
 const selectSearchResult = (result) => {
   searchTarget.value = { ...result, selectionId: ++searchSelectionId };
+};
+const clearSearchSelection = () => {
+  const hadSelection = Boolean(searchTarget.value);
+  searchTarget.value = null;
+  if (hadSelection) setTimeout(scrollToBottom, 100);
 };
 const loadingThread = ref(false);
 const displayContactInfo = ref(false);

@@ -37,6 +37,7 @@ const windowMode = ref(false);
 const windowHasOlder = ref(false);
 const windowHasNewer = ref(false);
 const windowError = ref(false);
+const windowLoading = ref(false);
 let windowRequestId = 0;
 let windowController = null;
 let windowHighlightTimer = null;
@@ -136,6 +137,7 @@ const restoreLatest = () => {
     windowRequestId++;
     windowController?.abort();
     windowMode.value = false;
+    windowLoading.value = false;
     windowError.value = false;
     messages.value = props.initialMessages;
     hasMore.value = props.hasMoreMessages;
@@ -149,6 +151,7 @@ const openSearchResult = async (target) => {
     windowController?.abort();
     windowController = new AbortController();
     windowError.value = false;
+    windowLoading.value = true;
     try {
         const response = await axios.get(`/chats/${encodeURIComponent(props.contactUuid)}/messages/around/${target.log_id}`, { signal: windowController.signal });
         if (current !== windowRequestId) return;
@@ -158,13 +161,15 @@ const openSearchResult = async (target) => {
         windowHasNewer.value = response.data.hasNewer;
         highlightedChatId.value = target.chat_id;
         clearTimeout(windowHighlightTimer);
-        windowHighlightTimer = setTimeout(() => { highlightedChatId.value = null; }, 2200);
+        windowHighlightTimer = setTimeout(() => { highlightedChatId.value = null; }, 3200);
         await nextTick();
         const item = messages.value.find((row) => row?.[0]?.value?.id === target.chat_id);
         const key = item && messageKey(item, messages.value.indexOf(item));
         messageElements.value[key]?.scrollIntoView({ behavior: 'smooth', block: 'center' });
     } catch (error) {
         if (current === windowRequestId && error.code !== 'ERR_CANCELED') windowError.value = true;
+    } finally {
+        if (current === windowRequestId) windowLoading.value = false;
     }
 };
 
@@ -317,29 +322,29 @@ const loadMoreMessages = async () => {
 </script>
 
 <template>
-    <div class="py-4 md:py-4 relative px-6 md:px-10">
-        <div v-if="windowMode" class="mb-3 flex flex-wrap items-center justify-center gap-2 text-sm">
-            <button v-if="windowHasOlder" type="button" class="rounded border bg-white px-3 py-1.5" :disabled="loading" @click="extendWindow('older')">{{ $t('Older messages') }}</button>
-            <button type="button" class="rounded border bg-white px-3 py-1.5" @click="restoreLatest">{{ $t('Back to latest messages') }}</button>
+    <div class="relative px-3 py-4 sm:px-6 md:px-10">
+        <p v-if="windowLoading" class="mb-2 text-center text-xs text-slate-600" role="status">{{ $t('Opening search result') }}</p>
+        <div v-if="windowMode && windowHasOlder" class="mb-3 text-center">
+            <button type="button" class="min-h-9 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-50" :disabled="loading" @click="extendWindow('older')">{{ $t('Older messages') }}</button>
         </div>
         <p v-if="windowError" role="alert" class="mb-2 text-center text-sm text-red-700">{{ $t('Could not open this message') }}</p>
         <div v-if="hasMore && !windowMode"
              class="text-center py-2">
             <div v-if="loading" 
                  class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 rounded-md text-sm text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-25 transition ease-in-out duration-150">
-                <svg class="animate-spin -ml-1 mr-3 h-5 w-5 text-gray-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <svg class="animate-spin me-3 h-5 w-5 text-gray-700" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                 </svg>
-                Loading...
+                {{ $t('Loading...') }}
             </div>
             <button v-else
                     @click="loadMoreMessages"
                     class="inline-flex items-center px-4 py-2 bg-white border border-gray-300 rounded-md text-sm text-gray-700 shadow-sm hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-25 transition ease-in-out duration-150">
-                <svg class="-ml-1 mr-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg class="me-2 h-5 w-5" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M7 16V4m0 0L3 8m4-4l4 4m6 0v12m0 0l4-4m-4 4l-4-4" />
                 </svg>
-                Load More Messages
+                {{ $t('Load More Messages') }}
             </button>
         </div>
         
