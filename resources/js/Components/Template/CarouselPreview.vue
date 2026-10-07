@@ -12,7 +12,7 @@
         <div
             v-for="(card, index) in cards"
             :key="index"
-            class="mr-auto rounded-lg rounded-tl-none my-1 p-1 text-sm bg-white flex flex-col relative speech-bubble-left flex-shrink-0"
+            class="me-auto rounded-lg rounded-ss-none my-1 p-1 text-sm bg-white flex flex-col relative speech-bubble-left flex-shrink-0"
             style="width: 22em;"
         >
             <!-- HEADER with actual media or placeholder -->
@@ -56,7 +56,7 @@
             >{{ card.body_text }}</p>
 
             <!-- Timestamp -->
-            <div class="text-[#8c8c8c] mt-1 px-2 text-right">
+            <div class="text-[#8c8c8c] mt-1 px-2 text-end">
                 <span class="text-xs leading-none">9:15</span>
             </div>
 
@@ -76,7 +76,7 @@
             </div>
 
             <!-- Card number badge (small, bottom-right corner) -->
-            <div class="absolute -bottom-2 -right-2 bg-slate-200 text-slate-500 text-[10px] rounded-full w-5 h-5 flex items-center justify-center">
+            <div class="absolute -bottom-2 -end-2 bg-slate-200 text-slate-500 text-[10px] rounded-full w-5 h-5 flex items-center justify-center">
                 {{ index + 1 }}
             </div>
         </div>

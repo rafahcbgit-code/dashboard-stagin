@@ -8,12 +8,14 @@ use App\Services\WhatsappService;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use App\Services\Templates\TemplateStatusHistoryService;
 
 class TemplateStatusWebhookProcessor
 {
     public function __construct(
         private readonly TemplateStatusMapper $mapper,
-        private readonly TemplateStatusNotificationRecorder $notifications
+        private readonly TemplateStatusNotificationRecorder $notifications,
+        private readonly TemplateStatusHistoryService $history
     ) {
     }
 
@@ -106,7 +108,7 @@ class TemplateStatusWebhookProcessor
                 }
             }
 
-            DB::transaction(function () use ($template, $organization, $mapping, $value, $templateCategory, $hasKnownStatus, $wabaId) {
+            DB::transaction(function () use ($template, $organization, $mapping, $value, $templateCategory, $hasKnownStatus, $wabaId, $requestId) {
                 $organization = Organization::query()->lockForUpdate()->find($organization->id);
                 if (! $organization || ($wabaId !== null
                     && (string) data_get(json_decode($organization->metadata ?: '{}', true), 'whatsapp.waba_id') !== (string) $wabaId)) {
@@ -115,6 +117,7 @@ class TemplateStatusWebhookProcessor
                 $template = Template::query()->where('organization_id', $organization->id)
                     ->lockForUpdate()->findOrFail($template->id);
                 $oldStatus = (string) $template->status;
+                $oldCategory = (string) $template->category;
                 if ($templateCategory) {
                     $template->category = $templateCategory;
                 }
@@ -150,8 +153,21 @@ class TemplateStatusWebhookProcessor
 
                 $template->updated_at = now();
                 $template->save();
+                $this->history->record(
+                    $template,
+                    $oldStatus,
+                    (string) $template->status,
+                    $oldCategory,
+                    (string) $template->category,
+                    $value['reason'] ?? null,
+                    'webhook',
+                    ['request_id' => $requestId, 'event' => $mapping['event'] ?? null]
+                );
                 if ($hasKnownStatus) {
                     $this->notifications->record($template, $organization, $oldStatus, (string) $template->status);
+                }
+                if ($oldCategory !== (string) $template->category) {
+                    $this->notifications->recordCategoryChange($template, $organization, $oldCategory, (string) $template->category);
                 }
             });
 

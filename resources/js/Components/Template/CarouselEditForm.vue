@@ -36,11 +36,11 @@
             <div class="flex items-center px-4 py-2 bg-white border-b">
                 <span class="text-sm font-medium text-slate-700">{{ $t('Card') }} {{ index + 1 }}</span>
                 <!-- Read-only media type badge -->
-                <span class="ml-2 text-[10px] uppercase bg-slate-200 text-slate-500 rounded px-1.5 py-0.5">
+                <span class="ms-2 text-[10px] uppercase bg-slate-200 text-slate-500 rounded px-1.5 py-0.5">
                     {{ card.header_type }}
                 </span>
                 <!-- Locked icon -->
-                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" class="text-slate-400 ml-auto"><path fill="currentColor" d="M12 1a5 5 0 0 0-5 5v2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2h-2V6a5 5 0 0 0-5-5zm3 7V6a3 3 0 1 0-6 0v2z"/></svg>
+                <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" class="text-slate-400 ms-auto"><path fill="currentColor" d="M12 1a5 5 0 0 0-5 5v2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2h-2V6a5 5 0 0 0-5-5zm3 7V6a3 3 0 1 0-6 0v2z"/></svg>
             </div>
 
             <div class="px-4 py-3">
@@ -105,7 +105,7 @@
                                 :placeholder="$t('Button label…')"
                                 :maxlength="BUTTON_TEXT_LIMIT"
                             />
-                            <div class="mt-1 text-right text-[11px] text-slate-400">{{ textLength(btn.text) }}/{{ BUTTON_TEXT_LIMIT }}</div>
+                            <div class="mt-1 text-end text-[11px] text-slate-400">{{ textLength(btn.text) }}/{{ BUTTON_TEXT_LIMIT }}</div>
                         </div>
                         <!-- Locked icon per button -->
                         <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" class="text-slate-300"><path fill="currentColor" d="M12 1a5 5 0 0 0-5 5v2H5a2 2 0 0 0-2 2v12a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2h-2V6a5 5 0 0 0-5-5zm3 7V6a3 3 0 1 0-6 0v2z"/></svg>

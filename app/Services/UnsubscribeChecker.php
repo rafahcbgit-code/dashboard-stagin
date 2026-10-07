@@ -36,16 +36,22 @@ class UnsubscribeChecker
             ? json_decode($organization->metadata, true)
             : [];
 
-        // Get unsubscribe triggers from metadata
-        $triggers = $metadataArray['campaign_settings']['unsubscribe_trigger'] ?? null;
-
-        if (!$triggers) {
-            return false;
-        }
-
-        // Split trigger words by comma
-        $triggerWords   = array_map('strtolower', preg_split('/\s*,\s*/', $triggers, -1, PREG_SPLIT_NO_EMPTY));
-        $messageCleaned = strtolower(trim($messageText));
+        // Include configured words, previous values, and custom words used by
+        // approved unsubscribe buttons so changing settings does not break
+        // templates that are already in use.
+        $triggers = $metadataArray['campaign_settings']['unsubscribe_trigger'] ?? '';
+        $currentWords = preg_split('/\s*,\s*/u', (string) $triggers, -1, PREG_SPLIT_NO_EMPTY) ?: [];
+        $historicalWords = is_array($metadataArray['campaign_settings']['unsubscribe_trigger_history'] ?? null)
+            ? $metadataArray['campaign_settings']['unsubscribe_trigger_history']
+            : [];
+        $buttonWords = is_array($metadataArray['campaign_settings']['unsubscribe_button_triggers'] ?? null)
+            ? $metadataArray['campaign_settings']['unsubscribe_button_triggers']
+            : [];
+        $triggerWords = array_values(array_unique(array_map(
+            fn ($word) => $this->normalize((string) $word),
+            array_merge($currentWords, $historicalWords, $buttonWords)
+        )));
+        $messageCleaned = $this->normalize($messageText);
 
         // Check if message matches any trigger word
         if (in_array($messageCleaned, $triggerWords, true)) {
@@ -64,5 +70,14 @@ class UnsubscribeChecker
 
         
         return false;
+    }
+
+    private function normalize(string $value): string
+    {
+        $value = trim($value);
+        $value = preg_replace('/[\x{064B}-\x{065F}\x{0670}\x{06D6}-\x{06ED}]/u', '', $value) ?? $value;
+        $value = str_replace("ـ", '', $value);
+
+        return mb_strtolower($value);
     }
 }

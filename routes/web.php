@@ -354,6 +354,8 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::post('/campaigns/{uuid}/cancel', [App\Http\Controllers\User\CampaignController::class, 'cancel'])->name('campaigns.cancel');
                 Route::post('/campaigns/{uuid}/resend-failed', [App\Http\Controllers\User\CampaignController::class, 'resendFailed'])->name('campaigns.resend-failed');
 
+                Route::post('/templates/sync', [App\Http\Controllers\User\TemplateController::class, 'sync'])->name('templates.sync');
+                Route::get('/templates/sync/status', [App\Http\Controllers\User\TemplateController::class, 'syncStatus'])->name('templates.sync-status');
                 Route::match(['get', 'post'], '/templates/create', [App\Http\Controllers\User\TemplateController::class, 'create']);
                 Route::get('/templates/{uuid}/show', [App\Http\Controllers\User\TemplateController::class, 'show'])->name('templates.show');
                 Route::get('/templates/{uuid}/copy', [App\Http\Controllers\User\TemplateController::class, 'copy'])->name('templates.copy');

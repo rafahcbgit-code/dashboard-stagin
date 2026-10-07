@@ -77,12 +77,17 @@ class SyncWhatsappTemplatesJob implements ShouldBeUnique, ShouldQueue
             throw new RuntimeException($result->message ?? data_get($result, 'data.error.message') ?? 'WhatsApp template synchronization failed.');
         }
 
-        WhatsappTemplateSyncStatus::update($this->organizationId, $this->wabaId, 'complete');
+        WhatsappTemplateSyncStatus::update($this->organizationId, $this->wabaId, 'complete', [
+            'counts' => (array) ($result->counts ?? []),
+            'duration_ms' => $result->duration_ms ?? null,
+        ]);
     }
 
     public function failed(Throwable $exception): void
     {
-        WhatsappTemplateSyncStatus::update($this->organizationId, $this->wabaId, 'failed');
+        WhatsappTemplateSyncStatus::update($this->organizationId, $this->wabaId, 'failed', [
+            'message' => __('Template synchronization failed. Please try again.'),
+        ]);
 
         Log::error('WhatsApp template synchronization job failed.', [
             'organization_id' => $this->organizationId,

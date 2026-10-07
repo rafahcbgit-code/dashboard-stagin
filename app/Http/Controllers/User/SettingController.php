@@ -222,7 +222,16 @@ class SettingController extends BaseController
 
             // Normalize words (remove spaces around commas)
             $words = preg_replace('/\s*,\s*/', ',', trim($input));
+            $previousWords = (string) ($metadataArray['campaign_settings']['unsubscribe_trigger'] ?? '');
+            $history = is_array($metadataArray['campaign_settings']['unsubscribe_trigger_history'] ?? null)
+                ? $metadataArray['campaign_settings']['unsubscribe_trigger_history']
+                : [];
+            $history = array_values(array_unique(array_filter(array_merge(
+                $history,
+                preg_split('/\s*,\s*/u', $previousWords, -1, PREG_SPLIT_NO_EMPTY) ?: []
+            ))));
             $metadataArray['campaign_settings']['unsubscribe_trigger'] = $words;
+            $metadataArray['campaign_settings']['unsubscribe_trigger_history'] = array_slice($history, -25);
 
             $organizationConfig->metadata = json_encode($metadataArray);
             $organizationConfig->save();

@@ -11,9 +11,19 @@ class Template extends Model {
 
     protected $guarded = [];
     protected $casts = [
+        'internal_metadata' => 'array',
+        'has_unsubscribe_action' => 'boolean',
         'last_status_change_at' => 'datetime',
         'disabled_at' => 'datetime',
+        'last_used_at' => 'datetime',
+        'last_synced_at' => 'datetime',
+        'remote_missing_at' => 'datetime',
     ];
 
     public $timestamps = false;
+
+    public function statusEvents()
+    {
+        return $this->hasMany(TemplateStatusEvent::class)->latest('occurred_at');
+    }
 }

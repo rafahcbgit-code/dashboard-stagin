@@ -1,17 +1,17 @@
 <template>
     <AppLayout>
-        <div class="px-4 md:px-0 flex flex-col bg-white border-l py-4 text-[#000] md:overflow-y-hidden">
+        <div class="px-4 md:px-0 flex flex-col bg-white border-s py-4 text-[#000] md:overflow-y-hidden">
             <div class="flex justify-between md:px-8 border-b pb-4">
                 <div>
                     <h2 class="text-xl mb-1">{{ copyTemplate ? $t('Copy') + ' ' + $t('Template') : $t('New template') }}</h2>
                     <p class="flex items-center text-sm leading-6 text-gray-600">
                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11v5m0 5a9 9 0 1 1 0-18a9 9 0 0 1 0 18Zm.05-13v.1h-.1V8h.1Z"/></svg>
-                        <span class="ml-1 mt-1">{{ $t('Create template for review') }}</span>
+                        <span class="ms-1 mt-1">{{ $t('Create template for review') }}</span>
                     </p>
                 </div>
                 <div class="space-s-2 flex items-center">
                     <Link href="/templates" class="rounded-md bg-black px-3 py-2 text-sm text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">{{ $t('Back') }}</Link>
-                    <button @click="submitForm()" type="button" class="capitalize rounded-md px-3 py-2 float-right text-sm text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600" :class="isFormValid === true ? 'bg-indigo-600 hover:bg-indigo-500 shadow-sm' : 'bg-gray-200'" :disabled="!isFormValid || isLoading">
+                    <button @click="submitForm()" type="button" class="capitalize rounded-md px-3 py-2 text-sm text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600" :class="isFormValid === true && connection?.connected ? 'bg-indigo-600 hover:bg-indigo-500 shadow-sm' : 'bg-gray-200'" :disabled="!isFormValid || isLoading || !connection?.connected">
                         <span v-if="!isLoading">{{ $t('Create template') }}</span>
                         <svg v-else xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2A10 10 0 1 0 22 12A10 10 0 0 0 12 2Zm0 18a8 8 0 1 1 8-8A8 8 0 0 1 12 20Z" opacity=".5"/><path fill="currentColor" d="M20 12h2A10 10 0 0 0 12 2V4A8 8 0 0 1 20 12Z"><animateTransform attributeName="transform" dur="1s" from="0 12 12" repeatCount="indefinite" to="360 12 12" type="rotate"/></path></svg>
                     </button>
@@ -19,16 +19,16 @@
             </div>
             <div class="md:flex md:flex-grow-1 md:h-[88vh] mt-4 md:mt-0">
                 <div class="md:w-[50%] md:p-8 overflow-y-auto">
-                    <div v-if="!settings?.whatsapp" class="p-4 md:p-8 overflow-y-auto p-4">
+                    <div v-if="!connection?.connected" class="p-4 md:p-8 overflow-y-auto">
                         <div class="bg-slate-50 border border-primary shadow rounded-md p-4 py-8">
                             <div class="flex justify-center mb-4">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 48 48"><path fill="black" d="M43.634 4.366a1.25 1.25 0 0 1 0 1.768l-4.913 4.913a9.253 9.253 0 0 1-.744 12.244l-3.343 3.343a1.25 1.25 0 0 1-1.768 0l-11.5-11.5a1.25 1.25 0 0 1 0-1.768l3.343-3.343a9.25 9.25 0 0 1 12.244-.743l4.913-4.914a1.25 1.25 0 0 1 1.768 0m-7.611 7.425a6.75 6.75 0 0 0-9.546 0l-2.46 2.459l9.733 9.732l2.46-2.459a6.75 6.75 0 0 0 0-9.546zM9.28 36.953l-4.914 4.913a1.25 1.25 0 0 0 1.768 1.768l4.913-4.913a9.253 9.253 0 0 0 12.244-.744l3.343-3.343a1.25 1.25 0 0 0 0-1.768L25.268 31.5l3.366-3.366a1.25 1.25 0 0 0-1.768-1.768L23.5 29.732L18.268 24.5l3.366-3.366a1.25 1.25 0 0 0-1.768-1.768L16.5 22.732l-1.366-1.366a1.25 1.25 0 0 0-1.768 0l-3.343 3.343a9.25 9.25 0 0 0-.743 12.244m2.51-10.476l2.46-2.46l9.732 9.733l-2.459 2.46a6.75 6.75 0 0 1-9.546 0l-.186-.187a6.75 6.75 0 0 1 0-9.546"/></svg>
                             </div>
-                            <h3 class="text-center text-lg font-medium mb-4">{{ $t('Connect your whatsapp account') }}</h3>
-                            <h4 class="text-center mb-4">{{ $t('You need to connect your WhatsApp account first before you can create a template.') }}</h4>
+                            <h3 class="text-center text-lg font-medium mb-4">{{ $t('WhatsApp number is not connected') }}</h3>
+                            <h4 class="text-center mb-4 text-sm leading-6 text-slate-600">{{ $t('Reconnect the number before creating, editing, or synchronizing templates. You can still view the saved templates.') }}</h4>
                             <div class="flex justify-center">
                                 <Link href="/settings/whatsapp" class="rounded-md px-3 py-2 text-sm hover:shadow-md text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 bg-primary" :disabled="isLoading">
-                                    <span v-if="!isLoading">{{ $t('Connect Whatsapp account') }}</span>
+                                        <span v-if="!isLoading">{{ $t('Reconnect number') }}</span>
                                 </Link>
                             </div>
                         </div>
@@ -39,6 +39,7 @@
                             <FormSelect v-model="form.category" :options="categoryOptions" :name="$t('Category')" :class="'sm:col-span-3'" :placeholder="$t('Select category')"/>
                             <FormSelect v-model="form.language" :options="langOptions" :name="$t('Language')" :class="'sm:col-span-3'" :placeholder="$t('Select language')"/>
                         </div>
+                        <TemplateCategoryGuide :category="form.category" />
                         <!-- Standard / Carousel toggle — only visible when MARKETING -->
                         <div v-if="form.category === 'MARKETING'" class="mb-6">
                             <h2 class="text-slate-600 text-sm mb-1">{{ $t('Template type') }}</h2>
@@ -193,22 +194,23 @@
                                 </div>
                             </div>
 
+                            <TemplateUnsubscribeCard v-if="templateType !== 'carousel'" :category="form.category" :rules="rules" :keyword="unsubscribeButton?.text || ''" :hasButton="Boolean(unsubscribeButton)" @add="addUnsubscribeButton" />
                             <h2 class="text-slate-600">{{ $t('Buttons') }} <span class="text-xs">({{ $t('Optional') }})</span></h2>
                             <span class="text-slate-600 text-xs">{{ $t('Create buttons that let customers respond to your message or take action') }}</span>
                             <div class="grid grid-cols-2 mt-3 mb-2">
-                                <button @click="addButton('call')" class="flex items-center justify-center text-slate-700 text-sm bg-slate-100 hover:bg-slate-200 hover:shadow-sm rounded-lg p-2 px-4 mr-2">
+                                <button type="button" @click="addButton('call')" class="flex items-center justify-center text-slate-700 text-sm bg-slate-100 hover:bg-slate-200 hover:shadow-sm rounded-lg p-2 px-4">
                                     <span>{{ $t('Call phone number (1)') }}</span>
                                 </button>
-                                <button @click="addButton('website')" class="flex items-center justify-center text-slate-700 text-sm bg-slate-100 hover:bg-slate-200 hover:shadow-sm rounded-lg p-2 px-4">
+                                <button type="button" @click="addButton('website')" class="flex items-center justify-center text-slate-700 text-sm bg-slate-100 hover:bg-slate-200 hover:shadow-sm rounded-lg p-2 px-4">
                                     <span>{{ $t('Visit website (2)') }}</span>
                                 </button>
                             </div>
                             <div class="grid grid-cols-2 mt-3 mb-2">
-                                <button @click="addButton('offer')" class="flex items-center justify-center text-slate-700 text-sm bg-slate-100 hover:bg-slate-200 hover:shadow-sm rounded-lg p-2 px-4 mr-2">
+                                <button type="button" @click="addButton('offer')" class="flex items-center justify-center text-slate-700 text-sm bg-slate-100 hover:bg-slate-200 hover:shadow-sm rounded-lg p-2 px-4">
                                     <span>{{ $t('Copy offer code (1)') }}</span>
                                 </button>
-                                <button @click="addButton('custom')" class="flex items-center justify-center text-slate-700 text-sm bg-slate-100 hover:bg-slate-200 hover:shadow-sm rounded-lg p-2 px-4">
-                                    <span>{{ $t('Custom button (6)') }}</span>
+                                <button type="button" @click="addButton('custom')" class="flex items-center justify-center text-slate-700 text-sm bg-slate-100 hover:bg-slate-200 hover:shadow-sm rounded-lg p-2 px-4">
+                                    <span>{{ $t('Quick reply button (3)') }}</span>
                                 </button>
                             </div>
                             <div v-if="metaFlows.length > 0" class="grid grid-cols-1 mt-3 mb-2">
@@ -232,12 +234,12 @@
                                                 <span v-if="button.type === 'URL' && isDynamicUrl(button.url)" class="block text-[11px] text-slate-500">{{ $t('Dynamic URL') }}</span>
                                             </div>
                                         </div>
-                                        <button @click="removeButton(index)" class="flex h-7 w-7 items-center justify-center rounded-full bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100 hover:text-slate-700">
+                                        <button type="button" @click="removeButton(index)" :aria-label="$t('Remove button')" class="flex h-7 w-7 items-center justify-center rounded-full bg-white text-slate-500 ring-1 ring-slate-200 hover:bg-slate-100 hover:text-slate-700">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M17.707 7.707a1 1 0 0 0-1.414-1.414L12 10.586L7.707 6.293a1 1 0 0 0-1.414 1.414L10.586 12l-4.293 4.293a1 1 0 1 0 1.414 1.414L12 13.414l4.293 4.293a1 1 0 1 0 1.414-1.414L13.414 12l4.293-4.293Z" clip-rule="evenodd"/></svg>
                                         </button>
                                     </div>
                                     <div class="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2">
-                                        <FormInput v-if="button.type !== 'COPY_CODE'" v-model="button.text" :name="$t('Button text')" :type="'text'" :class="button.type === 'URL' || button.type === 'QUICK_REPLY' || button.type === 'FLOW' ? 'w-full sm:col-span-2' :'w-full'" :labelClass="'mb-0 text-xs text-slate-600'" :maxLength="BUTTON_TEXT_LIMIT" :showCharacterCount="true"/>
+                                        <FormInput v-if="button.type !== 'COPY_CODE'" v-model="button.text" :name="button.is_unsubscribe ? $t('Unsubscribe button text') : $t('Button text')" :type="'text'" :class="button.type === 'URL' || button.type === 'QUICK_REPLY' || button.type === 'FLOW' ? 'w-full sm:col-span-2' :'w-full'" :labelClass="'mb-0 text-xs text-slate-600'" :maxLength="button.type === 'QUICK_REPLY' ? 25 : BUTTON_TEXT_LIMIT" :showCharacterCount="true"/>
                                         <FormInput v-model="button.url" v-if="button.type === 'URL'" :name="$t('Website URL')" :type="'text'" :class="'w-full sm:col-span-2'" :labelClass="'mb-0 text-xs text-slate-600'"/>
                                         <FormInput v-model="button.example" v-if="button.type === 'URL' && isDynamicUrl(button.url)" :name="$t('Example full URL')" :type="'text'" :class="'w-full sm:col-span-2'" :labelClass="'mb-0 text-xs text-slate-600'" :placeholder="buildDynamicUrlExample(button.url)"/>
                                         <FormInput v-model="button.country" v-if="button.type === 'PHONE_NUMBER'" :name="$t('Country')" :type="'text'" :class="'sm:col-span-2'" :labelClass="'mb-0'"/>
@@ -264,6 +266,7 @@
                         <div v-if="form.category === 'MARKETING' && templateType === 'carousel'">
                             <CarouselForm
                                 :cards="form.carousel_cards"
+                                :unsubscribeKeyword="rules.unsubscribe_keyword || 'stop'"
                                 @update:cards="form.carousel_cards = $event"
                                 :messageBody="form.carousel_message_body"
                                 @update:messageBody="form.carousel_message_body = $event"
@@ -276,7 +279,7 @@
 
                                 <div class="mt-4">
                                     <div v-for="option in codeDeliveryOptions" :key="option.value" class="relative flex mb-2">
-                                    <div class="flex h-6 items-center mr-2">
+                                    <div class="flex h-6 items-center me-2">
                                         <label class="flex items-center cursor-pointer">
                                         <input
                                             type="radio"
@@ -330,7 +333,7 @@
 
                                 <div class="mt-4">
                                     <div class="relative flex mb-2">
-                                        <div class="flex h-6 items-center mr-2">
+                                        <div class="flex h-6 items-center me-2">
                                             <input 
                                                 v-model="form.body.add_security_recommendation"
                                                 type="checkbox" 
@@ -342,7 +345,7 @@
                                         </div>
                                     </div>
                                     <div class="relative flex mb-2">
-                                        <div class="flex h-6 items-center mr-2">
+                                        <div class="flex h-6 items-center me-2">
                                             <input 
                                                 v-model="form.code_expiration"
                                                 type="checkbox" 
@@ -384,7 +387,7 @@
                             </div>
                         </div>
 
-                        <div v-if="form.category == 'UTILITY' || form.category == 'AUTHENTICATION'" class="mt-6 bg-gray-50 rounded-md p-3">
+                        <div v-if="form.category == 'AUTHENTICATION'" class="mt-6 rounded-xl border border-sky-100 bg-sky-50 p-4">
                             <h2 class="text-slate-600 mb-1">{{ $t('Message validity period') }}</h2>
                             <p class="text-slate-600 leading-tight text-xs ">{{ $t('It\'s recommended to set a custom validity period that your authentication message must be delivered by before it expires. If a message is not delivered within this time frame, you will not be charged and your customer will not see the message.') }}</p>
 
@@ -396,7 +399,7 @@
                                         <FormToggleSwitch v-model="form.customize_ttl" />
                                     </div>
                                 </div>
-                                <FormSelect v-if="form.customize_ttl" v-model="form.message_send_ttl_seconds" :options="form.category == 'UTILITY' ? utilityTTLOptions : authTTLOptions" :name="$t('Validity period')" :class="'sm:col-span-3'" :placeholder="$t('Select validity period')"/>
+                                <FormSelect v-if="form.customize_ttl" v-model="form.message_send_ttl_seconds" :options="authTTLOptions" :name="$t('Validity period')" :class="'sm:col-span-3'" :placeholder="$t('Select validity period')"/>
                             </div>
                         </div>
                     </div>
@@ -404,7 +407,7 @@
                 <div class="md:w-[50%] py-20 px-4 md:px-20 overflow-y-auto" style="background-image: url('/images/whatsapp-bg-02.png');">
                     <!-- Standard template preview -->
                     <div v-if="templateType !== 'carousel'">
-                    <div class="mr-auto rounded-lg rounded-tl-none my-1 p-1 text-sm bg-white flex flex-col relative speech-bubble-left w-[25em]">
+                    <div class="me-auto rounded-lg rounded-ss-none my-1 p-1 text-sm bg-white flex flex-col relative speech-bubble-left w-[25em]">
                         <div v-if="form.header.format != 'TEXT'" class="-m-1 mb-3 rounded overflow-hidden">
                             <template v-if="form.header.format === 'IMAGE'">
                                 <img
@@ -439,14 +442,14 @@
                         </div>
                         <h2 v-else class="text-gray-700 text-sm font-bold mb-1 px-2 normal-case whitespace-pre-wrap">{{ form.header.text }}</h2>
                         <p v-if="form.category != 'AUTHENTICATION'" class="px-2 normal-case whitespace-pre-wrap" v-html="formattedMessage"></p>
-                        <p v-else class="px-2 normal-case whitespace-pre-wrap" v-html="form.body.add_security_recommendation === true ? '{{1}} is your verification code. For your security, do not share this code.' : '{{1}} is your verification code.'"></p>
+                        <p v-else class="px-2 normal-case whitespace-pre-wrap" v-html="'{{1}} ' + $t(form.body.add_security_recommendation === true ? 'Authentication preview with security' : 'Authentication preview')"></p>
                         <div class="text-[#8c8c8c] mt-1 px-2">
                             <span v-if="form.category != 'AUTHENTICATION'" class="text-[13px]">{{ form.footer.text }}</span>
                             <span v-else-if="form.category === 'AUTHENTICATION' && form.code_expiration == true">{{ $t('This code expires in') }} {{ form.footer.code_expiration_minutes }} {{ 'minutes' }}</span>
-                            <span class="text-right text-xs leading-none float-right" :class="form.footer.text ? 'mt-2' : ''">9:15</span>
+                            <span class="text-end text-xs leading-none float-end" :class="form.footer.text ? 'mt-2' : ''">9:15</span>
                         </div>
                     </div>
-                    <div v-if="form.buttons.length > 0" class="mr-auto text-sm text-[#00a5f4] flex flex-col relative max-w-[25em]">
+                    <div v-if="form.buttons.length > 0" class="me-auto text-sm text-[#00a5f4] flex flex-col relative max-w-[25em]">
                         <div v-for="(item, index) in form.buttons" :key="index" class="flex justify-center items-center space-s-2 rounded-lg bg-white h-10 my-[0.1em]">
                             <span>
                                 <svg v-if="item.type === 'COPY_CODE'" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"><path fill="currentColor" d="M19 21H8V7h11m0-2H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2m-3-4H4a2 2 0 0 0-2 2v14h2V3h12V1Z"/></svg>
@@ -458,7 +461,7 @@
                             <span>{{ item.type === 'COPY_CODE' ? $t('Copy code') : item.text }}</span>
                         </div>
                     </div>
-                    <div v-if="form.category == 'AUTHENTICATION' && form.authentication_button.otp_type != 'zero_tap'" class="mr-auto text-sm text-[#00a5f4] flex flex-col relative max-w-[25em]">
+                    <div v-if="form.category == 'AUTHENTICATION' && form.authentication_button.otp_type != 'zero_tap'" class="me-auto text-sm text-[#00a5f4] flex flex-col relative max-w-[25em]">
                         <div class="flex justify-center items-center space-s-2 rounded-lg bg-white h-10 my-[0.1em]">
                             <span v-if="form.authentication_button.otp_type == 'copy_code'" class="flex gap-x-1">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"><path fill="currentColor" d="M19 21H8V7h11m0-2H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2m-3-4H4a2 2 0 0 0-2 2v14h2V3h12V1Z"/></svg>
@@ -470,9 +473,9 @@
                     </div>
                     <!-- Carousel preview -->
                     <div v-else>
-                        <div v-if="form.carousel_message_body" class="mr-auto rounded-lg rounded-tl-none my-1 mb-2 p-1 text-sm bg-white flex flex-col relative speech-bubble-left w-[25em]">
+                        <div v-if="form.carousel_message_body" class="me-auto rounded-lg rounded-ss-none my-1 mb-2 p-1 text-sm bg-white flex flex-col relative speech-bubble-left w-[25em]">
                             <p class="px-2 normal-case whitespace-pre-wrap">{{ form.carousel_message_body }}</p>
-                            <div class="text-[#8c8c8c] mt-1 px-2 text-right">
+                            <div class="text-[#8c8c8c] mt-1 px-2 text-end">
                                 <span class="text-xs leading-none">9:15</span>
                             </div>
                         </div>
@@ -486,10 +489,10 @@
                 <div v-if="error">
                 <div class="bg-red-50 text-red-700 border border-red-200 rounded p-3 text-sm">
                     <div class="font-semibold mb-1">
-                    {{ error.error_user_title || 'Error' }}
+                    {{ error.error_user_title || $t('Error') }}
                     </div>
                     <div>
-                    {{ error.error_user_msg || error.message || 'Something went wrong.' }}
+                    {{ error.error_user_msg || error.message || $t('Something went wrong.') }}
                     </div>
                     <div v-if="error.code" class="text-xs text-gray-500 mt-2">
                     (Code: {{ error.code }}{{ error.error_subcode ? ' / ' + error.error_subcode : '' }})
@@ -543,7 +546,10 @@
     import HeaderTextArea from '@/Components/Template/HeaderTextArea.vue';
     import CarouselForm from '@/Components/Template/CarouselForm.vue';
     import CarouselPreview from '@/Components/Template/CarouselPreview.vue';
+    import TemplateCategoryGuide from '@/Components/Template/TemplateCategoryGuide.vue';
+    import TemplateUnsubscribeCard from '@/Components/Template/TemplateUnsubscribeCard.vue';
     import { ref, computed, watch, onMounted, onErrorCaptured } from 'vue';
+    import { useI18n } from 'vue-i18n';
     import { Link } from "@inertiajs/vue3";
     import Modal from '@/Components/Modal.vue';
     import { toast } from 'vue3-toastify';
@@ -564,7 +570,10 @@
         ],
     });
 
-    const props = defineProps(['languages', 'settings', 'copyTemplate']);
+    const props = defineProps(['languages', 'settings', 'copyTemplate', 'connection', 'rules', 'capabilities']);
+    const connection = computed(() => props.connection || { connected: false });
+    const rules = computed(() => props.rules || { unsubscribe_keyword: 'stop', quick_reply_limit: 3 });
+    const { t } = useI18n();
 
     // Prevent uncaught child-component errors from crashing the whole page
     onErrorCaptured((err, instance, info) => {
@@ -596,6 +605,8 @@
     const HEADER_VIDEO_SIZE_ERROR = 'Video size must not exceed 16MB.';
     const bodyExamples = ref([]);
     const templateType = ref('standard');
+    const unsubscribeButtonRemoved = ref(false);
+    const unsubscribeButton = computed(() => form.value.buttons.find(button => button.is_unsubscribe) || null);
     const metaFlows = ref([]);
 
     onMounted(async () => {
@@ -760,6 +771,14 @@
         form.value.footer.code_expiration_minutes = copiedFooter.code_expiration_minutes || 5;
         form.value.code_expiration = Boolean(copiedFooter.code_expiration_minutes);
         form.value.buttons = normalizeCopiedButtons(copiedButtons.buttons);
+        const copiedUnsubscribeAction = props.copyTemplate.internal_metadata?.unsubscribe_action;
+        const copiedUnsubscribeKeyword = copiedUnsubscribeAction?.keyword_snapshot;
+        if ((copiedUnsubscribeAction?.enabled || props.copyTemplate.has_unsubscribe_action) && copiedUnsubscribeKeyword) {
+            const copiedUnsubscribeButton = form.value.buttons.find(button =>
+                button.type === 'QUICK_REPLY' && String(button.text || '').trim() === String(copiedUnsubscribeKeyword).trim()
+            );
+            if (copiedUnsubscribeButton) copiedUnsubscribeButton.is_unsubscribe = true;
+        }
 
         if (form.value.category === 'AUTHENTICATION' && form.value.buttons[0]) {
             form.value.authentication_button = {
@@ -795,13 +814,14 @@
 
     const formattedMessage = ref('');
 
+    const escapeHtml = (text) => String(text ?? '').replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[character]));
     const formatContent = (text) => {
         const boldRegex = /\*(.*?)\*/g;
         const italicRegex = /_(.*?)_/g;
         const strikethroughRegex = /~(.*?)~/g;
         const monospaceRegex = /```(.*?)```/g;
 
-        return text
+        return escapeHtml(text)
             .replace(boldRegex, "<b>$1</b>")
             .replace(italicRegex, "<i>$1</i>")
             .replace(strikethroughRegex, "<del>$1</del>")
@@ -820,10 +840,10 @@
         return headerPreviewUrls.value[currentFormat] || null;
     });
     const langOptions = ref(props.languages);
-    const categoryOptions = ref([
-        { value: 'UTILITY', label: 'Utility' },
-        { value: 'MARKETING', label: 'Marketing' },
-        { value: 'AUTHENTICATION', label: 'Authentication' },
+    const categoryOptions = computed(() => [
+        { value: 'UTILITY', label: t('Utility category'), description: t('Order, booking, account, or service updates requested by the customer.') },
+        { value: 'MARKETING', label: t('Marketing category'), description: t('Offers, announcements, and promotional messages.') },
+        { value: 'AUTHENTICATION', label: t('Authentication category'), description: t('Verification and login codes only.') },
     ])
 
     const previousExamples = ref({});
@@ -952,12 +972,18 @@
         }
     };
 
+    const insertButton = (button) => {
+        const unsubscribeIndex = form.value.buttons.findIndex(item => item.is_unsubscribe);
+        if (unsubscribeIndex === -1) form.value.buttons.push(button);
+        else form.value.buttons.splice(unsubscribeIndex, 0, button);
+    };
+
     const addButton = ($type) => {
         if($type === 'call'){
             const buttonsCount = form.value.buttons.filter(button => button.type === 'PHONE_NUMBER').length;
 
             if(buttonsCount < 1){
-                form.value.buttons.push({
+                insertButton({
                     'type' : 'PHONE_NUMBER',
                     'country' : null,
                     'text' : null,
@@ -967,8 +993,8 @@
         } else if($type === 'website'){
             const buttonsCount = form.value.buttons.filter(button => button.type === 'URL').length;
 
-            if(buttonsCount < 2){
-                form.value.buttons.push({
+            if(buttonsCount < 1 && form.value.buttons.filter(button => ['URL', 'PHONE_NUMBER'].includes(button.type)).length < 2){
+                insertButton({
                     'type' : 'URL',
                     'text' : null,
                     'url' : null,
@@ -977,8 +1003,8 @@
         } else if($type === 'custom'){
             const buttonsCount = form.value.buttons.filter(button => button.type === 'QUICK_REPLY').length;
 
-            if(buttonsCount < 6){
-                form.value.buttons.push({
+            if(buttonsCount < (rules.value.quick_reply_limit || 3)){
+                insertButton({
                     'type' : 'QUICK_REPLY',
                     'text' : null,
                 });
@@ -987,7 +1013,7 @@
             const buttonsCount = form.value.buttons.filter(button => button.type === 'COPY_CODE').length;
 
             if(buttonsCount < 1){
-                form.value.buttons.push({
+                insertButton({
                     'type' : 'COPY_CODE',
                     'example' : null,
                 });
@@ -996,7 +1022,7 @@
             const flowButtonsCount = form.value.buttons.filter(button => button.type === 'FLOW').length;
 
             if(flowButtonsCount < 1){
-                form.value.buttons.push({
+                insertButton({
                     'type'            : 'FLOW',
                     'text'            : null,
                     'flow_id'         : null,
@@ -1027,9 +1053,29 @@
 
     const removeButton = (index) => {
         if (index >= 0 && index < form.value.buttons.length) {
+            if (form.value.buttons[index]?.is_unsubscribe) unsubscribeButtonRemoved.value = true;
             form.value.buttons.splice(index, 1);
         }
     };
+
+    const ensureUnsubscribeButton = () => {
+        const keyword = rules.value.unsubscribe_keyword || 'stop';
+        if (form.value.category === 'MARKETING' && templateType.value !== 'carousel') {
+            if (!unsubscribeButtonRemoved.value && !unsubscribeButton.value) {
+                insertButton({ type: 'QUICK_REPLY', text: keyword, is_unsubscribe: true });
+            }
+            return;
+        }
+        form.value.buttons = form.value.buttons.filter(button => !button.is_unsubscribe);
+        unsubscribeButtonRemoved.value = false;
+    };
+
+    const addUnsubscribeButton = () => {
+        if (form.value.category !== 'MARKETING' || templateType.value === 'carousel' || unsubscribeButton.value) return;
+        unsubscribeButtonRemoved.value = false;
+        insertButton({ type: 'QUICK_REPLY', text: rules.value.unsubscribe_keyword || 'stop', is_unsubscribe: true });
+    };
+    watch([() => form.value.category, templateType], ensureUnsubscribeButton, { immediate: true });
 
     const isFormValid = computed(() => {
         if (
@@ -1230,6 +1276,7 @@
                     card.buttons.forEach((btn, btnIdx) => {
                         formData.append('cards[' + index + '][buttons][' + btnIdx + '][type]', btn.type);
                         formData.append('cards[' + index + '][buttons][' + btnIdx + '][text]', btn.text || '');
+                        if (btn.is_unsubscribe) formData.append('cards[' + index + '][buttons][' + btnIdx + '][is_unsubscribe]', '1');
                         if (btn.url)          formData.append('cards[' + index + '][buttons][' + btnIdx + '][url]', btn.url);
                         if (btn.country)      formData.append('cards[' + index + '][buttons][' + btnIdx + '][country]', btn.country);
                         if (btn.phone_number) formData.append('cards[' + index + '][buttons][' + btnIdx + '][phone_number]', btn.phone_number);
@@ -1247,7 +1294,7 @@
                     isLoading.value = false;
                     error.value = response.data.data?.error
                         || response.data.error
-                        || { message: response.data.message || 'Something went wrong' };
+                        || { message: response.data.message || t('Something went wrong') };
                 } else {
                     router.visit('/templates', { method: 'get' });
                 }
@@ -1257,7 +1304,7 @@
                 isLoading.value = false;
                 error.value = error.response?.data?.data?.error
                     || error.response?.data?.error
-                    || { message: error.response?.data?.message || 'Something went wrong. Please try again.' };
+                    || { message: error.response?.data?.message || t('Something went wrong. Please try again.') };
             });
 
             return;
@@ -1274,7 +1321,7 @@
                 isLoading.value = false;
                 error.value = response.data.data?.error
                     || response.data.error
-                    || { message: response.data.message || 'Something went wrong' };
+                        || { message: response.data.message || t('Something went wrong') };
             } else {
                 router.visit('/templates', {
                     method: 'get',
@@ -1286,7 +1333,7 @@
             isLoading.value = false;
             error.value = error.response?.data?.data?.error
                 || error.response?.data?.error
-                || { message: error.response?.data?.message || 'Something went wrong. Please try again.' };
+                || { message: error.response?.data?.message || t('Something went wrong. Please try again.') };
         });
     }
 
@@ -1376,8 +1423,8 @@
     watch(templateType, (newVal) => {
         if (newVal === 'carousel' && form.value.carousel_cards.length < 2) {
             form.value.carousel_cards = [
-                { _uid: '__seed_1', header_type: 'IMAGE', file: null, body_text: '', buttons: [{ type: 'QUICK_REPLY', text: '' }] },
-                { _uid: '__seed_2', header_type: 'IMAGE', file: null, body_text: '', buttons: [{ type: 'QUICK_REPLY', text: '' }] },
+                { _uid: '__seed_1', header_type: 'IMAGE', file: null, body_text: '', buttons: [{ type: 'QUICK_REPLY', text: '' }, { type: 'QUICK_REPLY', text: rules.value.unsubscribe_keyword || 'stop', is_unsubscribe: true }] },
+                { _uid: '__seed_2', header_type: 'IMAGE', file: null, body_text: '', buttons: [{ type: 'QUICK_REPLY', text: '' }, { type: 'QUICK_REPLY', text: rules.value.unsubscribe_keyword || 'stop', is_unsubscribe: true }] },
             ];
         }
     });

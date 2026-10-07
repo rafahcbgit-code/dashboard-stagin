@@ -34,7 +34,7 @@
             >
                 <span class="text-sm font-medium text-slate-700">
                     {{ $t('Card') }} {{ index + 1 }}
-                    <span v-if="!expandedCards[index] && card.body_text" class="font-normal text-slate-400 ml-2">
+                    <span v-if="!expandedCards[index] && card.body_text" class="font-normal text-slate-400 ms-2">
                         – {{ card.body_text.slice(0, 30) }}{{ card.body_text.length > 30 ? '…' : '' }}
                     </span>
                 </span>
@@ -90,7 +90,7 @@
                     <div v-else-if="existingMediaUrl(card)" class="relative overflow-hidden rounded-lg bg-slate-100">
                         <img v-if="card.header_type === 'IMAGE'" :src="existingMediaUrl(card)" class="max-h-48 w-full object-contain" alt="">
                         <video v-else :src="existingMediaUrl(card)" class="max-h-48 w-full" controls></video>
-                        <button type="button" @click="removeCardFile(index)" class="absolute right-2 top-2 rounded-full bg-white p-1 text-slate-600 shadow hover:text-red-500">
+                        <button type="button" @click="removeCardFile(index)" class="absolute end-2 top-2 rounded-full bg-white p-1 text-slate-600 shadow hover:text-red-500">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M17.707 7.707a1 1 0 0 0-1.414-1.414L12 10.586L7.707 6.293a1 1 0 0 0-1.414 1.414L10.586 12l-4.293 4.293a1 1 0 1 0 1.414 1.414L12 13.414l4.293 4.293a1 1 0 1 0 1.414-1.414L13.414 12l4.293-4.293Z" clip-rule="evenodd"/></svg>
                         </button>
                     </div>
@@ -131,19 +131,19 @@
                 <p v-if="card.buttons && card.buttons.length === 0" class="text-xs text-red-600 mb-2">{{ $t('Each card must have at least one button') }}</p>
                 <div v-for="(btn, btnIndex) in card.buttons" :key="btnIndex" class="bg-white border rounded-lg p-3 mb-2">
                     <div class="flex items-center justify-between mb-2">
-                        <span class="text-xs text-slate-500 uppercase">{{ btn.type === 'QUICK_REPLY' ? $t('Custom') : btn.type === 'URL' ? $t('Website') : $t('Phone') }}</span>
-                        <button type="button" @click="removeCardButton(index, btnIndex)" class="text-slate-400 hover:text-red-500">
+                        <span class="text-xs text-slate-500">{{ btn.is_unsubscribe ? $t('Unsubscribe button') : btn.type === 'QUICK_REPLY' ? $t('Custom') : btn.type === 'URL' ? $t('Website') : $t('Phone') }}</span>
+                        <button type="button" @click="removeCardButton(index, btnIndex)" :aria-label="$t('Remove button')" class="text-slate-400 hover:text-red-500">
                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M17.707 7.707a1 1 0 0 0-1.414-1.414L12 10.586L7.707 6.293a1 1 0 0 0-1.414 1.414L10.586 12l-4.293 4.293a1 1 0 1 0 1.414 1.414L12 13.414l4.293 4.293a1 1 0 1 0 1.414-1.414L13.414 12l4.293-4.293Z" clip-rule="evenodd"/></svg>
                         </button>
                     </div>
                     <div class="flex gap-x-2">
                         <div class="flex-1">
-                            <input v-model="btn.text" type="text" class="w-full rounded-md border-0 py-1 px-3 text-sm text-gray-900 shadow-sm outline-none ring-1 ring-inset ring-gray-300 placeholder:text-gray-400" :placeholder="$t('Button text')" :maxlength="BUTTON_TEXT_LIMIT" />
-                            <div class="mt-1 text-right text-[11px] text-slate-400">{{ textLength(btn.text) }}/{{ BUTTON_TEXT_LIMIT }}</div>
+                            <input v-model="btn.text" type="text" class="w-full rounded-md border-0 py-1 px-3 text-sm text-gray-900 shadow-sm outline-none ring-1 ring-inset ring-gray-300 placeholder:text-gray-400" :placeholder="btn.is_unsubscribe ? $t('Unsubscribe button text') : $t('Button text')" :maxlength="btn.type === 'QUICK_REPLY' ? 25 : BUTTON_TEXT_LIMIT" />
+                            <div class="mt-1 text-end text-[11px] text-slate-400">{{ textLength(btn.text) }}/{{ btn.type === 'QUICK_REPLY' ? 25 : BUTTON_TEXT_LIMIT }}</div>
                         </div>
                         <input v-if="btn.type === 'URL'" v-model="btn.url" type="url" class="flex-1 rounded-md border-0 py-1 px-3 text-sm text-gray-900 shadow-sm outline-none ring-1 ring-inset ring-gray-300 placeholder:text-gray-400" :placeholder="$t('https://…')" />
                         <template v-if="btn.type === 'PHONE_NUMBER'">
-                            <input v-model="btn.country" type="text" class="w-20 rounded-md border-0 py-1 px-3 text-sm text-gray-900 shadow-sm outline-none ring-1 ring-inset ring-gray-300 placeholder:text-gray-400" :placeholder="$t('+1')" />
+                            <input v-model="btn.country" type="text" class="w-20 rounded-md border-0 py-1 px-3 text-start text-sm text-gray-900 shadow-sm outline-none ring-1 ring-inset ring-gray-300 placeholder:text-gray-400" placeholder="+1" />
                             <input v-model="btn.phone_number" type="text" class="flex-1 rounded-md border-0 py-1 px-3 text-sm text-gray-900 shadow-sm outline-none ring-1 ring-inset ring-gray-300 placeholder:text-gray-400" :placeholder="$t('Phone number')" />
                         </template>
                     </div>
@@ -153,6 +153,12 @@
                     <button type="button" @click="addCardButton(index, 'URL')"         class="flex-1 text-xs text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg py-1.5 px-2">{{ $t('Website') }}</button>
                     <button type="button" @click="addCardButton(index, 'PHONE_NUMBER')" class="flex-1 text-xs text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg py-1.5 px-2">{{ $t('Phone') }}</button>
                 </div>
+                <button
+                    v-if="card.buttons && card.buttons.length < 2 && !card.buttons.some(button => button.is_unsubscribe)"
+                    type="button"
+                    @click="addCardButton(index, 'UNSUBSCRIBE')"
+                    class="mt-2 w-full rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-xs font-medium text-emerald-800 hover:bg-emerald-100"
+                >{{ $t('Add unsubscribe button') }}</button>
             </div>
         </div>
 
@@ -179,6 +185,10 @@ const props = defineProps({
     messageBody: {
         type: String,
         default: '',
+    },
+    unsubscribeKeyword: {
+        type: String,
+        default: 'stop',
     },
 });
 
@@ -289,7 +299,10 @@ function addCard() {
         header_type: 'IMAGE',
         file: null,
         body_text: '',
-        buttons: [{ type: 'QUICK_REPLY', text: '' }],
+        buttons: [
+            { type: 'QUICK_REPLY', text: '' },
+            { type: 'QUICK_REPLY', text: props.unsubscribeKeyword, is_unsubscribe: true },
+        ],
     });
     const updated = [...props.cards, newCard];
     // Expand the new card
@@ -370,13 +383,24 @@ function addCardButton(cardIndex, type) {
     if (cardIndex < 0 || cardIndex >= props.cards.length) return;
     if ((props.cards[cardIndex].buttons?.length ?? 0) >= 2) return;
 
-    const btn = { type, text: '' };
+    const btn = type === 'UNSUBSCRIBE'
+        ? { type: 'QUICK_REPLY', text: props.unsubscribeKeyword, is_unsubscribe: true }
+        : { type, text: '' };
     if (type === 'URL')          btn.url = '';
     if (type === 'PHONE_NUMBER') { btn.country = ''; btn.phone_number = ''; }
 
     const updated = props.cards.map((c, i) =>
         i === cardIndex
-            ? { ...c, buttons: [...(c.buttons || []), btn] }
+            ? {
+                ...c,
+                buttons: (() => {
+                    const buttons = [...(c.buttons || [])];
+                    const unsubscribeIndex = buttons.findIndex(button => button.is_unsubscribe);
+                    if (unsubscribeIndex === -1) buttons.push(btn);
+                    else buttons.splice(unsubscribeIndex, 0, btn);
+                    return buttons;
+                })(),
+            }
             : c
     );
     emitCards(updated);

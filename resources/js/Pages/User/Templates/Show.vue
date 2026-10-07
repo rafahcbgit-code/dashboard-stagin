@@ -1,6 +1,6 @@
 <template>
     <AppLayout>
-        <div class="flex min-h-full flex-col bg-white text-[#000] md:border-l">
+        <div class="flex min-h-full flex-col bg-white text-[#000] md:border-s">
             <div class="flex items-center justify-between border-b px-4 py-4 md:px-8">
                 <div>
                     <h2 class="text-xl">{{ $t('View') }} {{ $t('Template') }}</h2>
@@ -34,15 +34,15 @@
                     style="background-image: url('/images/whatsapp-bg-02.png');"
                 >
                     <div v-if="isCarousel">
-                        <div v-if="carouselMessageBody" class="mb-2 w-full max-w-[25em] rounded-lg rounded-tl-none bg-white p-3 text-sm shadow-sm">
-                            <p class="normal-case whitespace-pre-wrap">{{ carouselMessageBody }}</p>
-                            <p class="mt-1 text-right text-xs text-[#8c8c8c]">9:15</p>
+                        <div v-if="carouselMessageBody" class="mb-2 w-full max-w-[25em] rounded-lg rounded-ss-none bg-white p-3 text-sm shadow-sm">
+                            <p class="normal-case whitespace-pre-wrap" dir="auto">{{ carouselMessageBody }}</p>
+                            <p class="mt-1 text-end text-xs text-[#8c8c8c]">9:15</p>
                         </div>
                         <CarouselPreview :cards="carouselCards" />
                     </div>
 
                     <div v-else>
-                        <div class="w-full max-w-[25em] rounded-lg rounded-tl-none bg-white p-1 text-sm shadow-sm">
+                        <div class="w-full max-w-[25em] rounded-lg rounded-ss-none bg-white p-1 text-sm shadow-sm">
                             <div v-if="headerFormat && headerFormat !== 'TEXT'" class="mb-3 overflow-hidden rounded bg-[#ccd0d5]">
                                 <img
                                     v-if="headerFormat === 'IMAGE' && headerMediaUrl"
@@ -55,17 +55,17 @@
                                     <img :src="headerPlaceholder" alt="" class="max-h-28">
                                 </div>
                             </div>
-                            <h3 v-else-if="headerText" class="px-2 pt-1 text-base font-semibold normal-case">{{ headerText }}</h3>
-                            <p class="px-2 py-1 normal-case whitespace-pre-wrap">{{ bodyText || $t('Content not available') }}</p>
+                            <h3 v-else-if="headerText" class="px-2 pt-1 text-base font-semibold normal-case" dir="auto">{{ headerText }}</h3>
+                            <p class="px-2 py-1 normal-case whitespace-pre-wrap" dir="auto">{{ bodyText || $t('Content not available') }}</p>
                             <div class="px-2 pb-1 text-[#8c8c8c]">
-                                <span class="text-xs normal-case">{{ footerText }}</span>
-                                <span class="float-right text-xs">9:15</span>
+                                <span class="text-xs normal-case" dir="auto">{{ footerText }}</span>
+                                <span class="float-end text-xs">9:15</span>
                             </div>
                         </div>
 
                         <div v-if="buttons.length" class="mt-1 flex w-full max-w-[25em] flex-col text-sm text-[#00a5f4]">
                             <div v-for="(button, index) in buttons" :key="index" class="my-[0.1em] flex h-10 items-center justify-center rounded-lg bg-white px-3 shadow-sm">
-                                <span class="normal-case">{{ button.text || button.example || button.type }}</span>
+                                <span class="normal-case" dir="auto">{{ buttonLabel(button) }}</span>
                             </div>
                         </div>
                     </div>
@@ -77,6 +77,7 @@
 
 <script setup>
 import { computed } from 'vue';
+import { useI18n } from 'vue-i18n';
 import { Link } from '@inertiajs/vue3';
 import AppLayout from './../Layout/App.vue';
 import CarouselPreview from '@/Components/Template/CarouselPreview.vue';
@@ -87,6 +88,7 @@ const props = defineProps({
         required: true,
     },
 });
+const { t, locale } = useI18n();
 
 const metadata = computed(() => {
     if (!props.template.metadata) return {};
@@ -121,11 +123,31 @@ const headerPlaceholder = computed(() => {
 });
 
 const canEdit = computed(() => ['APPROVED', 'REJECTED', 'PAUSED'].includes(props.template.status));
+const categoryLabel = (value) => t({ MARKETING: 'Marketing category', UTILITY: 'Utility category', AUTHENTICATION: 'Authentication category' }[value] || value || 'Unknown status');
+const statusLabel = (value) => t({ PENDING: 'Under Meta review', APPROVED: 'Ready to use', REJECTED: 'Rejected by Meta', PAUSED: 'Temporarily paused', DISABLED: 'Disabled by Meta', IN_APPEAL: 'Appeal under review' }[value] || 'Unknown status');
+const buttonLabel = (button) => button.text || button.example || t({ QUICK_REPLY: 'Custom', URL: 'Website', PHONE_NUMBER: 'Phone', COPY_CODE: 'Copy code' }[button.type] || 'Button');
+const languageLabel = (value) => {
+    const [language, region] = String(value || '').split(/[-_]/);
+    if (!language) return t('Unknown language');
+    try {
+        const displayLocale = locale.value === 'ar' ? 'ar' : 'en';
+        const languageName = new Intl.DisplayNames([displayLocale], { type: 'language' }).of(language);
+        const regionName = region ? new Intl.DisplayNames([displayLocale], { type: 'region' }).of(region) : '';
+        return regionName ? `${languageName} (${regionName})` : languageName;
+    } catch {
+        return String(value).replace('_', '-');
+    }
+};
+const formatDate = (value) => {
+    if (!value) return '—';
+    const date = new Date(String(value).replace(' ', 'T'));
+    return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat(locale.value, { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+};
 const details = computed(() => [
     { label: 'Name', value: props.template.name },
-    { label: 'Category', value: props.template.category },
-    { label: 'Language', value: props.template.language },
-    { label: 'Status', value: props.template.status },
-    { label: 'Last updated', value: props.template.updated_at },
+    { label: 'Category', value: categoryLabel(props.template.category) },
+    { label: 'Language', value: languageLabel(props.template.language) },
+    { label: 'Status', value: statusLabel(props.template.status) },
+    { label: 'Last updated', value: formatDate(props.template.updated_at) },
 ]);
 </script>

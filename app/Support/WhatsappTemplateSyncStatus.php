@@ -13,12 +13,12 @@ class WhatsappTemplateSyncStatus
         return 'whatsapp-template-sync:' . $organizationId . ':' . hash('sha256', $wabaId);
     }
 
-    public static function update(int $organizationId, string $wabaId, string $status): void
+    public static function update(int $organizationId, string $wabaId, string $status, array $details = []): void
     {
-        Cache::put(self::cacheKey($organizationId, $wabaId), [
+        Cache::put(self::cacheKey($organizationId, $wabaId), array_merge([
             'status' => $status,
             'updated_at' => now()->toIso8601String(),
-        ], self::TTL_SECONDS);
+        ], $details), self::TTL_SECONDS);
     }
 
     public static function get(int $organizationId, string $wabaId): array

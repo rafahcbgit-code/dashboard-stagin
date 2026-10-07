@@ -1,17 +1,17 @@
 <template>
     <AppLayout>
-        <div class="px-4 md:px-0 flex flex-col bg-white border-l py-4 text-[#000] md:overflow-y-hidden">
+        <div class="px-4 md:px-0 flex flex-col bg-white border-s py-4 text-[#000] md:overflow-y-hidden">
             <div class="flex justify-between md:px-8 border-b pb-4">
                 <div>
                     <h2 class="text-xl mb-1">{{ $t('Edit template') }}</h2>
                     <p class="flex items-center text-sm leading-6 text-gray-600">
                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11v5m0 5a9 9 0 1 1 0-18a9 9 0 0 1 0 18Zm.05-13v.1h-.1V8h.1Z"/></svg>
-                        <span class="ml-1 mt-1">{{ $t('Modify whatsapp template') }}</span>
+                        <span class="ms-1 mt-1">{{ $t('Modify whatsapp template') }}</span>
                     </p>
                 </div>
                 <div class="space-s-2 flex items-center">
                     <Link href="/templates" class="rounded-md bg-black px-3 py-2 text-sm text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">{{ $t('Back') }}</Link>
-                    <button @click="submitForm()" type="button" class="rounded-md px-3 py-2 float-right text-sm text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 capitalize" :class="isFormValid === true ? 'bg-indigo-600 hover:bg-indigo-500 shadow-sm' : 'bg-gray-200'" :disabled="!isFormValid || isLoading">
+                    <button @click="submitForm()" type="button" class="rounded-md px-3 py-2 text-sm text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 capitalize" :class="isFormValid === true && connection.connected ? 'bg-indigo-600 hover:bg-indigo-500 shadow-sm' : 'bg-gray-200'" :disabled="!isFormValid || isLoading || !connection.connected">
                         <span v-if="!isLoading">{{ $t('Update template') }}</span>
                         <svg v-else xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2A10 10 0 1 0 22 12A10 10 0 0 0 12 2Zm0 18a8 8 0 1 1 8-8A8 8 0 0 1 12 20Z" opacity=".5"/><path fill="currentColor" d="M20 12h2A10 10 0 0 0 12 2V4A8 8 0 0 1 20 12Z"><animateTransform attributeName="transform" dur="1s" from="0 12 12" repeatCount="indefinite" to="360 12 12" type="rotate"/></path></svg>
                     </button>
@@ -28,20 +28,23 @@
                             </span>
                         </div>
                         <div class="sm:col-span-3">
-                            <FormSelect v-model="form.category" :options="categoryOptions" :name="$t('Category')" :disabled="true" :class="'sm:col-span-3'" :placeholder="'Select Category'"/>
+                            <FormSelect v-model="form.category" :options="categoryOptions" :name="$t('Category')" :disabled="true" :class="'sm:col-span-3'" :placeholder="$t('Select category')"/>
                             <span class="flex items-center gap-x-1 text-[11px] text-red-800 mt-1">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"><path fill="none" stroke="#991b1b" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3"/></svg>
                                 {{ $t('You are not allowed to edit this field') }}
                             </span>
                         </div>
                         <div class="sm:col-span-3">
-                            <FormSelect v-model="form.language" :disabled="true" :options="langOptions" :name="$t('Language')" :class="'sm:col-span-3'" :placeholder="'Select Language'"/>
+                            <FormSelect v-model="form.language" :disabled="true" :options="langOptions" :name="$t('Language')" :class="'sm:col-span-3'" :placeholder="$t('Select language')"/>
                             <span class="flex items-center gap-x-1 text-[11px] text-red-800 mt-1">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"><path fill="none" stroke="#991b1b" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3"/></svg>
                                 {{ $t('You are not allowed to edit this field') }}
                             </span>
                         </div>
                     </div>
+
+                    <div v-if="!connection.connected" class="mb-6 rounded-xl border border-red-200 bg-red-50 p-4 text-sm leading-6 text-red-800"><strong>{{ $t('WhatsApp number is not connected') }}</strong><p>{{ $t('Reconnect the number before creating, editing, or synchronizing templates. You can still view the saved templates.') }}</p><Link href="/settings/whatsapp" class="mt-2 inline-block font-semibold underline">{{ $t('Reconnect number') }}</Link></div>
+                    <TemplateCategoryGuide :category="form.category" />
 
                     <!-- ── STANDARD template form ────────────────────────────────── -->
                     <div v-if="!isCarousel">
@@ -64,7 +67,7 @@
                                         <div class="text-center">
                                             <div v-if="form.header.example" class="flex justify-center items-center">
                                                 <div class="flex justify-center items-center space-s-3 py-1 border bg-slate-100 rounded-lg mb-2 w-fit px-2">
-                                                    <span class="text-sm">{{ form.header.example.name || 'File attached' }}</span>
+                                                    <span class="text-sm">{{ form.header.example.name || $t('File attached') }}</span>
                                                     <button @click="removeFile()">
                                                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M17.707 7.707a1 1 0 0 0-1.414-1.414L12 10.586L7.707 6.293a1 1 0 0 0-1.414 1.414L10.586 12l-4.293 4.293a1 1 0 1 0 1.414 1.414L12 13.414l4.293 4.293a1 1 0 1 0 1.414-1.414L13.414 12l4.293-4.293Z" clip-rule="evenodd"/></svg>
                                                     </button>
@@ -98,26 +101,27 @@
                             <span class="text-xs">{{ $t('Characters') }}: {{ footerCharacterCount }}/{{ footerCharacterLimit }}</span>
                         </div>
 
+                        <TemplateUnsubscribeCard v-if="!isCarousel" :category="form.category" :rules="rules" :keyword="unsubscribeButton?.text || ''" :hasButton="Boolean(unsubscribeButton)" @add="addUnsubscribeButton" />
                         <h2 class="text-slate-600">{{ $t('Buttons') }} <span class="text-xs">({{ $t('Optional') }})</span></h2>
                         <span class="text-slate-600 text-xs">{{ $t('Create buttons that let customers respond to your message or take action') }}</span>
                         <div class="grid grid-cols-2 mt-3 mb-2">
-                            <button @click="addButton('call')" class="flex items-center justify-center text-slate-700 text-sm bg-slate-100 hover:bg-slate-200 hover:shadow-sm rounded-lg p-2 px-4 mr-2"><span>{{ $t('Call phone number (1)') }}</span></button>
-                            <button @click="addButton('website')" class="flex items-center justify-center text-slate-700 text-sm bg-slate-100 hover:bg-slate-200 hover:shadow-sm rounded-lg p-2 px-4"><span>{{ $t('Visit website (2)') }}</span></button>
+                            <button type="button" @click="addButton('call')" class="flex items-center justify-center text-slate-700 text-sm bg-slate-100 hover:bg-slate-200 hover:shadow-sm rounded-lg p-2 px-4"><span>{{ $t('Call phone number (1)') }}</span></button>
+                            <button type="button" @click="addButton('website')" class="flex items-center justify-center text-slate-700 text-sm bg-slate-100 hover:bg-slate-200 hover:shadow-sm rounded-lg p-2 px-4"><span>{{ $t('Visit website (1)') }}</span></button>
                         </div>
                         <div class="grid grid-cols-2 mt-3 mb-2">
-                            <button @click="addButton('offer')" class="flex items-center justify-center text-slate-700 text-sm bg-slate-100 hover:bg-slate-200 hover:shadow-sm rounded-lg p-2 px-4 mr-2"><span>{{ $t('Copy offer code (1)') }}</span></button>
-                            <button @click="addButton('custom')" class="flex items-center justify-center text-slate-700 text-sm bg-slate-100 hover:bg-slate-200 hover:shadow-sm rounded-lg p-2 px-4"><span>{{ $t('Custom button (6)') }}</span></button>
+                            <button type="button" @click="addButton('offer')" class="flex items-center justify-center text-slate-700 text-sm bg-slate-100 hover:bg-slate-200 hover:shadow-sm rounded-lg p-2 px-4"><span>{{ $t('Copy offer code (1)') }}</span></button>
+                            <button type="button" @click="addButton('custom')" class="flex items-center justify-center text-slate-700 text-sm bg-slate-100 hover:bg-slate-200 hover:shadow-sm rounded-lg p-2 px-4"><span>{{ $t('Quick reply button (3)') }}</span></button>
                         </div>
                         <div v-if="form?.buttons?.length > 0" class="mt-3 mb-8">
                             <div v-for="(button, index) in form.buttons" :key="index" class="bg-[#f9f9fa] p-3 rounded-lg mb-3">
                                 <div class="flex items-center justify-between pb-1">
                                     <span class="text-sm">{{ formatText(button.type) }}</span>
-                                    <button @click="removeButton(index)" class="bg-slate-200 hover:shadow rounded-full p-1">
+                                    <button type="button" @click="removeButton(index)" :aria-label="$t('Remove button')" class="bg-slate-200 hover:shadow rounded-full p-1">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M17.707 7.707a1 1 0 0 0-1.414-1.414L12 10.586L7.707 6.293a1 1 0 0 0-1.414 1.414L10.586 12l-4.293 4.293a1 1 0 1 0 1.414 1.414L12 13.414l4.293 4.293a1 1 0 1 0 1.414-1.414L13.414 12l4.293-4.293Z" clip-rule="evenodd"/></svg>
                                     </button>
                                 </div>
                                 <div class="flex flex-wrap gap-2 border-t pt-2">
-                                    <FormInput v-if="button.type !== 'COPY_CODE'" v-model="button.text" :name="$t('Button text')" :type="'text'" :class="button.type === 'QUICK_REPLY' ? 'w-full' :'sm:col-span-2'" :labelClass="'mb-0'" :maxLength="BUTTON_TEXT_LIMIT" :showCharacterCount="true"/>
+                                    <FormInput v-if="button.type !== 'COPY_CODE'" v-model="button.text" :name="button.is_unsubscribe ? $t('Unsubscribe button text') : $t('Button text')" :type="'text'" :class="button.type === 'QUICK_REPLY' ? 'w-full' :'sm:col-span-2'" :labelClass="'mb-0'" :maxLength="button.type === 'QUICK_REPLY' ? 25 : BUTTON_TEXT_LIMIT" :showCharacterCount="true"/>
                                     <FormInput v-model="button.url" v-if="button.type === 'URL'" :name="$t('Website URL')" :type="'text'" :class="'w-full'" :labelClass="'mb-0'"/>
                                     <FormInput v-model="button.example" v-if="button.type === 'URL' && isDynamicUrl(button.url)" :name="$t('Example full URL')" :type="'text'" :class="'w-full'" :labelClass="'mb-0'" :placeholder="buildDynamicUrlExample(button.url)"/>
                                     <FormInput v-model="button.country" v-if="button.type === 'PHONE_NUMBER'" :name="$t('Country')" :type="'text'" :class="'sm:col-span-2'" :labelClass="'mb-0'"/>
@@ -131,7 +135,7 @@
                             <!-- Authentication section kept as-is from your original -->
                         </div>
 
-                        <div v-if="form.category == 'UTILITY' || form.category == 'AUTHENTICATION'" class="mt-6 bg-gray-50 rounded-md p-3">
+                        <div v-if="form.category == 'AUTHENTICATION'" class="mt-6 rounded-xl border border-sky-100 bg-sky-50 p-4">
                             <h2 class="text-slate-600 mb-1">{{ $t('Message validity period') }}</h2>
                             <p class="text-slate-600 leading-tight text-xs">{{ $t('It\'s recommended to set a custom validity period that your authentication message must be delivered by before it expires.') }}</p>
                             <div class="mt-4">
@@ -139,7 +143,7 @@
                                     <p class="w-3/4 text-slate-600 text-[11px]">{{ $t('If you don\'t set a custom validity period, the standard 10 minutes WhatsApp message validity period will be applied.') }}</p>
                                     <div class="w-1/4"><FormToggleSwitch v-model="form.customize_ttl" /></div>
                                 </div>
-                                <FormSelect v-if="form.customize_ttl" v-model="form.message_send_ttl_seconds" :options="form.category == 'UTILITY' ? utilityTTLOptions : authTTLOptions" :name="$t('Validity period')" :class="'sm:col-span-3'" :placeholder="$t('Select validity period')"/>
+                                <FormSelect v-if="form.customize_ttl" v-model="form.message_send_ttl_seconds" :options="authTTLOptions" :name="$t('Validity period')" :class="'sm:col-span-3'" :placeholder="$t('Select validity period')"/>
                             </div>
                         </div>
                     </div>
@@ -169,7 +173,7 @@
                 <div class="md:w-[50%] py-20 px-4 md:px-20 overflow-y-auto" style="background-image: url('/images/whatsapp-bg-02.png');">
                     <!-- Standard preview -->
                     <div v-if="!isCarousel">
-                        <div class="mr-auto rounded-lg rounded-tl-none my-1 p-1 text-sm bg-white flex flex-col relative speech-bubble-left w-[25em]">
+                        <div class="me-auto rounded-lg rounded-ss-none my-1 p-1 text-sm bg-white flex flex-col relative speech-bubble-left w-[25em]">
                             <div v-if="form.header.format != null && form.header.format != 'TEXT' && form.category != 'AUTHENTICATION'" class="-m-1 mb-3 rounded overflow-hidden">
                                 <template v-if="form.header.format === 'IMAGE'">
                                     <img
@@ -202,13 +206,13 @@
                             </div>
                             <h2 v-else-if="form.header.format == 'TEXT' && form.category != 'AUTHENTICATION'" class="text-gray-700 text-[16px] mb-1 px-2">{{ form.header.text }}</h2>
                             <p v-if="form.category != 'AUTHENTICATION'" class="px-2 normal-case whitespace-pre-wrap" v-html="form.body.text"></p>
-                            <p v-else class="px-2 normal-case whitespace-pre-wrap" v-html="form.body.add_security_recommendation === true ? '{{1}} is your verification code. For your security, do not share this code.' : '{{1}} is your verification code.'"></p>
+                            <p v-else class="px-2 normal-case whitespace-pre-wrap" v-html="'{{1}} ' + $t(form.body.add_security_recommendation === true ? 'Authentication preview with security' : 'Authentication preview')"></p>
                             <div class="text-[#8c8c8c] mt-1 px-2">
                                 <span v-if="form.category != 'AUTHENTICATION'" class="text-[13px]">{{ form.footer.text }}</span>
-                                <span class="text-right text-xs leading-none float-right" :class="form.footer.text ? 'mt-2' : ''">9:15</span>
+                                <span class="text-end text-xs leading-none float-end" :class="form.footer.text ? 'mt-2' : ''">9:15</span>
                             </div>
                         </div>
-                        <div v-if="form.category != 'AUTHENTICATION' && form?.buttons?.length > 0" class="mr-auto text-sm text-[#00a5f4] flex flex-col relative max-w-[25em]">
+                        <div v-if="form.category != 'AUTHENTICATION' && form?.buttons?.length > 0" class="me-auto text-sm text-[#00a5f4] flex flex-col relative max-w-[25em]">
                             <div v-for="(item, index) in form.buttons" :key="index" class="flex justify-center items-center space-s-2 rounded-lg bg-white h-10 my-[0.1em]">
                                 <span>
                                     <svg v-if="item.type === 'COPY_CODE'" xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"><path fill="currentColor" d="M19 21H8V7h11m0-2H8a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h11a2 2 0 0 0 2-2V7a2 2 0 0 0-2-2m-3-4H4a2 2 0 0 0-2 2v14h2V3h12V1Z"/></svg>
@@ -224,9 +228,9 @@
                     <!-- Carousel preview — passes editableCards so preview updates live -->
                     <div v-else>
                         <!-- Shared message body shown above the cards -->
-                        <div class="mr-auto rounded-lg rounded-tl-none my-1 p-1 text-sm bg-white flex flex-col relative speech-bubble-left w-[25em] mb-2">
+                        <div class="me-auto rounded-lg rounded-ss-none my-1 p-1 text-sm bg-white flex flex-col relative speech-bubble-left w-[25em] mb-2">
                             <p class="px-2 normal-case whitespace-pre-wrap">{{ carouselMessageBody }}</p>
-                            <div class="text-[#8c8c8c] mt-1 px-2 text-right">
+                            <div class="text-[#8c8c8c] mt-1 px-2 text-end">
                                 <span class="text-xs leading-none">9:15</span>
                             </div>
                         </div>
@@ -247,7 +251,7 @@
                         <button 
                             type="button" 
                             @click="closeModal" 
-                            class="mt-4 inline-flex justify-center rounded-md border border-transparent bg-slate-50 px-4 py-2 text-sm text-slate-500 hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 mr-4"
+                            class="mt-4 inline-flex justify-center rounded-md border border-transparent bg-slate-50 px-4 py-2 text-sm text-slate-500 hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 me-4"
                         >
                             {{ $t('Close') }}
                         </button>
@@ -279,16 +283,22 @@
     import HeaderTextArea from '@/Components/Template/HeaderTextArea.vue';
     import CarouselEditForm from '@/Components/Template/CarouselEditForm.vue';
     import CarouselPreview from '@/Components/Template/CarouselPreview.vue';
+    import TemplateCategoryGuide from '@/Components/Template/TemplateCategoryGuide.vue';
+    import TemplateUnsubscribeCard from '@/Components/Template/TemplateUnsubscribeCard.vue';
     import FormInput from '@/Components/FormInput.vue';
     import FormSelect from '@/Components/FormSelect.vue';
     import FormTextArea from '@/Components/FormTextArea.vue';
     import FormToggleSwitch from '@/Components/FormToggleSwitch.vue';
-    import { ref, computed } from 'vue';
+    import { ref, computed, watch } from 'vue';
+    import { useI18n } from 'vue-i18n';
     import { Link } from "@inertiajs/vue3";
     import Modal from '@/Components/Modal.vue';
     import { router } from '@inertiajs/vue3';
 
-    const props = defineProps(['languages', 'template']);
+    const props = defineProps(['languages', 'template', 'settings', 'connection', 'rules', 'capabilities']);
+    const connection = computed(() => props.connection || { connected: false });
+    const rules = computed(() => props.rules || { unsubscribe_keyword: 'stop', quick_reply_limit: 3 });
+    const { t } = useI18n();
 
     const footerCharacterLimit = ref('60');
     const footerCharacterCount = ref('0');
@@ -376,12 +386,13 @@
             supported_apps: [{ package_name: null, signature_hash: null }],
         },
     });
+    const unsubscribeButton = computed(() => form.value.buttons.find(button => button.is_unsubscribe) || null);
 
     const langOptions = ref(props.languages);
-    const categoryOptions = ref([
-        { value: 'UTILITY', label: 'Utility' },
-        { value: 'MARKETING', label: 'Marketing' },
-        { value: 'AUTHENTICATION', label: 'Authentication' },
+    const categoryOptions = computed(() => [
+        { value: 'UTILITY', label: t('Utility category') },
+        { value: 'MARKETING', label: t('Marketing category') },
+        { value: 'AUTHENTICATION', label: t('Authentication category') },
     ]);
 
     const previousExamples = ref({});
@@ -457,17 +468,28 @@
         }
     };
 
+    const insertButton = (button) => {
+        const unsubscribeIndex = form.value.buttons.findIndex(item => item.is_unsubscribe);
+        if (unsubscribeIndex === -1) form.value.buttons.push(button);
+        else form.value.buttons.splice(unsubscribeIndex, 0, button);
+    };
+
     const addButton = ($type) => {
         if (!form.value.buttons) form.value.buttons = [];
-        if ($type === 'call')    form.value.buttons.push({ type: 'PHONE_NUMBER', country: null, text: null, phone_number: null });
-        if ($type === 'website') form.value.buttons.push({ type: 'URL', text: null, url: null });
-        if ($type === 'custom')  form.value.buttons.push({ type: 'QUICK_REPLY', text: null });
-        if ($type === 'offer')   form.value.buttons.push({ type: 'COPY_CODE', example: null });
+        if ($type === 'call' && !form.value.buttons.some(button => button.type === 'PHONE_NUMBER')) insertButton({ type: 'PHONE_NUMBER', country: null, text: null, phone_number: null });
+        if ($type === 'website' && !form.value.buttons.some(button => button.type === 'URL')) insertButton({ type: 'URL', text: null, url: null });
+        if ($type === 'custom' && form.value.buttons.filter(button => button.type === 'QUICK_REPLY').length < (rules.value.quick_reply_limit || 3)) insertButton({ type: 'QUICK_REPLY', text: null });
+        if ($type === 'offer' && !form.value.buttons.some(button => button.type === 'COPY_CODE')) insertButton({ type: 'COPY_CODE', example: null });
     };
     const removeButton = (index) => {
         if (form.value.buttons && index >= 0 && index < form.value.buttons.length) {
             form.value.buttons.splice(index, 1);
         }
+    };
+
+    const addUnsubscribeButton = () => {
+        if (form.value.category !== 'MARKETING' || isCarousel.value || unsubscribeButton.value) return;
+        insertButton({ type: 'QUICK_REPLY', text: rules.value.unsubscribe_keyword || 'stop', is_unsubscribe: true });
     };
 
     const updateHeaderExamples = (value) => { form.value.header.example = value; };
@@ -527,7 +549,7 @@
                         || responseData.data?.error?.error_user_msg 
                         || responseData.data?.error?.error_user_title
                         || responseData.data?.error?.message 
-                        || 'Something went wrong';
+                        || t('Something went wrong');
                 } else {
                     router.visit('/templates', { method: 'get' });
                 }
@@ -542,7 +564,7 @@
                         || responseData.data?.error?.error_user_msg 
                         || responseData.data?.error?.error_user_title
                         || responseData.data?.error?.message 
-                        || 'Network error occurred';
+                        || t('Network error occurred');
                 } else {
                     error.value = 'Network error occurred';
                 }
@@ -564,7 +586,7 @@
                     || responseData.data?.error?.error_user_msg 
                     || responseData.data?.error?.error_user_title
                     || responseData.data?.error?.message 
-                    || 'Something went wrong';
+                    || t('Something went wrong');
             } else {
                 router.visit('/templates', { method: 'get' });
             }
@@ -579,7 +601,7 @@
                     || responseData.data?.error?.error_user_msg 
                     || responseData.data?.error?.error_user_title
                     || responseData.data?.error?.message 
-                    || 'Network error occurred';
+                    || t('Network error occurred');
             } else {
                 error.value = 'Network error occurred';
             }
@@ -592,11 +614,18 @@
 
     function normalizeTemplateButtons(buttons) {
         if (!Array.isArray(buttons)) return [];
-
-        return buttons.map(button => ({
+        const normalized = buttons.map(button => ({
             ...button,
             example: Array.isArray(button.example) ? (button.example[0] ?? '') : button.example,
         }));
+        const unsubscribeAction = props.template.internal_metadata?.unsubscribe_action;
+        const keyword = unsubscribeAction?.keyword_snapshot || rules.value.unsubscribe_keyword;
+        if ((unsubscribeAction?.enabled || props.template.has_unsubscribe_action) && keyword) {
+            const button = normalized.find(item => item.type === 'QUICK_REPLY' && String(item.text || '').trim() === String(keyword).trim());
+            if (button) button.is_unsubscribe = true;
+        }
+
+        return normalized;
     }
 
     function isDynamicUrl(url) {

@@ -6,11 +6,15 @@ use App\Http\Resources\TemplateResource;
 use App\Models\Organization;
 use App\Models\Template;
 use App\Services\WhatsappService;
+use App\Services\Templates\TemplateAccessService;
+use App\Services\Templates\TemplateConnectionService;
+use App\Services\Templates\TemplatePolicyService;
 use Illuminate\Http\Request;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Inertia\Inertia;
 use Validator;
@@ -26,16 +30,24 @@ class TemplateService
 
     private $whatsappService;
     private $organizationId;
+    private Organization $organization;
+    private TemplateAccessService $access;
+    private TemplateConnectionService $connection;
+    private TemplatePolicyService $policy;
 
     public function __construct($organizationId)
     {
-        $this->organizationId = $organizationId;
+        $this->organizationId = (int) $organizationId;
+        $this->organization = Organization::findOrFail($this->organizationId);
+        $this->access = app(TemplateAccessService::class);
+        $this->connection = app(TemplateConnectionService::class);
+        $this->policy = app(TemplatePolicyService::class);
         $this->initializeWhatsappService();
     }
 
     private function initializeWhatsappService()
     {
-        $config = Organization::where('id', $this->organizationId)->first()->metadata;
+        $config = $this->organization->metadata;
         $config = $config ? json_decode($config, true) : [];
 
         $accessToken = $config['whatsapp']['access_token'] ?? null;
@@ -65,8 +77,13 @@ class TemplateService
     private function getTemplatesListResponse(Request $request)
     {
         if ($request->expectsJson()) {
-            $rows = Template::where('organization_id', $this->organizationId)->where('deleted_at', null)
-                ->get()
+            $rows = Template::query()
+                ->where('organization_id', $this->organizationId)
+                ->whereNull('deleted_at')
+                ->where('status', 'APPROVED')
+                ->orderBy('name')
+                ->limit(250)
+                ->get(['id', 'name'])
                 ->map(function ($row) {
                     return [
                         'value' => $row->id,
@@ -77,19 +94,62 @@ class TemplateService
             return response()->json([$rows]);
         }
 
+        $search = trim((string) $request->query('search', ''));
+        $category = strtoupper(trim((string) $request->query('category', '')));
+        $status = strtoupper(trim((string) $request->query('status', '')));
+        $needsAction = $request->boolean('needs_action');
+        $allowedCategories = ['MARKETING', 'UTILITY', 'AUTHENTICATION'];
+        $allowedStatuses = ['PENDING', 'APPROVED', 'REJECTED', 'PAUSED', 'DISABLED', 'IN_APPEAL'];
+
+        $query = Template::query()
+            ->where('organization_id', $this->organizationId)
+            ->whereNull('deleted_at')
+            ->when($search !== '', fn ($query) => $query->where('name', 'like', $search.'%'))
+            ->when(in_array($category, $allowedCategories, true), fn ($query) => $query->where('category', $category))
+            ->when(in_array($status, $allowedStatuses, true), fn ($query) => $query->where('status', $status))
+            ->when($needsAction, fn ($query) => $query->where(function ($query) {
+                $query->whereIn('status', ['REJECTED', 'PAUSED', 'DISABLED'])
+                    ->orWhere(function ($query) {
+                        $query->where('category', 'MARKETING')->where('has_unsubscribe_action', false);
+                    });
+            }));
+
+        $stats = Template::query()
+            ->where('organization_id', $this->organizationId)
+            ->whereNull('deleted_at')
+            ->selectRaw('COUNT(*) as total')
+            ->selectRaw("SUM(status = 'APPROVED') as approved")
+            ->selectRaw("SUM(status = 'PENDING') as pending")
+            ->selectRaw("SUM(status IN ('REJECTED','PAUSED','DISABLED')) as needs_action")
+            ->first();
+
         return Inertia::render('User/Templates/Index', [
             'title' => __('templates'),
-            'allowCreate' => true,
-            'rows' => TemplateResource::collection(
-                Template::where('organization_id', $this->organizationId)->where('deleted_at', null)->latest()->paginate(10)
-            ),
+            'capabilities' => $this->access->capabilities(auth()->user(), $this->organizationId),
+            'connection' => $this->connection->forOrganization($this->organization),
+            'rules' => $this->policy->rulesFor($this->organization),
+            'filters' => compact('search', 'category', 'status', 'needsAction'),
+            'stats' => [
+                'total' => (int) ($stats->total ?? 0),
+                'approved' => (int) ($stats->approved ?? 0),
+                'pending' => (int) ($stats->pending ?? 0),
+                'needs_action' => (int) ($stats->needs_action ?? 0),
+            ],
+            'rows' => TemplateResource::collection($query
+                ->orderByDesc('updated_at')
+                ->orderByDesc('id')
+                ->paginate(12)
+                ->withQueryString()),
         ]);
     }
 
     private function getTemplateDetailResponse(Request $request, $uuid)
     {
         if ($request->expectsJson()) {
-            $row = Template::where('uuid', $uuid)->where('deleted_at', null)->first();
+            $row = Template::where('uuid', $uuid)
+                ->where('organization_id', $this->organizationId)
+                ->whereNull('deleted_at')
+                ->firstOrFail();
 
             if ($row && $row->metadata) {
                 $metadata = json_decode($row->metadata, true);
@@ -106,7 +166,15 @@ class TemplateService
         }
 
         $data['languages'] = config('languages');
-        $data['template'] = Template::where('uuid', $uuid)->first();
+        $this->access->authorize('update', auth()->user(), $this->organizationId);
+        $data['template'] = Template::where('uuid', $uuid)
+            ->where('organization_id', $this->organizationId)
+            ->whereNull('deleted_at')
+            ->firstOrFail();
+        $data['settings'] = $this->organization;
+        $data['connection'] = $this->connection->forOrganization($this->organization);
+        $data['rules'] = $this->policy->rulesFor($this->organization);
+        $data['capabilities'] = $this->access->capabilities(auth()->user(), $this->organizationId);
         $data['title'] = 'Edit Template';
         return Inertia::render('User/Templates/Edit', $data);
     }
@@ -142,16 +210,23 @@ class TemplateService
     public function createTemplate(Request $request)
     {
         if ($request->isMethod('get')){
+            $this->access->authorize('create', auth()->user(), $this->organizationId);
             $data['languages'] = config('languages');
-            $data['settings'] = Organization::where('id', $this->organizationId)->first();
+            $data['settings'] = $this->organization;
+            $data['connection'] = $this->connection->forOrganization($this->organization);
+            $data['rules'] = $this->policy->rulesFor($this->organization);
+            $data['capabilities'] = $this->access->capabilities(auth()->user(), $this->organizationId);
             
             return Inertia::render('User/Templates/Add', $data);
         } else if ($request->isMethod('post')){
+            $this->access->authorize('create', auth()->user(), $this->organizationId);
+            $this->connection->assertConnected($this->organization);
             if ($response = $this->abortIfDemo('create')) {
                 return $response;
             }
 
             $this->hydrateCopiedTemplateMedia($request);
+            $this->policy->prepareAndValidate($request, $this->organization);
 
             $validator = Validator::make($request->all(), array_merge([
                 'name' => 'required',
@@ -198,18 +273,27 @@ class TemplateService
                     ]);
                 }
 
+                $this->markUnsubscribeCompliance($request, $carouselResponse);
+
                 return $carouselResponse;
             }
 
-            return $this->whatsappService->createTemplate($request);
+            $response = $this->whatsappService->createTemplate($request);
+            $this->markUnsubscribeCompliance($request, $response);
+
+            return $response;
         }
     }
 
     public function updateTemplate(Request $request, $uuid)
     {
+        $this->access->authorize('update', auth()->user(), $this->organizationId);
+        $this->connection->assertConnected($this->organization);
         if ($response = $this->abortIfDemo('update')) {
             return $response;
         }
+
+        $this->policy->prepareAndValidate($request, $this->organization);
 
         $validator = Validator::make($request->all(), array_merge([
             'name' => 'required',
@@ -232,19 +316,30 @@ class TemplateService
         // Check if the existing template is a carousel by reading its
         // metadata. If so, route to the carousel-specific update method
         // which only allows text changes (no media re-upload).
-        $template = Template::where('uuid', $uuid)->first();
+        $template = Template::where('uuid', $uuid)
+            ->where('organization_id', $this->organizationId)
+            ->whereNull('deleted_at')
+            ->firstOrFail();
+        $previousStatus = (string) $template->status;
         if ($template) {
             $metadata = json_decode($template->metadata, true);
             if (($metadata['template_type'] ?? null) === 'carousel') {
-                return $this->whatsappService->updateCarouselTemplate($request, $uuid);
+                $response = $this->whatsappService->updateCarouselTemplate($request, $uuid);
+                $this->markUnsubscribeCompliance($request, $response, $template, $previousStatus);
+
+                return $response;
             }
         }
 
-        return $this->whatsappService->updateTemplate($request, $uuid);
+        $response = $this->whatsappService->updateTemplate($request, $uuid);
+        $this->markUnsubscribeCompliance($request, $response, $template, $previousStatus);
+
+        return $response;
     }
 
     public function deleteTemplate($uuid)
     {
+        $this->access->authorize('delete', auth()->user(), $this->organizationId);
         if ($response = $this->abortIfDemo('delete')) {
             return $response;
         }
@@ -265,6 +360,87 @@ class TemplateService
                     ?? __('Something went wrong. Refresh the page and try again'),
             ]);
         }
+    }
+
+    private function markUnsubscribeCompliance(Request $request, object $response, ?Template $template = null, ?string $previousStatus = null): void
+    {
+        if (($response->success ?? false) !== true) {
+            return;
+        }
+
+        $template ??= Template::query()
+            ->where('organization_id', $this->organizationId)
+            ->where('meta_id', data_get($response, 'data.id'))
+            ->first();
+
+        if (! $template) {
+            return;
+        }
+
+        $unsubscribeKeywords = strtoupper((string) $request->input('category')) === 'MARKETING'
+            ? $this->policy->unsubscribeKeywordsFromRequest($request)
+            : [];
+        $hasAction = strtoupper((string) $request->input('category')) === 'MARKETING'
+            && $this->policy->hasUnsubscribeAction($request);
+        $previousUnsubscribeMetadata = data_get($template->internal_metadata, 'unsubscribe_action', []);
+
+        $template->has_unsubscribe_action = $hasAction;
+        $template->internal_metadata = array_merge($template->internal_metadata ?? [], [
+            'unsubscribe_action' => [
+                'enabled' => $hasAction,
+                'keyword_snapshot' => $unsubscribeKeywords[0]
+                    ?? ($previousUnsubscribeMetadata['keyword_snapshot'] ?? $this->policy->primaryUnsubscribeKeyword($this->organization)),
+                'version' => 1,
+            ],
+        ]);
+        $template->save();
+
+        if ($unsubscribeKeywords !== []) {
+            $this->rememberUnsubscribeButtonWords($unsubscribeKeywords);
+        }
+
+        $template->refresh();
+        app(\App\Services\Templates\TemplateStatusHistoryService::class)->record(
+            $template,
+            $previousStatus,
+            (string) $template->status,
+            (string) $template->category,
+            (string) $template->category,
+            null,
+            $previousStatus === null ? 'submission' : 'resubmission'
+        );
+    }
+
+    /** Keep custom button replies recognized even after campaign words change. */
+    private function rememberUnsubscribeButtonWords(array $keywords): void
+    {
+        DB::transaction(function () use ($keywords): void {
+            $organization = Organization::query()->lockForUpdate()->find($this->organizationId);
+            if (! $organization) {
+                return;
+            }
+
+            $metadata = json_decode($organization->metadata ?: '{}', true) ?: [];
+            $campaignSettings = $metadata['campaign_settings'] ?? [];
+            $existing = is_array($campaignSettings['unsubscribe_button_triggers'] ?? null)
+                ? $campaignSettings['unsubscribe_button_triggers']
+                : [];
+            $known = [];
+            foreach (array_merge($existing, $keywords) as $word) {
+                $word = trim((string) $word);
+                if ($word === '') {
+                    continue;
+                }
+                $normalized = mb_strtolower($word);
+                $known[$normalized] = $word;
+            }
+
+            $metadata['campaign_settings'] = array_merge($campaignSettings, [
+                'unsubscribe_button_triggers' => array_values($known),
+            ]);
+            $organization->metadata = json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            $organization->save();
+        });
     }
 
     protected function abortIfDemo($type)

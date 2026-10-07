@@ -131,7 +131,7 @@ const checkCustomValuesCompleteness = () => {
                 <div class="mt-2">
                     <input
                         type="text" 
-                        class="block w-full rounded-md border-0 py-1.5 px-4 text-gray-900 shadow-sm outline-none ring-1 ring-inset placeholder:text-gray-400 sm:text-sm sm:leading-6 ring-gray-300"
+                        class="block w-full rounded-md border-0 py-1.5 px-4 text-start text-gray-900 shadow-sm outline-none ring-1 ring-inset placeholder:text-gray-400 sm:text-sm sm:leading-6 ring-gray-300"
                         v-model="textInput"
                         @input="updatePlaceholders"
                         :rows="'5'"
@@ -141,7 +141,7 @@ const checkCustomValuesCompleteness = () => {
             </div>
             <div class="flex items-center justify-between mt-2 mb-2">
                 <span class="text-xs">{{ $t('Characters') }}: {{ characterCount + '/' + characterLimit }}</span>
-                <div class="flex items-center space-x-3">
+                <div class="flex items-center gap-3">
                     <button type="button" @click="addVariable" class="hover:bg-slate-100 rounded p-1 text-sm cursor-pointer" :disabled="variableButtonDisabled">{{ $t('Add variable') }} ({{ $t('Max: 1') }})</button>
                 </div>
             </div>
@@ -154,7 +154,7 @@ const checkCustomValuesCompleteness = () => {
             <div v-for="(placeholder, index) in placeholders" :key="index" class="flex items-center mb-1">
                 <div class="w-[10%] text-sm">{{ placeholder }}</div>
                 <div class="w-[90%]">
-                    <input type="text" v-model="customValues[index]" :placeholder="'Enter content for ' + placeholder" class="block w-full rounded-md border-0 py-1.5 px-4 text-gray-900 shadow-sm outline-none ring-1 ring-inset placeholder:text-gray-400 sm:text-sm sm:leading-6 ring-gray-300" required>
+                    <input type="text" v-model="customValues[index]" :placeholder="$t('Enter sample for variable', { variable: placeholder })" class="block w-full rounded-md border-0 py-1.5 px-4 text-start text-gray-900 shadow-sm outline-none ring-1 ring-inset placeholder:text-gray-400 sm:text-sm sm:leading-6 ring-gray-300" required>
                 </div>
             </div>
             <div v-if="isCustomValuesIncomplete" class="p-2 bg-red-100 rounded-md flex items-center gap-x-2 mt-4">

@@ -355,9 +355,12 @@ class ProcessWebhookJob implements ShouldQueue
         // AC-1.9.1, AC-1.9.2: Check for unsubscribe keywords in text and button messages
         // AC-1.9.4: Wrapped in try-catch to isolate failures - job continues on error
         try {
-            // Extract message text from text.body or button.text
+            // Extract typed text and all button reply shapes sent by Meta.
             $messageText = $message['text']['body'] ?? null;
-            $buttonText = $message['button']['text'] ?? null;
+            $buttonText = $message['button']['payload']
+                ?? $message['button']['text']
+                ?? data_get($message, 'interactive.button_reply.id')
+                ?? data_get($message, 'interactive.button_reply.title');
 
             $textToCheck = $messageText ?? $buttonText;
 

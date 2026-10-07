@@ -2272,7 +2272,7 @@ class WhatsappService
 
             //Save Template To Database
             $template = new Template();
-            $template->organization_id = session()->get('current_organization');
+            $template->organization_id = $this->organizationId;
             $template->meta_id = $responseObject->data->id;
             $template->name = $request->name;
             $template->category = $request->category;
@@ -2457,7 +2457,7 @@ class WhatsappService
             $metaToStore['carousel_cards'] = array_values($savedCards);
 
             $template = new Template();
-            $template->organization_id = session()->get('current_organization');
+            $template->organization_id = $this->organizationId;
             $template->meta_id         = $responseObject->data->id;
             $template->name            = $request->name;
             $template->category        = $request->category;
@@ -2493,7 +2493,10 @@ class WhatsappService
 
     public function updateTemplate(Request $request, $uuid)
     {
-        $template = Template::where('uuid', $uuid)->first();
+        $template = Template::where('uuid', $uuid)
+            ->where('organization_id', $this->organizationId)
+            ->whereNull('deleted_at')
+            ->firstOrFail();
         $url = "https://graph.facebook.com/{$this->apiVersion}/{$template->meta_id}";
         $existingMetadata = json_decode($template->metadata ?? '{}', true);
         $defaultHeaderMedia = $existingMetadata['_default_header_media'] ?? null;
@@ -2709,7 +2712,7 @@ class WhatsappService
 
             //Update Template In Database
             if ($template) {
-                $template->organization_id = session()->get('current_organization');
+                $template->organization_id = $this->organizationId;
                 $template->category = $template->status == 'APPROVED' ? $template->category : $request->category;
                 $metadataToSave = $requestData;
                 if ($defaultHeaderMedia) {
@@ -2768,7 +2771,10 @@ class WhatsappService
     public function updateCarouselTemplate(Request $request, $uuid)
     {
         $responseObject = new \stdClass();
-        $template       = Template::where('uuid', $uuid)->first();
+        $template = Template::where('uuid', $uuid)
+            ->where('organization_id', $this->organizationId)
+            ->whereNull('deleted_at')
+            ->first();
 
         if (!$template) {
             $responseObject->success = false;
@@ -3013,6 +3019,14 @@ class WhatsappService
 
     function syncTemplates()
     {
+        $startedAt = microtime(true);
+        $counts = [
+            'created' => 0,
+            'updated' => 0,
+            'status_changed' => 0,
+            'unchanged' => 0,
+            'remote_total' => 0,
+        ];
         $url = "https://graph.facebook.com/{$this->apiVersion}/{$this->wabaId}/message_templates";
 
         $client = self::getSharedClient();
@@ -3040,20 +3054,23 @@ class WhatsappService
                 }
 
                 foreach($responseObject->data as $templateData){
-                    DB::transaction(function () use ($organizationId, $templateData) {
-                        $organization = Organization::query()->lockForUpdate()->find($organizationId);
+                    $counts['remote_total']++;
+                    DB::transaction(function () use ($organizationId, $templateData, &$counts) {
+                        $organization = Organization::query()->find($organizationId);
                         $connection = json_decode($organization?->metadata ?: '{}', true);
                         if (! $organization || (string) data_get($connection, 'whatsapp.waba_id') !== (string) $this->wabaId
                             || (string) data_get($connection, 'whatsapp.access_token') !== (string) $this->accessToken) {
                             throw new \RuntimeException('WhatsApp connection changed during template synchronization.');
                         }
                         $template = Template::where('organization_id', $organizationId)
-                            ->where('meta_id', $templateData->id)->first();
+                            ->where('meta_id', $templateData->id)
+                            ->lockForUpdate()
+                            ->first();
 
                         if($template){
-                            $template = Template::where('organization_id', $organizationId)
-                                ->lockForUpdate()->findOrFail($template->id);
                             $oldStatus = (string) $template->status;
+                            $oldCategory = (string) $template->category;
+                            $oldMetadata = (string) $template->metadata;
                             // ── Carousel: preserve our carousel_cards before overwriting ──
                             // Meta's response replaces header_handle with CDN URLs and drops
                             // any custom keys we stored. We rebuild carousel_cards from the
@@ -3079,11 +3096,31 @@ class WhatsappService
                             }
                             $template->category = $templateData->category ?? $template->category;
                             $template->updated_at = now();
+                            $template->last_synced_at = now();
                             $template->deleted_at = NULL;
                             $template->save();
+                            $changed = $oldStatus !== (string) $template->status
+                                || $oldCategory !== (string) $template->category
+                                || $oldMetadata !== (string) $template->metadata;
+                            $counts[$changed ? 'updated' : 'unchanged']++;
                             if ($oldStatus !== (string) $template->status) {
+                                $counts['status_changed']++;
                                 app(TemplateStatusNotificationRecorder::class)->record(
                                     $template, $organization, $oldStatus, (string) $template->status
+                                );
+                            }
+                            app(\App\Services\Templates\TemplateStatusHistoryService::class)->record(
+                                $template,
+                                $oldStatus,
+                                (string) $template->status,
+                                $oldCategory,
+                                (string) $template->category,
+                                $template->last_rejection_reason,
+                                'sync'
+                            );
+                            if ($oldCategory !== (string) $template->category) {
+                                app(TemplateStatusNotificationRecorder::class)->recordCategoryChange(
+                                    $template, $organization, $oldCategory, (string) $template->category
                                 );
                             }
                         } else {
@@ -3108,7 +3145,18 @@ class WhatsappService
                                 ?? $organization->created_by;
                             $template->created_at = now();
                             $template->updated_at = now();
+                            $template->last_synced_at = now();
                             $template->save();
+                            $counts['created']++;
+                            app(\App\Services\Templates\TemplateStatusHistoryService::class)->record(
+                                $template,
+                                null,
+                                (string) $template->status,
+                                null,
+                                (string) $template->category,
+                                null,
+                                'sync'
+                            );
                         }
                     });
                 };
@@ -3139,6 +3187,9 @@ class WhatsappService
             $responseObject->data->error = new \stdClass();
             $responseObject->data->error->message = $e->getMessage();
         }
+
+        $responseObject->counts = (object) $counts;
+        $responseObject->duration_ms = (int) round((microtime(true) - $startedAt) * 1000);
 
         return $responseObject;
     }

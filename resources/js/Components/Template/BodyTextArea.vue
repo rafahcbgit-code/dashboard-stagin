@@ -177,7 +177,7 @@ const format = (type) => {
                 <div class="mt-2">
                     <textarea 
                         ref="textAreaRef"
-                        class="block w-full rounded-md border-0 py-1.5 px-4 text-gray-900 shadow-sm outline-none ring-1 ring-inset placeholder:text-gray-400 sm:text-sm sm:leading-6 ring-gray-300"
+                        class="block w-full rounded-md border-0 py-1.5 px-4 text-start text-gray-900 shadow-sm outline-none ring-1 ring-inset placeholder:text-gray-400 sm:text-sm sm:leading-6 ring-gray-300"
                         v-model="textInput"
                         @input="updatePlaceholders"
                         :rows="'5'"
@@ -187,7 +187,7 @@ const format = (type) => {
             </div>
             <div class="flex items-center justify-between mt-2 mb-2">
                 <span class="text-xs">{{ $t('Characters') }}: {{ characterCount + '/' + characterLimit }}</span>
-                <div class="flex items-center space-x-3">
+                <div class="flex items-center gap-3">
                     <button @click="format('bold')" class="hover:bg-slate-100 rounded p-1">
                         <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 3h8c1.06 0 2.078.474 2.828 1.318C16.578 5.162 17 6.307 17 7.5c0 1.193-.421 2.338-1.172 3.182C15.078 11.526 14.061 12 13 12H5zm0 9h10.039a4.44 4.44 0 0 1 3.154 1.318A4.52 4.52 0 0 1 19.5 16.5a4.52 4.52 0 0 1-1.307 3.182A4.442 4.442 0 0 1 15.038 21H5z"/></svg>
                     </button>
@@ -212,7 +212,7 @@ const format = (type) => {
             <div v-for="(placeholder, index) in placeholders" :key="index" class="flex items-center mb-1">
                 <div class="w-[10%] text-sm">{{ placeholder }}</div>
                 <div class="w-[90%]">
-                    <input type="text" v-model="customValues[index]" :placeholder="'Enter content for ' + placeholder" class="block w-full rounded-md border-0 py-1.5 px-4 text-gray-900 shadow-sm outline-none ring-1 ring-inset placeholder:text-gray-400 sm:text-sm sm:leading-6 ring-gray-300" required>
+                    <input type="text" v-model="customValues[index]" :placeholder="$t('Enter sample for variable', { variable: placeholder })" class="block w-full rounded-md border-0 py-1.5 px-4 text-start text-gray-900 shadow-sm outline-none ring-1 ring-inset placeholder:text-gray-400 sm:text-sm sm:leading-6 ring-gray-300" required>
                 </div>
             </div>
             <div v-if="isCustomValuesIncomplete" class="p-2 bg-red-100 rounded-md flex items-center gap-x-2 mt-4">

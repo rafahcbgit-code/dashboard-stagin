@@ -139,6 +139,22 @@ return [
             'subject' => 'WhatsApp account review rejected',
             'email' => 'The WhatsApp account {{waba_id}} review for {{organization_name}} was rejected.',
         ],
+        'meta.template_approved' => [
+            'name' => 'WhatsApp template approved',
+            'description' => 'Meta approved a message template and it is ready to use.',
+            'variables' => ['organization_name', 'template_name'],
+            'dashboard' => 'WhatsApp template {{template_name}} was approved.',
+            'subject' => 'WhatsApp template approved: {{template_name}}',
+            'email' => 'WhatsApp template {{template_name}} for {{organization_name}} was approved.',
+        ],
+        'meta.template_category_changed' => [
+            'name' => 'WhatsApp template category changed',
+            'description' => 'Meta changed a template category. This may affect how it can be used and its cost.',
+            'variables' => ['organization_name', 'template_name', 'old_category', 'new_category'],
+            'dashboard' => 'Template {{template_name}} changed from {{old_category}} to {{new_category}}.',
+            'subject' => 'WhatsApp template category changed: {{template_name}}',
+            'email' => 'Meta changed {{template_name}} in {{organization_name}} from {{old_category}} to {{new_category}}.',
+        ],
         'meta.template_rejected' => [
             'name' => 'WhatsApp template rejected',
             'description' => 'Meta rejected a message template submitted for approval. Review the reason and correct the template before trying to use it.',
