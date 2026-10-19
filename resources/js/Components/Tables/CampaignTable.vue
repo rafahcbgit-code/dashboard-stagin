@@ -5,6 +5,8 @@
     import { router, useForm } from '@inertiajs/vue3';
     import AlertModal from '@/Components/AlertModal.vue';
     import { useAlertModal } from '@/Composables/useAlertModal';
+    import { trans } from 'laravel-vue-i18n';
+    import { useI18n } from 'vue-i18n';
     import Table from '@/Components/Table.vue';
     import TableHeader from '@/Components/TableHeader.vue';
     import TableHeaderRow from '@/Components/TableHeaderRow.vue';
@@ -28,6 +30,7 @@
     });
 
     const { isOpenAlert, openAlert, confirmAlert } = useAlertModal();
+    const { locale } = useI18n();
 
     const form = useForm({'test': null});
 
@@ -36,6 +39,9 @@
     const scheduleError = ref(null);
     const scheduledTime = ref('');
     const selectedCampaign = ref(null);
+    const cancellingCampaign = ref(null);
+    const pendingCancelCampaign = ref(null);
+    const cancelActionError = ref(null);
 
     const deleteAction = (key) => {
         form.delete('/campaigns/' + key);
@@ -54,19 +60,19 @@
     const isSearching = ref(false);
     const emit = defineEmits(['delete']);
 
+    const formatNumber = (value) => new Intl.NumberFormat(locale.value || 'ar').format(Number(value) || 0);
+
     const formatPercentageRate = (numeratorCount, contactCount, contactGroupCount) => {
-        if(contactCount > 0){
-            return (numeratorCount/contactCount * 100).toFixed(2) + '%';
-        } else {
-            return (numeratorCount/contactGroupCount * 100).toFixed(2) + '%';
-        }
+        const denominator = Number(contactCount) > 0 ? Number(contactCount) : Number(contactGroupCount);
+        const percentage = denominator > 0 ? Number(numeratorCount) / denominator : 0;
+        return new Intl.NumberFormat(locale.value || 'ar', { style: 'percent', minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(percentage);
     };
 
     const formatStats = (numeratorCount, contactCount, contactGroupCount) => {
         if(contactCount > 0){
-            return numeratorCount + '/' + contactCount;
+            return `${formatNumber(numeratorCount)} / ${formatNumber(contactCount)}`;
         } else {
-            return numeratorCount + '/' + contactGroupCount;
+            return `${formatNumber(numeratorCount)} / ${formatNumber(contactGroupCount)}`;
         }
     }
 
@@ -84,6 +90,9 @@
         router.visit('/campaigns', {
             method: 'get',
             data: params.value,
+            onFinish: () => {
+                isSearching.value = false;
+            },
         })
     }
 
@@ -131,7 +140,7 @@
             const data = await response.json();
 
             if (!response.ok) {
-                scheduleError.value = data.errors?.time?.[0] || data.error || 'Unable to update the scheduled time.';
+                scheduleError.value = data.errors?.time?.[0] || data.error || trans('Unable to update the scheduled time.');
                 return;
             }
 
@@ -139,22 +148,55 @@
             selectedCampaign.value = null;
             router.reload({ only: ['rows'] });
         } catch (error) {
-            scheduleError.value = 'A network error occurred while updating the scheduled time.';
+            scheduleError.value = trans('A network error occurred while updating the scheduled time.');
         } finally {
             isUpdatingSchedule.value = false;
         }
     };
+
+    const requestCancelCampaign = (campaign) => {
+        pendingCancelCampaign.value = campaign;
+        cancelActionError.value = null;
+    };
+
+    const cancelCampaign = async () => {
+        const campaign = pendingCancelCampaign.value;
+        if (!campaign) return;
+        const isScheduled = campaign.status === 'scheduled';
+        cancellingCampaign.value = campaign.uuid;
+        try {
+            const response = await fetch(`/campaigns/${campaign.uuid}/${isScheduled ? 'cancel-schedule' : 'cancel'}`, {
+                method: 'POST',
+                headers: {
+                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')?.getAttribute('content') || '',
+                    'Accept': 'application/json',
+                },
+            });
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || trans('Unable to cancel this campaign.'));
+            pendingCancelCampaign.value = null;
+            router.reload({ only: ['rows'] });
+        } catch (error) {
+            cancelActionError.value = error.message || trans('Unable to cancel this campaign.');
+        } finally {
+            cancellingCampaign.value = null;
+        }
+    };
+
+    const duplicateCampaign = (campaign) => {
+        router.visit(`/campaigns/create?duplicate=${encodeURIComponent(campaign.uuid)}`);
+    };
 </script>
 <template>
     <div class="bg-[#f0f2f5] md:bg-white flex items-center md:border md:border-primary md:border-none md:shadow-sm h-12 md:h-10 w-full md:w-80 rounded-xl mb-6 text-sm mt-6">
-        <span class="pl-3">
+        <span class="ps-3">
             <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="m15 15l6 6m-11-4a7 7 0 1 1 0-14a7 7 0 0 1 0 14Z"/></svg>
         </span>
-        <input @input="search" v-model="params.search" type="text" class="outline-none px-4 w-full bg-inherit" :placeholder="$t('Search campaigns')">
-        <button v-if="isSearching === false && params.search" @click="clearSearch" type="button" class="pr-2">
+        <input @input="search" v-model="params.search" type="text" dir="auto" class="outline-none px-4 w-full bg-inherit text-start" :placeholder="$t('Search campaigns')">
+        <button v-if="isSearching === false && params.search" @click="clearSearch" type="button" class="pe-2" :aria-label="$t('Clear search')" :title="$t('Clear search')">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10s10-4.5 10-10S17.5 2 12 2zm3.7 12.3c.4.4.4 1 0 1.4c-.4.4-1 .4-1.4 0L12 13.4l-2.3 2.3c-.4.4-1 .4-1.4 0c-.4-.4-.4-1 0-1.4l2.3-2.3l-2.3-2.3c-.4-.4-.4-1 0-1.4c.4-.4 1-.4 1.4 0l2.3 2.3l2.3-2.3c.4-.4 1-.4 1.4 0c.4.4.4 1 0 1.4L13.4 12l2.3 2.3z"/></svg>
         </button>
-        <span v-if="isSearching" class="pr-2">
+        <span v-if="isSearching" class="pe-2" role="status" :aria-label="$t('Searching campaigns...')">
             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24"><circle cx="12" cy="3.5" r="1.5" fill="currentColor" opacity="0"><animateTransform attributeName="transform" calcMode="discrete" dur="2.4s" repeatCount="indefinite" type="rotate" values="0 12 12;90 12 12;180 12 12;270 12 12"/><animate attributeName="opacity" dur="0.6s" keyTimes="0;0.5;1" repeatCount="indefinite" values="1;1;0"/></circle><circle cx="12" cy="3.5" r="1.5" fill="currentColor" opacity="0"><animateTransform attributeName="transform" begin="0.2s" calcMode="discrete" dur="2.4s" repeatCount="indefinite" type="rotate" values="30 12 12;120 12 12;210 12 12;300 12 12"/><animate attributeName="opacity" begin="0.2s" dur="0.6s" keyTimes="0;0.5;1" repeatCount="indefinite" values="1;1;0"/></circle><circle cx="12" cy="3.5" r="1.5" fill="currentColor" opacity="0"><animateTransform attributeName="transform" begin="0.4s" calcMode="discrete" dur="2.4s" repeatCount="indefinite" type="rotate" values="60 12 12;150 12 12;240 12 12;330 12 12"/><animate attributeName="opacity" begin="0.4s" dur="0.6s" keyTimes="0;0.5;1" repeatCount="indefinite" values="1;1;0"/></circle></svg>
         </span>
     </div>
@@ -163,8 +205,8 @@
             <TableHeaderRow>
                 <TableHeaderRowItem :position="'first'">{{ $t('Campaign name') }}</TableHeaderRowItem>
                 <TableHeaderRowItem class="hidden md:table-cell">{{ $t('Template') }}</TableHeaderRowItem>
-                <TableHeaderRowItem>{{ $t('Delivery rate') }}</TableHeaderRowItem>
-                <TableHeaderRowItem>{{ $t('Read rate') }}</TableHeaderRowItem>
+                <TableHeaderRowItem :title="$t('Delivery rate explanation')">{{ $t('Delivery rate') }} ⓘ</TableHeaderRowItem>
+                <TableHeaderRowItem :title="$t('Read rate explanation')">{{ $t('Read rate') }} ⓘ</TableHeaderRowItem>
                 <TableHeaderRowItem>{{ $t('Status') }}</TableHeaderRowItem>
                 <TableHeaderRowItem :position="'last'"></TableHeaderRowItem>
             </TableHeaderRow>
@@ -173,15 +215,15 @@
             <TableBodyRow v-for="(item, index) in rows.data" :key="index" :class="!isLastRow(index) ? 'border-b' : ''">
                 <TableBodyRowItem :position="'first'">
                     <Link :href="'/campaigns/' + item.uuid" class="block w-full">
-                        <span class="block">{{ item.name }}</span>
+                        <span class="block" dir="auto">{{ item.name }}</span>
                         <span v-if="item.scheduled_at" class="mt-1 block text-xs text-slate-500">
-                            {{ $t('Scheduled time') }}: {{ item.scheduled_at }}
+                            {{ $t('Scheduled time') }}: <bdi dir="ltr">{{ item.scheduled_at }}</bdi>
                         </span>
                     </Link>
                 </TableBodyRowItem>
                 <TableBodyRowItem class="hidden md:table-cell">
                     <Link :href="'/campaigns/' + item.uuid" class="block w-full">
-                        {{ item.template.name }}
+                        <span dir="auto">{{ item.template.name }}</span>
                     </Link>
                 </TableBodyRowItem>
                 <TableBodyRowItem class="hidden sm:table-cell">
@@ -190,10 +232,10 @@
                             {{ $t('N/A') }}
                         </div>
                         <div v-else>
-                            <span class="bg-slate-200 px-1 py-1 rounded-lg mr-1 hidden md:inline-block">
+                            <span class="bg-slate-200 px-1 py-1 rounded-lg me-1 hidden md:inline-block" dir="ltr">
                                 {{ formatPercentageRate(item.delivery_count, item.contacts_count, item.contact_group_count) }}
                             </span>
-                            {{ formatStats(item.delivery_count, item.contacts_count, item.contact_group_count) }}
+                            <bdi dir="ltr">{{ formatStats(item.delivery_count, item.contacts_count, item.contact_group_count) }}</bdi>
                         </div>
                     </Link>
                 </TableBodyRowItem>
@@ -203,20 +245,22 @@
                             {{ $t('N/A') }}
                         </div>
                         <div v-else>
-                            <span class="bg-slate-200 px-1 py-1 rounded-lg mr-1 hidden md:inline-block">
+                            <span class="bg-slate-200 px-1 py-1 rounded-lg me-1 hidden md:inline-block" dir="ltr">
                                 {{ formatPercentageRate(item.read_count, item.contacts_count, item.contact_group_count) }}
                             </span>
-                            {{ formatStats(item.read_count, item.contacts_count, item.contact_group_count) }}
+                            <bdi dir="ltr">{{ formatStats(item.read_count, item.contacts_count, item.contact_group_count) }}</bdi>
                         </div>
                     </Link>
                 </TableBodyRowItem>
                 <TableBodyRowItem>
-                    <Link :href="'/campaigns/' + item.uuid" class="flex items-center w-full capitalize">
-                        {{ item.status }}
+                    <Link :href="'/campaigns/' + item.uuid" class="flex items-center w-full">
+                        <span class="rounded-full px-2.5 py-1 text-xs font-medium" :class="item.status === 'completed' ? 'bg-emerald-50 text-emerald-800' : (item.status === 'cancelled' ? 'bg-slate-100 text-slate-700' : (item.status === 'ongoing' ? 'bg-blue-50 text-blue-800' : 'bg-amber-50 text-amber-800'))" :title="$t(item.status + ' campaign status explanation')">
+                            {{ $t(item.status) }}
+                        </span>
                     </Link>
                 </TableBodyRowItem>
                 <TableBodyRowItem :position="'last'">
-                    <Dropdown :align="'right'" class="mt-2">
+                    <Dropdown :align="locale === 'ar' ? 'left' : 'right'" class="mt-2">
                         <button class="inline-flex w-full justify-center rounded-md text-sm font-medium text-black hover:bg-opacity-30 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-opacity-75">
                             <span class="hover:bg-[#F6F7F9] hover:rounded-full w-[fit-content] p-2">
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24">
@@ -230,6 +274,10 @@
                                 <DropdownItem v-if="item.status === 'scheduled'" as="button" @click="openScheduleEditor(item)">
                                     {{ $t('Edit scheduled time') }}
                                 </DropdownItem>
+                                <DropdownItem v-if="item.status === 'scheduled' || item.status === 'ongoing'" as="button" @click="requestCancelCampaign(item)">
+                                    {{ item.status === 'scheduled' ? $t('Cancel schedule') : $t('Stop campaign') }}
+                                </DropdownItem>
+                                <DropdownItem v-if="props.role !== 'agent'" as="button" @click="duplicateCampaign(item)">{{ $t('Copy as new campaign') }}</DropdownItem>
                                 <DropdownItem v-if="props.role !== 'agent'" as="button" @click="openAlert(item.uuid)">{{ $t('Delete') }}</DropdownItem>
                             </DropdownItemGroup>
                         </template>
@@ -244,10 +292,11 @@
             <div class="flex justify-center mb-4">
                 <svg xmlns="http://www.w3.org/2000/svg" width="72" height="72" viewBox="0 0 256 256"><path fill="currentColor" d="M216 80h-32V48a16 16 0 0 0-16-16H40a16 16 0 0 0-16 16v128a8 8 0 0 0 13 6.22L72 154v30a16 16 0 0 0 16 16h93.59L219 230.22a8 8 0 0 0 5 1.78a8 8 0 0 0 8-8V96a16 16 0 0 0-16-16M66.55 137.78L40 159.25V48h128v88H71.58a8 8 0 0 0-5.03 1.78M216 207.25l-26.55-21.47a8 8 0 0 0-5-1.78H88v-32h80a16 16 0 0 0 16-16V96h32Z"></path></svg>
             </div>
-            <h3 class="text-center text-lg font-medium mb-4">{{ $t('You don\'t have any campaigns') }}</h3>
-           <div v-if="props.role !== 'agent'" class="flex justify-center">
-                <Link href="/campaigns/create" class="rounded-md px-3 py-2 text-sm hover:shadow-md text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 bg-primary" :disabled="isLoading">
-                    <span v-if="!isLoading">{{ $t('Create campaign') }}</span>
+            <h3 class="text-center text-lg font-medium mb-4">{{ props.filters?.search ? $t('No campaigns match your search') : $t('You don\'t have any campaigns') }}</h3>
+            <p v-if="!props.filters?.search" class="mx-auto mb-5 max-w-lg text-center text-sm leading-6 text-slate-600">{{ $t('Create a campaign in three steps: choose an approved template, select the contacts who should receive it, then review and confirm.') }}</p>
+           <div v-if="props.role !== 'agent' && !props.filters?.search" class="flex justify-center">
+                <Link href="/campaigns/create" class="rounded-md px-3 py-2 text-sm hover:shadow-md text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 bg-primary">
+                    {{ $t('Create campaign') }}
                 </Link>
             </div>
         </div>
@@ -265,7 +314,7 @@
         <div class="flex min-h-screen items-end justify-center px-4 pb-20 pt-4 text-center sm:block sm:p-0">
             <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="closeScheduleEditor"></div>
             <span class="hidden sm:inline-block sm:h-screen sm:align-middle">&#8203;</span>
-            <div class="inline-block w-full max-w-lg transform overflow-hidden rounded-lg bg-white px-4 pb-4 pt-5 text-left align-bottom shadow-xl transition-all sm:my-8 sm:w-full sm:align-middle sm:p-6">
+            <div class="inline-block w-full max-w-lg transform overflow-hidden rounded-lg bg-white px-4 pb-4 pt-5 text-start align-bottom shadow-xl transition-all sm:my-8 sm:w-full sm:align-middle sm:p-6">
                 <h3 id="schedule-editor-title" class="text-lg font-medium leading-6 text-gray-900">{{ $t('Edit scheduled time') }}</h3>
                 <p class="mt-2 text-sm text-gray-500">{{ $t('Choose a new future date and time for this campaign.') }}</p>
                 <label for="scheduled-time" class="mt-4 block text-sm font-medium text-gray-700">{{ $t('Scheduled time') }}</label>
@@ -287,6 +336,20 @@
                 </div>
             </div>
         </div>
+    </div>
+
+    <div v-if="pendingCancelCampaign" class="fixed inset-0 z-[60] flex items-center justify-center bg-slate-950/50 p-4" role="alertdialog" aria-modal="true" aria-labelledby="cancel-campaign-title" aria-describedby="cancel-campaign-description">
+        <section class="w-full max-w-md rounded-xl bg-white p-5 shadow-xl sm:p-6">
+            <h3 id="cancel-campaign-title" class="text-lg font-semibold text-slate-900">{{ pendingCancelCampaign.status === 'scheduled' ? $t('Cancel schedule') : $t('Stop campaign') }}</h3>
+            <p id="cancel-campaign-description" class="mt-2 text-sm leading-6 text-slate-600">{{ pendingCancelCampaign.status === 'scheduled' ? $t('Are you sure you want to cancel this scheduled campaign?') : $t('Stop this campaign? Messages already sent or currently being sent cannot be recalled.') }}</p>
+            <p v-if="cancelActionError" class="mt-3 rounded-lg bg-red-50 p-3 text-sm text-red-800">{{ cancelActionError }}</p>
+            <div class="mt-5 flex flex-col-reverse gap-2 sm:flex-row sm:justify-end">
+                <button type="button" @click="pendingCancelCampaign = null" :disabled="Boolean(cancellingCampaign)" class="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 disabled:opacity-50">{{ $t('Keep campaign') }}</button>
+                <button type="button" @click="cancelCampaign" :disabled="Boolean(cancellingCampaign)" class="rounded-lg bg-red-700 px-4 py-2.5 text-sm font-semibold text-white disabled:opacity-50">
+                    {{ cancellingCampaign ? $t('Processing...') : (pendingCancelCampaign.status === 'scheduled' ? $t('Cancel schedule') : $t('Stop campaign')) }}
+                </button>
+            </div>
+        </section>
     </div>
 </template>
   

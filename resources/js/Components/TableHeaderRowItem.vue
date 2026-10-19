@@ -8,11 +8,11 @@
 
     const getRowClass = () => {
         if (props.position === 'first') {
-            return 'font-normal pl-4 py-4 text-left';
+            return 'font-normal ps-4 py-4 text-start';
         } else if (props.position === 'last') {
-            return 'pr-4';
+            return 'pe-4';
         } else {
-            return 'font-normal py-4 text-left'
+            return 'font-normal py-4 text-start'
         }
     };
 </script>

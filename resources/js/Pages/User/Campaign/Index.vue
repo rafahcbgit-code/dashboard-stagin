@@ -1,19 +1,19 @@
 <template>
     <AppLayout>
-        <div class="bg-white md:bg-inherit pt-0 px-4 md:pt-8 md:p-8 rounded-[5px] text-[#000] overflow-y-scroll capitalize">
-            <div class="md:flex justify-between mt-8 md:mt-0 hidden">
+        <div class="bg-white md:bg-inherit pt-0 px-4 md:pt-8 md:p-8 rounded-[5px] text-[#000] overflow-y-scroll">
+            <div class="flex flex-wrap items-start justify-between gap-3 mt-5 md:mt-0">
                 <div>
                     <h2 class="text-xl mb-1">{{ $t('Campaigns') }}</h2>
-                    <p v-if="props.role !== 'agent'" class="mb-6 md:flex items-center text-sm leading-6 text-gray-600 hidden">
+                    <p v-if="props.role !== 'agent'" class="mb-2 md:mb-6 flex items-center text-sm leading-6 text-gray-600">
                         <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 11v5m0 5a9 9 0 1 1 0-18a9 9 0 0 1 0 18Zm.05-13v.1h-.1V8h.1Z"/></svg>
-                        <span class="ml-1 mt-1" >{{ $t('Add campaigns') }}</span>
+                        <span class="ms-1 mt-1" >{{ $t('Add campaigns') }}</span>
                     </p>
                 </div>
                 <div v-if="props.role !== 'agent'">
                     <template v-if="canCreateCampaign">
                         <Link
                             href="/campaigns/create"
-                            class="rounded-md bg-primary px-3 py-2 text-sm text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 md:block hidden"
+                            class="rounded-md bg-primary px-3 py-2 text-sm text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
                         >
                             {{ $t('Create campaign') }}
                         </Link>
@@ -22,8 +22,8 @@
                         <button
                             type="button"
                             @click="onTrialLimitClick"
-                            title="You have exceeded your trial campaign messages limit. Please upgrade your plan."
-                            class="rounded-md bg-gray-400 px-3 py-2 text-sm text-gray-700 shadow-sm md:block hidden"
+                            :title="$t('You have exceeded your trial campaign messages limit. Please upgrade your plan.')"
+                            class="rounded-md bg-gray-400 px-3 py-2 text-sm text-gray-700 shadow-sm"
                         >
                             {{ $t('Create campaign') }}
                         </button>
@@ -37,46 +37,46 @@
                     <select
                         v-model="selectedRange"
                         @change="onRangeChange"
-                        class="h-10 pl-3 pr-8 rounded-md border border-slate-200 bg-[#f6f7f9] text-sm text-slate-700 appearance-none"
+                        class="h-10 ps-3 pe-8 rounded-md border border-slate-200 bg-[#f6f7f9] text-sm text-slate-700 appearance-none"
                     >
                         <option value="last30">{{ $t('Last 30 days') }}</option>
                         <option value="last7">{{ $t('Last 7 days') }}</option>
                         <option value="today">{{ $t('Today') }}</option>
                         <option value="custom">{{ $t('Custom range') }}</option>
                     </select>
-                    <svg class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-500" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
+                    <svg class="pointer-events-none absolute end-2 top-1/2 -translate-y-1/2 text-slate-500" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
                         <path fill="currentColor" d="m7 10l5 5l5-5z"/>
                     </svg>
                 </div>
 
                 <div class="relative">
-                    <svg class="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-500" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
+                    <svg class="pointer-events-none absolute start-2 top-1/2 -translate-y-1/2 text-slate-500" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
                         <path fill="currentColor" d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-2 .89-2 2v13a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6c0-1.11-.89-2-2-2m0 15H5V10h14z"/>
                     </svg>
                     <input
                         v-model="startDate"
                         @change="onCustomDateChange"
                         type="date"
-                        class="h-10 w-[170px] pl-8 pr-3 rounded-md border border-slate-200 bg-[#f6f7f9] text-sm text-slate-700"
+                        class="h-10 w-[170px] ps-8 pe-3 rounded-md border border-slate-200 bg-[#f6f7f9] text-sm text-slate-700"
                     />
                 </div>
 
                 <div class="relative">
-                    <svg class="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-slate-500" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
+                    <svg class="pointer-events-none absolute start-2 top-1/2 -translate-y-1/2 text-slate-500" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
                         <path fill="currentColor" d="M19 4h-1V2h-2v2H8V2H6v2H5c-1.11 0-2 .89-2 2v13a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6c0-1.11-.89-2-2-2m0 15H5V10h14z"/>
                     </svg>
                     <input
                         v-model="endDate"
                         @change="onCustomDateChange"
                         type="date"
-                        class="h-10 w-[170px] pl-8 pr-3 rounded-md border border-slate-200 bg-[#f6f7f9] text-sm text-slate-700"
+                        class="h-10 w-[170px] ps-8 pe-3 rounded-md border border-slate-200 bg-[#f6f7f9] text-sm text-slate-700"
                     />
                 </div>
 
                 <div class="relative">
                     <select
                         v-model="selectedExportStatus"
-                        class="h-10 pl-3 pr-8 rounded-md border border-slate-200 bg-[#f6f7f9] text-sm text-slate-700 appearance-none"
+                        class="h-10 ps-3 pe-8 rounded-md border border-slate-200 bg-[#f6f7f9] text-sm text-slate-700 appearance-none"
                     >
                         <option value="">{{ $t('All statuses') }}</option>
                         <option value="sent">{{ $t('Sent') }}</option>
@@ -86,7 +86,7 @@
                         <option value="processing">{{ $t('Processing') }}</option>
                         <option value="queued">{{ $t('Queued') }}</option>
                     </select>
-                    <svg class="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2 text-slate-500" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
+                    <svg class="pointer-events-none absolute end-2 top-1/2 -translate-y-1/2 text-slate-500" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
                         <path fill="currentColor" d="m7 10l5 5l5-5z"/>
                     </svg>
                 </div>
@@ -97,6 +97,7 @@
                 <button
                     @click="resetDateFilter"
                     :title="$t('Reset to last 30 days')"
+                    :aria-label="$t('Reset to last 30 days')"
                     class="h-10 w-10 inline-flex items-center justify-center rounded-md border border-slate-200 bg-white text-slate-600"
                 >
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
@@ -108,7 +109,7 @@
             <div v-if="!props.trial" class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 my-6">
                 <div v-for="metric in campaignMetrics" :key="metric.key" class="bg-gray-100 p-4 rounded">
                     <div class="flex items-center justify-between">
-                        <h2 class="text-2xl font-bold text-slate-800">{{ metric.value.toLocaleString() }}</h2>
+                        <h2 class="text-2xl font-bold text-slate-800"><bdi>{{ new Intl.NumberFormat(locale).format(metric.value) }}</bdi></h2>
                         <span class="h-8 w-8 inline-flex items-center justify-center rounded-full" :style="{ backgroundColor: metric.iconBg }">
                             <svg v-if="metric.icon === 'check'" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" :style="{ color: metric.iconColor }">
                                 <path fill="currentColor" d="m10 15.17l-3.88-3.88L4.7 12.71L10 18l10-10l-1.41-1.41z"/>
@@ -171,9 +172,13 @@
 </template>
 <script setup>
     import { computed, ref } from 'vue';
+    import { useI18n } from 'vue-i18n';
+    import { trans } from 'laravel-vue-i18n';
     import AppLayout from "./../Layout/App.vue";
     import { Link, router } from "@inertiajs/vue3";
     import CampaignTable from '@/Components/Tables/CampaignTable.vue';
+
+    const { locale } = useI18n();
 
     const props = defineProps(['rows', 'filters', 'role', 'overall_delivery_count', 'campaign_messages_limit', 'trial', 'campaign_analytics', 'initial_start_date', 'initial_end_date']);
 
@@ -298,7 +303,7 @@
 
     const onTrialLimitClick = () => {
         showTrialLimitError.value = true;
-        alert('You have exceeded your trial campaign messages limit. Please upgrade your plan.');
+        alert(trans('You have exceeded your trial campaign messages limit. Please upgrade your plan.'));
     };
 
     const progressPercentage = computed(() => {

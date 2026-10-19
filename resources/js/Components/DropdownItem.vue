@@ -21,7 +21,7 @@
             :disabled="props.disabled"
             :class="[
             props.disabled ? 'text-gray-400 cursor-not-allowed' : (active ? 'bg-blue-700 text-white' : 'text-gray-900'),
-            'group flex w-full rounded-md px-2 py-2 text-sm text-left',
+            'group flex w-full rounded-md px-2 py-2 text-sm text-start',
             ]"
         >
             <slot />

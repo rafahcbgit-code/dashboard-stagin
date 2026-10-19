@@ -105,14 +105,25 @@ class CreateCampaignLogsJob implements ShouldQueue
             return Contact::where('organization_id', $campaign->organization_id)
                 ->whereNull('deleted_at')
                 ->where('is_subscribed', 1)
+                ->where(function ($query) {
+                    $query->whereNull('is_blocked')->orWhere('is_blocked', false);
+                })
+                ->whereNotNull('phone')
+                ->where('phone', '<>', '')
                 ->get();
         }
 
         return Contact::whereHas('contactGroups', function ($query) use ($campaign) {
             $query->where('contact_groups.id', $campaign->contact_group_id);
         })
+            ->where('organization_id', $campaign->organization_id)
             ->whereNull('deleted_at')
             ->where('is_subscribed', 1)
+            ->where(function ($query) {
+                $query->whereNull('is_blocked')->orWhere('is_blocked', false);
+            })
+            ->whereNotNull('phone')
+            ->where('phone', '<>', '')
             ->get();
     }
 

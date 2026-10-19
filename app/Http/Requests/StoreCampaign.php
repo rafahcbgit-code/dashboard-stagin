@@ -46,15 +46,17 @@ class StoreCampaign extends FormRequest
 
             // Rules for image format
             if ($format === 'TEXT') {
-                $rules['header.parameters.0.value'] = 'required|max:60'; // Max 60 characters
+                $rules['header.parameters.0.selection'] = 'required|in:dynamic,static';
             }
 
             $headerSelection = $this->input('header.parameters.0.selection');
 
-            // Every static header variable needs a value, not just the first one.
+            // Campaign text variables may be fixed for all recipients or resolved
+            // from a contact field; media header validation is handled separately.
             foreach (is_array($headerParams) ? $headerParams : [] as $index => $parameter) {
-                if ($format === 'TEXT' && ($parameter['selection'] ?? null) === 'static') {
-                    $rules["header.parameters.$index.value"] = 'required|max:60';
+                if ($format === 'TEXT') {
+                    $rules["header.parameters.$index.selection"] = 'required|in:dynamic,static';
+                    $rules["header.parameters.$index.value"] = 'required|string|max:128';
                 }
             }
 
@@ -75,17 +77,10 @@ class StoreCampaign extends FormRequest
         $bodyParams = $this->input('body.parameters');
         $bodyParamValue = $this->input('body.parameters.0.value');
 
-        if(!empty($bodyParams)){
-            $rules['body.parameters.0.value'] = 'required|max:1028';
-        }
-
-        // Every *static* body variable must carry a value, not only the first one.
-        // Previously variables 2..N could be submitted empty and reached the
-        // customer as a blank placeholder in an otherwise approved template.
+        // Campaign body variables can use a fixed value or a recipient field.
         foreach (is_array($bodyParams) ? $bodyParams : [] as $index => $parameter) {
-            if (($parameter['selection'] ?? null) === 'static') {
-                $rules["body.parameters.$index.value"] = 'required|max:1028';
-            }
+            $rules["body.parameters.$index.selection"] = 'required|in:dynamic,static';
+            $rules["body.parameters.$index.value"] = 'required|string|max:1028';
         }
 
 

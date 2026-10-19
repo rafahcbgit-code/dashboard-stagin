@@ -10,8 +10,8 @@ namespace App\Services;
  * items back, so the API layer, the campaign form and any future surface can
  * share one source of truth instead of each re-implementing its own checks.
  *
- * Fail-open by design: missing or unknown metadata never blocks a send, so
- * organizations created before the status sync existed keep today's behaviour.
+ * Missing or unknown connection state blocks sending until the sender can be
+ * verified as connected. Unknown quality remains a warning, not a blocker.
  */
 final class CampaignReadinessService
 {
@@ -29,12 +29,12 @@ final class CampaignReadinessService
      */
     private const BLOCKERS = [
         self::KEY_NUMBER_DISCONNECTED => "Your WhatsApp number isn't connected, so this campaign can't be sent yet. Reconnect your number, then create the campaign again.",
+        self::KEY_NUMBER_UNKNOWN => "We couldn't verify that your WhatsApp number is connected. Sync or reconnect it before sending this campaign.",
         self::KEY_TEMPLATE_NOT_APPROVED => "This message template isn't approved yet, so it can't be used in a campaign. Pick another template or wait for Meta's review to finish.",
     ];
 
     /** Checks that deserve attention but must not stop an informed business user. */
     private const WARNINGS = [
-        self::KEY_NUMBER_UNKNOWN => "We couldn't confirm your WhatsApp number's status. If sending fails, reconnect your number.",
         self::KEY_QUALITY_LOW => "Your number's quality rating is low. Sending a large campaign now may put your number at risk — consider a smaller, more engaged audience first.",
     ];
 
@@ -43,7 +43,7 @@ final class CampaignReadinessService
      * @param  string|null $templateStatus Optional templates.status value of the template being sent.
      * @return array{ready: bool, blockers: array<int, array<string, mixed>>, warnings: array<int, array<string, mixed>>}
      */
-    public function check(array $metadata, ?string $templateStatus = null): array
+    public function check(array $metadata, ?string $templateStatus = null, ?string $templateCategory = null, bool $hasUnsubscribeAction = false): array
     {
         $whatsapp = is_array($metadata['whatsapp'] ?? null) ? $metadata['whatsapp'] : [];
 
@@ -55,7 +55,7 @@ final class CampaignReadinessService
         if ($numberStatus === WhatsappNumberStatusService::STATUS_DISCONNECTED) {
             $blockers[] = $this->item(self::KEY_NUMBER_DISCONNECTED, self::BLOCKERS[self::KEY_NUMBER_DISCONNECTED]);
         } elseif ($numberStatus === '' || $numberStatus === WhatsappNumberStatusService::STATUS_UNKNOWN) {
-            $warnings[] = $this->item(self::KEY_NUMBER_UNKNOWN, self::WARNINGS[self::KEY_NUMBER_UNKNOWN]);
+            $blockers[] = $this->item(self::KEY_NUMBER_UNKNOWN, self::BLOCKERS[self::KEY_NUMBER_UNKNOWN]);
         }
 
         $quality = $this->normalize($whatsapp['quality_rating'] ?? null);
@@ -64,12 +64,25 @@ final class CampaignReadinessService
         }
 
         $status = $this->normalize($templateStatus);
+        $templateReady = $status !== '' && in_array($status, self::SENDABLE_TEMPLATE_STATUSES, true);
         if ($status !== '' && ! in_array($status, self::SENDABLE_TEMPLATE_STATUSES, true)) {
             $blockers[] = $this->item(self::KEY_TEMPLATE_NOT_APPROVED, self::BLOCKERS[self::KEY_TEMPLATE_NOT_APPROVED]);
         }
 
+        $unsubscribeReady = $this->normalize($templateCategory) !== 'MARKETING'
+            || ($hasUnsubscribeAction && trim((string) ($metadata['campaign_settings']['unsubscribe_trigger'] ?? 'stop')) !== '');
+        if (! $unsubscribeReady) {
+            $warnings[] = $this->item(
+                'unsubscribe_missing',
+                __('This marketing template has no unsubscribe button. You can still send the campaign, but adding one helps recipients opt out.')
+            );
+        }
+
         return [
             'ready' => $blockers === [],
+            'number_ready' => $numberStatus === WhatsappNumberStatusService::STATUS_CONNECTED,
+            'template_ready' => $templateReady,
+            'unsubscribe_ready' => $unsubscribeReady,
             'blockers' => $blockers,
             'warnings' => $warnings,
         ];

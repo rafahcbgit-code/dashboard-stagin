@@ -2,15 +2,16 @@
 import axios from "axios";
 import FormInput from "@/Components/FormInput.vue";
 import FormSelect from "@/Components/FormSelect.vue";
+import CampaignAudienceSelect from "@/Components/CampaignAudienceSelect.vue";
 import WhatsappTemplate from "@/Components/WhatsappTemplate.vue";
 import CarouselPreview from "@/Components/Template/CarouselPreview.vue";
-import { ref, computed, onMounted } from "vue";
+import { ref, computed, onMounted, nextTick, watch } from "vue";
 import { Link, useForm } from "@inertiajs/vue3";
 import "vue3-toastify/dist/index.css";
 import { trans } from "laravel-vue-i18n";
 import { useI18n } from "vue-i18n";
 
-const { t } = useI18n();
+const { t, locale } = useI18n();
 
 const props = defineProps({
   templates: Object,
@@ -45,16 +46,29 @@ const props = defineProps({
     type: Number,
     default: 0,
   },
+  campaignDraft: {
+    type: Object,
+    default: null,
+  },
 });
 
 const isLoading = ref(false);
+const campaignFormElement = ref(null);
+const preflight = ref(null);
+const isPreflightLoading = ref(false);
+const preflightError = ref(null);
+const showCampaignReview = ref(false);
+const campaignStep = ref(1);
+const largeAudienceConfirmed = ref(false);
+const campaignReviewDialog = ref(null);
+const campaignReviewHeading = ref(null);
+let preflightController = null;
+let preflightRequestId = 0;
+let preflightTimer = null;
 const isTemplateLoading = ref(false);
 const templateLoadError = ref(null);
 const loadedTemplateUuid = ref(null);
 let templateLoadRequestId = 0;
-const contactGroupOptions = ref([
-  { value: "all", label: trans("all contacts") },
-]);
 const templateOptions = ref([]);
 const config = ref(props.settings?.metadata);
 const settings = ref(config.value ? JSON.parse(config.value) : null);
@@ -70,16 +84,13 @@ const carouselCards = ref([]);
 const carouselMessageBody = ref("");
 
 const variableOptions = computed(() => [
-  {
-    value: "static",
-    label: t("static"),
-    description: t("A fixed value is used for every recipient."),
-  },
-  {
-    value: "dynamic",
-    label: t("Use contact information"),
-    description: t("A value is filled from each recipient's contact details."),
-  },
+  { value: "static", label: t("static"), description: t("A fixed value is used for every recipient.") },
+  { value: "dynamic", label: t("Use contact information"), description: t("A value is filled from each recipient's contact details.") },
+]);
+
+const buttonVariableOptions = computed(() => [
+  { value: "static", label: t("static"), description: t("A fixed value is used for every recipient.") },
+  { value: "dynamic", label: t("Use contact information"), description: t("A value is filled from each recipient's contact details.") },
 ]);
 
 const mediaHeaderOptions = computed(() => [
@@ -120,6 +131,7 @@ const isTemplateReady = computed(() => {
 });
 
 const isSubmitDisabled = computed(() => isLoading.value || !isTemplateReady.value);
+const hasCampaignSetupErrors = computed(() => ["name", "template", "contacts", "time"].some((field) => Boolean(form.errors[field])));
 
 const contactUuid = computed(() => {
   return typeof props.contact === "object" ? props.contact?.uuid : props.contact;
@@ -127,7 +139,8 @@ const contactUuid = computed(() => {
 
 const resolveContactValue = (field) => {
   const contact = typeof props.contact === "object" ? props.contact : null;
-  if (!contact) return null;
+  const previewValues = preflight.value?.audience?.preview_values || {};
+  if (!contact) return previewValues[field] ?? null;
 
   const normalizedField = String(field || "").trim().toLowerCase();
   const standardFields = {
@@ -143,16 +156,47 @@ const resolveContactValue = (field) => {
 
 const submitLabel = computed(() => {
   if (isTemplateLoading.value) return t("Loading template...");
+  if (props.isCampaignFlow) return t("Continue to final review");
 
   return props.sendText ? t(props.sendText) : t("Send");
 });
 
 const requiredCampaignMessages = computed(() => {
+  if (preflight.value?.audience) return Number(preflight.value.audience.recipient_count || 0);
   if (!form.contacts) return 0;
   if (form.contacts === "all") return props.totalContacts || 0;
 
   const selectedGroup = props.contactGroups.find((group) => group.uuid === form.contacts);
   return Number(selectedGroup?.contacts_count || 0);
+});
+
+const audienceOptions = computed(() => [
+  { value: "all", label: trans("all contacts"), description: trans("All eligible contacts in your organization.") },
+  ...(Array.isArray(props.contactGroups) ? props.contactGroups : []).map((group) => ({
+    value: group.uuid,
+    label: group.name,
+    description: trans(":count contacts in this group", { count: Number(group.contacts_count || 0).toLocaleString() }),
+  })),
+]);
+
+const selectedAudienceLabel = computed(() =>
+  audienceOptions.value.find((option) => String(option.value) === String(form.contacts))?.label || t("Audience not selected"),
+);
+
+const formattedCampaignSendTime = computed(() => {
+  if (form.skip_schedule) return t("Immediately after confirmation");
+  if (!form.time) return "—";
+
+  const match = String(form.time).match(/^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/);
+  if (!match) return form.time;
+
+  const [, year, month, day, hour, minute] = match;
+  const wallClockDate = new Date(Date.UTC(Number(year), Number(month) - 1, Number(day), Number(hour), Number(minute)));
+  return new Intl.DateTimeFormat(locale.value || "ar", {
+    dateStyle: "long",
+    timeStyle: "short",
+    timeZone: "UTC",
+  }).format(wallClockDate);
 });
 
 const limitText = (value) => {
@@ -181,7 +225,7 @@ const previewParameters = computed(() => ({
       if (!parameter) return match;
 
       if (parameter.selection === "dynamic") {
-        return resolveContactValue(parameter.value) || parameter.value || match;
+        return resolveContactValue(parameter.value) || (props.isCampaignFlow ? t("No value in sample contact") : parameter.value) || match;
       }
 
       return parameter.value || match;
@@ -265,6 +309,261 @@ const form = useForm({
   buttons: [],
 });
 
+const dynamicFieldsForPreview = computed(() => {
+  const values = [];
+  if (form.header?.format === "TEXT") {
+    (form.header.parameters || []).forEach((parameter) => {
+      if (parameter.selection === "dynamic" && parameter.value) values.push(parameter.value);
+    });
+  }
+  (form.body.parameters || []).forEach((parameter) => {
+    if (parameter.selection === "dynamic" && parameter.value) values.push(parameter.value);
+  });
+  return [...new Set(values)];
+});
+
+const campaignVariablesReady = computed(() => {
+  if (!props.isCampaignFlow) return true;
+  const textVariables = [
+    ...(form.header?.format === "TEXT" ? form.header.parameters || [] : []),
+    ...(form.body.parameters || []),
+  ];
+  return textVariables.every((parameter) =>
+    typeof parameter.value === "string"
+      && parameter.value.trim() !== ""
+      && (parameter.selection === "static"
+        || (parameter.selection === "dynamic"
+          && dynamicOptions.value.some((option) => option.value === parameter.value)))
+  );
+});
+
+const sampleContactName = computed(() => preflight.value?.audience?.preview?.[0]?.name || t("No eligible sample contact"));
+const missingSampleDynamicFields = computed(() => dynamicFieldsForPreview.value.filter((field) => {
+  const value = preflight.value?.audience?.preview_values?.[field];
+  return value === null || value === undefined || String(value).trim() === "";
+}));
+
+const campaignReviewChecks = computed(() => (preflight.value?.checks || []).map((check) =>
+  check.key === "variables"
+    ? { ...check, status: campaignVariablesReady.value ? "ready" : "blocked", detail: campaignVariablesReady.value ? t("Every message field has a fixed value or is connected to contact information.") : t("Enter a value or choose contact information for every message field.") }
+    : check
+));
+const campaignSetupChecks = computed(() => campaignReviewChecks.value.filter((check) => check.key !== "variables"));
+const campaignWarningCount = computed(() => campaignSetupChecks.value.filter((check) => check.status === "warning").length);
+
+const campaignReadinessLabel = computed(() => {
+  if (isPreflightLoading.value) return t("Checking");
+  if (preflightError.value) return t("Unable to check campaign readiness.");
+  if (!preflight.value) return t("Waiting for campaign details");
+  if (!preflight.value.ready) return t("Needs attention");
+  return campaignWarningCount.value ? t("Ready with notices") : t("Ready to continue");
+});
+
+const campaignCheckStatusLabel = (status) => {
+  if (status === "ready") return t("Complete");
+  if (status === "warning") return t("Notice");
+  return t("Needs attention");
+};
+
+const campaignCanBeConfirmed = computed(() =>
+  Boolean(preflight.value?.ready)
+    && campaignVariablesReady.value
+    && Boolean(form.name?.trim())
+    && (form.skip_schedule || Boolean(form.time))
+    && !isPreflightLoading.value
+);
+
+const campaignSteps = computed(() => [
+  { number: 1, title: t("Campaign details") },
+  { number: 2, title: t("Message content") },
+  { number: 3, title: t("Final review") },
+]);
+
+const scheduleAfterInterval = (time) => {
+  if (!time) return;
+  form.skip_schedule = false;
+  form.time = time;
+  showCampaignReview.value = false;
+  campaignStep.value = 1;
+  scrollCampaignToTop();
+};
+
+const scrollCampaignToTop = async () => {
+  await nextTick();
+  requestAnimationFrame(() => {
+    let scrollContainer = campaignFormElement.value?.parentElement;
+    while (scrollContainer && scrollContainer !== document.body) {
+      const overflowY = window.getComputedStyle(scrollContainer).overflowY;
+      if (["auto", "scroll"].includes(overflowY) && scrollContainer.scrollHeight > scrollContainer.clientHeight) {
+        scrollContainer.scrollTo({ top: 0, behavior: "smooth" });
+        break;
+      }
+      scrollContainer = scrollContainer.parentElement;
+    }
+    campaignFormElement.value?.scrollTo({ top: 0, behavior: "smooth" });
+    window.scrollTo({ top: 0, behavior: "smooth" });
+  });
+};
+
+const focusFirstCampaignSetupError = async () => {
+  await nextTick();
+  const error = campaignFormElement.value?.querySelector(".form-error");
+  const field = error?.parentElement;
+  const control = field?.querySelector("select") || field?.querySelector("input, button");
+  if (control) {
+    control.focus();
+    control.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+};
+
+const continueToMessage = async () => {
+  form.clearErrors("name", "template", "contacts", "time");
+  let valid = true;
+  [
+    ["name", form.name],
+    ["template", form.template],
+    ["contacts", form.contacts],
+    ...(!form.skip_schedule ? [["time", form.time]] : []),
+  ].forEach(([field, value]) => {
+    if (!String(value || "").trim()) {
+      form.setError(field, t("This field is required."));
+      valid = false;
+    }
+  });
+
+  if (!valid) {
+    await focusFirstCampaignSetupError();
+    return;
+  }
+  if (!isTemplateReady.value) {
+    form.setError(
+      "template",
+      templateLoadError.value || t("Please wait for the template to finish loading."),
+    );
+    await focusFirstCampaignSetupError();
+    return;
+  }
+  campaignStep.value = 2;
+  scrollCampaignToTop();
+};
+
+const returnToCampaignSetup = () => {
+  showCampaignReview.value = false;
+  campaignStep.value = 1;
+  scrollCampaignToTop();
+};
+
+const returnToMessage = () => {
+  showCampaignReview.value = false;
+  campaignStep.value = 2;
+  scrollCampaignToTop();
+  nextTick(() => document.querySelector("[data-campaign-review-trigger]")?.focus());
+};
+
+const handleCampaignReviewKeydown = (event) => {
+  if (event.key === "Escape") {
+    event.preventDefault();
+    returnToMessage();
+    return;
+  }
+
+  if (event.key !== "Tab") return;
+
+  const focusable = [...(campaignReviewDialog.value?.querySelectorAll(
+    'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+  ) || [])].filter((element) => element.offsetParent !== null);
+  if (!focusable.length) {
+    event.preventDefault();
+    campaignReviewHeading.value?.focus();
+    return;
+  }
+
+  const first = focusable[0];
+  const last = focusable[focusable.length - 1];
+  if (event.shiftKey && (document.activeElement === first || document.activeElement === campaignReviewHeading.value)) {
+    event.preventDefault();
+    last.focus();
+  } else if (!event.shiftKey && document.activeElement === last) {
+    event.preventDefault();
+    first.focus();
+  }
+};
+
+watch(showCampaignReview, async (isOpen) => {
+  if (!isOpen) return;
+  await nextTick();
+  campaignReviewHeading.value?.focus();
+});
+
+const loadCampaignPreflight = async () => {
+  if (preflightTimer) {
+    clearTimeout(preflightTimer);
+    preflightTimer = null;
+  }
+  if (!props.isCampaignFlow) return;
+  const requestId = ++preflightRequestId;
+  preflightController?.abort();
+  preflight.value = null;
+  preflightError.value = null;
+
+  if (!form.template || !form.contacts || (!form.skip_schedule && !form.time) || isTemplateLoading.value || !isTemplateReady.value) {
+    isPreflightLoading.value = false;
+    return;
+  }
+
+  preflightController = new AbortController();
+  isPreflightLoading.value = true;
+  try {
+    const response = await fetch("/campaigns/preflight", {
+      method: "POST",
+      signal: preflightController.signal,
+      headers: {
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+        "X-CSRF-TOKEN": document.querySelector('meta[name="csrf-token"]')?.getAttribute("content") || "",
+      },
+      body: JSON.stringify({
+        template: form.template,
+        contacts: form.contacts,
+        time: form.skip_schedule ? null : form.time,
+        skip_schedule: form.skip_schedule,
+        dynamic_fields: dynamicFieldsForPreview.value,
+      }),
+    });
+    const data = await response.json();
+    if (requestId !== preflightRequestId) return;
+    if (!response.ok) throw new Error(data.message || t("Unable to check campaign readiness."));
+    preflight.value = data;
+  } catch (error) {
+    if (error.name !== "AbortError" && requestId === preflightRequestId) {
+      preflightError.value = error.message || t("Unable to check campaign readiness.");
+    }
+  } finally {
+    if (requestId === preflightRequestId) isPreflightLoading.value = false;
+  }
+};
+
+const scheduleCampaignPreflight = () => {
+  if (preflightTimer) clearTimeout(preflightTimer);
+  preflightController?.abort();
+  preflightRequestId += 1;
+  preflight.value = null;
+  preflightError.value = null;
+
+  if (!form.template || !form.contacts || (!form.skip_schedule && !form.time) || isTemplateLoading.value || !isTemplateReady.value) {
+    isPreflightLoading.value = false;
+    return;
+  }
+
+  isPreflightLoading.value = true;
+  preflightTimer = setTimeout(loadCampaignPreflight, 250);
+};
+
+watch(
+  () => [form.template, form.contacts, form.time, form.skip_schedule, dynamicFieldsForPreview.value.join("|")],
+  scheduleCampaignPreflight,
+);
+
 const loadTemplate = async (selectedTemplate = null) => {
   const requestId = ++templateLoadRequestId;
 
@@ -337,8 +636,8 @@ const loadTemplate = async (selectedTemplate = null) => {
         if (form.header.format === "TEXT") {
           form.header.parameters = headerExamples.header_text.map((item) => ({
             type: "text",
-            selection: "static",
-            value: item,
+            selection: props.isCampaignFlow ? "dynamic" : "static",
+            value: props.isCampaignFlow ? null : item,
           }));
         }
       }
@@ -381,8 +680,8 @@ const loadTemplate = async (selectedTemplate = null) => {
       if (bodyExamples) {
         form.body.parameters = bodyExamples.body_text[0].map((item) => ({
           type: "text",
-          selection: "static",
-          value: item,
+          selection: props.isCampaignFlow ? "dynamic" : "static",
+          value: props.isCampaignFlow ? null : item,
         }));
       } else {
         form.body.parameters = [];
@@ -409,7 +708,7 @@ const loadTemplate = async (selectedTemplate = null) => {
                 }
               }
               return {
-                type: "dynamic",
+                type: "static",
                 value: value,
               };
             });
@@ -437,6 +736,7 @@ const loadTemplate = async (selectedTemplate = null) => {
   } finally {
     if (requestId === templateLoadRequestId) {
       isTemplateLoading.value = false;
+      if (props.isCampaignFlow) loadCampaignPreflight();
     }
   }
 };
@@ -588,7 +888,12 @@ const transformOptions = (options) => {
   });
 };
 
-const submitForm = () => {
+const submitForm = async () => {
+  if (props.isCampaignFlow && campaignStep.value === 1) {
+    continueToMessage();
+    return;
+  }
+
   if (!isTemplateReady.value) {
     form.setError(
       "template",
@@ -705,6 +1010,23 @@ const submitForm = () => {
     };
   });
 
+  if (props.isCampaignFlow) {
+    // Fetch a fresh server-side readiness and audience snapshot before opening
+    // the final review. This also absorbs any debounced request still pending.
+    await loadCampaignPreflight();
+    isLoading.value = false;
+    largeAudienceConfirmed.value = false;
+    if (!campaignCanBeConfirmed.value) {
+      if (!preflightError.value) {
+        preflightError.value = t("Complete the campaign details and readiness checks before the final review.");
+      }
+      return;
+    }
+    campaignStep.value = 3;
+    showCampaignReview.value = true;
+    return;
+  }
+
   if (isCarouselTemplate.value && !props.isCampaignFlow) {
     // ── CAROUSEL SEND (chat context only for now) ───────────────
     // Hits the dedicated carousel endpoint. Only needs the template UUID.
@@ -741,6 +1063,20 @@ const submitForm = () => {
   );
 };
 
+const confirmCampaign = () => {
+  if (!campaignCanBeConfirmed.value || (requiredCampaignMessages.value >= 1000 && !largeAudienceConfirmed.value)) return;
+  showCampaignReview.value = false;
+  isLoading.value = true;
+  form.post("/campaigns", {
+    onError: (errors) => {
+      const errorKeys = Object.keys(errors || {});
+      const setupFields = ["name", "template", "contacts", "time"];
+      campaignStep.value = errorKeys.some((key) => setupFields.includes(key)) ? 1 : 2;
+    },
+    onFinish: () => { isLoading.value = false; },
+  });
+};
+
 const emit = defineEmits(["viewTemplate"]);
 
 const viewTemplate = () => {
@@ -749,18 +1085,20 @@ const viewTemplate = () => {
 
 onMounted(() => {
   templateOptions.value = transformOptions(props.templates);
-  contactGroupOptions.value = [
-    ...contactGroupOptions.value,
-    ...transformOptions(props.contactGroups),
-  ];
+  if (props.campaignDraft) {
+    form.name = props.campaignDraft.name || null;
+    form.contacts = props.campaignDraft.contacts || null;
+    form.template = props.campaignDraft.template || null;
+    if (form.template) loadTemplate(form.template);
+  }
 });
 </script>
 
 <template>
-  <div :class="isCampaignFlow ? 'md:flex md:h-screen' : 'flex h-full min-h-0 md:flex-row'">
+  <div :class="isCampaignFlow ? 'md:flex md:h-full md:min-h-0 md:overflow-hidden' : 'flex h-full min-h-0 md:flex-row'">
     <div
       v-if="!settings?.whatsapp"
-      class="md:w-[50%] p-4 md:p-8 overflow-y-auto h-[90vh]"
+      class="min-h-0 p-4 md:h-full md:w-1/2 md:overflow-y-auto md:p-8"
     >
       <div class="bg-slate-50 border border-primary shadow rounded-md p-4 py-8">
         <div class="flex justify-center mb-4">
@@ -800,8 +1138,9 @@ onMounted(() => {
 
     <form
       v-else
+      ref="campaignFormElement"
       @submit.prevent="submitForm()"
-      class="min-h-0 min-w-0 overflow-y-auto overscroll-contain"
+      class="min-h-0 min-w-0 overflow-y-auto overscroll-contain md:h-full md:shrink-0"
       :class="isCampaignFlow ? 'md:w-[50%] p-4 md:p-8' : 'w-full flex-1 md:w-[50%]'"
     >
       <div
@@ -818,8 +1157,33 @@ onMounted(() => {
         </button>
       </div>
 
+      <nav v-if="isCampaignFlow" class="mb-6" :aria-label="$t('Campaign creation steps')">
+        <ol class="flex items-center gap-2 sm:gap-3">
+          <li v-for="step in campaignSteps" :key="step.number" class="relative min-w-0 flex-1">
+            <div
+              class="flex min-h-12 min-w-0 flex-1 items-center gap-2 rounded-xl border px-2 py-2 shadow-sm transition-colors sm:min-h-14 sm:gap-2.5 sm:px-3"
+              :class="campaignStep === step.number ? 'border-emerald-700 bg-emerald-700 text-white shadow-emerald-900/10' : (campaignStep > step.number ? 'border-emerald-200 bg-emerald-50 text-emerald-900' : 'border-slate-200 bg-white text-slate-500')"
+              :aria-current="campaignStep === step.number ? 'step' : undefined"
+            >
+              <span
+                class="flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-xs font-bold"
+                :class="campaignStep === step.number ? 'border-white/50 bg-white text-emerald-800' : (campaignStep > step.number ? 'border-emerald-300 bg-emerald-100 text-emerald-800' : 'border-slate-300 bg-slate-50 text-slate-500')"
+                aria-hidden="true"
+              >{{ campaignStep > step.number ? '✓' : step.number }}</span>
+              <span class="min-w-0 truncate text-[11px] font-semibold leading-tight sm:text-sm">{{ step.title }}</span>
+            </div>
+            <span v-if="step.number < campaignSteps.length" class="absolute -end-2 top-1/2 z-10 h-0.5 w-2 -translate-y-1/2 rounded-full sm:-end-3 sm:w-3" :class="campaignStep > step.number ? 'bg-emerald-300' : 'bg-slate-200'" aria-hidden="true"></span>
+          </li>
+        </ol>
+      </nav>
+
+      <p v-if="isCampaignFlow && campaignStep === 1 && hasCampaignSetupErrors" class="mb-4 rounded-lg border border-amber-300 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-950" role="alert">
+        {{ $t("Complete the highlighted campaign details before continuing.") }}
+      </p>
+
       <!-- ── TEMPLATE SELECTOR (shared by both standard and carousel) ── -->
       <div
+        v-if="!isCampaignFlow || campaignStep === 1"
         class="grid gap-x-6 gap-y-4 mb-8"
         :class="isCampaignFlow ? 'sm:grid-cols-6' : 'p-3 md:p-3'"
       >
@@ -860,16 +1224,21 @@ onMounted(() => {
             </button>
           </div>
         </div>
-        <FormSelect
+        <CampaignAudienceSelect
           v-if="isCampaignFlow"
           v-model="form.contacts"
-          :options="contactGroupOptions"
+          :options="audienceOptions"
           :name="$t('Send to')"
           :required="true"
-          :class="'sm:col-span-3'"
           :placeholder="$t('Select contacts')"
+          :search-placeholder="$t('Search contact groups')"
+          :no-results="$t('No matching contact groups')"
+          :search-error="$t('Unable to search contact groups. Try again.')"
+          :results-hint="$t('Showing the first 50 results. Type to narrow your search.')"
+          :searching-label="$t('Searching contact groups...')"
+          :search-url="'/campaigns/contact-groups/search'"
           :error="form.errors.contacts"
-          :native="true"
+          class="sm:col-span-3 min-w-0"
         />
         <div
           v-if="isCampaignFlow"
@@ -884,6 +1253,67 @@ onMounted(() => {
             <div class="font-medium">{{ requiredCampaignMessages }}</div>
           </div>
         </div>
+        <section
+          v-if="isCampaignFlow && form.template && form.contacts"
+          class="sm:col-span-6 overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm"
+          aria-live="polite"
+        >
+          <div class="flex flex-wrap items-center justify-between gap-3 border-b border-slate-200 bg-slate-100 px-4 py-3">
+            <div>
+              <h3 class="font-semibold text-slate-900">{{ $t("Campaign readiness") }}</h3>
+              <p class="mt-1 text-xs text-slate-600">{{ $t("Review each item before you continue to the final confirmation.") }}</p>
+            </div>
+            <span
+              class="inline-flex items-center gap-2 rounded-full px-3 py-1 text-xs font-semibold"
+              :class="isPreflightLoading || !preflight ? 'bg-slate-200 text-slate-700' : (preflight.ready ? (campaignWarningCount ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-900') : 'bg-red-100 text-red-900')"
+              role="status"
+            >
+              <span v-if="isPreflightLoading" class="h-3.5 w-3.5 animate-spin rounded-full border-2 border-slate-400 border-t-primary" aria-hidden="true"></span>
+              <span v-else aria-hidden="true">{{ !preflight ? '…' : (preflight.ready ? (campaignWarningCount ? '!' : '✓') : '×') }}</span>
+              {{ campaignReadinessLabel }}
+            </span>
+          </div>
+          <p v-if="preflightError" class="m-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800" role="alert">{{ preflightError }}</p>
+          <div v-else-if="isPreflightLoading && !preflight" class="flex items-center gap-3 p-4 text-sm text-slate-600" role="status">
+            <span class="h-4 w-4 animate-spin rounded-full border-2 border-slate-300 border-t-primary" aria-hidden="true"></span>
+            {{ $t("Checking campaign details and recipients...") }}
+          </div>
+          <ul v-else-if="campaignSetupChecks.length" class="divide-y divide-slate-100 px-4">
+            <li v-for="check in campaignSetupChecks" :key="check.key" class="flex flex-col gap-3 py-3 text-sm sm:flex-row sm:items-center sm:justify-between">
+              <div class="flex min-w-0 items-start gap-2.5">
+                <span
+                  class="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold"
+                  :class="check.status === 'ready' ? 'bg-emerald-100 text-emerald-800' : (check.status === 'warning' ? 'bg-amber-100 text-amber-900' : 'bg-red-100 text-red-800')"
+                  aria-hidden="true"
+                >{{ check.status === 'ready' ? '✓' : (check.status === 'warning' ? '!' : '×') }}</span>
+                <div class="min-w-0">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <span class="font-medium text-slate-900">{{ $t(check.label) }}</span>
+                    <span class="rounded-full px-2 py-0.5 text-[11px] font-semibold" :class="check.status === 'ready' ? 'bg-emerald-100 text-emerald-800' : (check.status === 'warning' ? 'bg-amber-100 text-amber-900' : 'bg-red-100 text-red-800')">{{ campaignCheckStatusLabel(check.status) }}</span>
+                  </div>
+                  <p class="mt-1 break-words text-xs leading-5 text-slate-600">{{ check.detail }}</p>
+                </div>
+              </div>
+              <div class="flex shrink-0 flex-wrap items-center gap-2 sm:ms-8">
+                <Link v-if="['blocked', 'warning'].includes(check.status) && check.action?.path" :href="check.action.path" class="inline-flex min-h-9 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-800 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">{{ $t(check.action.label) }}</Link>
+                <button v-if="check.key === 'marketing_interval' && check.schedule_after" type="button" class="inline-flex min-h-9 items-center justify-center rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-800 hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" @click="scheduleAfterInterval(check.schedule_after)">{{ $t("Schedule after allowed time") }}</button>
+              </div>
+            </li>
+          </ul>
+          <div v-if="preflight?.audience" class="mx-4 mb-4 rounded-lg border border-slate-200 bg-slate-50 p-3 text-sm">
+            <div class="flex flex-wrap items-baseline justify-between gap-2">
+              <div>
+                <p class="font-semibold text-slate-900">{{ $t("Recipients who can receive this campaign") }}</p>
+                <p class="mt-0.5 text-xs text-slate-600">{{ selectedAudienceLabel }}</p>
+              </div>
+              <p class="text-lg font-bold text-slate-900">{{ preflight.audience.recipient_count.toLocaleString() }}</p>
+            </div>
+            <p class="mt-1 text-xs leading-5 text-slate-600">{{ $t("Excluded") }}: {{ preflight.audience.excluded_unsubscribed.toLocaleString() }} {{ $t("unsubscribed") }}, {{ preflight.audience.excluded_blocked.toLocaleString() }} {{ $t("blocked") }}, {{ preflight.audience.excluded_without_phone.toLocaleString() }} {{ $t("without a phone number") }}</p>
+            <p v-if="preflight.audience.preview.length" class="mt-2 text-xs leading-5 text-slate-700"><span class="font-medium">{{ $t("First recipients") }}:</span> {{ preflight.audience.preview.map((contact) => contact.name).join('، ') }}</p>
+            <p class="mt-2 text-[11px] leading-5 text-slate-500">{{ $t("Phone number validity is checked again when sending; an invalid number may still fail.") }}</p>
+          </div>
+          <div class="border-t border-sky-200 bg-sky-50 px-4 py-3 text-xs leading-5 text-sky-900" role="note">{{ $t("Blocked items must be fixed before campaign creation. Notices are informational and do not stop you from continuing.") }}</div>
+        </section>
         <FormInput
           v-if="isCampaignFlow && !form.skip_schedule"
           v-model="form.time"
@@ -894,6 +1324,9 @@ onMounted(() => {
           :required="true"
           :class="'sm:col-span-6'"
         />
+        <p v-if="isCampaignFlow && !form.skip_schedule" class="sm:col-span-6 -mt-3 text-xs text-slate-600">
+          {{ $t("Time zone") }}: {{ settings?.timezone || 'UTC' }}. {{ $t("The scheduled time uses your organization time zone.") }}
+        </p>
         <div v-if="isCampaignFlow" class="relative flex gap-x-3 sm:col-span-6">
           <div class="flex h-6 items-center">
             <input
@@ -910,9 +1343,53 @@ onMounted(() => {
             }}</label>
           </div>
         </div>
+        <p v-if="isCampaignFlow && form.skip_schedule" class="sm:col-span-6 -mt-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900">
+          {{ $t("This campaign will start sending as soon as it is confirmed. Messages already sent cannot be recalled.") }}
+        </p>
       </div>
 
-      <div :class="isCampaignFlow ? '' : 'px-3 md:px-3'">
+      <div v-if="isCampaignFlow && campaignStep === 1" class="sticky bottom-0 z-10 -mx-4 flex flex-col-reverse gap-2 border-t border-slate-200 bg-white/95 px-4 py-3 shadow-[0_-6px_20px_rgba(15,23,42,0.06)] backdrop-blur sm:flex-row sm:justify-between md:-mx-8 md:px-8">
+        <Link v-if="displayCancelBtn" href="/campaigns" class="inline-flex justify-center rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+          {{ $t("Cancel") }}
+        </Link>
+        <button type="button" class="inline-flex justify-center rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" :disabled="isTemplateLoading" @click="continueToMessage">
+          {{ $t("Continue to message") }}
+        </button>
+      </div>
+
+      <div v-if="!isCampaignFlow || campaignStep === 2" :class="isCampaignFlow ? '' : 'px-3 md:px-3'">
+        <div v-if="isCampaignFlow && (preflightError || (preflight && !preflight.ready))" class="mb-4 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-950" role="alert">
+          <p class="font-semibold">{{ preflightError || $t("Some campaign checks need attention before you can continue.") }}</p>
+          <ul v-if="preflight?.checks?.some((check) => check.status === 'blocked')" class="mt-2 space-y-2">
+            <li v-for="check in preflight.checks.filter((item) => item.status === 'blocked')" :key="check.key" class="flex flex-wrap items-start justify-between gap-2">
+              <span><strong>{{ $t(check.label) }}:</strong> {{ check.detail }}</span>
+              <Link v-if="check.action?.path" :href="check.action.path" class="shrink-0 font-medium underline underline-offset-2">{{ $t(check.action.label) }}</Link>
+            </li>
+          </ul>
+        </div>
+        <details v-if="isCampaignFlow" class="mb-4 overflow-hidden rounded-xl border border-slate-200 bg-white md:hidden">
+          <summary class="flex min-h-12 cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-semibold text-slate-900 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
+            <span>{{ $t("Preview message") }}</span>
+            <span class="text-xs font-normal text-slate-500">{{ $t("Based on a sample contact") }}</span>
+          </summary>
+          <div class="border-t border-slate-100 p-3">
+            <div v-if="dynamicFieldsForPreview.length" class="mb-3 rounded-lg border p-3 text-xs leading-5" :class="missingSampleDynamicFields.length ? 'border-amber-200 bg-amber-50 text-amber-950' : 'border-emerald-200 bg-emerald-50 text-emerald-950'">
+              <p>{{ $t("Preview sample contact") }}: <strong>{{ sampleContactName }}</strong></p>
+              <p v-if="missingSampleDynamicFields.length" class="mt-1">{{ $t("The sample contact has no value for these fields") }}: {{ missingSampleDynamicFields.join('، ') }}. {{ $t("Other recipients may have different values; this preview does not check every contact.") }}</p>
+              <p v-else class="mt-1">{{ $t("This preview uses one eligible contact. Other recipients may see different values.") }}</p>
+            </div>
+            <div class="max-h-[min(60vh,520px)] overflow-auto rounded-lg bg-[#efe7de] p-2">
+              <div v-if="isCarouselTemplate" class="mx-auto w-full max-w-md">
+                <div class="ms-auto mb-2 flex w-full max-w-[25em] flex-col rounded-lg bg-white p-2 text-sm shadow-sm">
+                  <p class="whitespace-pre-wrap">{{ carouselMessageBody }}</p>
+                  <span class="mt-1 text-end text-xs text-slate-400">9:15</span>
+                </div>
+                <CarouselPreview :cards="carouselCards" />
+              </div>
+              <WhatsappTemplate v-else :parameters="previewParameters" :placeholder="false" :visible="Boolean(form.template)" />
+            </div>
+          </div>
+        </details>
         <!-- ── CAROUSEL: info banner + send button (no variables to fill) ── -->
         <div v-if="isCarouselTemplate">
           <div
@@ -946,7 +1423,10 @@ onMounted(() => {
           </div>
 
           <!-- Submit button for carousel -->
-          <div class="flex items-center justify-end gap-3 mt-3">
+          <div :class="isCampaignFlow ? 'sticky bottom-0 z-10 -mx-3 mt-4 flex flex-col-reverse items-stretch justify-end gap-3 border-t border-slate-200 bg-white/95 px-3 py-3 shadow-[0_-6px_20px_rgba(15,23,42,0.06)] backdrop-blur sm:flex-row sm:items-center md:static md:mx-0 md:border-0 md:bg-transparent md:p-0 md:shadow-none' : 'mt-4 flex items-center justify-end gap-3'">
+            <button v-if="isCampaignFlow" type="button" class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" @click="returnToCampaignSetup">
+              {{ $t("Back to campaign details") }}
+            </button>
             <div v-if="displayCancelBtn">
               <Link
                 href="/campaigns"
@@ -957,6 +1437,7 @@ onMounted(() => {
             </div>
             <button
               type="submit"
+              :data-campaign-review-trigger="isCampaignFlow ? '' : null"
               class="rounded-md px-3 py-2 text-sm text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 bg-primary"
               :disabled="isSubmitDisabled"
             >
@@ -995,6 +1476,11 @@ onMounted(() => {
 
         <!-- ── STANDARD: header / body / button variables (unchanged) ────── -->
         <div v-if="!isCarouselTemplate">
+          <div v-if="isCampaignFlow && dynamicFieldsForPreview.length" class="mb-4 rounded-xl border p-3 text-xs leading-5" :class="missingSampleDynamicFields.length ? 'border-amber-200 bg-amber-50 text-amber-950' : 'border-sky-200 bg-sky-50 text-sky-950'" role="status">
+            <p class="font-semibold">{{ $t("Preview sample contact") }}: {{ sampleContactName }}</p>
+            <p v-if="missingSampleDynamicFields.length" class="mt-1">{{ $t("The sample contact has no value for these fields") }}: {{ missingSampleDynamicFields.join('، ') }}. {{ $t("Other recipients may have different values; this preview does not check every contact.") }}</p>
+            <p v-else class="mt-1">{{ $t("This preview uses one eligible contact. Other recipients may see different values.") }}</p>
+          </div>
           <div
             v-if="hasVisibleHeaderVariables"
             class="bg-slate-100 p-3 mt-4 text-sm"
@@ -1201,7 +1687,8 @@ onMounted(() => {
                 </svg>
               </span>
             </h2>
-            <p class="mt-2 text-xs leading-5 text-slate-600">{{ $t('For each message value, choose whether to type it yourself or use information saved for the contact.') }}</p>
+            <p v-if="isCampaignFlow" class="mt-2 text-xs leading-5 text-slate-600">{{ $t('For each variable, enter one value to use for everyone or connect a contact field to personalize it. The preview uses the first eligible contact.') }}</p>
+            <p v-else class="mt-2 text-xs leading-5 text-slate-600">{{ $t('For each message value, choose whether to type it yourself or use information saved for the contact.') }}</p>
             <div
               v-for="(item, index) in form.body.parameters"
               :key="index"
@@ -1294,7 +1781,7 @@ onMounted(() => {
                     <FormSelect
                       v-model="value.type"
                       :name="$t('Value source')"
-                      :options="variableOptions"
+                      :options="buttonVariableOptions"
                       :className="'w-full'"
                     />
                   </div>
@@ -1331,7 +1818,10 @@ onMounted(() => {
           </div>
 
           <!-- Standard submit button -->
-          <div class="flex items-center justify-end gap-3 mt-3">
+          <div :class="isCampaignFlow ? 'sticky bottom-0 z-10 -mx-3 mt-4 flex flex-col-reverse items-stretch justify-end gap-3 border-t border-slate-200 bg-white/95 px-3 py-3 shadow-[0_-6px_20px_rgba(15,23,42,0.06)] backdrop-blur sm:flex-row sm:items-center md:static md:mx-0 md:border-0 md:bg-transparent md:p-0 md:shadow-none' : 'mt-4 flex items-center justify-end gap-3'">
+            <button v-if="isCampaignFlow" type="button" class="rounded-lg border border-slate-300 px-4 py-2 text-sm font-medium text-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" @click="returnToCampaignSetup">
+              {{ $t("Back to campaign details") }}
+            </button>
             <div v-if="displayCancelBtn">
               <Link
                 href="/campaigns"
@@ -1343,6 +1833,7 @@ onMounted(() => {
             <div>
               <button
                 type="submit"
+                :data-campaign-review-trigger="isCampaignFlow ? '' : null"
                 class="rounded-md px-3 py-2 text-sm text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600 bg-primary"
                 :disabled="isSubmitDisabled"
               >
@@ -1382,8 +1873,106 @@ onMounted(() => {
       </div>
     </form>
 
+    <div v-if="showCampaignReview" class="fixed inset-0 z-[70] flex items-center justify-center overflow-y-auto bg-slate-950/55 p-3 sm:p-6" role="dialog" aria-modal="true" aria-labelledby="campaign-review-title" @keydown="handleCampaignReviewKeydown">
+      <section ref="campaignReviewDialog" class="my-auto flex max-h-[94vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl bg-white shadow-2xl">
+        <div class="flex items-start justify-between gap-4 border-b border-slate-200 bg-slate-50 px-5 py-4 sm:px-7">
+          <div>
+            <p class="text-xs font-semibold uppercase tracking-wide text-primary">{{ $t("Step 3 of 3") }}</p>
+            <h2 id="campaign-review-title" ref="campaignReviewHeading" tabindex="-1" class="mt-1 text-xl font-bold text-slate-900 focus:outline-none">{{ $t("Final review") }}</h2>
+            <p class="mt-1 text-sm text-slate-600">{{ $t("Check these details before creating the campaign.") }}</p>
+          </div>
+          <span class="inline-flex shrink-0 items-center gap-2 rounded-full px-3 py-1.5 text-xs font-semibold" :class="preflight?.ready ? (campaignWarningCount ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-900') : 'bg-red-100 text-red-900'" role="status">
+            <span aria-hidden="true">{{ preflight?.ready ? (campaignWarningCount ? '!' : '✓') : '×' }}</span>
+            {{ campaignReadinessLabel }}
+          </span>
+        </div>
+
+        <div class="min-h-0 flex-1 overflow-y-auto px-5 py-5 sm:px-7">
+          <dl class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div class="rounded-xl border border-emerald-200 bg-emerald-50 p-3.5">
+              <dt class="text-xs font-medium text-emerald-800">{{ $t("Sender") }}</dt>
+              <dd class="mt-1 break-words font-semibold text-slate-900">{{ settings?.whatsapp?.display_phone_number || settings?.whatsapp?.phone_number || $t("Connected WhatsApp number") }}</dd>
+            </div>
+            <div class="rounded-xl border border-sky-200 bg-sky-50 p-3.5">
+              <dt class="text-xs font-medium text-sky-800">{{ $t("Campaign name") }}</dt>
+              <dd class="mt-1 break-words font-semibold text-slate-900">{{ form.name || '—' }}</dd>
+            </div>
+            <div class="rounded-xl border border-violet-200 bg-violet-50 p-3.5">
+              <dt class="text-xs font-medium text-violet-800">{{ $t("Template") }}</dt>
+              <dd class="mt-1 break-words font-semibold text-slate-900">{{ preflight?.template?.name || '—' }}</dd>
+              <dd v-if="preflight?.template?.category" class="mt-1 text-xs text-slate-600">{{ $t(preflight.template.category) }}</dd>
+            </div>
+            <div class="rounded-xl border p-3.5" :class="form.skip_schedule ? 'border-amber-300 bg-amber-50' : 'border-indigo-200 bg-indigo-50'">
+              <dt class="text-xs font-medium" :class="form.skip_schedule ? 'text-amber-900' : 'text-indigo-800'">{{ $t("Send time") }}</dt>
+              <dd class="mt-1 font-semibold text-slate-900">{{ formattedCampaignSendTime }}</dd>
+              <dd v-if="!form.skip_schedule" class="mt-1 text-xs text-slate-600">{{ $t("Time zone") }}: {{ settings?.timezone || 'UTC' }}</dd>
+              <dd v-else class="mt-1 text-xs leading-5 text-amber-900">{{ $t("This campaign will start sending as soon as it is confirmed. Messages already sent cannot be recalled.") }}</dd>
+            </div>
+            <div class="rounded-xl border border-blue-200 bg-blue-50 p-3.5 sm:col-span-2">
+              <div class="flex flex-wrap items-start justify-between gap-3">
+                <div class="min-w-0">
+                  <dt class="text-xs font-medium text-blue-800">{{ $t("Audience") }}</dt>
+                  <dd class="mt-1 break-words font-semibold text-slate-900">{{ selectedAudienceLabel }}</dd>
+                </div>
+                <div class="rounded-lg bg-white px-3 py-2 text-end shadow-sm">
+                  <dd class="text-xl font-bold text-blue-900">{{ preflight?.audience?.recipient_count?.toLocaleString?.() || 0 }}</dd>
+                  <dt class="text-xs text-slate-600">{{ $t("eligible recipients") }}</dt>
+                </div>
+              </div>
+              <div class="mt-3 flex flex-wrap gap-2 border-t border-blue-200 pt-3 text-xs">
+                <span class="rounded-full bg-slate-100 px-2.5 py-1 text-slate-700">{{ $t("Excluded") }}: {{ ((preflight?.audience?.excluded_unsubscribed || 0) + (preflight?.audience?.excluded_blocked || 0) + (preflight?.audience?.excluded_without_phone || 0)).toLocaleString() }}</span>
+                <span class="rounded-full bg-amber-100 px-2.5 py-1 text-amber-900">{{ (preflight?.audience?.excluded_unsubscribed?.toLocaleString?.() || 0) }} {{ $t("unsubscribed") }}</span>
+                <span class="rounded-full bg-rose-100 px-2.5 py-1 text-rose-900">{{ (preflight?.audience?.excluded_blocked?.toLocaleString?.() || 0) }} {{ $t("blocked") }}</span>
+                <span class="rounded-full bg-slate-100 px-2.5 py-1 text-slate-700">{{ (preflight?.audience?.excluded_without_phone?.toLocaleString?.() || 0) }} {{ $t("without a phone number") }}</span>
+              </div>
+              <p v-if="preflight?.audience?.preview?.length" class="mt-2 text-xs leading-5 text-slate-700"><span class="font-medium">{{ $t("First recipients") }}:</span> {{ preflight.audience.preview.map((contact) => contact.name).join('، ') }}</p>
+            </div>
+          </dl>
+
+          <section class="mt-5" aria-labelledby="campaign-final-checks-title">
+            <div class="flex items-end justify-between gap-3">
+              <div>
+                <h3 id="campaign-final-checks-title" class="font-semibold text-slate-900">{{ $t("Final checks") }}</h3>
+                <p class="mt-1 text-xs text-slate-600">{{ $t("Green checks are complete. Notices are useful guidance and do not stop sending.") }}</p>
+              </div>
+            </div>
+            <ul class="mt-3 space-y-2">
+              <li v-for="check in campaignReviewChecks" :key="check.key" class="flex items-start gap-3 rounded-xl border p-3 text-sm" :class="check.status === 'ready' ? 'border-emerald-200 bg-emerald-50/60' : (check.status === 'warning' ? 'border-amber-200 bg-amber-50/70' : 'border-red-200 bg-red-50/70')">
+                <span class="mt-0.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-xs font-bold" :class="check.status === 'ready' ? 'bg-emerald-100 text-emerald-800' : (check.status === 'warning' ? 'bg-amber-100 text-amber-900' : 'bg-red-100 text-red-800')" aria-hidden="true">{{ check.status === 'ready' ? '✓' : (check.status === 'warning' ? '!' : '×') }}</span>
+                <div class="min-w-0 flex-1">
+                  <div class="flex flex-wrap items-center gap-2">
+                    <p class="font-semibold text-slate-900">{{ $t(check.label) }}</p>
+                    <span class="rounded-full px-2 py-0.5 text-[11px] font-semibold" :class="check.status === 'ready' ? 'bg-emerald-100 text-emerald-900' : (check.status === 'warning' ? 'bg-amber-100 text-amber-900' : 'bg-red-100 text-red-900')">{{ campaignCheckStatusLabel(check.status) }}</span>
+                  </div>
+                  <p class="mt-1 leading-5 text-slate-700">{{ check.detail }}</p>
+                  <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-2">
+                    <Link v-if="['blocked', 'warning'].includes(check.status) && check.action?.path" :href="check.action.path" class="inline-flex font-medium text-primary underline underline-offset-2">{{ $t(check.action.label) }}</Link>
+                    <button v-if="check.key === 'marketing_interval' && check.schedule_after" type="button" class="inline-flex font-medium text-primary underline underline-offset-2" @click="scheduleAfterInterval(check.schedule_after)">{{ $t("Schedule after allowed time") }}</button>
+                  </div>
+                </div>
+              </li>
+            </ul>
+          </section>
+
+          <label v-if="(preflight?.audience?.recipient_count || 0) >= 1000" class="mt-4 flex items-start gap-3 rounded-xl border border-amber-300 bg-amber-50 p-3.5 text-sm text-amber-950">
+            <input v-model="largeAudienceConfirmed" type="checkbox" class="mt-1 h-4 w-4 rounded border-amber-400 text-primary focus:ring-primary" />
+            <span><strong class="block">{{ $t("Large audience confirmation") }}</strong>{{ $t("Large audience confirmation explanation", { count: preflight.audience.recipient_count.toLocaleString() }) }}</span>
+          </label>
+
+          <p v-if="preflightError" class="mt-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800" role="alert">{{ preflightError }}</p>
+        </div>
+
+        <div class="sticky bottom-0 flex flex-col-reverse gap-2 border-t border-slate-200 bg-white/95 px-5 py-4 backdrop-blur sm:flex-row sm:justify-between sm:px-7">
+          <button type="button" class="rounded-lg border border-slate-300 px-4 py-2.5 text-sm font-medium text-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" @click="returnToMessage">{{ $t("Back to edit") }}</button>
+          <button type="button" class="rounded-lg bg-primary px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:brightness-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50" :disabled="!campaignCanBeConfirmed || ((preflight?.audience?.recipient_count || 0) >= 1000 && !largeAudienceConfirmed) || isLoading" @click="confirmCampaign">
+            {{ isLoading ? $t("Creating campaign...") : $t("Confirm and create campaign") }}
+          </button>
+        </div>
+      </section>
+    </div>
+
     <!-- ── RIGHT PANEL: Preview ─────────────────────────────────────────── -->
-    <div class="hidden min-h-0 md:block md:w-[50%] py-10 px-10 overflow-y-auto overscroll-contain chat-bg">
+    <div class="chat-bg hidden min-h-0 overscroll-contain md:flex md:h-full md:w-1/2 md:items-start md:justify-center md:overflow-y-auto md:px-8 md:py-8 lg:px-10">
       <div class="flex justify-center items-start min-h-full">
         <!-- Carousel preview -->
         <div v-if="isCarouselTemplate && form.template" class="w-full max-w-md">

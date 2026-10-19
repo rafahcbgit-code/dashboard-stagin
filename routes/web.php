@@ -345,13 +345,16 @@ Route::middleware(['auth:user'])->group(function () {
                 Route::put('/contacts/{uuid}/bot-toggle', [App\Http\Controllers\User\ContactController::class, 'toggleBot'])->name('contacts.bot.toggle');
                 Route::put('/contacts/{uuid}/block-toggle', [App\Http\Controllers\User\ContactController::class, 'toggleBlock'])->name('contacts.block.toggle');
 
+                Route::get('/campaigns/contact-groups/search', [App\Http\Controllers\User\CampaignController::class, 'searchContactGroups'])->name('campaigns.contact-groups.search');
                 Route::get('/campaigns/{uuid?}', [App\Http\Controllers\User\CampaignController::class, 'index'])->name('campaigns');
                 Route::post('/campaigns', [App\Http\Controllers\User\CampaignController::class, 'store']);
                 Route::get('/campaigns/export/{uuid?}', [App\Http\Controllers\User\CampaignController::class, 'export']);
                 Route::get('/campaigns/reports/export-statuses', [App\Http\Controllers\User\CampaignController::class, 'exportCampaignStatuses'])->name('campaigns.export-statuses');
+                Route::post('/campaigns/preflight', [App\Http\Controllers\User\CampaignController::class, 'preflight'])->name('campaigns.preflight');
                 Route::delete('/campaigns/{uuid?}', [App\Http\Controllers\User\CampaignController::class, 'delete']);
                 Route::put('/campaigns/{uuid}/schedule', [App\Http\Controllers\User\CampaignController::class, 'updateSchedule'])->name('campaigns.schedule.update');
                 Route::post('/campaigns/{uuid}/cancel', [App\Http\Controllers\User\CampaignController::class, 'cancel'])->name('campaigns.cancel');
+                Route::post('/campaigns/{uuid}/cancel-schedule', [App\Http\Controllers\User\CampaignController::class, 'cancelSchedule'])->name('campaigns.schedule.cancel');
                 Route::post('/campaigns/{uuid}/resend-failed', [App\Http\Controllers\User\CampaignController::class, 'resendFailed'])->name('campaigns.resend-failed');
 
                 Route::post('/templates/sync', [App\Http\Controllers\User\TemplateController::class, 'sync'])->name('templates.sync');

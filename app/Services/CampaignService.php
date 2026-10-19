@@ -8,6 +8,7 @@ use App\Jobs\SendCampaignJob;
 use App\Models\Campaign;
 use App\Models\ChatMedia;
 use App\Models\Contact;
+use App\Models\ContactField;
 use App\Models\ContactGroup;
 use App\Models\Organization;
 use App\Models\Subscription;
@@ -40,44 +41,64 @@ class CampaignService
             ]);
         }
 
-        // Server-side readiness gate — this is business logic, not a disabled button:
-        // a campaign cannot be created while the WhatsApp number is known to be
-        // disconnected. Organizations with unknown/empty metadata stay unaffected.
-        $readiness = (new CampaignReadinessService())->check($organizationMetadata);
+        $template = Template::query()
+            ->where('uuid', $request->template)
+            ->where('organization_id', $organizationId)
+            ->whereNull('deleted_at')
+            ->first();
 
-        if (! $readiness['ready']) {
+        if (! $template) {
             throw ValidationException::withMessages([
-                'contacts' => $readiness['blockers'][0]['message'],
+                'template' => __('Selected template is invalid or does not belong to your organization.'),
             ]);
         }
 
-        // Enforce messaging_limit_tier: selected group size must be <= allowed tier value
-        $tierLimit = $this->resolveTierLimit($organizationMetadata);
-
-        if ($request->contacts === 'all') {
-            $selectedCount = Contact::where('organization_id', $organizationId)
-                ->whereNull('deleted_at')
-                ->count();
-        } else {
-            $selectedGroup = ContactGroup::where('uuid', $request->contacts)
+        $requestedDynamicFields = collect($request->input('body.parameters', []))
+            ->merge(collect($request->input('header.parameters', []))->filter(fn ($parameter) => ($parameter['type'] ?? null) === 'text'))
+            ->filter(fn ($parameter) => ($parameter['selection'] ?? null) === 'dynamic')
+            ->map(fn ($parameter) => trim((string) ($parameter['value'] ?? '')))
+            ->filter()
+            ->unique();
+        $allowedDynamicFields = collect(['first name', 'last name', 'name', 'phone', 'email'])
+            ->merge(ContactField::query()
                 ->where('organization_id', $organizationId)
-                ->first();
+                ->whereNull('deleted_at')
+                ->pluck('name'))
+            ->map(fn ($field) => trim((string) $field))
+            ->unique();
 
-            if (!$selectedGroup) {
-                throw ValidationException::withMessages([
-                    'contacts' => __('Selected contact group is invalid or does not belong to your organization.'),
-                ]);
-            }
-
-            $selectedCount = (int) $selectedGroup->contacts_count;
+        if ($requestedDynamicFields->diff($allowedDynamicFields)->isNotEmpty()) {
+            throw ValidationException::withMessages([
+                'body' => __('Choose a contact field that belongs to your organization for every template variable.'),
+            ]);
         }
 
+        $targetTime = $request->skip_schedule
+            ? Carbon::now('UTC')
+            : Carbon::parse($request->time, $timezone)->utc();
+        $preflight = (new CampaignPreflightService())->evaluate(
+            (int) $organizationId,
+            $request->template,
+            $request->contacts,
+            $targetTime
+        );
+
+        $blockingCheck = collect($preflight['checks'])->firstWhere('status', 'blocked');
+        if ($blockingCheck) {
+            throw ValidationException::withMessages([
+                ($blockingCheck['key'] === 'template' || $blockingCheck['key'] === 'unsubscribe' ? 'template' : 'contacts')
+                    => $blockingCheck['detail'],
+            ]);
+        }
+
+        // Count only contacts eligible under the campaign send rules; the stored
+        // group counter also includes opted-out and otherwise excluded contacts.
+        $selectedCount = (int) $preflight['audience']['recipient_count'];
+
+        $tierLimit = $this->resolveTierLimit($organizationMetadata);
         if ($selectedCount > $tierLimit) {
-            throw \Illuminate\Validation\ValidationException::withMessages([
-                'contacts' => __(
-                    'The selected group contains :groupCount contacts, which exceeds your messaging limit of :limit. Please choose a smaller group or update your WhatsApp tier.',
-                    ['groupCount' => $selectedCount, 'limit' => $tierLimit]
-                ),
+            throw ValidationException::withMessages([
+                'contacts' => __('The eligible audience exceeds the configured recipient limit.'),
             ]);
         }
 
@@ -126,21 +147,10 @@ class CampaignService
             }
         }
 
-        $template = Template::where('uuid', $request->template)->first();
-
-        // An unapproved (or paused/rejected) template can never be sent, so fail
-        // before anything is written instead of letting the job fail later.
-        if ($template) {
-            $templateReadiness = (new CampaignReadinessService())->check($organizationMetadata, $template->status);
-
-            if (! $templateReadiness['ready']) {
-                throw ValidationException::withMessages([
-                    'template' => $templateReadiness['blockers'][0]['message'],
-                ]);
-            }
-        }
-
-        $contactGroup = ContactGroup::where('uuid', $request->contacts)->first();
+        $contactGroup = $request->contacts === 'all' ? null : ContactGroup::where('uuid', $request->contacts)
+            ->where('organization_id', $organizationId)
+            ->whereNull('deleted_at')
+            ->first();
 
         $shouldStartImmediately = false;
 

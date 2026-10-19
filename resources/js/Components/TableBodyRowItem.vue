@@ -8,14 +8,14 @@
 
     const getRowClass = () => {
         if (props.position === 'first') {
-            return 'pl-4 py-4';
+            return 'ps-4 py-4';
         } else if (props.position === 'last') {
-            return 'pr-4 float-right';
+            return 'pe-4';
         }
     };
 </script>
 <template>
     <td :class="getRowClass()">
-        <div class="text-left w-full h-full"><slot /></div>
+        <div class="text-start w-full h-full"><slot /></div>
     </td>
 </template>

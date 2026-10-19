@@ -19,6 +19,7 @@ use App\Models\Team;
 use App\Models\Template;
 use App\Services\CampaignService;
 use App\Services\CampaignStatsService;
+use App\Services\CampaignPreflightService;
 use App\Services\ContactFieldService;
 use App\Services\SubscriptionUsageService;
 use Illuminate\Http\JsonResponse;
@@ -28,6 +29,7 @@ use Illuminate\Support\Facades\Redirect;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Schema;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 use Carbon\Carbon;
 use Inertia\Inertia;
@@ -309,6 +311,7 @@ class CampaignController extends BaseController
                 ->where('contacts_count', '>', 0)
                 ->latest('created_at')
                 ->latest('id')
+                ->limit(50)
                 ->get(['uuid', 'name', 'contacts_count']);
 
             $usageService = new SubscriptionUsageService();
@@ -319,6 +322,34 @@ class CampaignController extends BaseController
             $data['totalContacts'] = Contact::where('organization_id', $organizationId)
                 ->whereNull('deleted_at')
                 ->count();
+
+            $duplicateUuid = trim((string) $request->query('duplicate', ''));
+            if ($duplicateUuid !== '') {
+                $sourceCampaign = Campaign::with('template')
+                    ->where('uuid', $duplicateUuid)
+                    ->where('organization_id', $organizationId)
+                    ->whereNull('deleted_at')
+                    ->first();
+
+                if ($sourceCampaign) {
+                    $sourceGroup = $sourceCampaign->contact_group_id
+                        ? ContactGroup::where('id', $sourceCampaign->contact_group_id)
+                            ->where('organization_id', $organizationId)
+                            ->whereNull('deleted_at')
+                            ->first()
+                        : null;
+
+                    $data['campaignDraft'] = [
+                        'name' => $sourceCampaign->name.' ('.__('Copy').')',
+                        'template' => $sourceCampaign->template?->uuid,
+                        'contacts' => $sourceCampaign->contact_group_id ? $sourceGroup?->uuid : 'all',
+                    ];
+
+                    if ($sourceGroup && ! $data['contactGroups']->contains('uuid', $sourceGroup->uuid)) {
+                        $data['contactGroups']->push($sourceGroup);
+                    }
+                }
+            }
 
             $data['title'] = __('Create campaign');
 
@@ -364,6 +395,60 @@ class CampaignController extends BaseController
 
             return Inertia::render('User/Campaign/View', $data);
         }
+    }
+
+    public function preflight(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'template' => ['required', 'string'],
+            'contacts' => ['required', 'string'],
+            'time' => ['nullable', 'date'],
+            'skip_schedule' => ['sometimes', 'boolean'],
+            'dynamic_fields' => ['sometimes', 'array'],
+            'dynamic_fields.*' => ['nullable', 'string', 'max:128'],
+        ]);
+
+        $organizationId = (int) session()->get('current_organization');
+        $organization = Organization::query()->findOrFail($organizationId);
+        $metadata = json_decode($organization->metadata ?? '{}', true);
+        $timezone = is_array($metadata) ? ($metadata['timezone'] ?? 'UTC') : 'UTC';
+        if (empty($validated['skip_schedule']) && empty($validated['time'])) {
+            throw ValidationException::withMessages([
+                'time' => __('The scheduled time is required unless you choose to send immediately.'),
+            ]);
+        }
+        $scheduledAt = !empty($validated['skip_schedule'])
+            ? now('UTC')
+            : Carbon::parse($validated['time'], $timezone)->utc();
+
+        return response()->json((new CampaignPreflightService())->evaluate(
+            $organizationId,
+            $validated['template'],
+            $validated['contacts'],
+            $scheduledAt,
+            $validated['dynamic_fields'] ?? []
+        ));
+    }
+
+    public function searchContactGroups(Request $request): JsonResponse
+    {
+        $validated = $request->validate([
+            'q' => ['nullable', 'string', 'max:100'],
+            'uuid' => ['nullable', 'string', 'max:50'],
+        ]);
+        $organizationId = (int) session()->get('current_organization');
+
+        $groups = ContactGroup::query()
+            ->where('organization_id', $organizationId)
+            ->whereNull('deleted_at')
+            ->where('contacts_count', '>', 0)
+            ->when(! empty($validated['uuid']), fn ($query) => $query->where('uuid', $validated['uuid']))
+            ->when(! empty($validated['q']), fn ($query) => $query->where('name', 'like', $validated['q'].'%'))
+            ->orderBy('name')
+            ->limit(50)
+            ->get(['uuid', 'name', 'contacts_count']);
+
+        return response()->json(['data' => $groups]);
     }
 
     public function store(StoreCampaign $request)
@@ -660,6 +745,23 @@ class CampaignController extends BaseController
                 'failed' => (int) ($stats->total_failed_count ?? 0),
             ],
         ]);
+    }
+
+    public function cancelSchedule(string $uuid): JsonResponse
+    {
+        $organizationId = (int) session()->get('current_organization');
+        $updated = Campaign::query()
+            ->where('uuid', $uuid)
+            ->where('organization_id', $organizationId)
+            ->whereNull('deleted_at')
+            ->where('status', 'scheduled')
+            ->update(['status' => 'cancelled', 'completed_at' => now()]);
+
+        if ($updated !== 1) {
+            return response()->json(['error' => __('The campaign is no longer scheduled.')], 409);
+        }
+
+        return response()->json(['status' => 'cancelled', 'message' => __('Scheduled campaign cancelled.')]);
     }
 
     public function resendFailed(string $uuid): JsonResponse

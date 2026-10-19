@@ -1,7 +1,7 @@
 <template>
     <AppLayout>
-        <div class="md:flex md:flex-col bg-white border-l text-[#000] h-screen overflow-y-auto">
-            <div class="flex justify-between px-8 border-b pb-2 capitalize sticky top-0 bg-white z-10 py-4">
+        <div class="flex min-h-full flex-col bg-white border-l text-[#000] md:h-full md:min-h-0 md:overflow-hidden">
+            <div class="z-10 flex shrink-0 justify-between border-b bg-white px-4 py-4 pb-2 capitalize sm:px-8 md:static">
                 <div>
                     <h2 class="text-xl mb-1">{{ $t('New campaign') }}</h2>
                     <p class="flex items-center text-sm leading-6 text-gray-600">
@@ -14,7 +14,7 @@
                 </div>
             </div>
             
-            <div class="pb-24">
+            <div class="min-h-0 flex-1 md:overflow-hidden">
                 <CampaignForm 
                     :templates="templates" 
                     :contactGroups="contactGroups" 
@@ -22,6 +22,7 @@
                     :contactFields="contactFields"
                     :resourceUsage="resourceUsage"
                     :totalContacts="totalContacts"
+                    :campaignDraft="campaignDraft"
                 />
             </div>
         </div>
@@ -37,5 +38,5 @@
     import 'vue3-toastify/dist/index.css';
     import { trans } from 'laravel-vue-i18n';
 
-    const props = defineProps(['templates', 'contactGroups', 'settings', 'contactFields', 'resourceUsage', 'totalContacts']);
+    const props = defineProps(['templates', 'contactGroups', 'settings', 'contactFields', 'resourceUsage', 'totalContacts', 'campaignDraft']);
 </script>
