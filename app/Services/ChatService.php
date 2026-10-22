@@ -394,6 +394,7 @@ class ChatService
                     'unreadMessages' => $unreadMessages,
                     'contactFields' => $contactFields,
                     'isChatLimitReached' => SubscriptionService::isSubscriptionFeatureLimitReached($this->organizationId, 'message_limit'),
+                    'subscriptionExpired' => SubscriptionService::outboundSubscriptionExpirationMessage((int) $this->organizationId) !== null,
                     'teamRole' => $team?->role,
                     'labelColors' => $labelColors
                 ]);
@@ -428,6 +429,7 @@ class ChatService
                     ->orderBy('position')
                     ->get(),
                 'isChatLimitReached' => SubscriptionService::isSubscriptionFeatureLimitReached($this->organizationId, 'message_limit'),
+                'subscriptionExpired' => SubscriptionService::outboundSubscriptionExpirationMessage((int) $this->organizationId) !== null,
                 'teamRole' => $team?->role
             ]);
         }
@@ -895,9 +897,10 @@ class ChatService
             return $result;
         }
 
-        if (SubscriptionService::isTrialExpiredForOutbound((int) $this->organizationId)) {
+        $subscriptionExpirationMessage = SubscriptionService::outboundSubscriptionExpirationMessage((int) $this->organizationId);
+        if ($subscriptionExpirationMessage !== null) {
             $result->success = false;
-            $result->message = SubscriptionService::trialExpiredOutboundMessage();
+            $result->message = $subscriptionExpirationMessage;
             return $result;
         }
 

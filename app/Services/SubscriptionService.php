@@ -56,6 +56,22 @@ class SubscriptionService
             && Carbon::parse($subscription->valid_until)->lt(now());
     }
 
+    public static function outboundSubscriptionExpirationMessage(int $organizationId): ?string
+    {
+        $subscription = Subscription::query()
+            ->where('organization_id', $organizationId)
+            ->orderByDesc('id')
+            ->first(['status', 'valid_until']);
+
+        if (! $subscription || ! $subscription->valid_until || Carbon::parse($subscription->valid_until)->lt(now())) {
+            return $subscription?->status === 'trial'
+                ? self::trialExpiredOutboundMessage()
+                : __('Your subscription has expired. Renew your plan to reply to conversations.');
+        }
+
+        return null;
+    }
+
     public static function isSubscriptionActive(string $organizationId)
     {
         $subscription = Subscription::currentForOrganization((int) $organizationId);

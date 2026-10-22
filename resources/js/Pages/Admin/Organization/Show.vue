@@ -126,7 +126,7 @@
                                 :min="props.organization?.subscription ? undefined : minValidUntil"
                                 :class="'sm:col-span-6'"
                             />
-                            <p v-if="props.organization" class="text-xs text-gray-500 sm:col-span-6">{{ $t('Choose the expiration date when assigning or changing the plan. To change the date of the same plan, use Extend subscription or Renew subscription.') }}</p>
+                            <p v-if="props.organization" class="text-xs text-gray-500 sm:col-span-6">{{ $t('You can move the expiration date earlier or later here, including to a past date. If the selected date has passed, the subscription will be treated as expired. Use Extend subscription to extend the same plan while keeping current usage.') }}</p>
                             <p v-if="props.organization" class="text-xs text-gray-500 sm:col-span-6">{{ $t('Dates use this organization timezone') }}: {{ props.subscriptionTimezone }}</p>
                             <FormSelect
                                 v-model="form.subscription_status"
