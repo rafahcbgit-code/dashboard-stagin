@@ -26,6 +26,7 @@
           <ChatForm :key="contact.uuid" :contact="contact" :chatThread="chatThread" :simpleForm="simpleForm"
             :pusherSettings="props.pusherSettings"
             :chatLimitReached="isChatLimitReached"
+            :subscriptionExpired="props.subscriptionExpired"
             :replyingTo="replyingTo"
             @reply-cleared="replyingTo = null"
             @viewTemplate="displayTemplate = true" />
@@ -39,6 +40,13 @@
                 @click="displayTemplate = false">
                 {{ $t('Back') }}
               </button>
+            </div>
+          </div>
+          <div v-else-if="props.subscriptionExpired" class="h-full bg-white flex items-center justify-center p-6">
+            <div class="max-w-lg text-center border border-amber-200 bg-amber-50 rounded-xl p-6">
+              <h3 class="text-base font-semibold text-amber-900 mb-2">{{ $t('Subscription expired') }}</h3>
+              <p class="text-sm text-amber-900 mb-4">{{ $t('Your subscription has expired. You can continue receiving conversations, but sending replies is disabled. Renew your subscription to reply.') }}</p>
+              <a href="/billing" class="inline-flex rounded-md bg-primary px-4 py-2 text-sm font-medium text-white">{{ $t('Renew subscription') }}</a>
             </div>
           </div>
           <CampaignForm v-else class="bg-white h-full" :contact="contact.uuid" :templates="templates"
@@ -73,6 +81,7 @@ const props = defineProps({
   pusherSettings: Object,
   organizationId: Number,
   isChatLimitReached: Boolean,
+  subscriptionExpired: Boolean,
   toggleNavBar: Function,
   state: String,
   demoNumber: String,

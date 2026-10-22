@@ -432,9 +432,6 @@ class OrganizationService
                             || (int) $request->input('subscription_version') !== (int) $subscription->period_version)) {
                         throw ValidationException::withMessages(['valid_until' => __('The subscription changed. Reload the page before trying again.')]);
                     }
-                    if ($expirationChanged && ! $planChanged) {
-                        throw ValidationException::withMessages(['valid_until' => __('Use the Extend subscription or Renew subscription action to change the expiration date.')]);
-                    }
                     if ($planChanged && $expiration->lte(now())) {
                         throw ValidationException::withMessages(['valid_until' => __('Choose an expiration date in the future.')]);
                     }
