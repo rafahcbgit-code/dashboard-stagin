@@ -940,6 +940,12 @@ class SubscriptionUsageService
         );
     }
 
+    public function forgetResourceSharingCache(int $organizationId): void
+    {
+        unset($this->resourceSharingEnabledCache[$organizationId]);
+        Cache::forget("subscription:resource-sharing-enabled:{$organizationId}");
+    }
+
     public function resourcePoolOrganizationIds(int $billingOrganizationId): array
     {
         return $this->resourcePoolOrganizationIdQuery($billingOrganizationId)
