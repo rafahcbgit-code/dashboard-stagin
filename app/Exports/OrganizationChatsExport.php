@@ -20,11 +20,15 @@ class OrganizationChatsExport
     public function headers(): array
     {
         return [
-            'chat_id', 'organization_id', 'contact_id', 'user_id', 'chat_type',
-            'wam_id', 'reply_to_message_id', 'status', 'media_id', 'is_read',
-            'chat_metadata', 'chat_created_at', 'contact_first_name',
-            'contact_last_name', 'contact_phone', 'contact_email', 'contact_address',
-            'contact_metadata', 'contact_is_subscribed',
+            'chat_created_at',
+            'chat_metadata',
+            'status',
+            'reply_to_message_id',
+            'chat_type',
+            'wam_id',
+            'contact_phone',
+            'contact_last_name',
+            'contact_first_name',
         ];
     }
 
@@ -37,13 +41,15 @@ class OrganizationChatsExport
             })
             ->where('c.organization_id', $this->organization->id)
             ->select([
-                'c.id as chat_id', 'c.organization_id', 'c.contact_id', 'c.user_id',
-                'c.type as chat_type', 'c.wam_id', 'c.reply_to_message_id',
-                'c.status', 'c.media_id', 'c.is_read', 'c.metadata as chat_metadata',
-                'c.created_at as chat_created_at', 'ct.first_name as contact_first_name',
-                'ct.last_name as contact_last_name', 'ct.phone as contact_phone',
-                'ct.email as contact_email', 'ct.address as contact_address',
-                'ct.metadata as contact_metadata', 'ct.is_subscribed as contact_is_subscribed',
+                'c.created_at as chat_created_at',
+                'c.metadata as chat_metadata',
+                'c.status',
+                'c.reply_to_message_id',
+                'c.type as chat_type',
+                'c.wam_id',
+                'ct.phone as contact_phone',
+                'ct.last_name as contact_last_name',
+                'ct.first_name as contact_first_name',
             ])
             ->orderBy('c.contact_id')
             ->orderBy('c.created_at')
