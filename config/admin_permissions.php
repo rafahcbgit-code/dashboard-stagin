@@ -8,7 +8,7 @@ return [
     'modules' => [
         'dashboard' => ['view'],
         'customers' => ['view', 'create', 'edit', 'delete'],
-        'organizations' => ['view', 'create', 'edit', 'delete', 'login_as'],
+        'organizations' => ['view', 'create', 'edit', 'delete', 'login_as', 'export_chats'],
         'billing' => ['view', 'create', 'edit', 'delete'],
         'support' => ['view', 'create', 'edit', 'delete'],
         'team' => ['view', 'create', 'edit', 'delete'],
@@ -42,7 +42,7 @@ return [
         ['GET', 'admin/dashboard', 'dashboard', 'view'],
 
         ['GET', 'admin/users', 'customers', 'view'], ['GET', 'admin/users/create', 'customers', 'create'], ['GET', 'admin/users/*/edit', 'customers', 'edit'], ['GET', 'admin/users/*', 'customers', 'view'], ['POST', 'admin/users', 'customers', 'create'], ['PUT', 'admin/users/*', 'customers', 'edit'], ['PATCH', 'admin/users/*', 'customers', 'edit'], ['DELETE', 'admin/users/*', 'customers', 'delete'],
-        ['GET', 'admin/organizations', 'organizations', 'view'], ['GET', 'admin/organizations/create', 'organizations', 'create'], ['GET', 'admin/organizations/*/login-as', 'organizations', 'login_as'], ['GET', 'admin/organizations/*/edit', 'organizations', 'edit'], ['GET', 'admin/organizations/*', 'organizations', 'view'], ['POST', 'admin/organizations', 'organizations', 'create'], ['POST', 'admin/organizations/sync-whatsapp-number-statuses', 'organizations', 'edit'], ['PUT', 'admin/organizations/*', 'organizations', 'edit'], ['PATCH', 'admin/organizations/*', 'organizations', 'edit'], ['DELETE', 'admin/organizations/*', 'organizations', 'delete'],
+        ['GET', 'admin/organizations/*/chats/export', 'organizations', 'export_chats'], ['GET', 'admin/organizations', 'organizations', 'view'], ['GET', 'admin/organizations/create', 'organizations', 'create'], ['GET', 'admin/organizations/*/login-as', 'organizations', 'login_as'], ['GET', 'admin/organizations/*/edit', 'organizations', 'edit'], ['GET', 'admin/organizations/*', 'organizations', 'view'], ['POST', 'admin/organizations', 'organizations', 'create'], ['POST', 'admin/organizations/sync-whatsapp-number-statuses', 'organizations', 'edit'], ['PUT', 'admin/organizations/*', 'organizations', 'edit'], ['PATCH', 'admin/organizations/*', 'organizations', 'edit'], ['DELETE', 'admin/organizations/*', 'organizations', 'delete'],
         ['GET', 'admin/payment-logs', 'billing', 'view'], ['GET', 'admin/billing/create', 'billing', 'create'], ['GET', 'admin/billing/*/edit', 'billing', 'edit'], ['GET', 'admin/billing*', 'billing', 'view'], ['POST', 'admin/billing*', 'billing', 'create'], ['PUT', 'admin/billing*', 'billing', 'edit'], ['PATCH', 'admin/billing*', 'billing', 'edit'], ['DELETE', 'admin/billing*', 'billing', 'delete'],
         ['GET', 'admin/support/create', 'support', 'create'], ['GET', 'admin/support*', 'support', 'view'], ['POST', 'admin/support', 'support', 'create'], ['POST', 'admin/support/*', 'support', 'edit'],
         ['GET', 'admin/team/users', 'team', 'view'], ['GET', 'admin/team/users/create', 'team', 'create'], ['GET', 'admin/team/users/*/edit', 'team', 'edit'], ['GET', 'admin/team/users/*', 'team', 'view'], ['POST', 'admin/team/users', 'team', 'create'], ['PUT', 'admin/team/users/*', 'team', 'edit'], ['PATCH', 'admin/team/users/*', 'team', 'edit'], ['DELETE', 'admin/team/users/*', 'team', 'delete'],

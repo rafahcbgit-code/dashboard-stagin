@@ -1618,5 +1618,12 @@
     "Subscription extended successfully.": "تم تمديد الاشتراك بنجاح.",
     "Subscription renewed and previous usage archived successfully.": "تم تجديد الاشتراك وأرشفة الاستهلاك السابق بنجاح.",
     "Plain text and HTML are supported. Use inline styles for email formatting. Scripts and unsafe HTML are removed. Save before previewing or sending a test.": "يمكن استخدام النص العادي أو HTML. استخدم التنسيق داخل خاصية style. تُزال السكربتات وأكواد HTML غير الآمنة. احفظ التعديلات قبل المعاينة أو إرسال بريد تجريبي.",
-    "HTML input is converted to plain text when saved. Email subjects cannot display HTML formatting. The resulting subject must fit within 191 characters.": "يُحوّل HTML إلى نص عادي عند الحفظ؛ عنوان البريد لا يعرض تنسيق HTML. يجب ألا يتجاوز العنوان الناتج 191 حرفًا."
+    "HTML input is converted to plain text when saved. Email subjects cannot display HTML formatting. The resulting subject must fit within 191 characters.": "يُحوّل HTML إلى نص عادي عند الحفظ؛ عنوان البريد لا يعرض تنسيق HTML. يجب ألا يتجاوز العنوان الناتج 191 حرفًا.",
+    "Export conversations": "تصدير المحادثات",
+    "Dates use this organization timezone. The range includes both dates.": "تُفسر التواريخ وفق المنطقة الزمنية للمؤسسة ويشمل النطاق التاريخين.",
+    "Conversation type": "نوع المحادثات",
+    "All conversations": "كل المحادثات",
+    "Ad campaign conversations": "محادثات الحملات الإعلانية",
+    "Preparing...": "جارٍ التجهيز...",
+    "The start date must be before or equal to the end date.": "يجب أن يكون تاريخ البداية قبل أو مساويًا لتاريخ النهاية."
 }

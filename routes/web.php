@@ -516,6 +516,9 @@ Route::prefix('admin')->middleware(['auth:admin', 'admin.permission'])->group(fu
     Route::post('/organizations/sync-whatsapp-number-statuses', [App\Http\Controllers\Admin\OrganizationController::class, 'syncWhatsappNumberStatuses'])
         ->name('admin.organizations.sync-whatsapp-number-statuses');
     Route::resource('organizations', App\Http\Controllers\Admin\OrganizationController::class);
+    Route::get('/organizations/{uuid}/chats/export', [App\Http\Controllers\Admin\OrganizationController::class, 'exportChats'])
+        ->middleware('throttle:10,1')
+        ->name('admin.organizations.chats.export');
     Route::post('/organizations/{uuid}/subscription/extend', [App\Http\Controllers\Admin\OrganizationController::class, 'extendSubscription']);
     Route::post('/organizations/{uuid}/subscription/renew', [App\Http\Controllers\Admin\OrganizationController::class, 'renewSubscription']);
     Route::get('/organizations/{id}/login-as', [App\Http\Controllers\AuthController::class, 'loginAs']);

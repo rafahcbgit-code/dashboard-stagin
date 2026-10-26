@@ -1104,5 +1104,12 @@
   "Used by this organization": "Used by this organization",
   "Used": "Used",
   "Shared pool remaining": "Shared pool remaining",
-  "Unnamed organization": "Unnamed organization"
+  "Unnamed organization": "Unnamed organization",
+  "Export conversations": "Export conversations",
+  "Dates use this organization timezone. The range includes both dates.": "Dates use this organization timezone. The range includes both dates.",
+  "Conversation type": "Conversation type",
+  "All conversations": "All conversations",
+  "Ad campaign conversations": "Ad campaign conversations",
+  "Preparing...": "Preparing...",
+  "The start date must be before or equal to the end date.": "The start date must be before or equal to the end date."
 }
