@@ -393,6 +393,7 @@ class OrganizationService
     {
         return DB::transaction(function () use ($request, $uuid) {
             $organization = Organization::where('uuid', $uuid)->lockForUpdate()->firstOrFail();
+            $previousBillingOrganizationId = $organization->billing_organization_id;
 
             $updateData = [
                 'name' => $request->input('name'),
@@ -412,6 +413,13 @@ class OrganizationService
             }
 
             $organization->update($updateData);
+
+            $usageService = new SubscriptionUsageService();
+            foreach ([$organization->id, $previousBillingOrganizationId, $organization->billing_organization_id] as $organizationId) {
+                if ($organizationId) {
+                    $usageService->forgetResourceSharingCache((int) $organizationId);
+                }
+            }
 
             $subscription = Subscription::where('organization_id', $organization->id)->orderByDesc('id')->lockForUpdate()->first();
             $plan = SubscriptionPlan::where('uuid', $request->plan)->first();
