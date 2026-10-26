@@ -49,6 +49,7 @@
                 <div @click="changeTab('team')" class="cursor-pointer px-2 py-2" :class="tab === 'team' ? 'bg-white' : ''">{{ $t('Team') }}</div>
                 <div @click="changeTab('billing')" class="cursor-pointer px-2 py-2" :class="tab === 'billing' ? 'bg-white' : ''">{{ $t('Billing history') }}</div>
                 <div @click="changeTab('subscription_history')" class="cursor-pointer px-2 py-2" :class="tab === 'subscription_history' ? 'bg-white' : ''">{{ $t('Subscription history') }}</div>
+                <div v-if="can('organizations', 'export_chats')" @click="changeTab('chat_export')" class="cursor-pointer px-2 py-2" :class="tab === 'chat_export' ? 'bg-white' : ''">{{ $t('Export conversations') }}</div>
             </div>
             <div v-if="props.organization && tab === 'team'" class="pt-5">
                 <UserTable :rows="props.users" :filters="props.filters" :type="'user'" :showRole="true" :showDeleteBtn="false"/>
@@ -109,7 +110,7 @@
                     </table>
                 </div>
             </div>
-            <section v-if="props.organization && tab === 'organization' && can('organizations', 'export_chats')" class="mb-5 rounded-md border bg-white p-5">
+            <section v-if="props.organization && tab === 'chat_export' && can('organizations', 'export_chats')" class="mb-5 rounded-md border bg-white p-5">
                 <h3 class="font-medium">{{ $t('Export conversations') }}</h3>
                 <p class="mt-1 text-xs text-gray-500">{{ $t('Dates use this organization timezone. The range includes both dates.') }}</p>
                 <div class="mt-4 grid gap-4 md:grid-cols-4 md:items-end">
