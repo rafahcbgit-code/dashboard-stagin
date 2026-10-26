@@ -40,6 +40,8 @@ return [
         ['POST', 'admin/chatbot-studio*', 'organizations', 'edit'],
         ['PUT', 'admin/chatbot-studio*', 'organizations', 'edit'],
         ['GET', 'admin/dashboard', 'dashboard', 'view'],
+        ['GET', 'admin/subscription-cancellation-requests', 'billing', 'view'],
+        ['POST', 'admin/subscription-cancellation-requests/*/review', 'billing', 'edit'],
 
         ['GET', 'admin/users', 'customers', 'view'], ['GET', 'admin/users/create', 'customers', 'create'], ['GET', 'admin/users/*/edit', 'customers', 'edit'], ['GET', 'admin/users/*', 'customers', 'view'], ['POST', 'admin/users', 'customers', 'create'], ['PUT', 'admin/users/*', 'customers', 'edit'], ['PATCH', 'admin/users/*', 'customers', 'edit'], ['DELETE', 'admin/users/*', 'customers', 'delete'],
         ['GET', 'admin/organizations/*/chats/export', 'organizations', 'export_chats'], ['GET', 'admin/organizations', 'organizations', 'view'], ['GET', 'admin/organizations/create', 'organizations', 'create'], ['GET', 'admin/organizations/*/login-as', 'organizations', 'login_as'], ['GET', 'admin/organizations/*/edit', 'organizations', 'edit'], ['GET', 'admin/organizations/*', 'organizations', 'view'], ['POST', 'admin/organizations', 'organizations', 'create'], ['POST', 'admin/organizations/sync-whatsapp-number-statuses', 'organizations', 'edit'], ['PUT', 'admin/organizations/*', 'organizations', 'edit'], ['PATCH', 'admin/organizations/*', 'organizations', 'edit'], ['DELETE', 'admin/organizations/*', 'organizations', 'delete'],

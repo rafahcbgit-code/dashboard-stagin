@@ -62,6 +62,7 @@ const primaryItems = [
     { href: '/admin/chatbot-studio', label: 'Chatbot Studio', module: 'organizations' },
     { href: '/admin/users', label: 'Users', module: 'customers' },
     { href: '/admin/payment-logs', label: 'Billing', module: 'billing' },
+    { href: '/admin/subscription-cancellation-requests', label: 'Cancellation requests', module: 'billing' },
     { href: '/admin/support', label: 'Support desk', module: 'support' },
     { href: '/admin/team/users', label: 'Team', module: 'team' },
     { href: '/admin/otp-config', label: 'Otp Config', module: 'otp_config' },
