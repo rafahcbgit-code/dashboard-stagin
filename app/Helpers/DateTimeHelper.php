@@ -19,6 +19,21 @@ class DateTimeHelper
         return $dt->format($dateFormat . ' ' . $timeFormat); 
     }
 
+    /** Format a UTC timestamp using the platform's configured timezone. */
+    public static function formatCompanyDate($date): string
+    {
+        $settings = Setting::whereIn('key', ['date_format', 'time_format', 'timezone'])
+            ->pluck('value', 'key');
+
+        $dateFormat = $settings['date_format'] ?? 'd-M-y';
+        $timeFormat = $settings['time_format'] ?? 'H:i';
+        $timezone = $settings['timezone'] ?? 'UTC';
+
+        return Carbon::parse($date, 'UTC')
+            ->setTimezone($timezone)
+            ->format($dateFormat . ' ' . $timeFormat);
+    }
+
     public static function convertToOrganizationTimezone($date)
     {
         $timezone = 'UTC'; // Default to UTC
