@@ -5,6 +5,8 @@
                 <div>
                     <h2 class="text-2xl font-semibold">{{ $t('Agent Reports') }}</h2>
                     <p class="text-sm text-slate-600">{{ $t('Performance metrics for your team members') }}</p>
+                    <p class="text-sm text-slate-600">{{ $t('Response times are attributed to the responding agent and filtered by response date. Conversation counts show current assignments.') }}</p>
+                    <p v-if="business_hours && !business_hours_available" class="text-sm text-amber-700">{{ $t('Business hours are unavailable or invalid. Response times use elapsed time.') }}</p>
                 </div>
 
                 <div class="flex flex-wrap items-center gap-4">
@@ -121,6 +123,7 @@ const props = defineProps({
     initial_start_date: { type: String, default: '' },
     initial_end_date: { type: String, default: '' },
     business_hours: { type: Boolean, default: false },
+    business_hours_available: { type: Boolean, default: false },
 });
 
 const formatDate = (d) => {

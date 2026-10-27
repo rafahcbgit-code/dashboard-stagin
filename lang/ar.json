@@ -1034,6 +1034,8 @@
   "Reporting": "التقارير",
   "Customer Reports": "تقارير العملاء",
   "Performance metrics for your team members": "مقاييس الأداء لأعضاء فريقك",
+  "Response times are attributed to the responding agent and filtered by response date. Conversation counts show current assignments.": "تُنسب أزمنة الرد إلى الموظف الذي أرسل الرد وتُرشّح حسب تاريخ الرد. تعرض أعداد المحادثات حالة الإسناد الحالية.",
+  "Business hours are unavailable or invalid. Response times use elapsed time.": "ساعات العمل غير مفعّلة أو إعداداتها غير صالحة. تُحسب أزمنة الرد حسب الوقت المنقضي كاملاً.",
   "Analytics & insights for your contacts": "التحليلات والرؤى لجهات الاتصال الخاصة بك",
   "Conversations over time": "المحادثات بمرور الوقت",
   "Daily conversations created": "المحادثات اليومية التي تم إنشاؤها",

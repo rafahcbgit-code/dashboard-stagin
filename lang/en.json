@@ -865,6 +865,8 @@
   "Reporting": "Reporting",
   "Customer Reports": "Customer Reports",
   "Performance metrics for your team members": "Performance metrics for your team members",
+  "Response times are attributed to the responding agent and filtered by response date. Conversation counts show current assignments.": "Response times are attributed to the responding agent and filtered by response date. Conversation counts show current assignments.",
+  "Business hours are unavailable or invalid. Response times use elapsed time.": "Business hours are unavailable or invalid. Response times use elapsed time.",
   "Analytics & insights for your contacts": "Analytics & insights for your contacts",
   "Conversations over time": "Conversations over time",
   "Daily conversations created": "Daily conversations created",

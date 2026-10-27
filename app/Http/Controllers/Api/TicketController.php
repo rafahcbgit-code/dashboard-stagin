@@ -13,6 +13,7 @@ use App\Models\Team;
 use App\Models\User;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Validator;
+use Illuminate\Support\Facades\DB;
 
 class TicketController extends Controller
 {
@@ -70,19 +71,28 @@ class TicketController extends Controller
                 }
             }
 
-            // Find or create ticket
+            return DB::transaction(function () use ($contact, $organizationId, $request) {
+            // Lock an existing ticket so status changes and event logs stay together.
+            $ticket = ChatTicket::where('contact_id', $contact->id)->lockForUpdate()->first();
+            if (!$ticket) {
             $ticket = ChatTicket::firstOrCreate(
                 ['contact_id' => $contact->id],
                 [
                     'status' => 'open',
+                    'organization_id' => $organizationId,
                     'assigned_to' => null,
                     'created_at' => now(),
                     'updated_at' => now()
                 ]
             );
+            }
 
             $oldStatus = $ticket->status;
             $newStatus = $request->input('status');
+
+            if ($oldStatus === $newStatus) {
+                return response()->json(['success' => true, 'message' => 'Ticket status unchanged', 'data' => ['status' => $ticket->status, 'updated_at' => $ticket->updated_at]], 200);
+            }
 
             // Update ticket status
             $ticket->status = $newStatus;
@@ -115,6 +125,7 @@ class TicketController extends Controller
                     'updated_at' => $ticket->updated_at
                 ]
             ], 200);
+            });
         } catch (\Exception $e) {
             return response()->json([
                 'success' => false,
