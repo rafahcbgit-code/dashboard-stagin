@@ -18,6 +18,9 @@ class UserResource extends JsonResource
         $data = parent::toArray($request);
         $data['updated_at'] = DateTimeHelper::formatDate($this->updated_at);
         $data['created_at'] = DateTimeHelper::formatDate($this->created_at);
+        $data['last_login_at'] = $this->last_login_at
+            ? DateTimeHelper::formatCompanyDate($this->last_login_at)
+            : null;
 
         return $data;
     }

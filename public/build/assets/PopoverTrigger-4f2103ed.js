@@ -1,1 +1,0 @@
-import{w as s}from"./index-5486a173.js";import{H as r,f as t,g as n,b6 as p,aP as l,u as c,o as f,E as i}from"./app-9defa0f9.js";const _=r({__name:"PopoverTrigger",props:{asChild:{type:Boolean},as:{}},setup(e){const a=e;return(o,u)=>(f(),t(c(s),p(l(a)),{default:n(()=>[i(o.$slots,"default")]),_:3},16))}});export{_ as default};

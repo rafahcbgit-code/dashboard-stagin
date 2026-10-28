@@ -114,7 +114,7 @@
                     <span class="">{{ $t('Status') }}</span>
                 </TableHeaderRowItem>
                 <TableHeaderRowItem class="hidden sm:table-cell">
-                    <span class="float-right">{{ $t('Last updated') }}</span>
+                    <span class="float-right">{{ $t('Last login') }}</span>
                 </TableHeaderRowItem>
                 <TableHeaderRowItem :position="'last'"></TableHeaderRowItem>
             </TableHeaderRow>
@@ -129,7 +129,7 @@
                     <span class="py-1 rounded-[5px] text-xs px-3 bg-[#ddebf7] text-slate-700">{{ statusLabel(item.status) }}</span>
                 </TableBodyRowItem>
                 <TableBodyRowItem class="hidden sm:table-cell">
-                    <span class="float-right">{{ item.updated_at }}</span>
+                    <span class="float-right">{{ item.last_login_at ?? $t('Never') }}</span>
                 </TableBodyRowItem>
                 <TableBodyRowItem :position="'last'">
                     <Dropdown v-if="item.role != 'admin'" :align="'right'" class="mt-2">
@@ -160,4 +160,3 @@
         :description = "$t('Are you sure you want to delete this row? This action can not be undone')"
     />
 </template>
-  

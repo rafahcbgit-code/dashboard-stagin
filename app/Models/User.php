@@ -50,6 +50,7 @@ class User extends Authenticatable implements MustVerifyEmail
      */
     protected $casts = [
         'email_verified_at' => 'datetime',
+        'last_login_at' => 'datetime',
         'password' => 'hashed',
     ];
 
@@ -58,6 +59,14 @@ class User extends Authenticatable implements MustVerifyEmail
     public function getFullNameAttribute()
     {
         return "{$this->first_name} {$this->last_name}";
+    }
+
+    /** Record a successful authentication without changing profile metadata. */
+    public function recordLogin(): void
+    {
+        static::withoutTimestamps(function (): void {
+            $this->forceFill(['last_login_at' => now('UTC')])->saveQuietly();
+        });
     }
     
     public function listAll($role, $searchTerm, $organizationId = null)

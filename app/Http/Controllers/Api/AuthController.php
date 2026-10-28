@@ -78,6 +78,7 @@ class AuthController extends Controller
 
         // Create personal access token using Sanctum
         $token = $user->createToken('mobile-app', ['*'])->plainTextToken;
+        $user->recordLogin();
 
         // Success response
         return response()->json([
