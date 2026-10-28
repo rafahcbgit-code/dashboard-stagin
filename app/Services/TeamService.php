@@ -179,6 +179,7 @@ class TeamService
             $invite->delete();
 
             Auth::guard('user')->loginUsingId($user->id);
+            $user->recordLogin();
 
             session()->put('current_organization', $invite->organization_id);
         } catch (\Exception $e) {
