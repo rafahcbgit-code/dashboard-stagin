@@ -17,12 +17,12 @@ it('counts only working time in the organization timezone across a weekend', fun
         ['day' => 'Monday', 'active' => true, 'from' => '09:00', 'to' => '17:00'],
     ]];
     // UTC 13:30 is 16:30 locally; UTC 06:30 Monday is 09:30 locally.
-    expect(effectiveReportSeconds('2026-10-23 13:30:00', '2026-10-26 06:30:00', $config))->toBe(3660);
+    expect(effectiveReportSeconds('2026-10-23 13:30:00', '2026-10-26 06:30:00', $config))->toBe(3600);
 });
 
 it('counts the portion of an overnight shift on the following day', function () {
     $config = ['enable_working_hours' => true, 'timezone' => 'UTC', 'working_hours' => [
         ['day' => 'Monday', 'active' => true, 'from' => '22:00', 'to' => '06:00'],
     ]];
-    expect(effectiveReportSeconds('2026-10-26 23:00:00', '2026-10-27 07:00:00', $config))->toBe(25260);
+    expect(effectiveReportSeconds('2026-10-26 23:00:00', '2026-10-27 07:00:00', $config))->toBe(25200);
 });

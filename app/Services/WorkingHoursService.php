@@ -35,6 +35,15 @@ class WorkingHoursService
 
             $metadata = $organization->metadata ? json_decode($organization->metadata, true) : [];
 
+            return $this->scheduleFromMetadata($metadata ?: []);
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    public function scheduleFromMetadata(array $metadata): ?array
+    {
+        try {
             // Check if working hours feature is enabled
             if (array_key_exists('enable_working_hours', $metadata) && ! (int) $metadata['enable_working_hours']) {
                 return null;
@@ -139,37 +148,36 @@ class WorkingHoursService
         $seconds = $now->hour * 3600 + $now->minute * 60 + $now->second;
         foreach ($schedule['days'] as $day) {
             if (!$day['active']) continue;
+            // Existing organizations use this pair to represent a full day.
+            if ($day['day'] === $today && $day['from'] === '00:00' && $day['to'] === '23:59') return true;
             $from = $this->parseScheduleTime($day['from'], false);
-            $to = $this->parseScheduleTime($day['to'], true);
-            if ($day['day'] === $today && ($from <= $to ? ($seconds >= $from && $seconds <= $to) : $seconds >= $from)) return true;
-            if ($day['day'] === $yesterday && $from > $to && $seconds <= $to) return true;
+            $to = $this->parseScheduleTime($day['to'], false);
+            if ($day['day'] === $today && ($from <= $to ? ($seconds >= $from && $seconds < $to) : $seconds >= $from)) return true;
+            if ($day['day'] === $yesterday && $from > $to && $seconds < $to) return true;
         }
         return false;
     }
 
     /**
-     * Compare a local time with an inclusive minute-based schedule.
-     *
-     * A configured end such as 23:59 represents the complete minute and is
-     * therefore treated as 23:59:59. Explicit HH:MM:SS values retain their
-     * provided seconds. Overnight ranges are supported as before.
+     * Compare a local time with a schedule whose end is exclusive.
      */
     private function isTimeWithinRange(Carbon $now, $from, $to): ?bool
     {
         $fromSeconds = $this->parseScheduleTime($from, false);
-        $toSeconds = $this->parseScheduleTime($to, true);
+        $toSeconds = $this->parseScheduleTime($to, false);
 
         if ($fromSeconds === null || $toSeconds === null) {
             return null;
         }
+        if ($from === '00:00' && $to === '23:59') return true;
 
         $currentSeconds = ($now->hour * 3600) + ($now->minute * 60) + $now->second;
 
         if ($fromSeconds <= $toSeconds) {
-            return $currentSeconds >= $fromSeconds && $currentSeconds <= $toSeconds;
+            return $currentSeconds >= $fromSeconds && $currentSeconds < $toSeconds;
         }
 
-        return $currentSeconds >= $fromSeconds || $currentSeconds <= $toSeconds;
+        return $currentSeconds >= $fromSeconds || $currentSeconds < $toSeconds;
     }
 
     private function parseScheduleTime($value, bool $endOfMinute): ?int
