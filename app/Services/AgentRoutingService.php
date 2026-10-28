@@ -249,6 +249,7 @@ class AgentRoutingService
             ->first();
 
         if ($ticket) {
+            $wasClosed = $ticket->status === 'closed';
             // Reopen if closed
             if ($ticket->status === 'closed') {
                 $ticket->status = 'open';
@@ -262,7 +263,7 @@ class AgentRoutingService
             $ticket->updated_at = now();
             $ticket->save();
 
-            $this->logTicketEvent($contactId, 'Conversation was moved from closed to open');
+            if ($wasClosed) $this->logTicketEvent($contactId, 'Conversation was moved from closed to open');
         } else {
             $ticket = new ChatTicket();
             $ticket->organization_id = $organizationId;

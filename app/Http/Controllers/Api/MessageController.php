@@ -321,7 +321,9 @@ class MessageController extends Controller
                 $mediaFilePath,
                 $mediaUrl,
                 $location,
-                $caption
+                $caption,
+                null,
+                $userId
             );
 
             Log::info('handleMediaMessage:whatsapp_response', ['response' => is_object($response) ? json_decode(json_encode($response), true) : $response]);

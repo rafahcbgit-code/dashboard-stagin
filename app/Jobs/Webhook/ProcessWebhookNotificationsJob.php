@@ -153,7 +153,7 @@ class ProcessWebhookNotificationsJob implements ShouldQueue
         $durations['webhook'] = $this->triggerExternalWebhook($chat);
 
         // 4. Handle ticket assignment (existing functionality)
-        $durations['ticket'] = $this->handleTicketAssignment();
+        $durations['ticket'] = $this->handleTicketAssignment($chat->type === 'inbound' ? $this->chatId : null);
 
         // AC-1.4.5: Log total performance
         $this->logPerformance($jobStartTime, $durations);
@@ -327,13 +327,13 @@ class ProcessWebhookNotificationsJob implements ShouldQueue
      *
      * @return float Duration in milliseconds
      */
-    protected function handleTicketAssignment(): float
+    protected function handleTicketAssignment(?int $triggerChatId = null): float
     {
         $startTime = microtime(true);
 
         try {
             $chatService = new ChatService($this->organizationId);
-            $chatService->handleTicketAssignment($this->contactId);
+            $chatService->handleTicketAssignment($this->contactId, $triggerChatId);
 
             $duration = (microtime(true) - $startTime) * 1000;
 

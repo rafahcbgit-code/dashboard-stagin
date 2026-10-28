@@ -25,30 +25,32 @@ class ChatTicketController extends BaseController
 
     public function update(Request $request, $uuid)
     { 
-        $contact = Contact::where('uuid', $uuid)->first();
+        $request->validate(['status' => 'required|in:open,closed']);
+        $contact = Contact::where('uuid', $uuid)->where('organization_id', session('current_organization'))->firstOrFail();
+        DB::transaction(function () use ($contact, $request) {
+            $ticket = ChatTicket::where('contact_id', $contact->id)->lockForUpdate()->firstOrFail();
+            $role = Team::where('organization_id', $contact->organization_id)->where('user_id', auth()->id())->value('role');
+            abort_if($role === 'agent' && $ticket->assigned_to && (int) $ticket->assigned_to !== (int) auth()->id(), 403);
+            if ($ticket->status === $request->status) return;
 
-        ChatTicket::where('contact_id', $contact->id)->update([
-            'status' => $request->status,
-            'assigned_to' => auth()->user()->id,
-            'updated_at' => now(),
-        ]);
-
-        $statusDescription = $request->status == 'closed' ? 'opened to closed' : 'closed to open';
-
-        $ticketId = ChatTicketLog::insertGetId([
-            'contact_id' => $contact->id,
-            'description' => 'Conversation was moved from ' . $statusDescription,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
-
-        ChatLog::insert([
-            'contact_id' => $contact->id,
-            'entity_type' => 'ticket',
-            'entity_id' => $ticketId,
-            'created_at' => now(),
-            'updated_at' => now(),
-        ]);
+            $ticket->status = $request->status;
+            $ticket->updated_at = now();
+            $ticket->save();
+            $statusDescription = $request->status === 'closed' ? 'opened to closed' : 'closed to open';
+            $ticketId = ChatTicketLog::insertGetId([
+                'contact_id' => $contact->id,
+                'description' => 'Conversation was moved from ' . $statusDescription,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            ChatLog::insert([
+                'contact_id' => $contact->id,
+                'entity_type' => 'ticket',
+                'entity_id' => $ticketId,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        });
 
         return Redirect::back()->with(
             'status', [

@@ -5,6 +5,8 @@
                 <div>
                     <h2 class="text-2xl font-semibold">{{ $t('Agent Reports') }}</h2>
                     <p class="text-sm text-slate-600">{{ $t('Performance metrics for your team members') }}</p>
+                    <p class="text-sm text-slate-600">{{ $t('Response times are attributed to the responding agent and filtered by response date. Conversation counts show current assignments.') }}</p>
+                    <p v-if="business_hours && !business_hours_available" class="text-sm text-amber-700">{{ $t('Business hours are unavailable or invalid. Response times use elapsed time.') }}</p>
                 </div>
 
                 <div class="flex flex-wrap items-center gap-4">
@@ -55,6 +57,7 @@
                             <th class="px-6 py-4 font-semibold text-slate-700 text-center">{{ $t('Avg. First Response Time') }}</th>
                             <th class="px-6 py-4 font-semibold text-slate-700 text-center">{{ $t('Avg. Waiting Time') }}
                             </th>
+                            <th class="px-6 py-4 font-semibold text-slate-700 text-center">{{ $t('Awaiting Reply') }}</th>
                         </tr>
                     </thead>
                     <tbody class="divide-y text-slate-600">
@@ -87,9 +90,10 @@
                             <td class="px-6 py-4 text-center font-mono">
                                 {{ agent.avg_customer_waiting_time }}
                             </td>
+                            <td class="px-6 py-4 text-center">{{ agent.waiting_unanswered_count }}</td>
                         </tr>
                         <tr v-if="props.agent_reports.length === 0">
-                            <td colspan="5" class="px-6 py-12 text-center text-slate-500">
+                            <td colspan="6" class="px-6 py-12 text-center text-slate-500">
                                 <div class="flex flex-col items-center gap-2">
                                     <svg class="w-12 h-12 text-slate-300" xmlns="http://www.w3.org/2000/svg" fill="none"
                                         viewBox="0 0 24 24" stroke="currentColor">
@@ -121,6 +125,7 @@ const props = defineProps({
     initial_start_date: { type: String, default: '' },
     initial_end_date: { type: String, default: '' },
     business_hours: { type: Boolean, default: false },
+    business_hours_available: { type: Boolean, default: false },
 });
 
 const formatDate = (d) => {

@@ -33,8 +33,10 @@ class StoreProfileAddress extends FormRequest
             'resend_intervals' => 'nullable|array',
             'resend_intervals.*' => 'integer|min:1|max:24',
             'failed_campaign_group' => 'required_if:move_failed_contacts_to_group,true|nullable|exists:contact_groups,uuid',
-            'working_hours' => 'array',
-            'working_hours.*.day' => 'required|string',
+            'timezone' => 'nullable|timezone',
+            'enable_working_hours' => 'boolean',
+            'working_hours' => 'required_if:enable_working_hours,true|array',
+            'working_hours.*.day' => 'required|distinct|in:Monday,Tuesday,Wednesday,Thursday,Friday,Saturday,Sunday',
             'working_hours.*.active' => 'boolean',
             'working_hours.*.from' => 'nullable|date_format:H:i',
             'working_hours.*.to' => 'nullable|date_format:H:i',
@@ -42,5 +44,22 @@ class StoreProfileAddress extends FormRequest
         ];
 
         return $rules;
+    }
+
+    public function withValidator($validator): void
+    {
+        $validator->after(function ($validator) {
+            if (!$this->boolean('enable_working_hours')) return;
+            $days = $this->input('working_hours', []);
+            if (!is_array($days)) return;
+            foreach ($days as $index => $day) {
+                if (!is_array($day)) continue;
+                if (!empty($day['active'])) {
+                    foreach (['from', 'to'] as $field) {
+                        if (empty($day[$field])) $validator->errors()->add("working_hours.$index.$field", 'A time is required for an active day.');
+                    }
+                }
+            }
+        });
     }
 }
