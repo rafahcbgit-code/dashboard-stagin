@@ -186,6 +186,9 @@ Route::middleware(['auth:user'])->group(function () {
         Route::group(['middleware' => ['check.organization']], function () {
             Route::get('/account/suspended', [App\Http\Controllers\User\AccountStatusController::class, 'suspended'])
                 ->name('user.account.suspended');
+            Route::post('/subscription/cancellation-request', [App\Http\Controllers\User\SubscriptionCancellationRequestController::class, 'store'])
+                ->middleware('throttle:3,60')
+                ->name('user.subscription.cancellation-request');
         });
 
         Route::group(['middleware' => ['check.organization', 'isTrial']], function () {
@@ -526,6 +529,11 @@ Route::prefix('admin')->middleware(['auth:admin', 'admin.permission'])->group(fu
     Route::post('/organizations/sync-whatsapp-number-statuses', [App\Http\Controllers\Admin\OrganizationController::class, 'syncWhatsappNumberStatuses'])
         ->name('admin.organizations.sync-whatsapp-number-statuses');
     Route::resource('organizations', App\Http\Controllers\Admin\OrganizationController::class);
+    Route::get('/subscription-cancellation-requests', [App\Http\Controllers\Admin\SubscriptionCancellationRequestController::class, 'index']);
+    Route::post('/subscription-cancellation-requests/{cancellationRequest}/review', [App\Http\Controllers\Admin\SubscriptionCancellationRequestController::class, 'markReviewed']);
+    Route::get('/organizations/{uuid}/chats/export', [App\Http\Controllers\Admin\OrganizationController::class, 'exportChats'])
+        ->middleware('throttle:10,1')
+        ->name('admin.organizations.chats.export');
     Route::post('/organizations/{uuid}/subscription/extend', [App\Http\Controllers\Admin\OrganizationController::class, 'extendSubscription']);
     Route::post('/organizations/{uuid}/subscription/renew', [App\Http\Controllers\Admin\OrganizationController::class, 'renewSubscription']);
     Route::get('/organizations/{id}/login-as', [App\Http\Controllers\AuthController::class, 'loginAs']);

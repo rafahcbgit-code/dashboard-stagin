@@ -11,6 +11,8 @@ use App\Models\Organization;
 use App\Models\PaymentGateway;
 use App\Models\Setting;
 use App\Models\Subscription;
+use App\Models\SubscriptionCancellationRequest;
+use App\Models\Team;
 use App\Resolvers\PaymentPlatformResolver;
 use App\Services\BillingService;
 use App\Services\SubscriptionService;
@@ -52,6 +54,17 @@ class BillingController extends BaseController
         ])->pluck('value', 'key')->toArray();
         $data['setting'] = Setting::whereIn('key', ['enable_custom_payment'])->pluck('value', 'key')->toArray();
         $data['organizationId'] = $organizationId;
+        $data['cancellationRequest'] = SubscriptionCancellationRequest::query()
+            ->where('organization_id', $organizationId)
+            ->latest('id')
+            ->first();
+        $data['canRequestCancellation'] = Team::query()
+            ->where('organization_id', $organizationId)
+            ->where('user_id', auth()->id())
+            ->where('role', 'owner')
+            ->where('status', 'active')
+            ->whereNull('deleted_at')
+            ->exists();
 
         if($request->has('paymentId') && $request->has('token')){
             //Check if payment id exists in DB

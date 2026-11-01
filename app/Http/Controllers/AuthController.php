@@ -114,6 +114,8 @@ class AuthController extends BaseController
             Auth::guard($guard)->login($user, $remember);
         }
 
+        $user->recordLogin();
+
         //Check number of organizations
         if($guard == 'user'){
             $teams = Team::where('user_id', auth()->user()->id)
@@ -179,6 +181,7 @@ class AuthController extends BaseController
 
                 $guard = $user->role == 'admin' ? 'admin' : 'user';
                 Auth::guard($guard)->login($user, true);
+                $user->recordLogin();
 
                 return redirect($user->role == 'admin' ? 'admin/dashboard' : '/dashboard');
             } else {
@@ -234,6 +237,7 @@ class AuthController extends BaseController
                     
                     // Log the user in
                     Auth::guard('user')->login($user, true);
+                    $user->recordLogin();
                 });
             
                 return redirect('dashboard');
@@ -264,6 +268,7 @@ class AuthController extends BaseController
             if ($user) {
                 $guard = $user->role == 'admin' ? 'admin' : 'user';
                 Auth::guard($guard)->login($user, true);
+                $user->recordLogin();
 
                 return redirect($user->role == 'admin' ? 'admin/dashboard' : '/dashboard');
             } else {
@@ -317,6 +322,7 @@ class AuthController extends BaseController
                 }
 
                 Auth::guard('user')->login($user, true);
+                $user->recordLogin();
                 session()->put('current_organization', $organization->id);
                 Cookie::queue('last_organization_id', (string) $organization->id, 60 * 24 * 365);
                 

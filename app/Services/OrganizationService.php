@@ -393,6 +393,7 @@ class OrganizationService
     {
         return DB::transaction(function () use ($request, $uuid) {
             $organization = Organization::where('uuid', $uuid)->lockForUpdate()->firstOrFail();
+            $previousBillingOrganizationId = $organization->billing_organization_id;
 
             $updateData = [
                 'name' => $request->input('name'),
@@ -413,6 +414,13 @@ class OrganizationService
 
             $organization->update($updateData);
 
+            $usageService = new SubscriptionUsageService();
+            foreach ([$organization->id, $previousBillingOrganizationId, $organization->billing_organization_id] as $organizationId) {
+                if ($organizationId) {
+                    $usageService->forgetResourceSharingCache((int) $organizationId);
+                }
+            }
+
             $subscription = Subscription::where('organization_id', $organization->id)->orderByDesc('id')->lockForUpdate()->first();
             $plan = SubscriptionPlan::where('uuid', $request->plan)->first();
             $subscriptionMeta = $this->resolveSubscriptionExpiration($request, $plan, $organization);
@@ -431,9 +439,6 @@ class OrganizationService
                         && ((int) $request->input('subscription_id') !== (int) $subscription->id
                             || (int) $request->input('subscription_version') !== (int) $subscription->period_version)) {
                         throw ValidationException::withMessages(['valid_until' => __('The subscription changed. Reload the page before trying again.')]);
-                    }
-                    if ($expirationChanged && ! $planChanged) {
-                        throw ValidationException::withMessages(['valid_until' => __('Use the Extend subscription or Renew subscription action to change the expiration date.')]);
                     }
                     if ($planChanged && $expiration->lte(now())) {
                         throw ValidationException::withMessages(['valid_until' => __('Choose an expiration date in the future.')]);

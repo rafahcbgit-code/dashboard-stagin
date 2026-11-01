@@ -1255,6 +1255,8 @@
   "Reporting": "Reporting",
   "Customer Reports": "Customer Reports",
   "Performance metrics for your team members": "Performance metrics for your team members",
+  "Response times are attributed to the responding agent and filtered by response date. Conversation counts show current assignments.": "Response times are attributed to the responding agent and filtered by response date. Conversation counts show current assignments.",
+  "Business hours are unavailable or invalid. Response times use elapsed time.": "Business hours are unavailable or invalid. Response times use elapsed time.",
   "Analytics & insights for your contacts": "Analytics & insights for your contacts",
   "Conversations over time": "Conversations over time",
   "Daily conversations created": "Daily conversations created",
@@ -1818,5 +1820,12 @@
   "Show original WhatsApp error": "Show original WhatsApp error",
   "Original error message": "Original error message",
   "Additional technical details": "Additional technical details",
-  "No additional technical details were provided.": "WhatsApp did not provide additional technical details."
+  "No additional technical details were provided.": "WhatsApp did not provide additional technical details.",
+  "Export conversations": "Export conversations",
+  "Dates use this organization timezone. The range includes both dates.": "Dates use this organization timezone. The range includes both dates.",
+  "Conversation type": "Conversation type",
+  "All conversations": "All conversations",
+  "Ad campaign conversations": "Ad campaign conversations",
+  "Preparing...": "Preparing...",
+  "The start date must be before or equal to the end date.": "The start date must be before or equal to the end date."
 }

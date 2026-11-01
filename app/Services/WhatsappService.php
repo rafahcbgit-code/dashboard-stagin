@@ -142,9 +142,9 @@ class WhatsappService
             return $this->buildBlockedContactResponse($contact);
         }
 
-        $trialExpiredGuard = $this->guardExpiredTrial((int) $contact->organization_id);
-        if ($trialExpiredGuard !== null) {
-            return $trialExpiredGuard;
+        $subscriptionGuard = $this->guardExpiredSubscription((int) $contact->organization_id);
+        if ($subscriptionGuard !== null) {
+            return $subscriptionGuard;
         }
 
         $conversationGuard = $this->guardConversationLimit((int) $contact->organization_id);
@@ -293,9 +293,9 @@ class WhatsappService
             return $this->buildBlockedContactResponse($contact);
         }
 
-        $trialExpiredGuard = $this->guardExpiredTrial((int) $contact->organization_id);
-        if ($trialExpiredGuard !== null) {
-            return $trialExpiredGuard;
+        $subscriptionGuard = $this->guardExpiredSubscription((int) $contact->organization_id);
+        if ($subscriptionGuard !== null) {
+            return $subscriptionGuard;
         }
 
         $conversationGuard = $this->guardConversationLimit((int) $contact->organization_id);
@@ -1711,7 +1711,7 @@ class WhatsappService
      * @param string $imageUrl The URL of the stored image.
      * @return mixed Returns the response from the HTTP request.
      */
-    public function sendMedia($contactUuId, $mediaType, $mediaFileName, $mediaFilePath, $mediaUrl, $location, $caption = NULL, $transcription = NULL)
+    public function sendMedia($contactUuId, $mediaType, $mediaFileName, $mediaFilePath, $mediaUrl, $location, $caption = NULL, $transcription = NULL, $userId = null)
     {
         $contact = Contact::where('uuid', $contactUuId)->first();
 
@@ -1723,9 +1723,9 @@ class WhatsappService
             return $this->buildBlockedContactResponse($contact);
         }
 
-        $trialExpiredGuard = $this->guardExpiredTrial((int) $contact->organization_id);
-        if ($trialExpiredGuard !== null) {
-            return $trialExpiredGuard;
+        $subscriptionGuard = $this->guardExpiredSubscription((int) $contact->organization_id);
+        if ($subscriptionGuard !== null) {
+            return $subscriptionGuard;
         }
 
         $conversationGuard = $this->guardConversationLimit((int) $contact->organization_id);
@@ -1775,6 +1775,7 @@ class WhatsappService
                 'wam_id' => $wamId,
                 'contact_id' => $contact->id,
                 'type' => 'outbound',
+                'user_id' => $userId,
                 'metadata' => json_encode($mediaData),
                 'media_id' => $media->id,
                 'status' => 'sent',
@@ -1873,16 +1874,17 @@ class WhatsappService
         return $this->buildErrorResponse('Contact is blocked', 403, 'CONTACT_BLOCKED');
     }
 
-    private function guardExpiredTrial(int $organizationId): ?\stdClass
+    private function guardExpiredSubscription(int $organizationId): ?\stdClass
     {
-        if (! SubscriptionService::isTrialExpiredForOutbound($organizationId)) {
+        $message = SubscriptionService::outboundSubscriptionExpirationMessage($organizationId);
+        if ($message === null) {
             return null;
         }
 
         return $this->buildErrorResponse(
-            SubscriptionService::trialExpiredOutboundMessage(),
+            $message,
             403,
-            'TRIAL_EXPIRED'
+            'SUBSCRIPTION_EXPIRED'
         );
     }
 

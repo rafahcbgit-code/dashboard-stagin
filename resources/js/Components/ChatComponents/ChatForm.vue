@@ -10,14 +10,17 @@ import PreCreatedRepliesModal from './PreCreatedRepliesModal.vue';
 import MetaFlowPickerModal from './MetaFlowPickerModal.vue';
 
 const recorder = ref(null);
+const subscriptionExpiredState = ref(false);
 const props = defineProps([
     'contact',
     'chatThread',
     'chatLimitReached',
+    'subscriptionExpired',
     'simpleForm',
     'pusherSettings',
     'replyingTo',
 ]);
+subscriptionExpiredState.value = Boolean(props.subscriptionExpired);
 const isContactBlocked = computed(() => Boolean(props.contact?.is_blocked));
 
 const showMetaFlowModal = ref(false);
@@ -423,6 +426,9 @@ const sendMessage = async () => {
 
             processingForm.value = false;
         } catch (error) {
+            if (error.response?.data?.error?.code === 'SUBSCRIPTION_EXPIRED') {
+                subscriptionExpiredState.value = true;
+            }
             outboundError.value = messageFromError(error);
             processingForm.value = false;
         }
@@ -889,12 +895,21 @@ onBeforeUnmount(() => {
 });
 </script>
 <template>
+    <div v-if="subscriptionExpiredState" class="flex justify-center items-center w-full px-6 md:px-4">
+        <div class="flex w-full items-start justify-between gap-4 rounded-lg border border-amber-200 bg-amber-50 p-4 text-amber-950 mb-2">
+            <div>
+                <div class="text-sm font-semibold">{{ $t('Subscription expired') }}</div>
+                <div class="text-sm">{{ $t('Your subscription has expired. You can continue receiving conversations, but sending replies is disabled. Renew your subscription to reply.') }}</div>
+            </div>
+            <a href="/billing" class="shrink-0 rounded-md bg-primary px-3 py-2 text-sm font-medium text-white">{{ $t('Renew subscription') }}</a>
+        </div>
+    </div>
     <div v-if="outboundError" class="flex justify-center items-center w-full px-6 md:px-4">
         <div class="w-full rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700 mb-2">
             {{ $t(outboundError) }}
         </div>
     </div>
-    <div v-if="props.chatLimitReached" class="flex justify-center items-center w-full px-6 md:px-4">
+    <div v-if="props.chatLimitReached && !subscriptionExpiredState" class="flex justify-center items-center w-full px-6 md:px-4">
         <div class="flex items-start space-x-4 bg-orange-100 rounded-lg p-2 mb-2 px-4">
             <span class="text-red-700">
                 <svg xmlns="http://www.w3.org/2000/svg" width="30" height="30" viewBox="0 0 36 36">
@@ -916,7 +931,7 @@ onBeforeUnmount(() => {
             </div>
         </div>
     </div>
-    <div v-if="isContactBlocked && !props.chatLimitReached" class="flex justify-center items-center w-full px-6 md:px-4">
+    <div v-if="isContactBlocked && !props.chatLimitReached && !subscriptionExpiredState" class="flex justify-center items-center w-full px-6 md:px-4">
         <div class="flex items-start space-x-4 bg-red-100 rounded-lg p-2 mb-2 px-4 border border-red-200">
             <span class="text-red-700">
                 <svg xmlns="http://www.w3.org/2000/svg" width="28" height="28" viewBox="0 0 24 24">
@@ -929,7 +944,7 @@ onBeforeUnmount(() => {
             </div>
         </div>
     </div>
-    <div v-if="!isContactBlocked && !props.chatLimitReached" class="w-full px-2 pb-2 md:px-10">
+    <div v-if="!isContactBlocked && !props.chatLimitReached && !subscriptionExpiredState" class="w-full px-2 pb-2 md:px-10">
         <section class="rounded-2xl border p-3 shadow-sm" :class="isInboundChatWithin24Hours ? (isReplyWindowExpiringSoon ? 'border-amber-300 bg-amber-50/80' : 'border-emerald-200 bg-emerald-50/70') : (!latestInboundAt ? 'border-blue-200 bg-blue-50/70' : 'border-slate-300 bg-slate-50')" :aria-label="$t('Free reply window')">
             <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div class="flex min-w-0 items-start gap-2">
@@ -986,7 +1001,7 @@ onBeforeUnmount(() => {
             </div>
         </section>
     </div>
-    <form v-if="!isContactBlocked && isInboundChatWithin24Hours && !props.chatLimitReached" @submit.prevent="sendMessage()"
+    <form v-if="!isContactBlocked && isInboundChatWithin24Hours && !props.chatLimitReached && !subscriptionExpiredState" @submit.prevent="sendMessage()"
         class="flex items-center px-2 md:px-10 space-x-2">
         <div class="cb-card w-full p-3 sm:p-4">
             <div v-if="props.replyingTo" class="mb-3 flex items-start gap-3 rounded-md border-l-4 border-[#00a884] bg-slate-50 px-3 py-2">

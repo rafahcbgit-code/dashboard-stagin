@@ -71,6 +71,27 @@
                     </div> -->
                 </div>
             </div>
+            <section v-if="canRequestCancellation" class="mt-6 rounded-lg border border-amber-200 bg-white p-5 shadow-sm">
+                <h3 class="text-base font-semibold text-gray-900">{{ $t('Request subscription cancellation') }}</h3>
+                <p class="mt-1 text-sm text-gray-600">{{ $t('Submit a reason for your request. Your subscription will not be cancelled until the administrator reviews it.') }}</p>
+                <div v-if="cancellationRequest?.status === 'pending'" class="mt-4 rounded-md bg-amber-50 p-4 text-sm text-amber-900">
+                    <p class="font-medium">{{ $t('Your cancellation request is under review.') }}</p>
+                    <p class="mt-1">{{ $t('The administrator will respond within 24 hours.') }}</p>
+                    <p class="mt-2 whitespace-pre-line text-amber-800">{{ cancellationRequest.reason }}</p>
+                </div>
+                <div v-else-if="cancellationRequest?.status === 'reviewed'" class="mt-4 rounded-md bg-slate-50 p-4 text-sm text-slate-700">
+                    <p class="font-medium">{{ $t('The administrator has responded to your cancellation request.') }}</p>
+                    <p class="mt-2 whitespace-pre-line">{{ cancellationRequest.admin_response }}</p>
+                    <p class="mt-3 text-xs text-gray-500">{{ $t('You may submit a new request if needed.') }}</p>
+                </div>
+                <form v-if="cancellationRequest?.status !== 'pending'" @submit.prevent="submitCancellationRequest" class="mt-4 space-y-3">
+                    <textarea v-model="cancellationForm.reason" rows="3" maxlength="2000" required class="w-full rounded-md border border-gray-300 p-3 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500" :placeholder="$t('Please tell us why you want to cancel')"></textarea>
+                    <p v-if="cancellationForm.errors.reason" class="text-sm text-red-600">{{ cancellationForm.errors.reason }}</p>
+                    <button type="submit" :disabled="cancellationForm.processing" class="rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:cursor-not-allowed disabled:opacity-60">
+                        {{ cancellationForm.processing ? $t('Sending...') : $t('Send cancellation request') }}
+                    </button>
+                </form>
+            </section>
             <div class="bg-white shadow-sm p-5 rounded-[0.5rem] mt-6 w-full">
                 <h2 class="text-sm text-gray-500 tracking-[0px] mb-4">{{ $t('Resource usage') }}</h2>
                 <div class="grid grid-cols-1 gap-3 md:grid-cols-5">
@@ -206,7 +227,7 @@
     import { Link, useForm, router } from "@inertiajs/vue3";
     import Modal from '@/Components/Modal.vue';
     import FormInput from '@/Components/FormInput.vue';
-    import { ref, onMounted } from 'vue';
+    import { ref, computed, onMounted } from 'vue';
     import { useI18n } from 'vue-i18n';
     import Echo from 'laravel-echo';
     import Pusher from 'pusher-js';
@@ -222,7 +243,9 @@
         'pusherSettings',
         'organizationId',
         'setting',
-        'resourceUsage'
+        'resourceUsage',
+        'cancellationRequest',
+        'canRequestCancellation'
     ]);
 
     const subscription = ref(props.subscription.data)
@@ -234,6 +257,12 @@
         'amount' : null,
         'method' : null
     });
+    const cancellationForm = useForm({ reason: '' });
+    const submitCancellationRequest = () => cancellationForm.post('/subscription/cancellation-request', {
+        preserveScroll: true,
+        onSuccess: () => cancellationForm.reset(),
+    });
+    const cancellationRequest = computed(() => props.cancellationRequest);
 
     const formatLimit = (value) => Number(value) === -1 ? t('Unlimited') : value;
     const sourceLabels = {

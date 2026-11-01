@@ -49,6 +49,7 @@
                 <div @click="changeTab('team')" class="cursor-pointer px-2 py-2" :class="tab === 'team' ? 'bg-white' : ''">{{ $t('Team') }}</div>
                 <div @click="changeTab('billing')" class="cursor-pointer px-2 py-2" :class="tab === 'billing' ? 'bg-white' : ''">{{ $t('Billing history') }}</div>
                 <div @click="changeTab('subscription_history')" class="cursor-pointer px-2 py-2" :class="tab === 'subscription_history' ? 'bg-white' : ''">{{ $t('Subscription history') }}</div>
+                <div v-if="can('organizations', 'export_chats')" @click="changeTab('chat_export')" class="cursor-pointer px-2 py-2" :class="tab === 'chat_export' ? 'bg-white' : ''">{{ $t('Export conversations') }}</div>
             </div>
             <div v-if="props.organization && tab === 'team'" class="pt-5">
                 <UserTable :rows="props.users" :filters="props.filters" :type="'user'" :showRole="true" :showDeleteBtn="false"/>
@@ -109,6 +110,17 @@
                     </table>
                 </div>
             </div>
+            <section v-if="props.organization && tab === 'chat_export' && can('organizations', 'export_chats')" class="mb-5 rounded-md border bg-white p-5">
+                <h3 class="font-medium">{{ $t('Export conversations') }}</h3>
+                <p class="mt-1 text-xs text-gray-500">{{ $t('Dates use this organization timezone. The range includes both dates.') }}</p>
+                <div class="mt-4 grid gap-4 md:grid-cols-4 md:items-end">
+                    <FormSelect v-model="chatExport.type" :name="$t('Conversation type')" :options="chatExportTypeOptions" />
+                    <FormInput v-model="chatExport.date_from" :name="$t('Start date')" type="date" />
+                    <FormInput v-model="chatExport.date_to" :name="$t('End date')" type="date" />
+                    <button type="button" :disabled="chatExport.processing" @click="exportChats" class="rounded-md bg-indigo-600 px-4 py-2 text-sm text-white disabled:opacity-50">{{ chatExport.processing ? $t('Preparing...') : $t('Export CSV') }}</button>
+                </div>
+                <p v-if="chatExportError" class="mt-2 text-sm text-red-600">{{ chatExportError }}</p>
+            </section>
             <form v-if="tab === 'organization'" @submit.prevent="submitForm()" class="bg-white py-5 px-5 rounded-bl-[0.5rem] rounded-br-[0.5rem]">
                 <div class="sm:flex border-b py-5">
                     <div class="hidden sm:block sm:w-[40%] mb-1">
@@ -126,7 +138,7 @@
                                 :min="props.organization?.subscription ? undefined : minValidUntil"
                                 :class="'sm:col-span-6'"
                             />
-                            <p v-if="props.organization" class="text-xs text-gray-500 sm:col-span-6">{{ $t('Choose the expiration date when assigning or changing the plan. To change the date of the same plan, use Extend subscription or Renew subscription.') }}</p>
+                            <p v-if="props.organization" class="text-xs text-gray-500 sm:col-span-6">{{ $t('You can move the expiration date earlier or later here, including to a past date. If the selected date has passed, the subscription will be treated as expired. Use Extend subscription to extend the same plan while keeping current usage.') }}</p>
                             <p v-if="props.organization" class="text-xs text-gray-500 sm:col-span-6">{{ $t('Dates use this organization timezone') }}: {{ props.subscriptionTimezone }}</p>
                             <FormSelect
                                 v-model="form.subscription_status"
@@ -452,6 +464,27 @@
         zip: getAddressDetail(props.organization?.address, 'zip'),
         country: getAddressDetail(props.organization?.address, 'country')
     });
+
+    const chatExport = useForm({ type: 'all', date_from: '', date_to: '' });
+    const chatExportError = ref('');
+    const chatExportTypeOptions = [
+        { value: 'all', label: trans('All conversations') },
+        { value: 'ad_campaigns', label: trans('Ad campaign conversations') },
+    ];
+
+    const exportChats = () => {
+        chatExportError.value = '';
+        if (chatExport.date_from && chatExport.date_to && chatExport.date_from > chatExport.date_to) {
+            chatExportError.value = trans('The start date must be before or equal to the end date.');
+            return;
+        }
+        chatExport.processing = true;
+        const params = new URLSearchParams({ type: chatExport.type });
+        if (chatExport.date_from) params.set('date_from', chatExport.date_from);
+        if (chatExport.date_to) params.set('date_to', chatExport.date_to);
+        window.location.href = `/admin/organizations/${props.organization.uuid}/chats/export?${params.toString()}`;
+        window.setTimeout(() => { chatExport.processing = false; }, 1500);
+    };
 
     const typeOptions = ref([
         { value: 'credit', label: trans('Credit') },

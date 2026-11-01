@@ -35,6 +35,15 @@ class WorkingHoursService
 
             $metadata = $organization->metadata ? json_decode($organization->metadata, true) : [];
 
+            return $this->scheduleFromMetadata($metadata ?: []);
+        } catch (\Throwable $e) {
+            return null;
+        }
+    }
+
+    public function scheduleFromMetadata(array $metadata): ?array
+    {
+        try {
             // Check if working hours feature is enabled
             if (array_key_exists('enable_working_hours', $metadata) && ! (int) $metadata['enable_working_hours']) {
                 return null;
@@ -44,6 +53,7 @@ class WorkingHoursService
             if (! $wh) {
                 return null;
             }
+            if (isset($wh['enabled']) && !$wh['enabled']) return null;
 
             $tz = $wh['timezone'] ?? $metadata['timezone'] ?? config('app.timezone') ?? 'UTC';
 
@@ -66,14 +76,14 @@ class WorkingHoursService
                         $days[] = [
                             'day' => $dayName,
                             'active' => (bool) ($found['active'] ?? true),
-                            'from' => $found['from'] ?? '09:00',
-                            'to' => $found['to'] ?? '17:00',
+                            'from' => $found['from'] ?? null,
+                            'to' => $found['to'] ?? null,
                         ];
                     } else {
                         $days[] = ['day' => $dayName, 'active' => false, 'from' => '09:00', 'to' => '17:00'];
                     }
                 }
-                return ['timezone' => $tz, 'days' => $days];
+                return $this->validatedSchedule($tz, $days);
             }
 
             // Simple from/to format (same schedule every day)
@@ -84,7 +94,7 @@ class WorkingHoursService
                     'from' => $wh['from'],
                     'to' => $wh['to'],
                 ], $dayNames);
-                return ['timezone' => $tz, 'days' => $days];
+                return $this->validatedSchedule($tz, $days);
             }
 
             // Per-day map format
@@ -98,14 +108,14 @@ class WorkingHoursService
                         $days[] = [
                             'day' => $dayName,
                             'active' => true,
-                            'from' => $dayCfg['from'] ?? '09:00',
-                            'to' => $dayCfg['to'] ?? '17:00',
+                            'from' => $dayCfg['from'] ?? null,
+                            'to' => $dayCfg['to'] ?? null,
                         ];
                     } else {
                         $days[] = ['day' => $dayName, 'active' => false, 'from' => '09:00', 'to' => '17:00'];
                     }
                 }
-                return ['timezone' => $tz, 'days' => $days];
+                return $this->validatedSchedule($tz, $days);
             }
 
             return null;
@@ -114,234 +124,82 @@ class WorkingHoursService
         }
     }
 
-    public function isWithinWorkingHours($organizationId): bool
+    private function validatedSchedule(string $timezone, array $days): ?array
     {
         try {
-            $organization = Organization::find($organizationId);
-            if (! $organization) {
-                Log::channel('webhook')->info('Working hours check - organization not found, allowing auto-reply', [
-                    'organization_id' => $organizationId,
-                ]);
-                return true;
-            }
-
-            $metadata = $organization->metadata ? json_decode($organization->metadata, true) : [];
-            $wh = $metadata['working_hours'] ?? null;
-
-            // Support two shapes:
-            // 1) legacy: working_hours => ['from' => '09:00', 'to' => '17:00'] or 'days' map
-            // 2) your format: enable_working_hours (bool) + working_hours as array of days
-
-            // If the organization explicitly disables the feature via enable_working_hours => allow
-            if (array_key_exists('enable_working_hours', $metadata) && ! (int) $metadata['enable_working_hours']) {
-                Log::channel('webhook')->info('Working hours check - enable_working_hours disabled, allowing auto-reply', [
-                    'organization_id' => $organizationId,
-                ]);
-                return true;
-            }
-
-            // If your format is present (array of day objects), normalize to per-day lookup
-            $workingHoursDayArray = null;
-            if (is_array($wh) && array_values($wh) === $wh && isset($wh[0]) && is_array($wh[0]) && isset($wh[0]['day'])) {
-                // Example: working_hours: [ { day: 'Monday', active: true, from:'09:00', to:'17:00' }, ... ]
-                $workingHoursDayArray = $wh;
-            }
-
-            // If nothing relevant configured -> allow auto-reply (backwards compatible)
-            if (! $wh && ! $workingHoursDayArray) {
-                Log::channel('webhook')->info('Working hours check - no working_hours configured, allowing auto-reply', [
-                    'organization_id' => $organizationId,
-                ]);
-                return true;
-            }
-
-            // Determine timezone
-            $tz = $wh['timezone'] ?? $metadata['timezone'] ?? config('app.timezone') ?? 'UTC';
-            $now = Carbon::now($tz);
-            $currentMinutes = (int)$now->format('G') * 60 + (int)$now->format('i');
-
-            // Helper to parse HH:MM to minutes
-            $toMinutes = function ($timeStr) {
-                if (! $timeStr || ! is_string($timeStr)) return null;
-                $parts = explode(':', $timeStr);
-                if (count($parts) < 2) return null;
-                $h = intval($parts[0]);
-                $m = intval($parts[1]);
-                return $h * 60 + $m;
-            };
-
-            // Case 1: simple from/to keys (same every day)
-            if (isset($wh['from']) && isset($wh['to'])) {
-                $fromMin = $toMinutes($wh['from']);
-                $toMin = $toMinutes($wh['to']);
-                if ($fromMin === null || $toMin === null) {
-                    Log::channel('webhook')->info('Working hours check - invalid from/to format, allowing auto-reply', [
-                        'organization_id' => $organizationId,
-                        'from' => $wh['from'] ?? null,
-                        'to' => $wh['to'] ?? null,
-                    ]);
-                    return true;
-                }
-
-                if ($fromMin <= $toMin) {
-                    $inside = $currentMinutes >= $fromMin && $currentMinutes < $toMin;
-                    Log::channel('webhook')->info('Working hours check', [
-                        'organization_id' => $organizationId,
-                        'timezone' => $tz,
-                        'now' => $now->toIso8601String(),
-                        'from' => $wh['from'],
-                        'to' => $wh['to'],
-                        'inside' => $inside,
-                    ]);
-                    return $inside;
-                }
-                // overnight range (e.g. 22:00 - 06:00)
-                $inside = $currentMinutes >= $fromMin || $currentMinutes < $toMin;
-                Log::channel('webhook')->info('Working hours check (overnight)', [
-                    'organization_id' => $organizationId,
-                    'timezone' => $tz,
-                    'now' => $now->toIso8601String(),
-                    'from' => $wh['from'],
-                    'to' => $wh['to'],
-                    'inside' => $inside,
-                ]);
-                return $inside;
-            }
-
-            // Case 1b: your format - working_hours is an array of day objects
-            if ($workingHoursDayArray !== null) {
-                $todayName = $now->format('l'); // e.g. Monday
-                $found = null;
-                foreach ($workingHoursDayArray as $entry) {
-                    if (! is_array($entry)) continue;
-                    $entryDay = $entry['day'] ?? ($entry['name'] ?? null);
-                    if (! $entryDay) continue;
-                    if (strcasecmp(trim($entryDay), $todayName) === 0) {
-                        $found = $entry;
-                        break;
-                    }
-                }
-
-                if (! $found) {
-                    Log::channel('webhook')->info('Working hours check - no entry for today in working_hours array, outside working hours', [
-                        'organization_id' => $organizationId,
-                        'today' => $todayName,
-                    ]);
-                    return false;
-                }
-
-                // Check active flag for the day
-                if (array_key_exists('active', $found) && ! (int) $found['active']) {
-                    Log::channel('webhook')->info('Working hours check - today marked inactive in working_hours array, outside working hours', [
-                        'organization_id' => $organizationId,
-                        'today' => $todayName,
-                    ]);
-                    return false;
-                }
-
-                $fromMin = $toMinutes($found['from'] ?? null);
-                $toMin = $toMinutes($found['to'] ?? null);
-                if ($fromMin === null || $toMin === null) {
-                    Log::channel('webhook')->info('Working hours check - invalid from/to in working_hours entry for today, outside working hours', [
-                        'organization_id' => $organizationId,
-                        'today' => $todayName,
-                        'entry' => $found,
-                    ]);
-                    return false;
-                }
-
-                if ($fromMin <= $toMin) {
-                    $inside = $currentMinutes >= $fromMin && $currentMinutes < $toMin;
-                    Log::channel('webhook')->info('Working hours check (array-of-days)', [
-                        'organization_id' => $organizationId,
-                        'timezone' => $tz,
-                        'now' => $now->toIso8601String(),
-                        'today' => $todayName,
-                        'from' => $found['from'],
-                        'to' => $found['to'],
-                        'inside' => $inside,
-                    ]);
-                    return $inside;
-                }
-
-                $inside = $currentMinutes >= $fromMin || $currentMinutes < $toMin;
-                Log::channel('webhook')->info('Working hours check (array-of-days overnight)', [
-                    'organization_id' => $organizationId,
-                    'timezone' => $tz,
-                    'now' => $now->toIso8601String(),
-                    'today' => $todayName,
-                    'from' => $found['from'],
-                    'to' => $found['to'],
-                    'inside' => $inside,
-                ]);
-                return $inside;
-            }
-
-            // Case 2: per-day configuration
-            if (isset($wh['days']) && is_array($wh['days'])) {
-                $dayMap = [
-                    0 => 'sun', 1 => 'mon', 2 => 'tue', 3 => 'wed', 4 => 'thu', 5 => 'fri', 6 => 'sat'
-                ];
-                $dayKey = $dayMap[(int)$now->dayOfWeek] ?? null;
-                $dayCfg = $dayKey && isset($wh['days'][$dayKey]) ? $wh['days'][$dayKey] : null;
-
-                if (! $dayCfg) {
-                    // If no config for today, assume not working -> disallow
-                    Log::channel('webhook')->info('Working hours check - no day configuration for today, outside working hours', [
-                        'organization_id' => $organizationId,
-                        'day' => $dayKey,
-                    ]);
-                    return false;
-                }
-
-                $fromMin = $toMinutes($dayCfg['from'] ?? null);
-                $toMin = $toMinutes($dayCfg['to'] ?? null);
-                if ($fromMin === null || $toMin === null) {
-                    Log::channel('webhook')->info('Working hours check - invalid day from/to format, outside working hours', [
-                        'organization_id' => $organizationId,
-                        'day' => $dayKey,
-                        'from' => $dayCfg['from'] ?? null,
-                        'to' => $dayCfg['to'] ?? null,
-                    ]);
-                    return false;
-                }
-
-                if ($fromMin <= $toMin) {
-                    $inside = $currentMinutes >= $fromMin && $currentMinutes < $toMin;
-                    Log::channel('webhook')->info('Working hours check (per-day)', [
-                        'organization_id' => $organizationId,
-                        'timezone' => $tz,
-                        'now' => $now->toIso8601String(),
-                        'day' => $dayKey,
-                        'from' => $dayCfg['from'],
-                        'to' => $dayCfg['to'],
-                        'inside' => $inside,
-                    ]);
-                    return $inside;
-                }
-                $inside = $currentMinutes >= $fromMin || $currentMinutes < $toMin;
-                Log::channel('webhook')->info('Working hours check (per-day overnight)', [
-                    'organization_id' => $organizationId,
-                    'timezone' => $tz,
-                    'now' => $now->toIso8601String(),
-                    'day' => $dayKey,
-                    'from' => $dayCfg['from'],
-                    'to' => $dayCfg['to'],
-                    'inside' => $inside,
-                ]);
-                return $inside;
-            }
-
-            // Unknown format -> allow
-            return true;
+            new \DateTimeZone($timezone);
         } catch (\Throwable $e) {
-            // On error, don't block auto-reply
-            Log::channel('webhook')->warning('isWithinWorkingHours check failed, allowing auto-reply', [
-                'organization_id' => $organizationId,
-                'error' => $e->getMessage(),
-            ]);
-            return true;
+            return null;
         }
+        foreach ($days as $day) {
+            if ($day['active'] && ($this->parseScheduleTime($day['from'], false) === null || $this->parseScheduleTime($day['to'], true) === null)) return null;
+        }
+        return ['timezone' => $timezone, 'days' => $days];
+    }
+
+    public function isWithinWorkingHours($organizationId): bool
+    {
+        $schedule = $this->getSchedule($organizationId);
+        if (!$schedule) return true; // Invalid or disabled: allow the normal greeting.
+
+        $now = Carbon::now($schedule['timezone']);
+        $today = $now->format('l');
+        $yesterday = $now->copy()->subDay()->format('l');
+        $seconds = $now->hour * 3600 + $now->minute * 60 + $now->second;
+        foreach ($schedule['days'] as $day) {
+            if (!$day['active']) continue;
+            // Existing organizations use this pair to represent a full day.
+            if ($day['day'] === $today && $day['from'] === '00:00' && $day['to'] === '23:59') return true;
+            $from = $this->parseScheduleTime($day['from'], false);
+            $to = $this->parseScheduleTime($day['to'], false);
+            if ($day['day'] === $today && ($from <= $to ? ($seconds >= $from && $seconds < $to) : $seconds >= $from)) return true;
+            if ($day['day'] === $yesterday && $from > $to && $seconds < $to) return true;
+        }
+        return false;
+    }
+
+    /**
+     * Compare a local time with a schedule whose end is exclusive.
+     */
+    private function isTimeWithinRange(Carbon $now, $from, $to): ?bool
+    {
+        $fromSeconds = $this->parseScheduleTime($from, false);
+        $toSeconds = $this->parseScheduleTime($to, false);
+
+        if ($fromSeconds === null || $toSeconds === null) {
+            return null;
+        }
+        if ($from === '00:00' && $to === '23:59') return true;
+
+        $currentSeconds = ($now->hour * 3600) + ($now->minute * 60) + $now->second;
+
+        if ($fromSeconds <= $toSeconds) {
+            return $currentSeconds >= $fromSeconds && $currentSeconds < $toSeconds;
+        }
+
+        return $currentSeconds >= $fromSeconds || $currentSeconds < $toSeconds;
+    }
+
+    private function parseScheduleTime($value, bool $endOfMinute): ?int
+    {
+        if (! is_string($value) || ! preg_match('/^(\d{1,2}):(\d{2})(?::(\d{2}))?$/', trim($value), $matches)) {
+            return null;
+        }
+
+        $hour = (int) $matches[1];
+        $minute = (int) $matches[2];
+        $second = isset($matches[3]) ? (int) $matches[3] : ($endOfMinute ? 59 : 0);
+
+        if ($hour > 23 || $minute > 59 || $second > 59) {
+            return null;
+        }
+
+        return ($hour * 3600) + ($minute * 60) + $second;
+    }
+
+    private function isOvernightRange(string $from, string $to): bool
+    {
+        return $this->parseScheduleTime($from, false) > $this->parseScheduleTime($to, true);
     }
 
 }

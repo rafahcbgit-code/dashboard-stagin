@@ -86,6 +86,8 @@ class ProfileController extends BaseController
         $organizationId = session('current_organization');
         $organizationConfig = Organization::where('id', $organizationId)->first();
         $metadataArray = $organizationConfig->metadata ? json_decode($organizationConfig->metadata, true) : [];
+        $scheduleKeys = array_flip(['timezone', 'enable_working_hours', 'working_hours']);
+        $previousSchedule = array_intersect_key($metadataArray, $scheduleKeys);
 
         $metadataArray['notifications']['enable_sound'] = $request->input('enable_sound_notification');
         $metadataArray['notifications']['tone'] = $request->input('tone');
@@ -114,6 +116,14 @@ class ProfileController extends BaseController
             }, $incomingWorkingHours);
 
             $metadataArray['working_hours'] = $normalized;
+        }
+
+        $newSchedule = array_intersect_key($metadataArray, $scheduleKeys);
+        if ($previousSchedule != $newSchedule) {
+            $history = $metadataArray['working_hours_history'] ?? [];
+            if (!$history) $history[] = ['effective_at' => null, 'settings' => $previousSchedule];
+            $history[] = ['effective_at' => now()->utc()->toDateTimeString(), 'settings' => $newSchedule];
+            $metadataArray['working_hours_history'] = $history;
         }
 
         $addressArray['street'] = $request->input('address');

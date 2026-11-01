@@ -84,7 +84,9 @@ class PopulateGoogleSheetJob implements ShouldQueue
                 continue;
             }
 
-            $columnValues[$sheetColumn] = $submittedValues[$field] ?? '';
+            $columnValues[$sheetColumn] = $this->normalizeSheetCellValue(
+                $submittedValues[$field] ?? ''
+            );
         }
 
         // 7. Fetch actual column order from the sheet header row, then build the
@@ -133,10 +135,36 @@ class PopulateGoogleSheetJob implements ShouldQueue
                 continue;
             }
 
-            $columnValues[$sheetColumn] = $submittedValues[$field] ?? '';
+            $columnValues[$sheetColumn] = $this->normalizeSheetCellValue(
+                $submittedValues[$field] ?? ''
+            );
         }
 
         return $columnValues;
+    }
+
+    /**
+     * Google Sheets cells must contain scalar values. Meta Flow choice fields
+     * such as CheckboxGroup can return an array, so flatten those values only
+     * at the spreadsheet boundary without changing the shared Flow response
+     * data used by replies, notifications, or other integrations.
+     */
+    private function normalizeSheetCellValue(mixed $value): string|int|float|bool|null
+    {
+        if (is_array($value)) {
+            return implode(', ', array_map(
+                static fn ($item) => is_scalar($item)
+                    ? (string) $item
+                    : (json_encode($item, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: ''),
+                $value
+            ));
+        }
+
+        if (is_object($value)) {
+            return json_encode($value, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?: '';
+        }
+
+        return $value;
     }
 
     private function buildAutomaticMapping(MetaFlow $flow, array $headers): array

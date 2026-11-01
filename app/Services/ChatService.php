@@ -29,6 +29,7 @@ use Illuminate\Support\Facades\Http;
 use App\Services\SubscriptionService;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Facades\Schema;
 use Inertia\Inertia;
 
 class ChatService
@@ -37,6 +38,7 @@ class ChatService
 
     private $whatsappService;
     private $organizationId;
+    private ?bool $ticketEventLinkAvailable = null;
 
     private $throttleSeconds = 15;
     private $cacheTtl = 30;
@@ -394,6 +396,7 @@ class ChatService
                     'unreadMessages' => $unreadMessages,
                     'contactFields' => $contactFields,
                     'isChatLimitReached' => SubscriptionService::isSubscriptionFeatureLimitReached($this->organizationId, 'message_limit'),
+                    'subscriptionExpired' => SubscriptionService::outboundSubscriptionExpirationMessage((int) $this->organizationId) !== null,
                     'teamRole' => $team?->role,
                     'labelColors' => $labelColors
                 ]);
@@ -428,6 +431,7 @@ class ChatService
                     ->orderBy('position')
                     ->get(),
                 'isChatLimitReached' => SubscriptionService::isSubscriptionFeatureLimitReached($this->organizationId, 'message_limit'),
+                'subscriptionExpired' => SubscriptionService::outboundSubscriptionExpirationMessage((int) $this->organizationId) !== null,
                 'teamRole' => $team?->role
             ]);
         }
@@ -483,13 +487,16 @@ class ChatService
     /**
      * Log ticket event in ChatTicketLog and ChatLog
      */
-    private function logTicketEvent($contactId, $description)
+    private function logTicketEvent($contactId, $description, $triggerChatId = null)
     {
-        $ticketId = ChatTicketLog::insertGetId([
+        $event = [
             'contact_id' => $contactId,
             'description' => $description,
             'created_at' => now()
-        ]);
+        ];
+        $this->ticketEventLinkAvailable ??= Schema::hasColumn('chat_ticket_logs', 'trigger_chat_id');
+        if ($this->ticketEventLinkAvailable) $event['trigger_chat_id'] = $triggerChatId;
+        $ticketId = ChatTicketLog::insertGetId($event);
 
         ChatLog::insert([
             'contact_id' => $contactId,
@@ -520,7 +527,7 @@ class ChatService
     /**
      * Create a new ticket and assign agent
      */
-    private function createNewTicket($contactId, $organizationId, $autoassignment)
+    private function createNewTicket($contactId, $organizationId, $autoassignment, $triggerChatId = null)
     {
         $ticket = new ChatTicket();
         $ticket->organization_id = $organizationId;
@@ -539,7 +546,7 @@ class ChatService
             $organizationId
         );
 
-        $this->logTicketEvent($contactId, 'Conversation was opened');
+        $this->logTicketEvent($contactId, 'Conversation was opened', $triggerChatId);
 
         return $ticket;
     }
@@ -547,7 +554,7 @@ class ChatService
     /**
      * Process existing ticket (closed or unassigned)
      */
-    private function processExistingTicket($ticket, $contactId, $organizationId, $autoassignment, $reassignOnReopen)
+    private function processExistingTicket($ticket, $contactId, $organizationId, $autoassignment, $reassignOnReopen, $triggerChatId = null)
     {
         // Only process if closed OR open but unassigned
         if ($ticket->status !== 'closed' && !($ticket->status === 'open' && $ticket->assigned_to === null)) {
@@ -578,11 +585,11 @@ class ChatService
         );
 
         if ($shouldLogReopen) {
-            $this->logTicketEvent($contactId, 'Conversation was moved from closed to open');
+            $this->logTicketEvent($contactId, 'Conversation was moved from closed to open', $triggerChatId);
         }
     }
 
-    public function handleTicketAssignment($contactId)
+    public function handleTicketAssignment($contactId, $triggerChatId = null)
     {
         try {
             $organizationId = $this->organizationId;
@@ -606,7 +613,7 @@ class ChatService
 
             // Case 1: Assign tickets to specific agents in a round-robin style
             if ($isSpecificAgentEnabled) {
-                $this->assignTicketToSpecificAgent($contactId, $organizationId);
+                $this->assignTicketToSpecificAgent($contactId, $organizationId, $triggerChatId);
                 return;
             }
 
@@ -615,7 +622,7 @@ class ChatService
                 $autoassignment = $settings->tickets->auto_assignment;
                 $reassignOnReopen = $settings->tickets->reassign_reopened_chats;
 
-                DB::transaction(function () use ($reassignOnReopen, $autoassignment, $contactId, $organizationId) {
+                DB::transaction(function () use ($reassignOnReopen, $autoassignment, $contactId, $organizationId, $triggerChatId) {
                     // Reload while holding the row lock. The initial
                     // existence check above is only an optimization; using
                     // that stale model here could overwrite a manual
@@ -627,10 +634,10 @@ class ChatService
 
                     if (!$ticket) {
                         // Create a new ticket
-                        $this->createNewTicket($contactId, $organizationId, $autoassignment);
+                        $this->createNewTicket($contactId, $organizationId, $autoassignment, $triggerChatId);
                     } else {
                         // Process existing ticket (closed or open without assignment)
-                        $this->processExistingTicket($ticket, $contactId, $organizationId, $autoassignment, $reassignOnReopen);
+                        $this->processExistingTicket($ticket, $contactId, $organizationId, $autoassignment, $reassignOnReopen, $triggerChatId);
                     }
                 });
             }
@@ -643,7 +650,7 @@ class ChatService
     }
 
 
-    private function assignTicketToSpecificAgent($contactId, $organizationId)
+    private function assignTicketToSpecificAgent($contactId, $organizationId, $triggerChatId = null)
     {
         $ticket = ChatTicket::where('contact_id', $contactId)
             ->where('organization_id', $organizationId)
@@ -694,9 +701,9 @@ class ChatService
         
         // Log appropriate event based on ticket state
         if ($isNewTicket) {
-            $this->logTicketEvent($contactId, 'Conversation was opened');
+            $this->logTicketEvent($contactId, 'Conversation was opened', $triggerChatId);
         } elseif ($wasClosed) {
-            $this->logTicketEvent($contactId, 'Conversation was moved from closed to open');
+            $this->logTicketEvent($contactId, 'Conversation was moved from closed to open', $triggerChatId);
         }
         
         $ticket->updated_at = now();
@@ -805,7 +812,9 @@ class ChatService
                 $mediaFilePath,
                 $mediaUrl,
                 $location,
-                $request->message ?? null
+                $request->message ?? null,
+                null,
+                $userId ?: null
             );
         }
     }
@@ -895,9 +904,10 @@ class ChatService
             return $result;
         }
 
-        if (SubscriptionService::isTrialExpiredForOutbound((int) $this->organizationId)) {
+        $subscriptionExpirationMessage = SubscriptionService::outboundSubscriptionExpirationMessage((int) $this->organizationId);
+        if ($subscriptionExpirationMessage !== null) {
             $result->success = false;
-            $result->message = SubscriptionService::trialExpiredOutboundMessage();
+            $result->message = $subscriptionExpirationMessage;
             return $result;
         }
 

@@ -8,6 +8,7 @@ use App\Support\ContactPageCache;
 use Carbon\Carbon;
 use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 class ReportService
 {
@@ -501,150 +502,198 @@ class ReportService
             ->whereNull('deleted_at')
             ->get();
 
-        $config = $useBusinessHours ? $this->getOrgConfig() : null;
+        $hoursService = app(WorkingHoursService::class);
+        $schedule = $useBusinessHours ? $hoursService->getSchedule($this->organizationId) : null;
+        $config = $schedule ? ['enable_working_hours' => true, 'timezone' => $schedule['timezone'], 'working_hours' => $schedule['days']] : null;
+        if ($useBusinessHours) {
+            $metadata = json_decode(DB::table('organizations')->where('id', $this->organizationId)->value('metadata') ?: '{}', true) ?: [];
+            $history = [];
+            foreach ($metadata['working_hours_history'] ?? [] as $version) {
+                $versionSchedule = $hoursService->scheduleFromMetadata($version['settings'] ?? []);
+                $history[] = ['effective_at' => $version['effective_at'] ?? null, 'config' => $versionSchedule ? [
+                    'enable_working_hours' => true, 'timezone' => $versionSchedule['timezone'], 'working_hours' => $versionSchedule['days'],
+                ] : null];
+            }
+            if ($history) $config = ['history' => $history];
+        }
+        $metrics = [];
+        $unanswered = [];
+        $supportsLinkedEvents = Schema::hasColumn('chat_ticket_logs', 'trigger_chat_id');
+        $tickets = DB::table('chat_tickets')->join('contacts', 'chat_tickets.contact_id', '=', 'contacts.id')
+            ->where('contacts.organization_id', $this->organizationId)
+            ->select('chat_tickets.*')->orderBy('chat_tickets.id')->get()->unique('contact_id');
+
+        foreach ($tickets->chunk(200) as $batch) {
+            $ids = $batch->pluck('contact_id')->all();
+            $batchStart = Carbon::parse($batch->min('created_at'), config('app.timezone', 'UTC'))->subMinutes(5)->toDateTimeString();
+            $earliestLinkedOpening = $supportsLinkedEvents ? DB::table('chat_ticket_logs as opening')
+                ->join('chats as opening_chat', 'opening_chat.id', '=', 'opening.trigger_chat_id')
+                ->whereIn('opening.contact_id', $ids)
+                ->whereColumn('opening_chat.contact_id', 'opening.contact_id')
+                ->where('opening_chat.organization_id', $this->organizationId)
+                ->where('opening.description', 'Conversation was opened')
+                ->min('opening_chat.created_at') : null;
+            if ($earliestLinkedOpening && $earliestLinkedOpening < $batchStart) $batchStart = $earliestLinkedOpening;
+            $messagesByContact = DB::table('chats')->whereIn('contact_id', $ids)
+                ->where('organization_id', $this->organizationId)
+                ->where('created_at', '>=', $batchStart)
+                ->when($end, fn ($query) => $query->where('created_at', '<=', $end->copy()->setTimezone(config('app.timezone', 'UTC'))->toDateTimeString()))
+                ->orderBy('created_at')->orderBy('id')->get()->groupBy('contact_id');
+            $outboundIds = $messagesByContact->flatten(1)->where('type', 'outbound')->pluck('id')->all();
+            $campaignIds = [];
+            foreach (array_chunk($outboundIds, 1000) as $outboundBatch) {
+                foreach (DB::table('campaign_logs')->whereIn('chat_id', $outboundBatch)->pluck('chat_id') as $campaignChatId) {
+                    $campaignIds[$campaignChatId] = true;
+                }
+            }
+            $eventsByContact = DB::table('chat_ticket_logs')->whereIn('contact_id', $ids)
+                ->whereIn('description', ['Conversation was opened', 'Conversation was moved from closed to open', 'Conversation was moved from opened to closed'])
+                ->where('created_at', '>=', $batchStart)
+                ->when($end, function ($query) use ($end, $supportsLinkedEvents) {
+                    $query->where(function ($q) use ($end, $supportsLinkedEvents) {
+                        $q->where('created_at', '<=', $end->copy()->setTimezone(config('app.timezone', 'UTC'))->toDateTimeString());
+                        if ($supportsLinkedEvents) $q->orWhereExists(function ($subquery) use ($end) {
+                                $subquery->selectRaw('1')->from('chats as trigger_chat')
+                                    ->whereColumn('trigger_chat.id', 'chat_ticket_logs.trigger_chat_id')
+                                    ->whereColumn('trigger_chat.contact_id', 'chat_ticket_logs.contact_id')
+                                    ->where('trigger_chat.organization_id', $this->organizationId)
+                                    ->where('trigger_chat.created_at', '<=', $end->copy()->setTimezone(config('app.timezone', 'UTC'))->toDateTimeString());
+                            });
+                    });
+                })
+                ->orderBy('created_at')->orderBy('id')->get()->groupBy('contact_id');
+            $orderByContact = DB::table('chat_logs')->whereIn('contact_id', $ids)
+                ->whereIn('entity_type', ['chat', 'ticket'])->where('created_at', '>=', $batchStart)
+                ->when($end, fn ($query) => $query->where('created_at', '<=', $end->copy()->setTimezone(config('app.timezone', 'UTC'))->toDateTimeString()))
+                ->orderBy('id')->get(['id', 'contact_id', 'entity_type', 'entity_id'])->groupBy('contact_id');
+        foreach ($batch as $ticket) {
+            $messages = $messagesByContact->get($ticket->contact_id, collect());
+            $events = $eventsByContact->get($ticket->contact_id, collect());
+            // The inbound webhook can persist the triggering message shortly before
+            // creating its ticket. Earlier unrelated conversations are excluded.
+            $ticketStart = Carbon::parse($ticket->created_at, config('app.timezone', 'UTC'));
+            $earliest = $ticketStart->copy()->subMinutes(5)->toDateTimeString();
+            $opening = $events->first(fn ($event) => $event->description === 'Conversation was opened' && ($event->trigger_chat_id ?? null));
+            $anchor = $opening ? $messages->firstWhere('id', $opening->trigger_chat_id) : null;
+            if (!$anchor) $anchor = $messages->filter(fn ($message) => $message->type === 'inbound' && $message->created_at >= $earliest && $message->created_at <= $ticketStart->toDateTimeString())->first();
+            $boundary = $anchor ? $anchor->created_at : $ticketStart->toDateTimeString();
+            $messages = $messages->filter(fn ($message) => $message->created_at >= $boundary);
+            $events = $events->filter(fn ($event) => $event->created_at >= $boundary);
+            $sequence = [];
+            foreach ($orderByContact->get($ticket->contact_id, collect()) as $log) {
+                $sequence[$log->entity_type . ':' . $log->entity_id] ??= $log->id;
+            }
+            $timeline = [];
+            $messageTimes = [];
+            foreach ($messages as $message) {
+                $time = $message->created_at;
+                $payload = json_decode($message->metadata ?? '{}', true) ?: [];
+                $providerTimestamp = $payload['timestamp'] ?? null;
+                if ($message->type === 'inbound' && is_numeric($providerTimestamp) && $providerTimestamp > 0 && $providerTimestamp <= Carbon::parse($message->created_at, config('app.timezone', 'UTC'))->timestamp) {
+                    $time = Carbon::createFromTimestampUTC((int) $providerTimestamp)->setTimezone(config('app.timezone', 'UTC'))->toDateTimeString();
+                }
+                $messageTimes[$message->id] = $time;
+                $timeline[] = ['time' => $time, 'kind' => 'message', 'id' => $message->id, 'sequence' => $sequence['chat:' . $message->id] ?? null, 'value' => $message];
+            }
+            foreach ($events as $event) {
+                $trigger = ($event->trigger_chat_id ?? null) && isset($messageTimes[$event->trigger_chat_id]);
+                $timeline[] = ['time' => $trigger ? $messageTimes[$event->trigger_chat_id] : $event->created_at, 'kind' => 'event', 'id' => $event->id, 'sequence' => $trigger ? (($sequence['chat:' . $event->trigger_chat_id] ?? PHP_INT_MAX) - 0.5) : ($sequence['ticket:' . $event->id] ?? null), 'value' => $event];
+            }
+            usort($timeline, function ($a, $b) {
+                $time = strcmp($a['time'], $b['time']);
+                if ($time) return $time;
+                // Existing unified chat logs preserve ordering across tables at second precision.
+                if ($a['sequence'] !== $b['sequence']) return ($a['sequence'] ?? PHP_INT_MAX) <=> ($b['sequence'] ?? PHP_INT_MAX);
+                return $a['kind'] === $b['kind'] ? $a['id'] <=> $b['id'] : ($a['kind'] === 'event' ? -1 : 1);
+            });
+            $waitingSince = null;
+            $firstResponseDone = false;
+            $closed = false;
+            foreach ($timeline as $item) {
+                if ($item['kind'] === 'event') {
+                    if ($item['value']->description === 'Conversation was opened') continue;
+                    if (str_contains($item['value']->description, 'closed to open')) {
+                        if ($closed) {
+                            $firstResponseDone = false;
+                            $closed = false;
+                        }
+                    } else {
+                        $closed = true;
+                    }
+                    continue;
+                }
+                $message = $item['value'];
+                if ($message->type === 'inbound') {
+                    if ($waitingSince === null) $waitingSince = $item['time'];
+                } elseif ($message->type === 'outbound' && $message->user_id > 0 && $message->status !== 'failed' && $waitingSince !== null) {
+                    $metadata = json_decode($message->metadata ?? '{}', true) ?: [];
+                    $source = $metadata['billing']['source'] ?? null;
+                    if (isset($campaignIds[$message->id]) || ($source !== null && $source !== 'live_chat')) continue;
+                    $responseAt = Carbon::parse($message->created_at, config('app.timezone', 'UTC'));
+                    if ((!$start || $responseAt->gte($start)) && (!$end || $responseAt->lte($end))) {
+                        $seconds = $this->calculateEffectiveSeconds($waitingSince, $message->created_at, $config);
+                        $metrics[$message->user_id]['waiting'][] = $seconds;
+                        if (!$closed && !$firstResponseDone) $metrics[$message->user_id]['first'][] = $seconds;
+                    }
+                    if (!$closed) $firstResponseDone = true;
+                    $waitingSince = null;
+                }
+            }
+            if ($waitingSince !== null && $ticket->assigned_to) {
+                $unanswered[$ticket->assigned_to] = ($unanswered[$ticket->assigned_to] ?? 0) + 1;
+            }
+        }
+        }
 
         $data = [];
         foreach ($agents as $agent) {
             $userId = $agent->user_id;
             $userName = $agent->user ? ($agent->user->first_name . ' ' . $agent->user->last_name) : 'Unknown';
-
-            $baseTicketQuery = DB::table('chat_tickets')
-                ->join('contacts', 'chat_tickets.contact_id', '=', 'contacts.id')
-                ->where('contacts.organization_id', $this->organizationId)
-                ->where('chat_tickets.assigned_to', $userId);
-
-            // Filter both open and closed tickets by updated_at
-            if ($start && $end) {
-                $baseTicketQuery->whereBetween('chat_tickets.updated_at', [$start->toDateTimeString(), $end->toDateTimeString()]);
-            }
-
-            $openCount = (clone $baseTicketQuery)->where('chat_tickets.status', 'open')->count();
-            $closedCount = (clone $baseTicketQuery)->where('chat_tickets.status', 'closed')->count();
-
-            // First Response Time & Waiting Time calculation
-            // Include all tickets (both open and closed) for response time metrics
-            $ticketsForMetrics = DB::table('chat_tickets')
-                ->join('contacts', 'chat_tickets.contact_id', '=', 'contacts.id')
-                ->where('contacts.organization_id', $this->organizationId)
-                ->where('chat_tickets.assigned_to', $userId)
-                ->select('chat_tickets.id', 'chat_tickets.contact_id', 'chat_tickets.created_at', 'chat_tickets.status', 'chat_tickets.updated_at');
-            
-            if ($start && $end) {
-                // Filter tickets by updated_at for metrics as well
-                $ticketsForMetrics->whereBetween('chat_tickets.updated_at', [$start->toDateTimeString(), $end->toDateTimeString()]);
-            }
-
-            $tickets = $ticketsForMetrics->get();
-            
-            $firstResponseTimes = [];
-            $allWaitingTimes = [];
-
-            foreach ($tickets as $ticket) {
-                $conversationStart = $this->resolveConversationStart($ticket->contact_id, $ticket->created_at);
-
-                $msgQuery = DB::table('chats')
-                    ->where('contact_id', $ticket->contact_id)
-                    ->orderBy('created_at', 'asc');
-
-                if ($conversationStart) {
-                    $windowStart = $conversationStart->copy()->subMinutes(5);
-                    $msgQuery->where('created_at', '>=', $windowStart->toDateTimeString());
-                }
-
-                $messages = $msgQuery->get();
-
-                $firstInboundFound = false;
-                $lastInboundTime = null;
-
-                foreach ($messages as $msg) {
-                    if ($msg->type === 'inbound') {
-                        if (!$firstInboundFound) {
-                            $lastInboundTime = $msg->created_at;
-                            $firstInboundFound = true;
-                        } else {
-                            if ($lastInboundTime === null) {
-                                $lastInboundTime = $msg->created_at;
-                            }
-                        }
-                    } elseif ($msg->type === 'outbound' && $msg->user_id > 0) {
-                        if ($lastInboundTime !== null) {
-                            $diff = $this->calculateEffectiveSeconds($lastInboundTime, $msg->created_at, $config);
-                            if ($diff >= 0) {
-                                $allWaitingTimes[] = $diff;
-                            }
-                            $lastInboundTime = null; // Reset: we've replied to the current waiting block
-                        }
-                    }
-                }
-
-                // Dedicated First Response calculation for the ticket
-            $firstInbound = $messages->where('type', 'inbound')->first();
-            if ($firstInbound) {
-                $firstOutbound = $messages->where('type', 'outbound')->where('user_id', '>', 0)
-                    ->where('created_at', '>', $firstInbound->created_at)
-                    ->first();
-                if ($firstOutbound) {
-                    $diff = $this->calculateEffectiveSeconds($firstInbound->created_at, $firstOutbound->created_at, $config);
-                    if ($diff >= 0) {
-                        $firstResponseTimes[] = $diff;
-                    }
-                }
-            }
-        }
-
-        $avgFirstResponseSeconds = count($firstResponseTimes) > 0 ? (array_sum($firstResponseTimes) / count($firstResponseTimes)) : 0;
-        $avgWaitingSeconds = count($allWaitingTimes) > 0 ? (array_sum($allWaitingTimes) / count($allWaitingTimes)) : 0;
-
+            $assigned = $tickets->where('assigned_to', $userId);
+            $first = $metrics[$userId]['first'] ?? [];
+            $waiting = $metrics[$userId]['waiting'] ?? [];
             $data[] = [
                 'agent_name' => $userName,
-                'open_conversations_count' => $openCount,
-                'closed_conversations_count' => $closedCount,
-                'avg_first_response_time' => $this->formatSeconds($avgFirstResponseSeconds),
-                'avg_customer_waiting_time' => $this->formatSeconds($avgWaitingSeconds),
+                'open_conversations_count' => $assigned->where('status', 'open')->count(),
+                'closed_conversations_count' => $assigned->where('status', 'closed')->count(),
+                'waiting_unanswered_count' => $unanswered[$userId] ?? 0,
+                'avg_first_response_time' => $this->formatSeconds(count($first) ? array_sum($first) / count($first) : null),
+                'avg_customer_waiting_time' => $this->formatSeconds(count($waiting) ? array_sum($waiting) / count($waiting) : null),
             ];
         }
 
         return $data;
     }
 
-    private function getOrgConfig()
-    {
-        $org = DB::table('organizations')->where('id', $this->organizationId)->first();
-        if ($org && $org->metadata) {
-            return json_decode($org->metadata, true);
-        }
-        return null;
-    }
-
-    private function resolveConversationStart(int $contactId, ?string $ticketCreatedAt): ?Carbon
-    {
-        if ($ticketCreatedAt) {
-            try {
-                return Carbon::parse($ticketCreatedAt);
-            } catch (\Exception $e) {
-                // fall back to cached conversations when parse fails
-            }
-        }
-
-        if (!array_key_exists($contactId, $this->conversationStartCache)) {
-            $this->conversationStartCache[$contactId] = DB::table('chats')
-                ->where('contact_id', $contactId)
-                ->orderBy('created_at', 'asc')
-                ->value('created_at');
-        }
-
-        $value = $this->conversationStartCache[$contactId];
-        return $value ? Carbon::parse($value) : null;
-    }
-
     private function calculateEffectiveSeconds($from, $to, $config)
     {
+        if (!empty($config['history'])) {
+            $fromTime = Carbon::parse($from, config('app.timezone', 'UTC'))->utc();
+            $toTime = Carbon::parse($to, config('app.timezone', 'UTC'))->utc();
+            if ($fromTime->gte($toTime)) return 0;
+            $cursor = $fromTime->copy();
+            $active = null;
+            $total = 0;
+            foreach ($config['history'] as $version) {
+                $change = empty($version['effective_at']) ? null : Carbon::parse($version['effective_at'], 'UTC');
+                if (!$change || $change->lte($cursor)) {
+                    $active = $version['config'];
+                    continue;
+                }
+                if ($change->gte($toTime)) break;
+                $total += $this->calculateEffectiveSeconds($cursor->copy()->setTimezone(config('app.timezone', 'UTC'))->toDateTimeString(), $change->copy()->setTimezone(config('app.timezone', 'UTC'))->toDateTimeString(), $active);
+                $cursor = $change;
+                $active = $version['config'];
+            }
+            return $total + $this->calculateEffectiveSeconds($cursor->copy()->setTimezone(config('app.timezone', 'UTC'))->toDateTimeString(), $toTime->copy()->setTimezone(config('app.timezone', 'UTC'))->toDateTimeString(), $active);
+        }
         if (!$config || !($config['enable_working_hours'] ?? false)) {
             return max(0, Carbon::parse($to)->diffInSeconds(Carbon::parse($from)));
         }
 
-        $start = Carbon::parse($from);
-        $end = Carbon::parse($to);
+        $timezone = $config['timezone'] ?? config('app.timezone', 'UTC');
+        $start = Carbon::parse($from, config('app.timezone', 'UTC'))->setTimezone($timezone);
+        $end = Carbon::parse($to, config('app.timezone', 'UTC'))->setTimezone($timezone);
         
         if ($start->gt($end)) return 0;
 
@@ -653,42 +702,59 @@ class ReportService
             $workingHours[$wh['day']] = $wh;
         }
 
-        $totalSeconds = 0;
-        $current = $start->copy();
+        $intervals = [];
+        $current = $start->copy()->subDay()->startOfDay();
 
         while ($current->toDateString() <= $end->toDateString()) {
             $dayName = $current->format('l');
             $wh = $workingHours[$dayName] ?? null;
 
-            if ($wh && ($wh['active'] ?? false)) {
+            if ($wh && ($wh['active'] ?? false) && !empty($wh['from']) && !empty($wh['to'])) {
                 $dayStart = $current->copy()->startOfDay();
-                $dayEnd = $current->copy()->endOfDay();
 
                 // Configured working hours for this day
                 $workStart = $dayStart->copy()->setTimeFromTimeString($wh['from']);
                 $workEnd = $dayStart->copy()->setTimeFromTimeString($wh['to']);
+                if ($wh['from'] === '00:00' && $wh['to'] === '23:59') $workEnd = $dayStart->copy()->addDay();
+                if ($workEnd->lt($workStart)) $workEnd->addDay();
 
                 // The period we are measuring (on this specific day)
-                $actualStart = $start->gt($dayStart) ? $start : $dayStart;
-                $actualEnd = $end->lt($dayEnd) ? $end : $dayEnd;
+                $actualStart = $start;
+                $actualEnd = $end;
 
                 // Overlap between [workStart, workEnd] and [actualStart, actualEnd]
                 $overlapStart = $workStart->gt($actualStart) ? $workStart : $actualStart;
                 $overlapEnd = $workEnd->lt($actualEnd) ? $workEnd : $actualEnd;
 
                 if ($overlapStart->lt($overlapEnd)) {
-                    $totalSeconds += $overlapStart->diffInSeconds($overlapEnd);
+                    $intervals[] = [$overlapStart->copy(), $overlapEnd->copy()];
                 }
             }
             $current->addDay()->startOfDay();
         }
 
+        // Consecutive configured shifts can overlap; count each instant once.
+        usort($intervals, fn ($a, $b) => $a[0]->getTimestamp() <=> $b[0]->getTimestamp());
+        $totalSeconds = 0;
+        $lastStart = null;
+        $lastEnd = null;
+        foreach ($intervals as [$intervalStart, $intervalEnd]) {
+            if ($lastEnd && $intervalStart->lte($lastEnd)) {
+                if ($intervalEnd->gt($lastEnd)) $lastEnd = $intervalEnd;
+            } else {
+                if ($lastEnd) $totalSeconds += $lastStart->diffInSeconds($lastEnd);
+                $lastStart = $intervalStart;
+                $lastEnd = $intervalEnd;
+            }
+        }
+        if ($lastEnd) $totalSeconds += $lastStart->diffInSeconds($lastEnd);
         return $totalSeconds;
     }
 
     private function formatSeconds($seconds)
     {
-        if ($seconds <= 0) return '-';
+        if ($seconds === null) return '-';
+        if ($seconds <= 0) return '0s';
         
         if ($seconds < 60) {
             return round($seconds) . 's';
@@ -698,8 +764,9 @@ class ReportService
             return round($seconds / 60) . 'm';
         }
         
-        $hours = floor($seconds / 3600);
-        $minutes = round(($seconds % 3600) / 60);
+        $totalMinutes = (int) round($seconds / 60);
+        $hours = intdiv($totalMinutes, 60);
+        $minutes = $totalMinutes % 60;
         
         if ($minutes == 0) return $hours . 'h';
         return $hours . 'h ' . $minutes . 'm';

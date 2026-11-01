@@ -131,17 +131,19 @@ class ReportController extends BaseController
     {
         $organizationId = $this->getCurrentOrganizationId();
         $businessHours = $request->query('business_hours') === 'true';
+        $businessHoursAvailable = app(\App\Services\WorkingHoursService::class)->getSchedule($organizationId) !== null;
+        $timezone = \App\Models\Organization::find($organizationId)?->effectiveTimezone() ?? 'UTC';
 
         if ($request->query('start_date')) {
-            $start = Carbon::parse($request->query('start_date'))->startOfDay();
+            $start = Carbon::parse($request->query('start_date'), $timezone)->startOfDay();
         } else {
-            $start = Carbon::now()->startOfDay()->subDays(6);
+            $start = Carbon::now($timezone)->startOfDay()->subDays(6);
         }
 
         if ($request->query('end_date')) {
-            $end = Carbon::parse($request->query('end_date'))->endOfDay();
+            $end = Carbon::parse($request->query('end_date'), $timezone)->endOfDay();
         } else {
-            $end = Carbon::now()->endOfDay();
+            $end = Carbon::now($timezone)->endOfDay();
         }
 
         $service = new ReportService($organizationId);
@@ -153,6 +155,7 @@ class ReportController extends BaseController
             'initial_start_date' => $start->toDateString(),
             'initial_end_date' => $end->toDateString(),
             'business_hours' => $businessHours,
+            'business_hours_available' => $businessHoursAvailable,
         ]);
     }
 }

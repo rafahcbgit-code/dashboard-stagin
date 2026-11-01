@@ -35,5 +35,7 @@ class AuthService
                 Cookie::queue('last_organization_id', (string) $team->organization_id, 60 * 24 * 365);
             }
         }
+
+        $this->user->recordLogin();
     }
 }

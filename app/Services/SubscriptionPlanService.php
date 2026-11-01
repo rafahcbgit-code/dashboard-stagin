@@ -5,6 +5,7 @@ namespace App\Services;
 use App\Http\Resources\SubscriptionPlanResource;
 use App\Models\PaymentGateway;
 use App\Models\SubscriptionPlan;
+use App\Models\Subscription;
 use App\Services\StripeService;
 use DB;
 use Illuminate\Support\Str;
@@ -151,6 +152,13 @@ class SubscriptionPlanService
                 ]);
             }
         });
+
+        if (($oldMetadata['resource_sharing_enabled'] ?? 0) !== ($metadata['resource_sharing_enabled'] ?? 0)) {
+            $usageService = new SubscriptionUsageService();
+            Subscription::where('plan_id', $plan->id)
+                ->pluck('organization_id')
+                ->each(fn ($organizationId) => $usageService->forgetResourceSharingCache((int) $organizationId));
+        }
 
         $stripe = PaymentGateway::where('name', 'Stripe')->first();
 

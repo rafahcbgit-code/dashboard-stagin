@@ -5,10 +5,14 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller as BaseController;
 use App\Http\Requests\StoreOrganization;
 use App\Http\Requests\ManageSubscriptionPeriod;
+use App\Http\Requests\ExportOrganizationChatsRequest;
+use App\Exports\OrganizationChatsExport;
+use App\Models\Organization;
 use App\Jobs\SyncWhatsappNumberStatusJob;
 use App\Services\OrganizationService;
 use App\Services\SubscriptionPeriodService;
 use Illuminate\Http\Request;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 use Inertia\Inertia;
 
 class OrganizationController extends BaseController
@@ -177,6 +181,41 @@ class OrganizationController extends BaseController
                 'message' => __('Organization updated successfully!')
             ]
         );
+    }
+
+    public function exportChats(ExportOrganizationChatsRequest $request, string $uuid): StreamedResponse
+    {
+        $organization = Organization::where('uuid', $uuid)->firstOrFail();
+        $export = new OrganizationChatsExport(
+            $organization,
+            $request->string('type')->toString(),
+            $request->input('date_from'),
+            $request->input('date_to'),
+        );
+
+        return response()->streamDownload(function () use ($export) {
+            $output = fopen('php://output', 'w');
+            fwrite($output, "\xEF\xBB\xBF");
+            fputcsv($output, $export->headers(), ',', '"', '\\');
+
+            foreach ($export->query()->cursor() as $row) {
+                fputcsv($output, array_map(
+                    static fn ($value) => self::csvValue($value),
+                    (array) $row
+                ), ',', '"', '\\');
+            }
+
+            fclose($output);
+        }, $export->filename(), ['Content-Type' => 'text/csv; charset=UTF-8']);
+    }
+
+    private static function csvValue(mixed $value): mixed
+    {
+        if (!is_string($value)) {
+            return $value;
+        }
+
+        return preg_match('/^[=+\-@]/', ltrim($value)) === 1 ? "'{$value}" : $value;
     }
 
     public function extendSubscription(ManageSubscriptionPeriod $request, string $uuid, SubscriptionPeriodService $periods)
