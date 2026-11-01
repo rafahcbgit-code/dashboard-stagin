@@ -7,7 +7,7 @@
     })
 </script>
 <template>
-    <div class="bg-slate-100 md:bg-white rounded-[0.5rem]" :class="className">
+    <div class="cb-section overflow-hidden" :class="className">
         <table class="w-full">
             <slot />
         </table>

@@ -1,13 +1,13 @@
 <template>
   <AppLayout v-slot:default="slotProps">
-    <div class="md:flex md:flex-grow md:min-h-0 md:h-full md:overflow-hidden">
-      <div class="md:w-[30%] md:flex md:min-h-0 flex-col h-full bg-white border-r border-l" :class="contact ? 'hidden' : ''">
+    <div class="md:flex md:flex-grow md:min-h-0 md:h-full md:overflow-hidden bg-slate-50/70 p-0 md:p-3 gap-3">
+      <div class="md:w-[31%] md:flex md:min-h-0 flex-col h-full bg-white border rounded-2xl overflow-visible shadow-sm relative z-20" :class="contact ? 'hidden md:flex' : ''">
         <ChatTable :rows="rows" :filters="props.filters" :rowCount="props.rowCount"
           :ticketingIsEnabled="ticketingIsEnabled" :status="props?.status"
           :chatSortDirection="props.chat_sort_direction" :teamRole="props.teamRole"
                     :selectedContactUuid="contact?.uuid" :templates="templates" :contactFields="contactFields" />
       </div>
-      <div class="min-w-0 min-h-0 bg-cover flex flex-col chat-bg md:h-full md:w-[70%]">
+      <div class="min-w-0 min-h-0 bg-white border rounded-2xl shadow-sm flex flex-col chat-bg md:h-full md:flex-1 overflow-hidden">
         <ChatHeader v-if="contact" class="shrink-0" :ticketingIsEnabled="ticketingIsEnabled" :contact="contact"
           :displayContactInfo="displayContactInfo" :labelColors="labelColors" :ticket="ticket" :addon="addon"
           :teamRole="props.teamRole" :currentPage="rows.meta?.current_page" @toggleView="toggleContactView"
@@ -16,16 +16,35 @@
         <ChatSearchPanel v-if="contact && searchOpen && !displayTemplate && !displayContactInfo"
           :key="contact.uuid" :contact-uuid="contact.uuid" :refresh-token="searchRefreshToken"
           @close="closeConversationSearch" @select="selectSearchResult" @reset-selection="clearSearchSelection" />
-        <div v-if="contact && !displayTemplate" class="flex-1 min-h-0 overflow-y-auto" ref="scrollContainer2" data-chat-scroll-container>
-          <ChatThread v-if="!displayContactInfo && !loadingThread && !displayTemplate" :contactId="contact.id"
-            :contactUuid="contact.uuid" :searchTarget="searchTarget"
-            :initialMessages="chatThread" :hasMoreMessages="hasMoreMessages" :initialNextPage="nextPage"
-            @reply-selected="replyingTo = $event" />
-          <Contact v-if="displayContactInfo && !displayTemplate" class="bg-white h-full" :fields="props.fields"
-            :contact="contact" :locationSettings="props.locationSettings" />
+        <div v-if="contact && !displayTemplate" class="flex-1 min-h-0 overflow-hidden" ref="scrollContainer2" data-chat-scroll-container>
+          <div class="flex h-full min-h-0 flex-row">
+            <div class="min-w-0 min-h-0 flex-1 overflow-y-auto cb-scrollbar">
+              <ChatThread v-if="!loadingThread && !displayTemplate" :contactId="contact.id"
+                :contactUuid="contact.uuid" :searchTarget="searchTarget"
+                :initialMessages="chatThread" :hasMoreMessages="hasMoreMessages" :initialNextPage="nextPage"
+                @reply-selected="replyingTo = $event" />
+            </div>
+            <aside v-if="displayContactInfo" class="hidden w-[340px] shrink-0 border-s border-slate-200 bg-slate-50/60 2xl:block">
+              <Contact class="h-full" :fields="props.fields"
+                :contact="contact" :locationSettings="props.locationSettings" />
+            </aside>
+          </div>
+        </div>
+        <div v-if="contact && displayContactInfo && !displayTemplate" class="fixed inset-0 z-[70] 2xl:hidden" role="dialog" aria-modal="true" :aria-label="$t('Contact information')">
+          <button type="button" class="absolute inset-0 cursor-default bg-slate-900/20 backdrop-blur-[1px]" :aria-label="$t('Close')" @click="closeContactInfo"></button>
+          <aside class="absolute inset-y-0 end-0 flex w-[min(92vw,360px)] flex-col border-s border-slate-200 bg-white shadow-2xl">
+            <div class="flex shrink-0 items-center justify-between border-b border-slate-100 px-4 py-3">
+              <h2 class="text-sm font-semibold text-slate-800">{{ $t('Contact information') }}</h2>
+              <button type="button" class="inline-flex h-8 w-8 items-center justify-center rounded-lg text-slate-500 hover:bg-slate-100 hover:text-slate-800" :aria-label="$t('Close')" @click="closeContactInfo">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" d="M6 6l12 12M18 6L6 18" /></svg>
+              </button>
+            </div>
+            <Contact class="min-h-0 flex-1" :fields="props.fields"
+              :contact="contact" :locationSettings="props.locationSettings" />
+          </aside>
         </div>
         <div v-if="
-          contact && !displayContactInfo && !formLoading && !displayTemplate
+          contact && !formLoading && !displayTemplate
         " class="w-full shrink-0 py-4">
           <ChatForm :key="contact.uuid" :contact="contact" :chatThread="chatThread" :simpleForm="simpleForm"
             :pusherSettings="props.pusherSettings"
@@ -309,6 +328,10 @@ function toggleContactView(value) {
     searchTarget.value = null;
   }
 }
+
+const closeContactInfo = () => {
+  displayContactInfo.value = false;
+};
 
 const scrollToBottom = () => {
   const container = scrollContainer2.value;

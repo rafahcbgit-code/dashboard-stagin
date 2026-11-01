@@ -73,7 +73,7 @@
                                     <!-- Trigger Info -->
                                     <div class="flex-1 min-w-0">
                                         <div class="flex items-center gap-2">
-                                            <span class="font-medium text-sm text-slate-800 truncate">{{ trigger.name }}</span>
+                                            <span class="font-medium text-sm text-slate-800 truncate">{{ $t(trigger.name) }}</span>
                                             <span class="inline-flex items-center gap-0.5 rounded-full px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider bg-sky-50 text-sky-600 border border-sky-100">
                                                 <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12c5.16-1.26 9-6.45 9-12V5l-9-4z"/></svg>
                                                 {{ $t('System') }}
@@ -339,7 +339,7 @@
                         </div>
                         <div v-if="keywordChecking" class="mt-1.5 flex items-center gap-1.5 text-xs text-slate-400">
                             <svg class="animate-spin h-3 w-3" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
-                            <span>Checking keyword...</span>
+                            <span>{{ $t('Checking keyword...') }}</span>
                         </div>
                     </div>
                     <div>
@@ -430,10 +430,11 @@ import { router } from '@inertiajs/vue3';
 import axios from 'axios';
 import Modal from '@/Components/Modal.vue';
 import Pagination from '@/Components/Pagination.vue';
-import { trans } from 'laravel-vue-i18n';
+import { useI18n } from 'vue-i18n';
 import debounce from 'lodash/debounce';
 
 const props = defineProps(['systemTriggers', 'triggerGroups', 'flows', 'filters', 'aimodule', 'fbmodule', 'aiOnlyMode']);
+const { t } = useI18n();
 
 const systemTriggersList = ref([...(props.systemTriggers || [])]);
 const localTriggers = ref([...(props.triggerGroups?.data || [])]);
@@ -520,7 +521,7 @@ function formatType(type) {
         away: 'Away',
         fallback: 'Fallback',
     };
-    return types[type] || type;
+    return t(types[type] || type);
 }
 
 function formatRateLimit(type) {
@@ -529,7 +530,7 @@ function formatRateLimit(type) {
         lifetime: 'Once ever',
         '24h': 'Once/24h',
     };
-    return limits[type] || type;
+    return t(limits[type] || type);
 }
 
 function formatTypeDescription(type, rateLimitType) {
@@ -540,7 +541,7 @@ function formatTypeDescription(type, rateLimitType) {
         fallback: 'When no other trigger matches',
         new_message: rateLimitType === 'none' ? 'Fires every time' : rateLimitType === 'lifetime' ? 'Once per contact, ever' : 'Once per 24h per contact',
     };
-    return descriptions[type] || '';
+    return descriptions[type] ? t(descriptions[type]) : '';
 }
 
 async function addKeyword() {
@@ -552,7 +553,7 @@ async function addKeyword() {
 
     // Check for duplicates within the current form
     if (form.value.keywords.some(k => k.toLowerCase() === val.toLowerCase())) {
-        keywordError.value = 'This keyword already exists in this trigger.';
+        keywordError.value = t('This keyword already exists in this trigger.');
         keywordInput.value = '';
         return;
     }
@@ -569,7 +570,10 @@ async function addKeyword() {
         });
 
         if (!response.data.available) {
-            keywordError.value = 'Keyword "' + val + '" is already used in trigger: ' + (response.data.trigger_name || 'another trigger');
+            keywordError.value = t('Keyword "{keyword}" is already used in trigger: {trigger}', {
+                keyword: val,
+                trigger: response.data.trigger_name || t('another trigger'),
+            });
             keywordInput.value = '';
             return;
         }
@@ -632,7 +636,10 @@ async function submitForm() {
                     },
                 });
                 if (!response.data.available) {
-                    keywordError.value = 'Keyword "' + kw + '" is already used in trigger: ' + (response.data.trigger_name || 'another trigger');
+                    keywordError.value = t('Keyword "{keyword}" is already used in trigger: {trigger}', {
+                        keyword: kw,
+                        trigger: response.data.trigger_name || t('another trigger'),
+                    });
                     return;
                 }
             } catch (error) {
@@ -661,7 +668,7 @@ function toggleTrigger(trigger) {
 }
 
 function deleteTrigger(trigger) {
-    if (!confirm(trans('Are you sure you want to delete this trigger?'))) return;
+    if (!confirm(t('Are you sure you want to delete this trigger?'))) return;
     router.delete(`/automation/triggers/${trigger.uuid}`, { preserveScroll: true });
 }
 

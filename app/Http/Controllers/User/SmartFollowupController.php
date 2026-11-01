@@ -68,7 +68,7 @@ class SmartFollowupController extends BaseController
 
         return redirect()->back()->with('status', [
             'type' => 'success',
-            'message' => 'Rejoin reminder created successfully',
+            'message' => __('Rejoin reminder created successfully'),
         ]);
     }
 
@@ -85,7 +85,7 @@ class SmartFollowupController extends BaseController
 
         return redirect()->back()->with('status', [
             'type' => 'success',
-            'message' => 'Rejoin reminder updated successfully',
+            'message' => __('Rejoin reminder updated successfully'),
         ]);
     }
 
@@ -96,7 +96,7 @@ class SmartFollowupController extends BaseController
 
         return redirect()->back()->with('status', [
             'type' => 'success',
-            'message' => 'Rejoin reminder deleted successfully',
+            'message' => __('Rejoin reminder deleted successfully'),
         ]);
     }
 
@@ -111,7 +111,7 @@ class SmartFollowupController extends BaseController
 
         return redirect()->back()->with('status', [
             'type' => 'success',
-            'message' => 'Rejoin reminder status updated',
+            'message' => __('Rejoin reminder status updated'),
         ]);
     }
 }

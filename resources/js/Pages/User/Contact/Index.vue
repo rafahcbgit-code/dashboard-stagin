@@ -1,7 +1,7 @@
 <template>
     <AppLayout>
-        <div class="p-4 md:p-6">
-            <div v-if="isAddMode || editContact" class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+        <div class="cb-page-shell">
+            <div v-if="isAddMode || editContact" class="cb-section p-4">
                 <ContactForm :contactGroups="contactGroups" :contact="contact" :fields="fields" :locationSettings="locationSettings" />
             </div>
 
@@ -9,7 +9,7 @@
                 <Link href="/contacts" class="inline-flex items-center rounded-md border border-slate-300 px-3 py-2 text-sm text-slate-700">
                     {{ $t('Back to contacts') }}
                 </Link>
-                <div class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                <div class="cb-section p-4">
                     <ContactInfo :contact="contact" :fields="fields" :locationSettings="locationSettings" />
                 </div>
             </div>

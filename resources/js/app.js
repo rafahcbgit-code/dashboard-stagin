@@ -5,6 +5,46 @@ import VueTelInput from 'vue-tel-input';
 import { createI18n } from 'vue-i18n';
 import axios from 'axios';
 
+let revealObserver;
+
+const motionIsReduced = () => window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+
+const animatePageSections = () => {
+  if (typeof window === 'undefined' || motionIsReduced()) return;
+
+  const pageKey = `chatberry:revealed:${window.location.pathname}`;
+  if (window.sessionStorage.getItem(pageKey)) return;
+
+  const candidates = [...document.querySelectorAll(
+    '.cb-page-shell > .cb-page-inner, .cb-page-shell > section, .cb-page-shell > div, .cb-page-shell .cb-card, .cb-page-shell .cb-section, .cb-page-shell .cb-filter-bar',
+  )].filter((element) => (
+    !element.matches('[data-no-reveal]')
+    && !element.closest('[data-no-reveal]')
+    && !element.closest('.chat-bg, [data-chat-scroll-container]')
+  ));
+
+  const targets = candidates.filter((element, index) => !candidates.some((other, otherIndex) => (
+    otherIndex !== index && other.contains(element) && other.matches('.cb-card, .cb-section, .cb-filter-bar')
+  ))).slice(0, 18);
+
+  if (!targets.length) return;
+  window.sessionStorage.setItem(pageKey, '1');
+  revealObserver?.disconnect();
+  revealObserver = new IntersectionObserver((entries) => {
+    entries.forEach((entry) => {
+      if (!entry.isIntersecting) return;
+      entry.target.classList.add('cb-reveal-visible');
+      revealObserver.unobserve(entry.target);
+    });
+  }, { threshold: 0.08, rootMargin: '0px 0px -4% 0px' });
+
+  targets.forEach((element, index) => {
+    element.classList.add('cb-reveal');
+    element.style.setProperty('--cb-reveal-delay', `${Math.min(index, 5) * 50}ms`);
+    revealObserver.observe(element);
+  });
+};
+
 const cleanupNavigationBlockers = () => {
   document.querySelectorAll('[inert]').forEach((element) => {
     element.removeAttribute('inert');
@@ -24,6 +64,7 @@ router.on('start', () => {
 });
 router.on('finish', () => {
   console.debug('Inertia navigation finished');
+  window.requestAnimationFrame(animatePageSections);
 });
 router.on('error', (error) => {
   console.error('Inertia request error', error);
@@ -115,6 +156,8 @@ createInertiaApp({
       .use(VueTelInput)
       .use(i18n)
       .mount(el);
+
+    window.requestAnimationFrame(animatePageSections);
 
     // Keep dynamically selected locales ready before rendering their strings.
     watch(i18n.global.locale, async (newLocale) => {

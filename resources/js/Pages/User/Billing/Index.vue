@@ -9,7 +9,7 @@
         </div>
     </div>
     <AppLayout>
-        <div class="bg-white md:bg-inherit pt-0 px-4 md:pt-8 md:p-8 rounded-[5px] text-[#000] overflow-y-scroll">
+        <div class="cb-page-shell overflow-y-scroll">
             <div class="flex justify-between mt-8 md:mt-0">
                 <div>
                     <h2 class="text-xl mb-1">{{ $t('Billing and subscription') }}</h2>
@@ -207,7 +207,7 @@
     import Modal from '@/Components/Modal.vue';
     import FormInput from '@/Components/FormInput.vue';
     import { ref, onMounted } from 'vue';
-    import { trans } from 'laravel-vue-i18n';
+    import { useI18n } from 'vue-i18n';
     import Echo from 'laravel-echo';
     import Pusher from 'pusher-js';
 
@@ -228,13 +228,14 @@
     const subscription = ref(props.subscription.data)
     const isOpenModal = ref(false);
     const isLoading = ref(false);
+    const { t } = useI18n();
     
     const form = useForm({
         'amount' : null,
         'method' : null
     });
 
-    const formatLimit = (value) => Number(value) === -1 ? trans('Unlimited') : value;
+    const formatLimit = (value) => Number(value) === -1 ? t('Unlimited') : value;
     const sourceLabels = {
         campaign: 'Campaigns',
         live_chat: 'Live Chat',
@@ -273,15 +274,15 @@
         ...actualTemplateMessageSources.map((source) => source.source || 'unknown'),
     ])).map((source) => ({
         source,
-        label: trans(sourceLabels[source] || source || 'Unknown'),
+        label: t(sourceLabels[source] || source || 'Unknown'),
         quantity: Number(templateMessageSourceTotals[source] || 0),
     }));
     const usageItems = [
-        { key: 'template_messages', label: trans('Template messages') },
-        { key: 'conversations', label: trans('Conversations') },
-        { key: 'contacts', label: trans('Contacts') },
-        { key: 'team_members', label: trans('Team members') },
-        { key: 'organizations', label: trans('Organizations') },
+        { key: 'template_messages', label: t('Template messages') },
+        { key: 'conversations', label: t('Conversations') },
+        { key: 'contacts', label: t('Contacts') },
+        { key: 'team_members', label: t('Team members') },
+        { key: 'organizations', label: t('Organizations') },
     ].map((item) => {
         const usage = props.resourceUsage?.[item.key] || {};
         return {
@@ -294,11 +295,11 @@
             isSharedPool: Boolean(usage.is_shared_pool),
             isResourceAccount: Boolean(usage.is_resource_account),
             usedLabel: usage.is_shared_pool
-                ? (usage.is_resource_account ? trans('Total used in pool') : trans('Used by this organization'))
-                : trans('Used'),
+                ? (usage.is_resource_account ? t('Total used in pool') : t('Used by this organization'))
+                : t('Used'),
             remainingLabel: usage.is_shared_pool && !usage.is_resource_account
-                ? trans('Shared pool remaining')
-                : trans('Remaining'),
+                ? t('Shared pool remaining')
+                : t('Remaining'),
             billingOrganizationName: usage.billing_organization_name || null,
         };
     });
@@ -308,8 +309,8 @@
     };
     const organizationPoolBreakdown = (props.resourceUsage?.organizations?.organization_breakdown || []).map((organization) => ({
         ...organization,
-        displayName: organization.organization_name || organization.name || trans('Unnamed organization'),
-        roleLabel: trans(organizationRoleLabels[organization.role] || organization.role || 'Shared Account'),
+        displayName: organization.organization_name || organization.name || t('Unnamed organization'),
+        roleLabel: t(organizationRoleLabels[organization.role] || organization.role || 'Shared Account'),
         counts_as: Number(organization.counts_as ?? 1),
     }));
     const showOrganizationPoolBreakdown = Boolean(props.resourceUsage?.organizations?.is_shared_pool)

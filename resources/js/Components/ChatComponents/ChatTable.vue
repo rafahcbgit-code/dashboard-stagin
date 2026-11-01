@@ -140,7 +140,7 @@ const formatTime = (time) => {
             targetTime.getMonth() === yesterday.getMonth() &&
             targetTime.getFullYear() === yesterday.getFullYear()
         ) {
-            return 'Yesterday';
+            return t('Yesterday');
         }
 
         // If beyond yesterday, return the time in the format d/m/y
@@ -173,7 +173,7 @@ const params = ref({
     search: props.filters.search,
     labels: props.filters.labels,
     assigned_to: props.filters.assigned_to,
-    status: props.status,
+    status: props.status || 'all',
     awaiting_reply: props.filters.awaiting_reply,
 });
 
@@ -198,6 +198,20 @@ const runSearch = () => {
         data: params.value,
     })
 }
+
+const tabs = [
+    { key: 'all', label: 'All' },
+    { key: 'unread', label: 'Unread Only' },
+    { key: 'open', label: 'Open' },
+];
+
+const selectTab = (tab) => {
+    if (params.value.status === tab) return;
+    params.value.status = tab;
+    tempSelectedStatus.value = tab;
+    hasUnappliedFilters.value = false;
+    runSearch();
+};
 
 const clearSearch = () => {
     params.value.search = null;
@@ -442,7 +456,7 @@ const cleanupNavigationBlockers = () => {
 </script>
 <template>
     <div class="flex h-full min-h-0 flex-col">
-        <div class="shrink-0 px-4 py-4 border-b">
+        <div class="shrink-0 border-b border-slate-100 px-4 py-4 bg-white">
         <div class="flex items-center justify-between space-x-1 text-xl">
             <div class="flex items-center space-x-3">
                 <h2>{{ $t('Chats') }}</h2>
@@ -450,7 +464,7 @@ const cleanupNavigationBlockers = () => {
             </div>
             <SendTemplateToPhone :templates="props.templates" :contactFields="props.contactFields" @sent="handleQuickSendSent" />
         </div>
-        <div class="bg-slate-50 rounded-md mt-3 flex items-center py-[2px]">
+        <div class="cb-control mt-3 flex items-center bg-slate-50/80 py-[2px]">
             <div class="pl-3 py-2">
                 <svg class="text-slate-600" xmlns="http://www.w3.org/2000/svg" width="20" height="20"
                     viewBox="0 0 24 24">
@@ -491,16 +505,31 @@ const cleanupNavigationBlockers = () => {
             </span>
         </div>
 
+        <nav class="mt-2 flex items-center gap-0.5 rounded-2xl bg-slate-100 p-1" :aria-label="$t('Conversation tabs')">
+            <button
+                v-for="tab in tabs"
+                :key="tab.key"
+                type="button"
+                @click="selectTab(tab.key)"
+                class="min-h-8 flex-1 rounded-xl px-1.5 py-1 text-[11px] font-semibold leading-4 transition sm:text-xs"
+                :class="params.status === tab.key ? 'bg-white text-slate-900 shadow-sm ring-1 ring-slate-200' : 'text-slate-500 hover:bg-white/70 hover:text-slate-800'"
+                :aria-selected="params.status === tab.key"
+                role="tab"
+            >
+                {{ $t(tab.label) }}
+            </button>
+        </nav>
+
         <!-- Filter Section -->
-        <div class="mt-3 space-y-3">
+        <div class="mt-2 space-y-1.5 rounded-2xl bg-slate-50/80 p-1.5">
             <!-- Filter Buttons Row -->
-            <div class="flex items-start space-x-2 flex-wrap gap-2 relative">
-                <div class="flex flex-col gap-2">
+            <div class="relative flex flex-wrap items-start gap-1.5">
+                <div class="flex flex-row flex-wrap gap-1.5">
                     <!-- Team Member Filter Button -->
                     <div class="relative team-member-filter-container">
                         <button @click="loadTeamMembers" :disabled="loadingTeamMembers"
-                            :class="tempSelectedTeamMember ? 'border border-blue-500 text-blue-600 hover:bg-blue-50' : 'bg-gray-100 hover:bg-gray-200'"
-                            class="flex items-center space-x-1 px-3 py-1 rounded-md text-sm transition-colors">
+                            :class="tempSelectedTeamMember ? 'border border-emerald-500 bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'"
+                            class="flex min-h-8 items-center gap-1 rounded-xl px-2.5 py-1 text-xs transition-colors">
                             <svg v-if="loadingTeamMembers" class="animate-spin w-4 h-4"
                                 xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor"
@@ -553,8 +582,8 @@ const cleanupNavigationBlockers = () => {
                     <!-- Status Dropdown -->
                     <div class="relative status-filter-container">
                         <button @click="showStatusFilter = !showStatusFilter"
-                            :class="tempSelectedStatus !== 'all' ? 'border border-purple-500 text-purple-600 hover:bg-purple-50' : 'bg-gray-100 hover:bg-gray-200'"
-                            class="flex items-center space-x-1 px-3 py-1 rounded-md text-sm transition-colors">
+                            :class="tempSelectedStatus !== 'all' ? 'border border-emerald-500 bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'"
+                            class="flex min-h-8 items-center gap-1 rounded-xl px-2.5 py-1 text-xs transition-colors">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
                                 <path fill="currentColor"
                                     d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10s10-4.5 10-10S17.5 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8s8 3.59 8 8s-3.59 8-8 8z" />
@@ -571,37 +600,37 @@ const cleanupNavigationBlockers = () => {
                             class="absolute top-full ltr:left-0 rtl:right-0 rtl:left-auto mt-1 w-48 bg-white border border-gray-200 rounded-md shadow-lg z-20">
                             <div class="p-1">
                                 <div v-if="teamRole === 'agent'" @click="selectStatus('assigned_to_me')"
-                                    :class="tempSelectedStatus === 'assigned_to_me' ? 'bg-purple-50 text-purple-700' : 'hover:bg-gray-50'"
+                                        :class="tempSelectedStatus === 'assigned_to_me' ? 'bg-emerald-50 text-emerald-700' : 'hover:bg-slate-50'"
                                     class="px-3 py-2 text-sm cursor-pointer rounded">
                                     {{ $t('Assigned to Me') }}
                                 </div>
                                 <div @click="selectStatus('unassigned')"
-                                    :class="tempSelectedStatus === 'unassigned' ? 'bg-purple-50 text-purple-700' : 'hover:bg-gray-50'"
+                                    :class="tempSelectedStatus === 'unassigned' ? 'bg-emerald-50 text-emerald-700' : 'hover:bg-slate-50'"
                                     class="px-3 py-2 text-sm cursor-pointer rounded">
                                     {{ $t('Unassigned') }}
                                 </div>
                                 <div @click="selectStatus('open')"
-                                    :class="tempSelectedStatus === 'open' ? 'bg-purple-50 text-purple-700' : 'hover:bg-gray-50'"
+                                    :class="tempSelectedStatus === 'open' ? 'bg-emerald-50 text-emerald-700' : 'hover:bg-slate-50'"
                                     class="px-3 py-2 text-sm cursor-pointer rounded">
                                     {{ $t('Open') }}
                                 </div>
                                 <div @click="selectStatus('closed')"
-                                    :class="tempSelectedStatus === 'closed' ? 'bg-purple-50 text-purple-700' : 'hover:bg-gray-50'"
+                                    :class="tempSelectedStatus === 'closed' ? 'bg-emerald-50 text-emerald-700' : 'hover:bg-slate-50'"
                                     class="px-3 py-2 text-sm cursor-pointer rounded">
                                     {{ $t('Closed') }}
                                 </div>
                                 <div @click="selectStatus('all')"
-                                    :class="tempSelectedStatus === 'all' ? 'bg-purple-50 text-purple-700' : 'hover:bg-gray-50'"
+                                    :class="tempSelectedStatus === 'all' ? 'bg-emerald-50 text-emerald-700' : 'hover:bg-slate-50'"
                                     class="px-3 py-2 text-sm cursor-pointer rounded">
                                     {{ $t('All') }}
                                 </div>
                                 <div @click="selectStatus('unread')"
-                                    :class="tempSelectedStatus === 'unread' ? 'bg-purple-50 text-purple-700' : 'hover:bg-gray-50'"
+                                    :class="tempSelectedStatus === 'unread' ? 'bg-emerald-50 text-emerald-700' : 'hover:bg-slate-50'"
                                     class="px-3 py-2 text-sm cursor-pointer rounded">
                                     {{ $t('Unread Only') }}
                                 </div>
                                 <div @click="toggleAwaitingReply"
-                                    :class="tempAwaitingReply ? 'bg-purple-50 text-purple-700' : 'hover:bg-gray-50'"
+                                    :class="tempAwaitingReply ? 'bg-emerald-50 text-emerald-700' : 'hover:bg-slate-50'"
                                     class="px-3 py-2 text-sm cursor-pointer rounded flex items-center justify-between">
                                     <span>{{ $t('Awaiting Reply') }}</span>
                                     <svg v-if="tempAwaitingReply" xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
@@ -616,8 +645,8 @@ const cleanupNavigationBlockers = () => {
                 <!-- Labels Filter Button -->
                 <div class="relative label-filter-container">
                     <button @click="loadLabels" :disabled="loadingLabels"
-                        :class="tempSelectedLabels.length > 0 ? 'border border-green-500 text-green-600 hover:bg-green-50' : 'bg-gray-100 hover:bg-gray-200'"
-                        class="flex items-center space-x-1 px-3 py-1 rounded-md text-sm transition-colors">
+                        :class="tempSelectedLabels.length > 0 ? 'border border-emerald-500 bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'border border-slate-200 bg-white text-slate-700 hover:bg-slate-50'"
+                        class="flex min-h-8 items-center gap-1 rounded-xl px-2.5 py-1 text-xs transition-colors">
                         <svg v-if="loadingLabels" class="animate-spin w-4 h-4" xmlns="http://www.w3.org/2000/svg"
                             fill="none" viewBox="0 0 24 24">
                             <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4">
@@ -632,32 +661,32 @@ const cleanupNavigationBlockers = () => {
                         </svg>
                         <span>{{ $t('Labels') }}</span>
                         <span v-if="tempSelectedLabels.length > 0"
-                            class="bg-white text-green-600 text-xs rounded-full w-5 h-5 flex items-center justify-center font-bold">
+                            class="flex h-5 w-5 items-center justify-center rounded-full bg-emerald-100 text-xs font-bold text-emerald-700">
                             {{ tempSelectedLabels.length }}
                         </span>
                     </button>
 
                     <!-- Label Filter Dropdown -->
                     <div v-if="showLabelFilter && availableLabels.length > 0"
-                        class="absolute top-full ltr:left-0 rtl:right-0 rtl:left-auto mt-1 w-64 bg-white border border-gray-200 rounded-md shadow-lg z-20 max-h-60 overflow-y-auto">
-                        <div class="p-2">
-                            <div class="text-sm font-medium text-gray-700 mb-2">{{ $t('Select Labels') }}</div>
-                            <div class="space-y-2">
+                        class="absolute top-full ltr:left-0 rtl:right-0 rtl:left-auto z-[60] mt-1 w-72 max-w-[calc(100vw-2rem)] overflow-y-auto rounded-xl border border-slate-200 bg-white shadow-xl max-h-60">
+                        <div class="p-2.5">
+                            <div class="mb-2 text-sm font-medium text-slate-700">{{ $t('Select Labels') }}</div>
+                            <div class="space-y-1">
                                 <div v-for="label in availableLabels" :key="label.id"
-                                    class="flex items-center space-x-2 hover:bg-gray-50 p-1 rounded">
+                                    class="flex min-w-0 items-center gap-2 rounded-lg p-1.5 hover:bg-slate-50">
                                     <input type="checkbox" :id="`filter-label-${label.id}`"
                                         :checked="tempSelectedLabels.includes(label.id)" @change="toggleLabel(label.id)"
-                                        class="w-4 h-4 text-blue-600 bg-gray-100 border-gray-300 rounded focus:ring-blue-500 focus:ring-2">
+                                        class="h-4 w-4 shrink-0 rounded border-slate-300 bg-white text-emerald-600 focus:ring-emerald-500 focus:ring-2">
                                     <label :for="`filter-label-${label.id}`"
-                                        class="flex items-center space-x-2 cursor-pointer flex-1">
+                                        class="flex min-w-0 flex-1 cursor-pointer items-center gap-2">
                                         <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14"
                                             viewBox="0 0 24 24">
                                             <path fill="none" :stroke="label.color" stroke-linecap="round"
                                                 stroke-linejoin="round" stroke-width="2"
                                                 d="M20.59 13.41 12 22 4 14V4h10l8.59 8.59zM7 7h.01" />
                                         </svg>
-                                        <span class="text-sm">{{ label.title }}</span>
-                                        <span class="text-xs text-gray-500 ml-auto">({{ label.contacts_count }})</span>
+                                        <span class="min-w-0 flex-1 break-words text-sm leading-5">{{ label.title }}</span>
+                                        <span class="ml-auto shrink-0 text-xs text-slate-500">({{ label.contacts_count }})</span>
                                     </label>
                                 </div>
                             </div>
@@ -669,10 +698,10 @@ const cleanupNavigationBlockers = () => {
 
             <!-- Action Buttons -->
             <div v-if="hasUnappliedFilters || tempSelectedLabels.length > 0 || tempSelectedTeamMember || tempSelectedStatus !== 'all' || tempAwaitingReply"
-                class="flex items-center gap-2">
+                class="flex flex-wrap items-center justify-end gap-2 border-t border-slate-200 pt-2">
                 <button @click="applyFilters" :disabled="!hasUnappliedFilters"
-                    :class="hasUnappliedFilters ? 'border border-blue-500 text-blue-600 hover:bg-blue-50' : 'border border-gray-300 text-gray-400 cursor-not-allowed'"
-                    class="flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium transition-colors">
+                    :class="hasUnappliedFilters ? 'bg-emerald-600 text-white hover:bg-emerald-700' : 'cursor-not-allowed border border-slate-200 text-slate-400'"
+                    class="flex min-h-9 items-center gap-2 rounded-xl px-4 py-2 text-sm font-medium transition-colors">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
                         <path fill="currentColor" d="M9 16.17L4.83 12l-1.42 1.41L9 19L21 7l-1.41-1.41L9 16.17z" />
                     </svg>
@@ -681,7 +710,7 @@ const cleanupNavigationBlockers = () => {
 
                 <button @click="resetFilters"
                     v-if="tempSelectedLabels.length > 0 || tempSelectedTeamMember || tempSelectedStatus !== 'all' || tempAwaitingReply"
-                    class="flex items-center gap-2 px-4 py-2 border border-red-500 text-red-600 hover:bg-red-50 rounded-md text-sm font-medium transition-colors">
+                    class="flex min-h-9 items-center gap-2 rounded-xl border border-rose-200 bg-white px-4 py-2 text-sm font-medium text-rose-600 transition-colors hover:bg-rose-50">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24">
                         <path fill="currentColor"
                             d="M19 6.41L17.59 5L12 10.59L6.41 5L5 6.41L10.59 12L5 17.59L6.41 19L12 13.41L17.59 19L19 17.59L13.41 12L19 6.41z" />
@@ -720,15 +749,15 @@ const cleanupNavigationBlockers = () => {
             </div>
         </div>
         </div>
-        <div class="min-h-0 flex-1 overflow-y-auto" ref="scrollContainer">
-        <Link :href="buildChatUrl(contact.uuid)" preserve-scroll class="block border-b group-hover:pr-0" :class="{
-            'bg-green-50': contact.unread_messages > 0 && selectedContactUuid !== contact.uuid,
-            'bg-green-100': selectedContactUuid === contact.uuid
+        <div class="min-h-0 flex-1 overflow-y-auto cb-scrollbar" ref="scrollContainer">
+        <Link :href="buildChatUrl(contact.uuid)" preserve-scroll class="block border-b border-slate-100 group-hover:pr-0 transition-colors" :class="{
+            'bg-emerald-50': contact.unread_messages > 0 && selectedContactUuid !== contact.uuid,
+            'bg-emerald-50 ring-1 ring-inset ring-emerald-200': selectedContactUuid === contact.uuid
         }" v-for="(contact, index) in rows.data" :key="index" @click="cleanupNavigationBlockers">
-            <div class="flex space-x-2 hover:bg-gray-50 cursor-pointer py-3 px-4">
+            <div class="flex gap-3 hover:bg-slate-50/80 cursor-pointer py-3.5 px-4">
                 <div class="w-[15%]">
-                    <img v-if="contact.avatar" class="rounded-full w-10 h-10" :src="contact.avatar">
-                    <div v-else class="rounded-full w-10 h-10 flex items-center justify-center bg-slate-200 capitalize">
+                    <img v-if="contact.avatar" class="rounded-2xl w-11 h-11 object-cover ring-2 ring-white shadow-sm" :src="contact.avatar">
+                    <div v-else class="rounded-full w-10 h-10 flex items-center justify-center bg-emerald-100 text-emerald-700 font-semibold capitalize">
                         {{ contact.full_name.substring(0, 1) }}</div>
                 </div>
                 <div class="w-[85%]">
@@ -737,7 +766,7 @@ const cleanupNavigationBlockers = () => {
                         <div class="flex flex-col flex-1 min-w-0">
 
                             <div class="flex items-center gap-2">
-                                <h3 class="font-small text-gray-900 whitespace-nowrap shrink-0">
+                                <h3 class="font-medium text-slate-900 whitespace-nowrap shrink-0 text-sm">
                                     {{ contact.full_name }}
                                 </h3>
 
@@ -751,12 +780,12 @@ const cleanupNavigationBlockers = () => {
                             </div>
 
                             <span v-if="contact?.latest_assigned_user?.full_name"
-                                class="inline-flex w-fit text-sm truncate bg-gray-200 text-gray-800 px-2 py-0.5 rounded-full">
+                                class="inline-flex w-fit text-xs truncate bg-slate-100 text-slate-600 px-2 py-0.5 rounded-full">
                                 {{ contact.latest_assigned_user.full_name }}
                             </span>
                         </div>
 
-                        <span class="text-gray-400 text-xs whitespace-nowrap ml-auto">
+                        <span class="text-slate-400 text-[11px] whitespace-nowrap ml-auto">
                             {{ formatTime(contact?.last_chat?.created_at) }}
                         </span>
                     </div>
@@ -880,8 +909,8 @@ const cleanupNavigationBlockers = () => {
             </div>
         </Link>
         </div>
-        <div class="shrink-0 px-4 pb-4">
-            <Pagination class="mt-3" :pagination="rows.meta" :compact="true" />
+        <div class="shrink-0 px-3 pb-2 pt-1">
+            <Pagination :pagination="rows.meta" :compact="true" />
         </div>
     </div>
 </template>

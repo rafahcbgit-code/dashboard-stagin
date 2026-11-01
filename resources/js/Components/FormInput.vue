@@ -30,8 +30,8 @@
         <label for="name" class="block text-sm leading-6 text-gray-900" :class="labelClass">{{ label ?? name }}</label>
         <div>
             <input
-            class="block w-full rounded-md border-0 py-1.5 px-4 text-gray-900 shadow-sm outline-none ring-1 ring-inset placeholder:text-gray-400 sm:text-sm sm:leading-6"
-            :class="error ? 'ring-[#b91c1c]' : 'ring-gray-300'"
+            class="block min-h-10 w-full rounded-md border bg-white px-3 py-2 text-slate-900 shadow-sm outline-none placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/15 sm:text-sm"
+            :class="error ? 'border-red-400 ring-2 ring-red-500/10' : 'border-slate-300'"
             :type="type"
             :value="props.modelValue"
             @input="updateValue"

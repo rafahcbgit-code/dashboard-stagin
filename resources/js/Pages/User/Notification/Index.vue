@@ -75,8 +75,8 @@ const markAllRead = async () => {
 
 <template>
     <AppLayout>
-        <div class="p-6">
-            <div class="max-w-3xl mx-auto">
+        <div class="cb-page-shell">
+            <div class="mx-auto w-full max-w-3xl space-y-5">
                 <div class="flex items-center justify-between mb-6">
                     <div>
                         <h2 class="text-xl font-semibold text-gray-900">{{ $t('Notifications') }}</h2>
@@ -91,7 +91,7 @@ const markAllRead = async () => {
                     </button>
                 </div>
 
-                <div class="bg-white border border-slate-200 rounded-lg overflow-hidden">
+                <div class="cb-section overflow-hidden">
                     <div v-if="notifications.data.length === 0" class="p-8 text-center">
                         <div class="text-gray-400 mb-2">
                             <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="mx-auto">

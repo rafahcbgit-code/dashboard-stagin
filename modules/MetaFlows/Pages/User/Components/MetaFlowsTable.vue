@@ -91,7 +91,7 @@
         <div
             v-for="item in rows.data"
             :key="item.uuid"
-            class="group bg-white border border-slate-200 rounded-xl p-4 hover:shadow-md hover:border-slate-300 transition-all duration-200 flex flex-col gap-3 relative"
+            class="cb-hover-lift group bg-white border border-slate-200 rounded-xl p-4 hover:shadow-md hover:border-slate-300 transition-all duration-200 flex flex-col gap-3 relative"
         >
             <!-- Top row: status + action menu -->
             <div class="flex items-center justify-between">

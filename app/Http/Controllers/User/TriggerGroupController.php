@@ -85,7 +85,7 @@ class TriggerGroupController extends BaseController
 
         $this->triggerGroupService->create($organizationId, $validated);
 
-        return redirect()->back()->with('status', ['type' => 'success', 'message' => 'Trigger created successfully']);
+        return redirect()->back()->with('status', ['type' => 'success', 'message' => __('Trigger created successfully')]);
     }
 
     public function update(Request $request, string $uuid)
@@ -118,7 +118,7 @@ class TriggerGroupController extends BaseController
 
         $this->triggerGroupService->update($uuid, $validated);
 
-        return redirect()->back()->with('status', ['type' => 'success', 'message' => 'Trigger updated successfully']);
+        return redirect()->back()->with('status', ['type' => 'success', 'message' => __('Trigger updated successfully')]);
     }
 
     public function destroy(string $uuid)
@@ -129,7 +129,7 @@ class TriggerGroupController extends BaseController
             return redirect()->back()->withErrors('Cannot delete system triggers. Disable them instead.');
         }
 
-        return redirect()->back()->with('status', ['type' => 'success', 'message' => 'Trigger deleted successfully']);
+        return redirect()->back()->with('status', ['type' => 'success', 'message' => __('Trigger deleted successfully')]);
     }
 
     public function reorder(Request $request)
@@ -142,7 +142,7 @@ class TriggerGroupController extends BaseController
         $organizationId = session()->get('current_organization');
         $this->triggerGroupService->reorder($organizationId, $validated['ordered_uuids']);
 
-        return redirect()->back()->with('status', ['type' => 'success', 'message' => 'Trigger priority updated']);
+        return redirect()->back()->with('status', ['type' => 'success', 'message' => __('Trigger priority updated')]);
     }
 
     public function toggle(Request $request, string $uuid)
@@ -153,7 +153,7 @@ class TriggerGroupController extends BaseController
 
         $this->triggerGroupService->toggleEnabled($uuid, $validated['is_enabled']);
 
-        return redirect()->back()->with('status', ['type' => 'success', 'message' => 'Trigger status updated']);
+        return redirect()->back()->with('status', ['type' => 'success', 'message' => __('Trigger status updated')]);
     }
 
     public function linkFlow(Request $request, string $uuid)

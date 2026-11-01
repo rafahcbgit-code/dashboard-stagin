@@ -4,7 +4,7 @@
             :title="currentPageTitle" :displayCreateBtn="displayCreateBtn" :displayTopBar="viewTopBar"
             :unreadNotifications="unreadNotifications"></MobileSidebar>
 
-        <div class="md:mt-0 md:pt-0 flex md:h-screen md:overflow-hidden w-full tracking-[0.3px] bg-gray-300/10"
+        <div class="md:mt-0 md:pt-0 flex md:h-screen md:overflow-hidden w-full tracking-[0.3px] bg-slate-50/70"
             :class="viewTopBar === false ? 'mt-0 pt-0' : ''">
             <Sidebar :user="user" :config="config" :organization="organization" :organizations="organizations"
                 :unreadMessages="unreadMessages" :unreadNotifications="unreadNotifications"></Sidebar>
@@ -44,7 +44,7 @@
                         </button>
                     </div>
                 </div>
-                <div class="flex-1 min-h-0 md:overflow-y-auto">
+                <div class="flex-1 min-h-0 md:overflow-y-auto cb-scrollbar">
                     <slot :user="user" :toggleNavBar="toggleTopBar"></slot>
                 </div>
             </div>

@@ -446,8 +446,8 @@ const viewContactDetails = async (data) => {
 }
 </script>
 <template>
-    <div class="group min-w-0 rounded-lg my-1 p-2 text-sm flex flex-col relative [overflow-wrap:anywhere]"
-        :class="props.type === 'outbound' ? 'ml-auto rounded-tr-none bg-[#d8fad4] speech-bubble-right' : 'mr-auto rounded-tl-none bg-white speech-bubble-left'">
+    <div class="group min-w-0 rounded-2xl my-1 p-3 text-sm flex flex-col relative [overflow-wrap:anywhere] shadow-sm border border-black/5"
+        :class="props.type === 'outbound' ? 'ml-auto rounded-tr-md bg-[#1e293b] text-white speech-bubble-right' : 'mr-auto rounded-tl-md bg-white text-slate-900 speech-bubble-left'">
         <button
             v-if="canReply"
             type="button"
@@ -1033,7 +1033,7 @@ const viewContactDetails = async (data) => {
             <div v-else-if="content.metadata && isCarouselMessage()" class="space-y-2">
                 <!-- Message body bubble -->
                 <div class="bg-white rounded-lg rounded-tl-none p-3 shadow-sm">
-                    <p class="text-sm">{{ getCarouselBody() }}</p>
+                    <p class="text-sm text-slate-900">{{ getCarouselBody() }}</p>
                     <!-- <span class="text-xs text-gray-400 float-right mt-1">{{ content.created_at }}</span> -->
                 </div>
                 
@@ -1104,8 +1104,8 @@ const viewContactDetails = async (data) => {
             </template>
 
             <!--Timestamp-->
-            <div v-if="props.type === 'outbound' && content.user" class="mt-2 mb--2">
-                <span class="text-gray-500 text-xs text-right leading-none">Sent By: <u>{{ content.user?.first_name + '' + content.user?.last_name }}</u></span>
+            <div v-if="props.type === 'outbound' && content.user" class="mt-2 text-start" dir="auto">
+                <span class="text-xs leading-none text-gray-500">{{ $t('Sent by') }}: <bdi dir="auto"><u>{{ `${content.user?.first_name ?? ''} ${content.user?.last_name ?? ''}`.trim() }}</u></bdi></span>
             </div>
             <div class="flex items-center justify-between space-x-4"
                 :class="props.type === 'outbound' && content.user ? '' : 'mt-2'">

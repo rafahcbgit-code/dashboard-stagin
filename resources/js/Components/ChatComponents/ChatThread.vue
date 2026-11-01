@@ -322,7 +322,7 @@ const loadMoreMessages = async () => {
 </script>
 
 <template>
-    <div class="relative px-3 py-4 sm:px-6 md:px-10">
+    <div class="relative min-h-full bg-[#f7fafb] px-3 py-5 sm:px-6 md:px-8">
         <p v-if="windowLoading" class="mb-2 text-center text-xs text-slate-600" role="status">{{ $t('Opening search result') }}</p>
         <div v-if="windowMode && windowHasOlder" class="mb-3 text-center">
             <button type="button" class="min-h-9 rounded-lg border border-slate-300 bg-white px-3 text-sm font-medium text-slate-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary disabled:opacity-50" :disabled="loading" @click="extendWindow('older')">{{ $t('Older messages') }}</button>

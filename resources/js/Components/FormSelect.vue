@@ -44,8 +44,8 @@
         <label for="name" class="block text-sm leading-6 text-gray-900">{{ name }}</label>
         <div v-if="disabled == true">
             <input
-            class="block w-full rounded-md border-0 py-1.5 px-4 text-gray-900 shadow-sm outline-none ring-1 ring-inset placeholder:text-gray-400 sm:text-sm sm:leading-6"
-            :class="error ? 'ring-[#b91c1c]' : 'ring-gray-300'"
+            class="block min-h-10 w-full rounded-md border bg-white px-3 py-2 text-slate-900 shadow-sm outline-none placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/15 sm:text-sm"
+            :class="error ? 'border-red-400 ring-2 ring-red-500/10' : 'border-slate-300'"
             :type="'text'"
             :value="label"
             :step="'any'"
@@ -55,8 +55,8 @@
         </div>
         <div v-else-if="native == true">
             <select
-            class="block w-full rounded-lg border-0 bg-white py-2 px-5 text-gray-900 shadow-sm outline-none ring-1 ring-inset focus:ring-2 focus:ring-indigo-600 sm:text-sm"
-            :class="error ? 'ring-[#b91c1c]' : 'ring-gray-300'"
+            class="block min-h-10 w-full rounded-md border bg-white px-3 py-2 text-slate-900 shadow-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 sm:text-sm"
+            :class="error ? 'border-red-400 ring-2 ring-red-500/10' : 'border-slate-300'"
             :value="props.modelValue ?? ''"
             :required="required"
             @change="event => emit('update:modelValue', event.target.value || null)"
@@ -79,8 +79,8 @@
                 :model-value="props.modelValue">
                 <div class="relative">
                     <ListboxButton
-                    class="relative w-full cursor-default rounded-lg bg-white py-2 ltr:pr-10 rtl:pl-10 px-5 text-start shadow-sm ring-1 ring-inset focus:outline-none focus-visible:border-indigo-500 focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-opacity-75 focus-visible:ring-offset-2 focus-visible:ring-offset-orange-300 sm:text-sm"
-                    :class="error ? 'ring-[#b91c1c]' : 'ring-gray-300'"
+                    class="relative min-h-10 w-full cursor-default rounded-md border bg-white py-2 ltr:pr-10 rtl:pl-10 px-3 text-start text-slate-900 shadow-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/15 sm:text-sm"
+                    :class="error ? 'border-red-400 ring-2 ring-red-500/10' : 'border-slate-300'"
                     >
                     <span class="block truncate" v-if="label">{{ label }}</span>
                     <span v-else class="text-gray-500">{{ props.placeholder }}</span>
@@ -100,7 +100,7 @@
                     leave-to-class="opacity-0"
                     >
                     <ListboxOptions
-                        class="z-20 absolute mt-1 max-h-60 w-max min-w-full max-w-[90vw] overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm ltr:left-0 rtl:right-0" :class="optionClassName"
+                        class="z-20 absolute mt-1 max-h-[min(15rem,calc(100vh-11rem))] w-max min-w-full max-w-[90vw] overflow-auto rounded-md bg-white py-1 text-base shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none sm:text-sm ltr:left-0 rtl:right-0" :class="optionClassName"
                     >
                         <ListboxOption
                         v-slot="{ active, selected }"

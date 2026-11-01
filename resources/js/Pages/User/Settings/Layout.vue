@@ -1,7 +1,7 @@
 <template>
     <AppLayout>
         <div
-            class="bg-white md:bg-inherit pt-10 px-4 md:pt-8 md:py-8 md:pl-8 md:pr-0 rounded-[5px] text-[#000] overflow-y-hidden">
+            class="cb-page-shell overflow-y-hidden">
             <div class="flex justify-between">
                 <div>
                     <h2 class="text-xl mb-1">{{ $t('General settings') }}</h2>

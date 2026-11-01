@@ -85,6 +85,7 @@
         const message = [error?.title, error?.message, error?.error_data?.details].filter(Boolean).join(' ').toLowerCase();
         const code = String(error?.code || '');
 
+        if (code === '131042' || message.includes('business eligibility payment issue') || message.includes('payment method')) return 'WhatsApp could not send this message because of a payment issue. The card may have insufficient funds, an outstanding balance, or invalid details. Review the payment method and any outstanding balance in your Meta Business billing settings.';
         if (code === '131026' || message.includes('message undeliverable')) return 'WhatsApp could not deliver this message.';
         if (code === '130472' || message.includes('part of an experiment')) return 'Recipient number is part of a WhatsApp experiment.';
         if (code === '131049' || message.includes('healthy ecosystem engagement') || message.includes('healthy ecosystem')) return 'WhatsApp withheld this message to protect a healthy messaging experience.';

@@ -37,13 +37,13 @@
                         <FormInput
                             v-model="form.consumer_key"
                             :error="form.errors.consumer_key"
-                            label="Consumer key"
+                            :label="t('Consumer key')"
                             placeholder="ck_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
                         />
                         <FormInput
                             v-model="form.consumer_secret"
                             :error="form.errors.consumer_secret"
-                            label="Consumer secret"
+                            :label="t('Consumer secret')"
                             placeholder="cs_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
                         />
                     </div>
@@ -51,7 +51,7 @@
                         <FormInput
                             v-model="form.domain_link"
                             :error="form.errors.domain_link"
-                            label="Domain link"
+                            :label="t('Domain link')"
                             placeholder="https://example.com"
                         />
                         <p class="text-xs text-slate-500">

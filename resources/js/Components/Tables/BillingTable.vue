@@ -1,5 +1,6 @@
 <script setup>
     import { ref } from 'vue';
+    import { useI18n } from 'vue-i18n';
     import debounce from 'lodash/debounce';
     import { router } from '@inertiajs/vue3';
     import 'vue3-toastify/dist/index.css';
@@ -29,6 +30,7 @@
     });
 
     const isSearching = ref(false);
+    const { t } = useI18n();
 
     const clearSearch = () => {
         params.value.search = null;
@@ -52,6 +54,18 @@
     }
 
     const emit = defineEmits(['update:modelValue', 'callback']);
+
+    const translateDescription = (description) => {
+        if (!description) {
+            return '-';
+        }
+
+        const paymentMethod = description.match(/^(.+) Transaction$/);
+
+        return paymentMethod
+            ? `${t('Transaction')} ${paymentMethod[1]}`
+            : description;
+    };
 </script>
 <template>
     <div class="flex justify-between">
@@ -82,7 +96,7 @@
             <TableBodyRow v-for="(item, index) in rows.data" :key="index" :class="!isLastRow(index) ? 'border-b' : ''">
                 <TableBodyRowItem :position="'first'" class="hidden sm:table-cell">{{ item.created_at }}</TableBodyRowItem>
                 <TableBodyRowItem :position="'first'" class="capitalize">{{ item.organization.name }}</TableBodyRowItem>
-                <TableBodyRowItem class="hidden sm:table-cell capitalize">{{ item.description }}</TableBodyRowItem>
+                <TableBodyRowItem class="hidden sm:table-cell">{{ translateDescription(item.description) }}</TableBodyRowItem>
                 <TableBodyRowItem class="">{{ item.amount }}</TableBodyRowItem>
                 <TableBodyRowItem class="hidden sm:table-cell">
                     <span class="float-right"></span>
@@ -91,4 +105,3 @@
         </TableBody>
     </Table>
 </template>
-  

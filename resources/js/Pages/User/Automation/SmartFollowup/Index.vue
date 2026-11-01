@@ -184,8 +184,10 @@ import SettingLayout from './../Layout.vue';
 import Modal from '@/Components/Modal.vue';
 import { router } from '@inertiajs/vue3';
 import { computed, ref, watch } from 'vue';
+import { useI18n } from 'vue-i18n';
 
 const props = defineProps(['rejoinReminders', 'flows', 'aimodule', 'fbmodule']);
+const { t } = useI18n();
 
 const localReminders = ref([...(props.rejoinReminders || [])]);
 const showModal = ref(false);
@@ -194,7 +196,7 @@ const editingReminder = ref(null);
 
 const defaultForm = () => ({
     flow_id: null,
-    message: 'You have an active conversation with us. Reply to continue where you left off.',
+    message: t('You have an active conversation with us. Reply to continue where you left off.'),
     reminder_minutes: 15,
     is_enabled: true,
 });
@@ -273,7 +275,7 @@ function toggleReminder(reminder) {
 }
 
 function deleteReminder(reminder) {
-    if (!confirm('Delete this rejoin reminder?')) {
+    if (!confirm(t('Delete this rejoin reminder?'))) {
         return;
     }
 

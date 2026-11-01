@@ -1,5 +1,5 @@
 <template>
-    <aside class="md:flex flex-col h-full bg-white hidden relative md:sticky md:top-0 md:h-screen" :class="menuIconsOnly ? 'w-20' : 'w-80'">
+        <aside class="cb-app-sidebar md:flex flex-col h-full bg-slate-800 hidden relative md:sticky md:top-0 md:h-screen border-e border-slate-700/80" :class="menuIconsOnly ? 'w-[76px]' : 'w-72'">
         <button @click="toggleMenu"
             class="absolute end-[-18px] top-[32px] bg-slate-100 px-2 py-2 rounded-full shadow-md z-10">
             <svg v-if="menuIconsOnly" xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 256 256">

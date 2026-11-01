@@ -930,19 +930,19 @@ onBeforeUnmount(() => {
         </div>
     </div>
     <div v-if="!isContactBlocked && !props.chatLimitReached" class="w-full px-2 pb-2 md:px-10">
-        <section class="rounded-xl border p-3 shadow-sm sm:p-4" :class="isInboundChatWithin24Hours ? (isReplyWindowExpiringSoon ? 'border-amber-300 bg-amber-50/80' : 'border-emerald-200 bg-emerald-50/70') : 'border-slate-300 bg-slate-50'" :aria-label="$t('Free reply window')">
-            <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
-                <div class="flex min-w-0 items-start gap-3">
-                    <span class="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full" :class="isInboundChatWithin24Hours ? (isReplyWindowExpiringSoon ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-700') : 'bg-slate-200 text-slate-700'" aria-hidden="true">
+        <section class="rounded-2xl border p-3 shadow-sm" :class="isInboundChatWithin24Hours ? (isReplyWindowExpiringSoon ? 'border-amber-300 bg-amber-50/80' : 'border-emerald-200 bg-emerald-50/70') : (!latestInboundAt ? 'border-blue-200 bg-blue-50/70' : 'border-slate-300 bg-slate-50')" :aria-label="$t('Free reply window')">
+            <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
+                <div class="flex min-w-0 items-start gap-2">
+                    <span class="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full" :class="isInboundChatWithin24Hours ? (isReplyWindowExpiringSoon ? 'bg-amber-100 text-amber-800' : 'bg-emerald-100 text-emerald-700') : (!latestInboundAt ? 'bg-blue-100 text-blue-700' : 'bg-slate-200 text-slate-700')" aria-hidden="true">
                         <svg v-if="isInboundChatWithin24Hours" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-5"><circle cx="12" cy="12" r="9"/><path stroke-linecap="round" d="M12 7v5l3 2"/></svg>
                         <svg v-else viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" class="size-5"><rect x="4" y="5" width="16" height="15" rx="2"/><path stroke-linecap="round" d="M8 3v4m8-4v4M4 10h16"/></svg>
                     </span>
                     <div class="min-w-0 flex-1">
                         <div class="flex flex-wrap items-center gap-2">
-                            <h3 class="font-semibold" :class="isInboundChatWithin24Hours ? (isReplyWindowExpiringSoon ? 'text-amber-950' : 'text-emerald-950') : 'text-slate-900'">
+                            <h3 class="text-sm font-semibold" :class="isInboundChatWithin24Hours ? (isReplyWindowExpiringSoon ? 'text-amber-950' : 'text-emerald-950') : 'text-slate-900'">
                                 {{ $t(isInboundChatWithin24Hours ? 'You can reply to this customer now' : (latestInboundAt ? 'Regular reply time has ended' : 'The customer has not messaged yet')) }}
                             </h3>
-                            <span class="rounded-full px-2.5 py-1 text-xs font-semibold" :class="isInboundChatWithin24Hours ? (isReplyWindowExpiringSoon ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-900') : 'bg-slate-200 text-slate-800'">
+                            <span class="rounded-full px-2 py-0.5 text-[11px] font-semibold" :class="isInboundChatWithin24Hours ? (isReplyWindowExpiringSoon ? 'bg-amber-100 text-amber-900' : 'bg-emerald-100 text-emerald-900') : (!latestInboundAt ? 'bg-blue-100 text-blue-800' : 'bg-slate-200 text-slate-800')">
                                 {{ $t(isInboundChatWithin24Hours ? 'You can reply now' : (latestInboundAt ? '24 hours passed — approved message needed' : 'Approved message needed to start')) }}
                             </span>
                         </div>
@@ -957,14 +957,14 @@ onBeforeUnmount(() => {
                         </p>
                         <p v-else-if="isInboundChatWithin24Hours" class="mt-1 text-sm leading-6 text-emerald-900">{{ $t('You can write and send a normal message now.') }}</p>
                         <p v-else-if="latestInboundAt" class="mt-1 text-sm leading-6 text-slate-700">{{ $t('More than 24 hours have passed since the customer messaged you. Choose an approved WhatsApp message to contact them now.') }}</p>
-                        <p v-else class="mt-1 text-sm leading-6 text-slate-700">{{ $t('The customer has not sent a message yet. Choose an approved WhatsApp message to start the conversation.') }}</p>
+                        <p v-else class="mt-0.5 text-xs leading-5 text-slate-700">{{ $t('The customer has not sent a message yet. Choose an approved WhatsApp message to start the conversation.') }}</p>
                     </div>
                 </div>
                 <div class="flex shrink-0 flex-wrap items-center gap-2 sm:justify-end">
-                    <button type="button" class="inline-flex min-h-9 items-center justify-center rounded-lg border border-slate-300 bg-white px-3 py-2 text-sm font-medium text-slate-700 transition hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" :aria-expanded="showReplyWindowHelp" aria-controls="reply-window-explanation" @click="showReplyWindowHelp = !showReplyWindowHelp">
+                    <button type="button" class="inline-flex min-h-8 items-center justify-center rounded-lg border border-slate-300 bg-white px-2.5 py-1.5 text-xs font-medium text-slate-700 transition hover:bg-slate-100 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary" :aria-expanded="showReplyWindowHelp" aria-controls="reply-window-explanation" @click="showReplyWindowHelp = !showReplyWindowHelp">
                         {{ $t(showReplyWindowHelp ? 'Hide explanation' : 'How does reply time work?') }}
                     </button>
-                    <button v-if="!isInboundChatWithin24Hours" type="button" @click="viewTemplate()" class="inline-flex min-h-9 items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+                    <button v-if="!isInboundChatWithin24Hours" type="button" @click="viewTemplate()" class="inline-flex min-h-8 items-center justify-center rounded-lg bg-primary px-3 py-1.5 text-xs font-semibold text-white shadow-sm transition hover:brightness-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
                         {{ $t(latestInboundAt ? 'Send an approved message after 24 hours' : 'Choose an approved message to start') }}
                     </button>
                 </div>
@@ -988,7 +988,7 @@ onBeforeUnmount(() => {
     </div>
     <form v-if="!isContactBlocked && isInboundChatWithin24Hours && !props.chatLimitReached" @submit.prevent="sendMessage()"
         class="flex items-center px-2 md:px-10 space-x-2">
-        <div class="bg-white rounded-md w-full p-4">
+        <div class="cb-card w-full p-3 sm:p-4">
             <div v-if="props.replyingTo" class="mb-3 flex items-start gap-3 rounded-md border-l-4 border-[#00a884] bg-slate-50 px-3 py-2">
                 <div class="min-w-0 flex-1">
                     <div class="text-xs font-semibold text-[#008f72]">{{ $t('Replying to') }}</div>
@@ -1002,7 +1002,7 @@ onBeforeUnmount(() => {
             </div>
             <div>
                 <textarea ref="textInputRef" @keydown.enter.exact.prevent="handleEnterKey"
-                    class="w-full outline-none resize-none text-sm rounded-md p-2"
+                    class="w-full outline-none resize-none text-sm rounded-xl p-3 bg-slate-50/70"
                     :class="processingForm ? 'bg-gray-100' : 'bg-white'" v-model="formTextInput"
                     @input="handleComposerInput" @blur="stopTyping" type="text" rows="3" :placeholder="$t('Type your message...')"
                     :disabled="processingForm">

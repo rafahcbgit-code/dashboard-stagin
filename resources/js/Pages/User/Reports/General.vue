@@ -1,6 +1,6 @@
 <template>
     <AppLayout>
-        <div class="bg-white md:bg-inherit p-4 md:p-8 rounded-[5px] text-[#000] h-full overflow-y-auto capitalize">
+        <div class="cb-page-shell h-full capitalize">
             <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div>
                     <h2 class="text-2xl font-semibold">{{ $t('General Reports') }}</h2>
@@ -11,7 +11,7 @@
                     <input v-model="startDate" type="date" class="border rounded p-2 text-sm" />
                     <span class="text-sm text-slate-400">—</span>
                     <input v-model="endDate" type="date" class="border rounded p-2 text-sm" />
-                    <button @click="applyFilter" class="bg-primary text-white px-3 py-2 rounded ml-2 text-sm">{{
+                    <button @click="applyFilter" class="cb-primary-button ml-2">{{
                         $t('Apply') }}</button>
                     <button @click="setToday" class="ml-2 text-sm px-3 py-2 border rounded">{{ $t('Today') }}</button>
                     <button @click="setLast7Days" class="ml-2 text-sm px-3 py-2 border rounded">{{ $t('Last 7 Days')
@@ -19,7 +19,7 @@
                 </div>
             </div>
 
-            <div class="mt-6 bg-white rounded-lg p-4 shadow-sm">
+            <div class="cb-section mt-6 p-4">
                 <div class="flex items-center justify-between">
                     <h4 class="text-sm text-slate-600">{{ $t('Conversations over time') }}</h4>
                     <div class="text-xs text-slate-400">{{ $t('Daily conversations created') }}</div>
@@ -30,7 +30,7 @@
                 </div>
             </div>
 
-            <div class="mt-6 bg-white rounded-lg p-4 shadow-sm">
+            <div class="cb-section mt-6 p-4">
                 <div class="flex items-center justify-between">
                     <h4 class="text-sm text-slate-600">{{ $t('Labels over time') }}</h4>
                     <div class="text-xs text-slate-400">{{ $t('Daily contacts assigned to labels') }}</div>

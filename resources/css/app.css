@@ -2,6 +2,36 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Keep the collapsed navigation focused on the primary workspace areas. */
+.cb-menu-icons-only li:not([data-collapsed-visible]) {
+    display: none;
+}
+
+.cb-menu-icons-only ul {
+    margin-top: 0.25rem;
+    margin-bottom: 0.25rem;
+}
+
+.cb-menu-icons-only [data-collapsed-visible] {
+    padding-inline: 0.25rem;
+}
+
+.cb-menu-icons-only [data-collapsed-visible] > a {
+    justify-content: center;
+}
+
+.cb-menu-icons-only [data-collapsed-visible] > a > span {
+    display: none;
+}
+
+.cb-menu-icons-only [data-collapsed-visible] > a > div {
+    justify-content: center;
+}
+
+.cb-menu-icons-only [data-collapsed-visible] svg {
+    flex-shrink: 0;
+}
+
 @font-face {
     font-family: "Outfit";
     src: local('Outfit'), url("/resources/fonts/outfit/Outfit-Thin.ttf") format("truetype");
@@ -67,12 +97,258 @@
 
 @layer base {
     :root {
-        --primary: 164 90% 15%;
+        --primary: 160 84% 39%;
+        --primary-dark: 164 88% 15%;
+        --surface: 0 0% 100%;
+        --canvas: 216 33% 97%;
+        --ink: 222 47% 11%;
+        --muted: 215 16% 47%;
+        --line: 214 32% 91%;
+        --cb-motion-fast: 160ms;
+        --cb-motion-standard: 220ms;
+        --cb-motion-enter: 240ms;
+        --cb-motion-ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+    }
+
+    *, *::before, *::after { border-color: hsl(var(--line)); }
+
+    body {
+        background: hsl(var(--canvas));
+        color: hsl(var(--ink));
+        text-rendering: optimizeLegibility;
     }
 }
 
-body {
-    font-family: Outfit, Helvetica, sans-serif;
+body { font-family: Outfit, Helvetica, sans-serif; }
+
+@layer components {
+    .cb-card { @apply rounded-2xl border bg-white shadow-sm; }
+    .cb-control { @apply rounded-xl border bg-white transition-colors duration-150 focus-within:ring-2 focus-within:ring-emerald-500/20 focus-within:border-emerald-500; }
+    .cb-muted { color: hsl(var(--muted)); }
+    .cb-page { @apply min-h-full bg-slate-50/70; }
+    .cb-scrollbar { scrollbar-width: thin; scrollbar-color: #cbd5e1 transparent; }
+    .cb-scrollbar::-webkit-scrollbar { width: 6px; height: 6px; }
+    .cb-scrollbar::-webkit-scrollbar-thumb { @apply rounded-full bg-slate-300; }
+}
+
+/* Layout 3 navigation rail: navy surface, muted labels, blue active state. */
+.cb-app-sidebar { background: #1e293b !important; color: #cbd5e1; }
+.cb-app-sidebar a, .cb-app-sidebar li, .cb-app-sidebar svg { color: #cbd5e1; }
+.cb-app-sidebar li:hover, .cb-app-sidebar li:has(a[aria-current="page"]) { background: #334155 !important; color: #fff; }
+.cb-app-sidebar li:hover a, .cb-app-sidebar li:hover svg { color: #fff; }
+.cb-app-sidebar .bg-slate-50 { background: #334155 !important; color: #fff !important; }
+.cb-app-sidebar .bg-slate-50 svg, .cb-app-sidebar .bg-slate-50 span { color: #fff !important; }
+.cb-app-sidebar .bg-slate-200 { background: #475569 !important; }
+
+.cb-page-shell { @apply min-h-full overflow-y-auto bg-[#f4f6f9] px-4 py-5 text-slate-900 md:px-8 md:py-8; }
+.cb-page-inner { @apply mx-auto w-full max-w-7xl space-y-5; }
+.cb-page-title { @apply text-xl font-semibold text-slate-900 md:text-2xl; }
+.cb-section { @apply rounded-lg border border-slate-200 bg-white shadow-sm; }
+.cb-filter-bar { @apply rounded-lg border border-slate-200 bg-white p-4 shadow-sm; }
+.cb-primary-button { @apply inline-flex min-h-10 items-center justify-center rounded-md bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:bg-emerald-700 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary disabled:cursor-not-allowed disabled:opacity-50; }
+.cb-secondary-button { @apply inline-flex min-h-10 items-center justify-center rounded-md border border-slate-300 bg-white px-4 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary; }
+
+/* Pagination uses a compact control height and must not inherit the standard action-button minimum. */
+.cb-pagination-go {
+    min-height: 1.75rem;
+    height: 1.75rem;
+    padding-top: 0;
+    padding-bottom: 0;
+}
+
+/* Interactive metric cards: enough movement to signal interactivity, without shifting page layout. */
+.cb-stat-card,
+.cb-hover-lift {
+    position: relative;
+    transition: transform var(--cb-motion-standard) var(--cb-motion-ease), border-color var(--cb-motion-standard) var(--cb-motion-ease), box-shadow var(--cb-motion-standard) var(--cb-motion-ease), background-color var(--cb-motion-standard) var(--cb-motion-ease);
+}
+
+.cb-stat-card { isolation: isolate; }
+
+.cb-stat-card::after {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    border-radius: inherit;
+    background: linear-gradient(135deg, rgb(16 185 129 / 0.10), transparent 52%);
+    content: "";
+    opacity: 0;
+    transition: opacity var(--cb-motion-standard) var(--cb-motion-ease);
+}
+
+.cb-stat-card:hover,
+.cb-stat-card:focus-within,
+.cb-hover-lift:hover,
+.cb-hover-lift:focus-within {
+    transform: translateY(-4px) scale(1.01);
+    border-color: rgb(16 185 129 / 0.45);
+    box-shadow: 0 14px 28px rgb(15 118 110 / 0.14);
+}
+
+.cb-stat-card:hover::after,
+.cb-stat-card:focus-within::after {
+    opacity: 1;
+}
+
+.cb-stat-card:hover [class*="rounded-full"],
+.cb-stat-card:focus-within [class*="rounded-full"] {
+    transform: scale(1.08);
+}
+
+.cb-stat-card [class*="rounded-full"] {
+    transition: transform var(--cb-motion-standard) var(--cb-motion-ease);
+}
+
+/* Saved replies: make searching and scanning feel responsive without moving table content. */
+.cb-saved-replies-search {
+    transition: border-color var(--cb-motion-fast) var(--cb-motion-ease), box-shadow var(--cb-motion-fast) var(--cb-motion-ease), background-color var(--cb-motion-fast) var(--cb-motion-ease), transform var(--cb-motion-fast) var(--cb-motion-ease);
+}
+
+.cb-saved-replies-search:focus-within {
+    transform: translateY(-1px);
+}
+
+.cb-table-row-hover > td {
+    transition: background-color var(--cb-motion-fast) var(--cb-motion-ease), color var(--cb-motion-fast) var(--cb-motion-ease);
+}
+
+.cb-table-row-hover:hover > td {
+    background-color: rgb(236 253 245 / 0.85);
+}
+
+/* One-time, low-cost entrances for page sections and overview cards. */
+.cb-reveal {
+    opacity: 0;
+    transform: translateY(8px);
+    transition: opacity var(--cb-motion-enter) var(--cb-motion-ease), transform var(--cb-motion-enter) var(--cb-motion-ease);
+    transition-delay: var(--cb-reveal-delay, 0ms);
+    will-change: opacity, transform;
+}
+
+.cb-reveal-visible {
+    opacity: 1;
+    transform: translateY(0);
+}
+
+/* Shared feedback for every interactive control without delaying its action. */
+button,
+a[role="button"],
+a[class*="rounded"][class*="bg-"],
+.cb-primary-button,
+.cb-secondary-button {
+    transition: background-color var(--cb-motion-fast) var(--cb-motion-ease), border-color var(--cb-motion-fast) var(--cb-motion-ease), color var(--cb-motion-fast) var(--cb-motion-ease), box-shadow var(--cb-motion-fast) var(--cb-motion-ease), transform var(--cb-motion-fast) var(--cb-motion-ease);
+}
+
+button:not(:disabled):active,
+a[role="button"]:active,
+a[class*="rounded"][class*="bg-"]:active,
+.cb-primary-button:active,
+.cb-secondary-button:active {
+    transform: translateY(1px) scale(0.985);
+}
+
+button:focus-visible,
+a[role="button"]:focus-visible,
+a[class*="rounded"][class*="bg-"]:focus-visible {
+    outline: 2px solid hsl(var(--primary));
+    outline-offset: 2px;
+}
+
+/* Primary actions share one green; red/amber controls stay semantic for destructive or warning actions. */
+:is(button, a).bg-primary,
+:is(button, a).bg-black,
+:is(button, a).bg-indigo-400,
+:is(button, a).bg-indigo-500,
+:is(button, a).bg-indigo-600,
+:is(button, a).bg-indigo-700,
+:is(button, a).bg-blue-500,
+:is(button, a).bg-blue-600,
+:is(button, a).bg-blue-700,
+:is(button, a).bg-sky-500,
+:is(button, a).bg-sky-600,
+:is(button, a).bg-teal-500,
+:is(button, a).bg-teal-600,
+:is(button, a).bg-green-500,
+:is(button, a).bg-green-600,
+:is(button, a).bg-slate-600,
+:is(button, a).bg-slate-700,
+:is(button, a).bg-gray-600,
+:is(button, a).bg-gray-700 {
+    background-color: #10b981 !important;
+    color: #fff !important;
+}
+
+:is(button, a).bg-primary:not(:disabled):hover,
+:is(button, a).bg-black:not(:disabled):hover,
+:is(button, a).bg-indigo-400:not(:disabled):hover,
+:is(button, a).bg-indigo-500:not(:disabled):hover,
+:is(button, a).bg-indigo-600:not(:disabled):hover,
+:is(button, a).bg-indigo-700:not(:disabled):hover,
+:is(button, a).bg-blue-500:not(:disabled):hover,
+:is(button, a).bg-blue-600:not(:disabled):hover,
+:is(button, a).bg-blue-700:not(:disabled):hover,
+:is(button, a).bg-sky-500:not(:disabled):hover,
+:is(button, a).bg-sky-600:not(:disabled):hover,
+:is(button, a).bg-teal-500:not(:disabled):hover,
+:is(button, a).bg-teal-600:not(:disabled):hover,
+:is(button, a).bg-green-500:not(:disabled):hover,
+:is(button, a).bg-green-600:not(:disabled):hover,
+:is(button, a).bg-slate-600:not(:disabled):hover,
+:is(button, a).bg-slate-700:not(:disabled):hover,
+:is(button, a).bg-gray-600:not(:disabled):hover,
+:is(button, a).bg-gray-700:not(:disabled):hover,
+:is(button, a).hover\:bg-indigo-500:hover,
+:is(button, a).hover\:bg-indigo-600:hover,
+:is(button, a).hover\:bg-indigo-700:hover,
+:is(button, a).hover\:bg-blue-500:hover,
+:is(button, a).hover\:bg-blue-600:hover,
+:is(button, a).hover\:bg-blue-700:hover,
+:is(button, a).hover\:bg-sky-500:hover,
+:is(button, a).hover\:bg-sky-600:hover,
+:is(button, a).hover\:bg-teal-500:hover,
+:is(button, a).hover\:bg-teal-600:hover,
+:is(button, a).hover\:bg-green-500:hover,
+:is(button, a).hover\:bg-green-600:hover {
+    background-color: #047857 !important;
+    color: #fff !important;
+}
+
+.cb-primary-button:not(:disabled):hover {
+    box-shadow: 0 8px 18px rgb(5 150 105 / 0.20);
+    transform: translateY(-1px);
+}
+
+.cb-secondary-button:not(:disabled):hover {
+    border-color: rgb(16 185 129 / 0.45);
+    color: #047857;
+    box-shadow: 0 4px 12px rgb(15 118 110 / 0.08);
+    transform: translateY(-1px);
+}
+
+/* Phone values remain LTR inside Arabic forms so country codes and the + sign never reverse. */
+.cb-phone-input .vti__input {
+    direction: ltr;
+    text-align: left;
+    unicode-bidi: plaintext;
+}
+
+.cb-phone-input .vti__dropdown,
+.cb-phone-input .vti__selection {
+    direction: ltr;
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *, *::before, *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+    }
+
+    .cb-reveal {
+        opacity: 1;
+        transform: none;
+    }
 }
 
 h1 {
@@ -193,7 +469,17 @@ h2 {
 }
 
 .chat-bg {
+    background-color: #f8fafc;
+    background-image: none;
+    background-size: auto;
+    background-repeat: no-repeat;
+}
+
+.template-preview-bg {
+    background-color: #efe7de;
     background-image: url('/resources/images/whatsapp-bg-02.png');
+    background-size: 420px auto;
+    background-repeat: repeat;
 }
 
 .speech-bubble-right::before {
@@ -201,9 +487,9 @@ h2 {
     width: 0px;
     height: 0px;
     position: absolute;
-    border-left: 5px solid #d8fad4;
+    border-left: 5px solid #1e293b;
     border-right: 5px solid transparent;
-    border-top: 5px solid #d8fad4;
+    border-top: 5px solid #1e293b;
     border-bottom: 5px solid transparent;
     right: -10px;
     top: 0;

@@ -1,6 +1,6 @@
 <template>
     <AppLayout>
-        <div class="bg-white md:bg-inherit pt-0 px-4 md:pt-8 md:p-8 rounded-[5px] text-[#000] overflow-y-scroll">
+        <div class="cb-page-shell">
             <div class="flex flex-wrap items-start justify-between gap-3 mt-5 md:mt-0">
                 <div>
                     <h2 class="text-xl mb-1">{{ $t('Campaigns') }}</h2>
@@ -13,7 +13,7 @@
                     <template v-if="canCreateCampaign">
                         <Link
                             href="/campaigns/create"
-                            class="rounded-md bg-primary px-3 py-2 text-sm text-white shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600"
+                            class="cb-primary-button"
                         >
                             {{ $t('Create campaign') }}
                         </Link>
@@ -23,7 +23,7 @@
                             type="button"
                             @click="onTrialLimitClick"
                             :title="$t('You have exceeded your trial campaign messages limit. Please upgrade your plan.')"
-                            class="rounded-md bg-gray-400 px-3 py-2 text-sm text-gray-700 shadow-sm"
+                            class="cb-secondary-button cursor-not-allowed opacity-60"
                         >
                             {{ $t('Create campaign') }}
                         </button>
@@ -107,7 +107,7 @@
             </div>
 
             <div v-if="!props.trial" class="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-6 gap-4 my-6">
-                <div v-for="metric in campaignMetrics" :key="metric.key" class="bg-gray-100 p-4 rounded">
+                <div v-for="metric in campaignMetrics" :key="metric.key" class="cb-stat-card group rounded bg-gray-100 p-4">
                     <div class="flex items-center justify-between">
                         <h2 class="text-2xl font-bold text-slate-800"><bdi>{{ new Intl.NumberFormat(locale).format(metric.value) }}</bdi></h2>
                         <span class="h-8 w-8 inline-flex items-center justify-center rounded-full" :style="{ backgroundColor: metric.iconBg }">
@@ -142,15 +142,15 @@
 
             <!-- stats (only show during trial) -->
             <div v-if="props.trial" class="grid grid-cols-1 sm:grid-cols-3 gap-4 my-6">
-                <div class="bg-gray-100 p-4 rounded">
+                <div class="cb-stat-card group rounded bg-gray-100 p-4">
                     <h2 class="text-2xl font-bold">{{ props.campaign_messages_limit }}</h2>
                     <p class="text-sm text-gray-600">{{ $t('Campaign messages limit') }}</p>
                 </div>
-                <div class="bg-gray-100 p-4 rounded">
+                <div class="cb-stat-card group rounded bg-gray-100 p-4">
                     <h2 class="text-2xl font-bold">{{ props.overall_delivery_count }}</h2>
                     <p class="text-sm text-gray-600">{{ $t('Delivered messages') }}</p>
                 </div>
-                <div class="bg-gray-100 p-4 rounded">
+                <div class="cb-stat-card group rounded bg-gray-100 p-4">
                     <h2 class="text-2xl font-bold">{{ props.campaign_messages_limit - props.overall_delivery_count }}</h2>
                     <p class="text-sm text-gray-600">{{ $t('Remaining balance') }}</p>
                 </div>

@@ -12,7 +12,7 @@
         <div
             v-for="(card, index) in cards"
             :key="index"
-            class="me-auto rounded-lg rounded-ss-none my-1 p-1 text-sm bg-white flex flex-col relative speech-bubble-left flex-shrink-0"
+            class="me-auto rounded-lg rounded-ss-none my-1 p-1 text-sm text-slate-900 bg-white flex flex-col relative speech-bubble-left flex-shrink-0"
             style="width: 22em;"
         >
             <!-- HEADER with actual media or placeholder -->
@@ -65,7 +65,7 @@
                 <div
                     v-for="(btn, btnIndex) in card.buttons"
                     :key="btnIndex"
-                    class="flex justify-center items-center gap-x-1 rounded-lg bg-white border-t h-9 text-sm text-[#00a5f4]"
+                class="flex justify-center items-center gap-x-1 rounded-lg bg-white border-t h-9 text-sm text-primary"
                 >
                     <!-- icon per button type -->
                     <svg v-if="btn.type === 'PHONE_NUMBER'" xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"><path fill="currentColor" d="M20 16v4c-2.758 0-5.07-.495-7-1.325c-3.841-1.652-6.176-4.63-7.5-7.675C4.4 8.472 4 5.898 4 4h4l1 4l-3.5 3c1.324 3.045 3.659 6.023 7.5 7.675L16 15l4 1z"/></svg>

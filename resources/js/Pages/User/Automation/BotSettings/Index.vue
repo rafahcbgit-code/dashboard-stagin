@@ -44,7 +44,7 @@
                                     >
                                         <span
                                             class="inline-block h-4 w-4 transform rounded-full bg-white shadow-sm transition-transform duration-200"
-                                            :class="form.automation_enabled ? 'translate-x-[22px]' : 'translate-x-[3px]'"
+                                            :class="form.automation_enabled ? 'ltr:translate-x-[22px] rtl:-translate-x-[22px]' : 'ltr:translate-x-[3px] rtl:-translate-x-[3px]'"
                                         />
                                     </button>
                                 </div>
@@ -72,7 +72,7 @@
                                         >
                                             <span
                                                 class="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform duration-200"
-                                                :class="form.ai_enabled ? 'translate-x-[18px]' : 'translate-x-[3px]'"
+                                                :class="form.ai_enabled ? 'ltr:translate-x-[18px] rtl:-translate-x-[18px]' : 'ltr:translate-x-[3px] rtl:-translate-x-[3px]'"
                                             />
                                         </button>
                                     </div>
@@ -96,7 +96,7 @@
                                         >
                                             <span
                                                 class="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform duration-200"
-                                                :class="form.ai_only_mode ? 'translate-x-[18px]' : 'translate-x-[3px]'"
+                                                :class="form.ai_only_mode ? 'ltr:translate-x-[18px] rtl:-translate-x-[18px]' : 'ltr:translate-x-[3px] rtl:-translate-x-[3px]'"
                                             />
                                         </button>
                                     </div>
@@ -152,7 +152,7 @@
                                         >
                                             <span
                                                 class="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform duration-200"
-                                                :class="form.ai_fallback_enabled ? 'translate-x-[18px]' : 'translate-x-[3px]'"
+                                                :class="form.ai_fallback_enabled ? 'ltr:translate-x-[18px] rtl:-translate-x-[18px]' : 'ltr:translate-x-[3px] rtl:-translate-x-[3px]'"
                                             />
                                         </button>
                                     </div>
@@ -162,7 +162,10 @@
                                         <div v-if="!hasKbEntries" class="flex items-start gap-2 rounded-md bg-amber-50 border border-amber-100 px-3 py-2 text-xs text-amber-700">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 mt-0.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
                                             <span>{{ $t('Your Knowledge Base is empty. Add Q&A entries so AI has content to search.') }}
-                                                <a href="/automation/knowledge-base" class="text-primary hover:underline">{{ $t('Manage Knowledge Base') }} &rarr;</a>
+                                                <a href="/automation/knowledge-base" class="inline-flex items-center gap-1 text-primary hover:underline">
+                                                    {{ $t('Manage Knowledge Base') }}
+                                                    <svg class="h-3 w-3 rtl:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
+                                                </a>
                                             </span>
                                         </div>
 
@@ -184,7 +187,7 @@
                                                 >
                                                     <span
                                                         class="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform duration-200"
-                                                        :class="form.ai_followup_enabled ? 'translate-x-[18px]' : 'translate-x-[3px]'"
+                                                        :class="form.ai_followup_enabled ? 'ltr:translate-x-[18px] rtl:-translate-x-[18px]' : 'ltr:translate-x-[3px] rtl:-translate-x-[3px]'"
                                                     />
                                                 </button>
                                             </div>
@@ -256,13 +259,14 @@
                                                 >
                                                     <span
                                                         class="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform duration-200"
-                                                        :class="form.ai_escalation_enabled ? 'translate-x-[18px]' : 'translate-x-[3px]'"
+                                                        :class="form.ai_escalation_enabled ? 'ltr:translate-x-[18px] rtl:-translate-x-[18px]' : 'ltr:translate-x-[3px] rtl:-translate-x-[3px]'"
                                                     />
                                                 </button>
                                             </div>
                                             <div v-if="form.ai_escalation_enabled" class="mt-3">
                                                 <a href="/automation/escalation" class="inline-flex items-center gap-1 text-xs font-medium text-primary hover:text-[#045a47] transition-colors">
-                                                    {{ $t('Configure escalation rules') }} &rarr;
+                                                    {{ $t('Configure escalation rules') }}
+                                                    <svg class="h-3 w-3 rtl:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
                                                 </a>
                                             </div>
                                         </div>
@@ -302,7 +306,7 @@
                                         >
                                             <span
                                                 class="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform duration-200"
-                                                :class="form.auto_escalation_enabled ? 'translate-x-[18px]' : 'translate-x-[3px]'"
+                                                :class="form.auto_escalation_enabled ? 'ltr:translate-x-[18px] rtl:-translate-x-[18px]' : 'ltr:translate-x-[3px] rtl:-translate-x-[3px]'"
                                             />
                                         </button>
                                     </div>
@@ -325,7 +329,8 @@
                                     </div>
                                     <div v-if="form.auto_escalation_enabled" class="mt-3 hidden">
                                         <a href="/automation/escalation" class="inline-flex items-center gap-1 text-xs font-medium text-primary hover:text-[#045a47] transition-colors">
-                                            {{ $t('Configure specific escalation rules') }} &rarr;
+                                            {{ $t('Configure specific escalation rules') }}
+                                            <svg class="h-3 w-3 rtl:rotate-180" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 18 6-6-6-6"/></svg>
                                         </a>
                                     </div>
                                 </div>
@@ -349,7 +354,7 @@
                                         >
                                             <span
                                                 class="inline-block h-3.5 w-3.5 transform rounded-full bg-white shadow-sm transition-transform duration-200"
-                                                :class="form.escalation_transfer_message_enabled ? 'translate-x-[18px]' : 'translate-x-[3px]'"
+                                                :class="form.escalation_transfer_message_enabled ? 'ltr:translate-x-[18px] rtl:-translate-x-[18px]' : 'ltr:translate-x-[3px] rtl:-translate-x-[3px]'"
                                             />
                                         </button>
                                     </div>
@@ -433,12 +438,12 @@
                                     </div>
                                     <!-- Quick presets -->
                                     <div class="mt-3 flex items-center gap-2">
-                                        <span class="text-xs text-slate-500 mr-1">{{ $t('Quick set:') }}</span>
-                                        <button type="button" @click="form.flow_timeout_minutes = 15" class="px-2.5 py-1 rounded-md border text-xs transition-colors" :class="form.flow_timeout_minutes === 15 ? 'border-primary bg-primary/5 text-primary font-medium' : 'border-slate-200 text-slate-500 hover:border-slate-300'">15 min</button>
-                                        <button type="button" @click="form.flow_timeout_minutes = 30" class="px-2.5 py-1 rounded-md border text-xs transition-colors" :class="form.flow_timeout_minutes === 30 ? 'border-primary bg-primary/5 text-primary font-medium' : 'border-slate-200 text-slate-500 hover:border-slate-300'">30 min</button>
-                                        <button type="button" @click="form.flow_timeout_minutes = 60" class="px-2.5 py-1 rounded-md border text-xs transition-colors" :class="form.flow_timeout_minutes === 60 ? 'border-primary bg-primary/5 text-primary font-medium' : 'border-slate-200 text-slate-500 hover:border-slate-300'">1 hr</button>
-                                        <button type="button" @click="form.flow_timeout_minutes = 120" class="px-2.5 py-1 rounded-md border text-xs transition-colors" :class="form.flow_timeout_minutes === 120 ? 'border-primary bg-primary/5 text-primary font-medium' : 'border-slate-200 text-slate-500 hover:border-slate-300'">2 hr</button>
-                                        <button type="button" @click="form.flow_timeout_minutes = 1440" class="px-2.5 py-1 rounded-md border text-xs transition-colors" :class="form.flow_timeout_minutes === 1440 ? 'border-primary bg-primary/5 text-primary font-medium' : 'border-slate-200 text-slate-500 hover:border-slate-300'">24 hr</button>
+                                        <span class="text-xs text-slate-500 me-1">{{ $t('Quick set:') }}</span>
+                                        <button type="button" @click="form.flow_timeout_minutes = 15" class="px-2.5 py-1 rounded-md border text-xs transition-colors" :class="form.flow_timeout_minutes === 15 ? 'border-primary bg-primary/5 text-primary font-medium' : 'border-slate-200 text-slate-500 hover:border-slate-300'">{{ $t('15 min') }}</button>
+                                        <button type="button" @click="form.flow_timeout_minutes = 30" class="px-2.5 py-1 rounded-md border text-xs transition-colors" :class="form.flow_timeout_minutes === 30 ? 'border-primary bg-primary/5 text-primary font-medium' : 'border-slate-200 text-slate-500 hover:border-slate-300'">{{ $t('30 min') }}</button>
+                                        <button type="button" @click="form.flow_timeout_minutes = 60" class="px-2.5 py-1 rounded-md border text-xs transition-colors" :class="form.flow_timeout_minutes === 60 ? 'border-primary bg-primary/5 text-primary font-medium' : 'border-slate-200 text-slate-500 hover:border-slate-300'">{{ $t('1 hr') }}</button>
+                                        <button type="button" @click="form.flow_timeout_minutes = 120" class="px-2.5 py-1 rounded-md border text-xs transition-colors" :class="form.flow_timeout_minutes === 120 ? 'border-primary bg-primary/5 text-primary font-medium' : 'border-slate-200 text-slate-500 hover:border-slate-300'">{{ $t('2 hr') }}</button>
+                                        <button type="button" @click="form.flow_timeout_minutes = 1440" class="px-2.5 py-1 rounded-md border text-xs transition-colors" :class="form.flow_timeout_minutes === 1440 ? 'border-primary bg-primary/5 text-primary font-medium' : 'border-slate-200 text-slate-500 hover:border-slate-300'">{{ $t('24 hr') }}</button>
                                     </div>
                                 </div>
 
@@ -466,7 +471,7 @@
                                     <div v-if="workingHours.enabled && scheduleSummary.length > 0" class="mt-4 rounded-md border border-slate-100 bg-slate-50 p-3">
                                         <div class="space-y-1.5">
                                             <div v-for="day in scheduleSummary" :key="day.label" class="flex items-center justify-between text-xs">
-                                                <span class="text-slate-600">{{ day.label }}</span>
+                                                <span class="text-slate-600">{{ $t(day.label) }}</span>
                                                 <span :class="day.active ? 'text-slate-800 font-medium' : 'text-slate-400'">
                                                     {{ day.active ? day.time : $t('Off') }}
                                                 </span>
@@ -483,7 +488,7 @@
                                     <div class="mt-3">
                                         <a href="/settings" class="inline-flex items-center gap-1 text-xs font-medium text-primary hover:text-[#045a47] transition-colors">
                                             {{ $t('Configure in General Settings') }}
-                                            <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
+                                            <svg class="rtl:rotate-180" xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18l6-6-6-6"/></svg>
                                         </a>
                                     </div>
                                 </div>
@@ -532,8 +537,10 @@
 import SettingLayout from './../Layout.vue';
 import { ref, computed } from 'vue';
 import { router } from '@inertiajs/vue3';
+import { useI18n } from 'vue-i18n';
 
 const props = defineProps(['settings', 'aiSettings', 'workingHours', 'kbEntryCount', 'aimodule', 'fbmodule']);
+const { t } = useI18n();
 
 const saving = ref(false);
 
@@ -545,12 +552,12 @@ const form = ref({
     ai_fallback_enabled: props.settings?.ai_fallback_enabled || false,
     ai_fallback_confidence: props.settings?.ai_fallback_confidence || 85,
     escalation_transfer_message_enabled: props.settings?.escalation_transfer_message_enabled ?? false,
-    escalation_transfer_message: props.settings?.escalation_transfer_message || "You're being connected to a team member who can help. Please hold on a moment.",
+    escalation_transfer_message: props.settings?.escalation_transfer_message || t("You're being connected to a team member who can help. Please hold on a moment."),
     auto_reenable_bot_minutes: props.settings?.auto_reenable_bot_minutes || 0,
     ai_followup_enabled: props.settings?.ai_followup_enabled ?? false,
-    ai_followup_question: props.settings?.ai_followup_question || 'Was this helpful?',
-    ai_followup_yes_text: props.settings?.ai_followup_yes_text || 'Yes, this helped',
-    ai_followup_no_text: props.settings?.ai_followup_no_text || 'No, I need more help',
+    ai_followup_question: props.settings?.ai_followup_question || t('Was this helpful?'),
+    ai_followup_yes_text: props.settings?.ai_followup_yes_text || t('Yes, this helped'),
+    ai_followup_no_text: props.settings?.ai_followup_no_text || t('No, I need more help'),
     auto_escalation_enabled: props.settings?.auto_escalation_enabled ?? false,
     ai_escalation_enabled: props.settings?.ai_escalation_enabled ?? false,
     // AI Settings fields
@@ -571,7 +578,7 @@ const scheduleSummary = computed(() => {
     return dayOrder.map(dayName => {
         const day = schedule.find(d => d.day === dayName);
         return {
-            label: dayName.slice(0, 3),
+            label: dayName,
             active: day ? day.active : false,
             time: day && day.from && day.to ? `${day.from} – ${day.to}` : '—',
         };

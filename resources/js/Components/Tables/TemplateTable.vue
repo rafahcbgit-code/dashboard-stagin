@@ -1,7 +1,7 @@
 <template>
     <section aria-live="polite">
         <div v-if="rows.data?.length" class="grid gap-4 lg:grid-cols-2">
-            <article v-for="item in rows.data" :key="item.uuid" class="flex min-w-0 flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-300 hover:shadow-md">
+            <article v-for="item in rows.data" :key="item.uuid" class="cb-hover-lift flex min-w-0 flex-col rounded-xl border border-slate-200 bg-white p-4 shadow-sm transition hover:border-slate-300 hover:shadow-md">
                 <div class="flex items-start justify-between gap-3">
                     <div class="min-w-0">
                         <div class="flex flex-wrap items-center gap-2"><h2 class="truncate font-bold text-slate-900" dir="auto">{{ item.name }}</h2><span class="rounded-full px-2.5 py-1 text-xs font-semibold" :class="statusClass(item.status)">{{ statusLabel(item.status) }}</span></div>

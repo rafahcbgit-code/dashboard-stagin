@@ -1,17 +1,17 @@
 <template>
     <div :aria-busy="isNavigating" class="flex w-full min-w-0 items-center justify-center">
-      <div :class="compact ? 'flex-col gap-2' : 'flex-wrap gap-2'" class="flex w-full min-w-0 items-center justify-center">
-      <div v-if="pagination.last_page > 1" class="shrink-0 whitespace-nowrap text-xs text-gray-600 sm:text-sm">{{ pagination.total }} items</div>
+      <div class="flex w-full min-w-0 flex-col items-center justify-center gap-1">
+      <div v-if="pagination.last_page > 1" class="shrink-0 whitespace-nowrap text-[11px] font-medium text-slate-600 sm:text-xs">{{ pagination.total }} {{ $t('Items') }}</div>
 
-      <div class="flex max-w-full min-w-0 flex-none flex-wrap items-center justify-center gap-1" v-if="pagination.last_page > 1">
+      <div class="flex max-w-full min-w-0 flex-none items-center justify-center gap-1 rounded-xl border border-slate-100 bg-slate-50/80 p-0.5" v-if="pagination.last_page > 1">
         <!-- First Page Button -->
         <button v-if="!compact"
             :disabled="noPreviousPage || isNavigating"
             :class="{'opacity-50': noPreviousPage || isNavigating}"
             @click="loadPage(1)"
-            aria-label="First page"
-            class="hidden shrink-0 justify-center items-center h-9 w-9 text-gray-700 bg-white rounded border border-gray-200 shadow-sm outline-none hover:bg-gray-50 sm:inline-flex focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 lg:h-3 lg:w-3" fill="none" viewBox="0 0 24 24"
+            :aria-label="$t('First page')"
+            class="hidden h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm outline-none hover:bg-emerald-50 hover:text-emerald-700 sm:inline-flex focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 lg:h-3 lg:w-3" :class="{ 'rotate-180': isRtl }" fill="none" viewBox="0 0 24 24"
                stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 19l-7-7 7-7m8 14l-7-7 7-7"/>
           </svg>
@@ -22,17 +22,17 @@
             :disabled="noPreviousPage || isNavigating"
             :class="{'opacity-50': noPreviousPage || isNavigating}"
             @click="loadPage(pagination.current_page - 1)"
-            aria-label="Previous page"
-            class="inline-flex shrink-0 justify-center items-center h-9 w-9 text-gray-700 bg-white rounded border border-gray-200 shadow-sm outline-none hover:bg-gray-50 focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 lg:h-3 lg:w-3" fill="none" viewBox="0 0 24 24"
+            :aria-label="$t('Previous page')"
+            class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm outline-none hover:bg-emerald-50 hover:text-emerald-700 focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 lg:h-3 lg:w-3" :class="{ 'rotate-180': isRtl }" fill="none" viewBox="0 0 24 24"
                stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
           </svg>
         </button>
   
         <!-- Jump to Page Input Section -->
-        <div class="relative flex shrink-0 items-center gap-1 border-l border-r border-gray-200 px-1 sm:mx-1 sm:px-2">
-          <div class="flex items-center space-x-1">
+        <div class="relative flex shrink-0 items-center gap-1 px-1">
+          <div class="flex items-center gap-1">
             <input
                 type="number"
                 v-model.number="goToPageInput"
@@ -42,28 +42,25 @@
                 @keydown.enter="goToPage"
                 :min="1"
                 :max="pagination.last_page"
-                placeholder="Go"
-                aria-label="Page number"
+                :placeholder="$t('Go')"
+                :aria-label="$t('Page number')"
                 :class="validationError ? 'bg-red-50' : 'bg-white'"
-                class="w-14 px-1 py-1 text-xs text-center rounded border-2 shadow-sm outline-none hover:bg-gray-50 focus:ring-1 sm:w-16 sm:px-2 sm:text-sm"
-                :style="{ borderColor: validationError ? '#dc2626' : '#008000', color: validationError ? '#dc2626' : '#008000', fontWeight: 500 }"
-                :title="validationError || 'Enter page number'"
+                class="h-7 w-12 rounded border-2 px-1 py-0.5 text-center text-[11px] shadow-sm outline-none hover:bg-gray-50 focus:ring-1 sm:w-14 sm:px-2 sm:text-xs"
+                :style="{ borderColor: validationError ? '#dc2626' : '#10b981', color: validationError ? '#dc2626' : '#047857', fontWeight: 500 }"
+                :title="validationError || $t('Enter page number')"
             />
             <button
                 @click="goToPage"
                 :disabled="!goToPageInput || isNavigating"
                 :class="{'opacity-50': !goToPageInput || isNavigating}"
-                aria-label="Go to page"
-                class="shrink-0 px-2 py-1 text-xs text-white rounded focus:ring-1"
-                style="background-color: #008000;"
-                @mouseover="$event.target.style.backgroundColor = '#008000'"
-                @mouseout="$event.target.style.backgroundColor = '#008000'"
+                :aria-label="$t('Go to page')"
+                class="cb-pagination-go cb-primary-button w-12 shrink-0 rounded-lg px-0 text-[11px] sm:w-14"
             >
               <span v-if="isNavigating" class="inline-block h-3 w-3 animate-spin rounded-full border-2 border-white border-t-transparent" aria-hidden="true"></span>
-              <span v-else>Go</span>
+              <span v-else>{{ $t('Go') }}</span>
             </button>
           </div>
-          <div class="pagination-page-indicator shrink-0 text-gray-600 text-xs whitespace-nowrap max-[260px]:hidden">{{ page }} / {{ pagination.last_page }}</div>
+          <div class="pagination-page-indicator shrink-0 whitespace-nowrap text-xs text-slate-600">{{ page }} / {{ pagination.last_page }}</div>
           <span v-if="validationError" role="alert" class="absolute top-full z-10 mt-1 whitespace-nowrap rounded bg-red-50 px-2 py-1 text-[10px] text-red-600 shadow-sm ltr:left-0 rtl:right-0">{{ validationError }}</span>
         </div>
   
@@ -72,9 +69,9 @@
             :disabled="noNextPage || isNavigating"
             :class="{'opacity-50': noNextPage || isNavigating}"
             @click="loadPage(pagination.current_page + 1)"
-            aria-label="Next page"
-            class="inline-flex shrink-0 justify-center items-center h-9 w-9 text-gray-700 bg-white rounded border border-gray-300 shadow-sm outline-none hover:bg-gray-50 focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 lg:h-3 lg:w-3" fill="none" viewBox="0 0 24 24"
+            :aria-label="$t('Next page')"
+            class="inline-flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm outline-none hover:bg-emerald-50 hover:text-emerald-700 focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 lg:h-3 lg:w-3" :class="{ 'rotate-180': isRtl }" fill="none" viewBox="0 0 24 24"
                stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7"/>
           </svg>
@@ -85,9 +82,9 @@
             :disabled="noNextPage || isNavigating"
             :class="{'opacity-50': noNextPage || isNavigating}"
             @click="loadPage(pagination.last_page)"
-            aria-label="Last page"
-            class="hidden shrink-0 justify-center items-center h-9 w-9 text-gray-700 bg-white rounded border border-gray-300 shadow-sm outline-none hover:bg-gray-50 sm:inline-flex focus:ring-1 focus:ring-blue-500 focus:border-blue-500">
-          <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 lg:h-3 lg:w-3" fill="none" viewBox="0 0 24 24"
+            :aria-label="$t('Last page')"
+            class="hidden h-7 w-7 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm outline-none hover:bg-emerald-50 hover:text-emerald-700 sm:inline-flex focus:ring-1 focus:ring-emerald-500 focus:border-emerald-500">
+            <svg xmlns="http://www.w3.org/2000/svg" class="w-4 h-4 lg:h-3 lg:w-3" :class="{ 'rotate-180': isRtl }" fill="none" viewBox="0 0 24 24"
                stroke="currentColor">
             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 5l7 7-7 7M5 5l7 7-7 7"/>
           </svg>
@@ -110,6 +107,7 @@
     data() {
       return {
         page: this.pagination.current_page,
+        isRtl: typeof document !== 'undefined' && document.documentElement.dir === 'rtl',
         goToPageInput: null,
         isNavigating: false,
         validationError: null,
@@ -150,12 +148,12 @@
         const targetPage = Number(this.goToPageInput);
 
         if (!Number.isInteger(targetPage) || targetPage < 1) {
-          this.validationError = 'Enter a valid page number';
+          this.validationError = this.$t('Enter a valid page number');
           return;
         }
 
         if (targetPage > this.pagination.last_page) {
-          this.validationError = `Maximum page is ${this.pagination.last_page}`;
+          this.validationError = this.$t('Maximum page is {page}', { page: this.pagination.last_page });
           return;
         }
 

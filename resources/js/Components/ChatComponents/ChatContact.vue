@@ -1,15 +1,16 @@
 <script setup>
     import axios from 'axios';
     import { ref, watchEffect } from 'vue';
+    import { useI18n } from 'vue-i18n';
     import { Link, router, useForm, usePage } from '@inertiajs/vue3';
     import Dropdown from '@/Components/Dropdown.vue';
     import DropdownItemGroup from '@/Components/DropdownItemGroup.vue';
     import DropdownItem from '@/Components/DropdownItem.vue';
     import FormTextArea from '@/Components/FormTextArea.vue';
     import Modal from '@/Components/Modal.vue';
-    import { trans } from 'laravel-vue-i18n';
     
     const props = defineProps(['contact', 'fields', 'locationSettings']);
+    const { t } = useI18n();
     const contact = ref(props.contact);
     const metadata = (props.contact.metadata !== null && props.contact.metadata !== '') ? JSON.parse(props.contact.metadata) : {};
     const isOpenModal = ref(false);
@@ -36,8 +37,17 @@
     }
 
     const getAddressDetail = (value, key) => {
-        const address = JSON.parse(value);
-        return address?.[key] && address?.[key] != 'Not Set' ? address?.[key] : trans('not set');
+        try {
+            const address = JSON.parse(value || '{}');
+            const detail = address?.[key];
+            const normalizedDetail = String(detail ?? '').trim().toLowerCase();
+
+            return detail && !['not set', 'n/a', 'null', 'undefined', '-'].includes(normalizedDetail)
+                ? detail
+                : t('not set');
+        } catch {
+            return t('not set');
+        }
     }
 
     const submitForm = () => {

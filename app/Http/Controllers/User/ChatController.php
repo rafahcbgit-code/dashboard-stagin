@@ -7,12 +7,14 @@ use App\Models\Chat;
 use Inertia\Inertia;
 use App\Models\Label;
 use App\Models\Contact;
+use App\Models\ChatTicket;
 use App\Models\Organization;
 use Illuminate\Http\Request;
 use App\Services\ChatService;
 use App\Services\ConversationAccessService;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 use App\Http\Controllers\Controller as BaseController;
 use App\Models\Team;
 use App\Models\Template;
@@ -52,7 +54,59 @@ class ChatController extends BaseController
             ], $response->status_code ?? 422);
         }
 
+        $this->assignUnassignedConversationToResponder($request);
+
         return $response;
+    }
+
+    /** Assign a conversation to its first human responder, without replacing an existing assignee. */
+    private function assignUnassignedConversationToResponder(Request $request): void
+    {
+        $organizationId = (int) session()->get('current_organization');
+        $userId = (int) auth()->id();
+        $contactUuid = (string) $request->input('uuid', '');
+
+        if ($organizationId <= 0 || $userId <= 0 || $contactUuid === '') {
+            return;
+        }
+
+        $contact = Contact::query()
+            ->where('uuid', $contactUuid)
+            ->where('organization_id', $organizationId)
+            ->whereNull('deleted_at')
+            ->first(['id']);
+
+        if (! $contact) {
+            return;
+        }
+
+        DB::transaction(function () use ($contact, $organizationId, $userId) {
+            $ticket = ChatTicket::query()
+                ->where('contact_id', $contact->id)
+                ->where('organization_id', $organizationId)
+                ->lockForUpdate()
+                ->first();
+
+            if ($ticket) {
+                if ($ticket->assigned_to !== null) {
+                    return;
+                }
+
+                $ticket->assigned_to = $userId;
+                $ticket->updated_at = now();
+                $ticket->save();
+                return;
+            }
+
+            ChatTicket::query()->create([
+                'organization_id' => $organizationId,
+                'contact_id' => $contact->id,
+                'assigned_to' => $userId,
+                'status' => 'open',
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+        });
     }
 
     /**

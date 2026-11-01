@@ -1,6 +1,6 @@
 <template>
     <AppLayout>
-        <div class="bg-white md:bg-inherit p-4 md:p-8 rounded-[5px] text-[#000] h-full overflow-y-auto capitalize">
+        <div class="cb-page-shell h-full capitalize">
             <div class="flex justify-between mt-3 md:mt-0">
                 <div>
                     <h2 class="md:block hidden text-xl mb-1">{{ $t('Dashboard') }}</h2>

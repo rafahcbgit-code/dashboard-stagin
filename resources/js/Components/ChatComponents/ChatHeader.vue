@@ -332,7 +332,7 @@ onUnmounted(() => {
 });
 </script>
 <template>
-    <div class="h-20 bg-white border-b border-1 flex items-center justify-between px-4 md:px-4 header-container">
+    <div class="min-h-[76px] bg-white border-b border-slate-100 flex items-center justify-between px-4 md:px-5 header-container">
         <div class="flex items-center gap-x-4 cursor-pointer w-3/4">
             <button type="button" @click="closeThread" class="sm:block md:hidden">
                 <svg xmlns="http://www.w3.org/2000/svg" width="2em" height="2em" viewBox="0 0 24 24">
@@ -341,17 +341,17 @@ onUnmounted(() => {
                 </svg>
             </button>
             <div @click="toggleView">
-                <img v-if="contact.avatar" class="rounded-full w-14 h-14" :src="contact.avatar">
-                <div v-else class="rounded-full w-10 h-10 flex items-center justify-center bg-slate-100">{{
+                <img v-if="contact.avatar" class="rounded-2xl w-11 h-11 object-cover ring-2 ring-emerald-50" :src="contact.avatar">
+                <div v-else class="rounded-full w-10 h-10 flex items-center justify-center bg-emerald-100 text-emerald-700 font-semibold">{{
                     contact.full_name.substring(0, 1) }}</div>
             </div>
             <div class="flex items-center w-full gap-x-8">
                 <div>
                     <div class="flex items-center" @click="toggleView">
-                        <span dir="auto" class="whitespace-nowrap">{{ contact.full_name }}</span>
+                        <span dir="auto" class="whitespace-nowrap font-semibold text-slate-900">{{ contact.full_name }}</span>
                     </div>
                     <div class="w-full flex items-center text-xs">
-                        <span dir="ltr" class="whitespace-nowrap tabular-nums" @click="toggleView">{{ contact.formatted_phone_number }}</span>
+                        <span dir="ltr" class="whitespace-nowrap tabular-nums text-slate-500" @click="toggleView">{{ contact.formatted_phone_number }}</span>
                     </div>
                 </div>
                 <FormSelectCombo v-if="ticketingIsEnabled" v-model="user"

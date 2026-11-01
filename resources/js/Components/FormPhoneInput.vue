@@ -53,7 +53,7 @@
     <div :class="className">
         <label for="name" class="block text-sm leading-6 text-gray-900" :class="labelClass">{{ name }}</label>
         <div>
-            <div style="padding:1px" class="outline-none focus-none focus-within-none block w-full rounded-md border-0 text-gray-900 shadow-sm ring-1 ring-gray-300 ring-inset placeholder:text-gray-400 sm:text-sm sm:leading-6">
+            <div dir="ltr" style="padding:1px" class="cb-phone-input outline-none focus-none focus-within-none block w-full rounded-md border-0 text-gray-900 shadow-sm ring-1 ring-gray-300 ring-inset placeholder:text-gray-400 sm:text-sm sm:leading-6">
                 <vue-tel-input 
                     :inputOptions="{
                         autocomplete: 'tel',

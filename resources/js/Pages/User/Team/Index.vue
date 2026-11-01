@@ -1,6 +1,6 @@
 <template>
     <AppLayout>
-        <div class="bg-white md:bg-inherit pt-10 px-4 md:pt-8 md:p-8 rounded-[5px] text-[#000] h-full md:overflow-y-auto">
+        <div class="cb-page-shell h-full md:overflow-y-auto">
             <div class="flex justify-between">
                 <div>
                     <h2 class="text-xl mb-1">{{ $t('Team') }}</h2>
@@ -10,7 +10,7 @@
                     </p>
                 </div>
                 <div v-if="canInviteUsers">
-                    <button @click="openModal()" class="rounded-md bg-indigo-600 px-3 py-2 text-sm text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">{{ $t('Invite user') }}</button>
+                    <button @click="openModal()" class="cb-primary-button">{{ $t('Invite user') }}</button>
                 </div>
             </div>
             <!-- Table Component-->

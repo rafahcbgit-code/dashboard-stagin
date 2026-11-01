@@ -1145,9 +1145,12 @@ onMounted(() => {
     >
       <div
         v-if="displayTitle"
-        class="m-1 rounded px-3 pt-3 pb-3 bg-slate-100 flex items-center justify-between mb-4"
+        class="m-1 mb-4 flex items-center justify-between rounded-lg border border-slate-200 bg-white px-3 py-3 shadow-sm"
       >
-        <h3 class="text-[15px]">{{ $t("Send Template Message") }}</h3>
+        <div>
+          <h3 class="text-[15px] font-semibold text-slate-900">{{ $t("Send Template Message") }}</h3>
+          <p class="mt-0.5 text-xs text-slate-500">{{ $t("Choose a template and review the exact message before sending.") }}</p>
+        </div>
         <button
           type="button"
           @click="viewTemplate()"
@@ -1378,7 +1381,7 @@ onMounted(() => {
               <p v-if="missingSampleDynamicFields.length" class="mt-1">{{ $t("The sample contact has no value for these fields") }}: {{ missingSampleDynamicFields.join('، ') }}. {{ $t("Other recipients may have different values; this preview does not check every contact.") }}</p>
               <p v-else class="mt-1">{{ $t("This preview uses one eligible contact. Other recipients may see different values.") }}</p>
             </div>
-            <div class="max-h-[min(60vh,520px)] overflow-auto rounded-lg bg-[#efe7de] p-2">
+            <div class="template-preview-bg max-h-[min(60vh,520px)] overflow-auto rounded-lg p-2">
               <div v-if="isCarouselTemplate" class="mx-auto w-full max-w-md">
                 <div class="ms-auto mb-2 flex w-full max-w-[25em] flex-col rounded-lg bg-white p-2 text-sm shadow-sm">
                   <p class="whitespace-pre-wrap">{{ carouselMessageBody }}</p>
@@ -1692,20 +1695,22 @@ onMounted(() => {
             <div
               v-for="(item, index) in form.body.parameters"
               :key="index"
-              class="mt-3 grid min-w-0 grid-cols-1 items-end gap-3 rounded-lg border border-slate-200 bg-white p-3 lg:grid-cols-[4rem_minmax(0,1fr)_minmax(0,1fr)]"
+              class="mt-3 min-w-0 rounded-xl border border-slate-200 bg-white p-4 shadow-sm"
             >
-              <div class="flex items-center">
-                <span class="rounded-md bg-slate-100 px-2.5 py-2 text-sm font-semibold text-slate-700" v-text="'{{' + (index + 1) + '}}'"></span>
+              <div class="mb-3 flex items-center justify-between gap-3 border-b border-slate-100 pb-3">
+                <div class="min-w-0">
+                  <p class="text-sm font-semibold text-slate-900">{{ $t('Value') }} {{ index + 1 }}</p>
+                  <p class="mt-0.5 text-xs text-slate-500">{{ $t('Choose how this value will be filled before sending.') }}</p>
+                </div>
+                <span class="shrink-0 rounded-lg bg-emerald-50 px-2.5 py-1.5 font-mono text-sm font-semibold text-emerald-700" dir="ltr" v-text="'{{' + (index + 1) + '}}'"></span>
               </div>
-              <div class="min-w-0">
+              <div class="grid min-w-0 grid-cols-1 gap-3">
                 <FormSelect
                   v-model="form.body.parameters[index].selection"
                   :name="$t('Value source')"
                   :options="variableOptions"
-                  :className="'w-full'"
+                  :className="'w-full min-w-0'"
                 />
-              </div>
-              <div class="min-w-0">
                 <FormInput
                   v-if="form.body.parameters[index].selection === 'static'"
                   :name="$t('Value')"
@@ -1725,7 +1730,7 @@ onMounted(() => {
                   :options="dynamicOptions"
                   :placeholder="$t('Choose contact information')"
                   :native="true"
-                  :className="'w-full'"
+                  :className="'w-full min-w-0'"
                 />
               </div>
             </div>
@@ -1972,13 +1977,17 @@ onMounted(() => {
     </div>
 
     <!-- ── RIGHT PANEL: Preview ─────────────────────────────────────────── -->
-    <div class="chat-bg hidden min-h-0 overscroll-contain md:flex md:h-full md:w-1/2 md:items-start md:justify-center md:overflow-y-auto md:px-8 md:py-8 lg:px-10">
-      <div class="flex justify-center items-start min-h-full">
+    <div class="template-preview-bg hidden min-h-0 overscroll-contain md:flex md:h-full md:w-1/2 md:flex-col md:overflow-y-auto md:px-8 md:py-6 lg:px-10">
+      <div class="mb-4 w-full rounded-lg border border-slate-200 bg-white px-4 py-3 shadow-sm">
+        <h3 class="text-sm font-semibold text-slate-900">{{ $t("Message preview") }}</h3>
+        <p class="mt-1 text-xs leading-5 text-slate-500">{{ $t("This is the message that will be sent to the customer after you confirm.") }}</p>
+      </div>
+      <div class="flex h-fit min-h-0 w-full justify-center items-start rounded-xl border border-slate-200 bg-transparent p-4">
         <!-- Carousel preview -->
         <div v-if="isCarouselTemplate && form.template" class="w-full max-w-md">
           <!-- Top-level message body bubble -->
           <div
-            class="ms-auto rounded-lg rounded-ss-none my-1 p-1 text-sm bg-white flex flex-col relative speech-bubble-left w-[25em] mb-2"
+            class="ms-auto mb-2 flex w-full max-w-[25em] flex-col rounded-2xl rounded-ss-none border border-slate-200 bg-white p-3 text-sm shadow-sm"
           >
             <p class="px-2 normal-case whitespace-pre-wrap">
               {{ carouselMessageBody }}

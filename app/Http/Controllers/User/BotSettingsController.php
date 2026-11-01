@@ -111,7 +111,7 @@ class BotSettingsController extends BaseController
 
         return redirect()->back()->with('status', [
             'type' => 'success',
-            'message' => 'Settings updated successfully',
+            'message' => __('Settings updated successfully'),
         ]);
     }
 }

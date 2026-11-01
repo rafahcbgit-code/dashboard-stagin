@@ -21,9 +21,12 @@
         </span>
     </div>
     <div v-else class="flex items-center justify-between px-5 pt-5 h-20 mb-1">
-        <Link href="/dashboard">
-            <img :src="'/media/' + getValueByKey('logo')" alt="{{ getValueByKey('company_name') }}"
-                class="w-32 object-contain h-full ps-2">
+        <Link href="/dashboard" class="flex min-w-0 items-center justify-center">
+            <img v-if="getValueByKey('logo')" :src="'/media/' + getValueByKey('logo')" alt=""
+                class="w-32 object-contain h-full ps-2" :title="!menuIconsOnly ? getValueByKey('company_name') : undefined">
+            <span v-else class="flex h-10 w-10 items-center justify-center rounded-xl bg-primary text-lg font-bold text-white" aria-hidden="true">
+                {{ (getValueByKey('company_name') || 'C').charAt(0).toUpperCase() }}
+            </span>
         </Link>
         <span v-if="isSidebarOpen === true" @click="closeSidebar()">
             <svg xmlns="http://www.w3.org/2000/svg" width="2em" height="2em" viewBox="0 0 24 24">
@@ -44,7 +47,7 @@
         <LangToggle v-if="!menuIconsOnly" class="text-black" :languages="languages"
             :currentLanguage="currentLanguage" />
     </div>
-    <div class="flex-grow space-y-3 px-2 overflow-y-scroll">
+    <div class="flex-grow space-y-3 px-2 overflow-y-scroll" :class="menuIconsOnly ? 'cb-menu-icons-only' : ''">
         <div class="flex-1">
             <ul class="pt-2 space-y-1 text-sm mb-2">
                 <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
@@ -59,7 +62,7 @@
                         <span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Dashboard') }}</span>
                     </Link>
                 </li>
-                <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
+                <li data-collapsed-visible class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
                     :class="$page.url.startsWith('/chats') ? 'bg-slate-50 text-black' : ''">
                     <Link rel="noopener noreferrer" href="/chats"
                         class="flex items-center justify-between p-2 space-s-3 rounded-md">
@@ -89,7 +92,7 @@
                             unreadNotifications }}</span>
                     </Link>
                 </li>
-                <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
+                <li data-collapsed-visible class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
                     :class="$page.url.startsWith('/contact') ? 'bg-slate-50 text-black' : ''">
                     <Link rel="noopener noreferrer" href="/contacts" class="flex items-center p-2 space-s-3 rounded-md">
                         <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24">
@@ -139,7 +142,7 @@
                         </li>
                     </ul>
                 </li>
-                <li v-if="!isAgent" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
+                <li v-if="!isAgent" data-collapsed-visible class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
                     :class="$page.url.startsWith('/campaign') ? 'bg-slate-50 text-black' : ''">
                     <Link rel="noopener noreferrer" href="/campaigns"
                         class="flex items-center p-2 space-s-3 rounded-md">
@@ -150,7 +153,7 @@
                         <span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Campaigns') }}</span>
                     </Link>
                 </li>
-                <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
+                <li data-collapsed-visible class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
                     :class="$page.url.startsWith('/template') ? 'bg-slate-50 text-black' : ''">
                     <Link rel="noopener noreferrer" href="/templates"
                         class="flex items-center p-2 space-s-3 rounded-md">
@@ -199,7 +202,7 @@
                 <hr>
             </div>
 
-            <ul class="pb-4 space-y-1 text-sm mt-2">
+                    <ul class="pb-4 space-y-1 text-sm mt-2">
                 <li class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
                     :class="$page.url.startsWith('/team') ? 'bg-slate-50 text-black' : ''">
                     <Link rel="noopener noreferrer" href="/team" class="flex items-center p-2 space-s-3 rounded-md">
@@ -211,7 +214,7 @@
                         <span :class="menuIconsOnly ? 'hidden' : ''">{{ $t('Team') }}</span>
                     </Link>
                 </li>
-                <li v-if="!isAgent" class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
+                <li v-if="!isAgent" data-collapsed-visible class="hover:bg-slate-50 hover:text-black rounded-[5px] px-2 truncate"
                     :class="($page.url.startsWith('/settings') || $page.url.startsWith('/web-widget')) ? 'bg-slate-50 text-black' : ''">
                     <Link href="/settings"
                         @click="cleanupNavigationBlockers(); closeSidebar()"

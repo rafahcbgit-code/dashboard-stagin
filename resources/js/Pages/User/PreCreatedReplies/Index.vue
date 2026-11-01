@@ -1,6 +1,6 @@
 <template>
     <AppLayout>
-        <div class="bg-white md:bg-inherit pt-0 px-4 md:pt-8 md:p-8 rounded-[5px] text-[#000] overflow-y-scroll capitalize">
+        <div class="cb-page-shell overflow-y-scroll capitalize">
             <div class="flex justify-between mt-8 md:mt-0 mb-6">
                 <div>
                     <h2 class="text-xl mb-1">{{ $t('Saved Replies') }}</h2>
@@ -10,11 +10,11 @@
                     </p>
                 </div>
                 <div class="space-s-2 flex items-center">
-                    <Link href="/pre-created-replies/create" class="md:block hidden rounded-md bg-indigo-600 px-3 py-2 text-sm text-white shadow-sm hover:bg-indigo-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-indigo-600">{{ $t('Create Reply') }}</Link>
+                    <Link href="/pre-created-replies/create" class="cb-primary-button md:inline-flex hidden">{{ $t('Create Reply') }}</Link>
                 </div>
             </div>
 
-            <div class="relative flex h-11 w-full items-center rounded-xl border border-slate-200 bg-slate-50 text-sm shadow-sm transition focus-within:border-indigo-400 focus-within:bg-white focus-within:ring-4 focus-within:ring-indigo-500/10 md:w-80">
+            <div class="cb-saved-replies-search relative mb-5 flex h-11 w-full items-center rounded-xl border border-slate-200 bg-slate-50 text-sm shadow-sm transition focus-within:border-emerald-500 focus-within:bg-white focus-within:ring-4 focus-within:ring-emerald-500/10 md:w-80">
                 <span class="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 rtl:right-3 rtl:left-auto">
                     <svg class="h-4 w-4" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7" /><path d="m20 20-4-4" /></svg>
                 </span>
@@ -27,7 +27,7 @@
                 </span>
             </div>
 
-            <Table :rows="rows">
+            <Table :rows="rows" class-name="cb-saved-replies-table">
                 <TableHeader>
                     <TableHeaderRow>
                         <TableHeaderRowItem :position="'first'">{{ $t('Title') }}</TableHeaderRowItem>
@@ -37,7 +37,7 @@
                     </TableHeaderRow>
                 </TableHeader>
                 <TableBody>
-                    <TableBodyRow v-for="(row, index) in rows.data" :key="row.id" :class="!isLastRow(index) ? 'border-b' : ''">
+                    <TableBodyRow v-for="(row, index) in rows.data" :key="row.id" class="cb-table-row-hover" :class="!isLastRow(index) ? 'border-b' : ''">
                         <TableBodyRowItem :position="'first'">{{ row.title }}</TableBodyRowItem>
                         <TableBodyRowItem class="capitalize">{{ row.type.replace('_', ' ') }}</TableBodyRowItem>
                         <TableBodyRowItem>{{ new Date(row.created_at).toLocaleDateString() }}</TableBodyRowItem>

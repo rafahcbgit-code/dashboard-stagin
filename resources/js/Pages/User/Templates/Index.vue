@@ -1,7 +1,7 @@
 <template>
     <AppLayout>
-        <main class="min-h-full bg-slate-50 px-4 py-5 text-slate-900 md:px-8 md:py-8">
-            <div class="mx-auto max-w-7xl space-y-5">
+        <main class="cb-page-shell">
+            <div class="cb-page-inner">
                 <header class="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
                     <div class="min-w-0">
                         <h1 class="text-xl font-bold sm:text-2xl">{{ $t('Message templates') }}</h1>
@@ -12,7 +12,7 @@
                             <svg class="size-4" :class="syncing ? 'animate-spin' : ''" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="M20 11a8 8 0 0 0-15-3l-2 3m1-7v7h7M4 13a8 8 0 0 0 15 3l2-3m-1 7v-7h-7"/></svg>
                             {{ syncing ? $t('Synchronizing templates') : $t('Sync templates') }}
                         </button>
-                        <Link v-if="capabilities.create && connection.connected" href="/templates/create" class="inline-flex min-h-10 items-center justify-center rounded-lg bg-primary px-4 py-2 text-sm font-semibold text-white shadow-sm transition hover:brightness-95 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">{{ $t('Create template') }}</Link>
+                        <Link v-if="capabilities.create && connection.connected" href="/templates/create" class="cb-primary-button">{{ $t('Create template') }}</Link>
                     </div>
                 </header>
 
@@ -30,7 +30,7 @@
                 </section>
 
                 <section class="grid gap-3 sm:grid-cols-2 xl:grid-cols-4" :aria-label="$t('Template summary')">
-                    <article v-for="item in summaryCards" :key="item.key" class="rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
+                    <article v-for="item in summaryCards" :key="item.key" class="cb-stat-card group rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
                         <p class="text-sm font-medium text-slate-500">{{ item.label }}</p>
                         <p class="mt-2 text-2xl font-bold" :class="item.color">{{ item.value }}</p>
                         <p class="mt-1 text-xs leading-5 text-slate-500">{{ item.help }}</p>
@@ -47,20 +47,22 @@
                             </div>
                         </div>
                         <div class="grid gap-3 sm:grid-cols-2 xl:w-[34rem]">
-                            <label class="text-sm font-semibold text-slate-800">{{ $t('Category') }}
-                                <select v-model="form.category" class="mt-2 block min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-emerald-700" @change="applyFilters">
-                                    <option value="">{{ $t('All categories') }}</option>
-                                    <option value="MARKETING">{{ $t('Marketing category') }}</option>
-                                    <option value="UTILITY">{{ $t('Utility category') }}</option>
-                                    <option value="AUTHENTICATION">{{ $t('Authentication category') }}</option>
-                                </select>
-                            </label>
-                            <label class="text-sm font-semibold text-slate-800">{{ $t('Status') }}
-                                <select v-model="form.status" class="mt-2 block min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3 text-sm outline-none focus:border-emerald-700" @change="applyFilters">
-                                    <option value="">{{ $t('All statuses') }}</option>
-                                    <option v-for="status in statuses" :key="status" :value="status">{{ statusLabel(status) }}</option>
-                                </select>
-                            </label>
+                            <FormSelect
+                                v-model="form.category"
+                                :name="$t('Category')"
+                                :options="categoryOptions"
+                                :placeholder="$t('All categories')"
+                                :class-name="'min-w-0'"
+                                @update:model-value="applyFilters"
+                            />
+                            <FormSelect
+                                v-model="form.status"
+                                :name="$t('Status')"
+                                :options="statusOptions"
+                                :placeholder="$t('All statuses')"
+                                :class-name="'min-w-0'"
+                                @update:model-value="applyFilters"
+                            />
                         </div>
                     </div>
                     <div class="mt-4 flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 pt-4">
@@ -86,6 +88,7 @@ import { useI18n } from 'vue-i18n';
 import axios from 'axios';
 import AppLayout from './../Layout/App.vue';
 import TemplateTable from '@/Components/Tables/TemplateTable.vue';
+import FormSelect from '@/Components/FormSelect.vue';
 
 const props = defineProps({ rows: { type: Object, required: true }, filters: { type: Object, default: () => ({}) }, stats: { type: Object, default: () => ({}) }, capabilities: { type: Object, default: () => ({}) }, connection: { type: Object, default: () => ({ connected: false, settings_url: '/settings/whatsapp' }) } });
 const { t } = useI18n();
@@ -97,6 +100,16 @@ let filterTimer;
 let syncTimer;
 
 const statusLabel = (status) => t({ PENDING: 'Under Meta review', APPROVED: 'Ready to use', REJECTED: 'Rejected by Meta', PAUSED: 'Temporarily paused', DISABLED: 'Disabled by Meta', IN_APPEAL: 'Appeal under review' }[status] || 'Unknown status');
+const categoryOptions = computed(() => [
+    { value: '', label: t('All categories') },
+    { value: 'MARKETING', label: t('Marketing category') },
+    { value: 'UTILITY', label: t('Utility category') },
+    { value: 'AUTHENTICATION', label: t('Authentication category') },
+]);
+const statusOptions = computed(() => [
+    { value: '', label: t('All statuses') },
+    ...statuses.map((status) => ({ value: status, label: statusLabel(status) })),
+]);
 const summaryCards = computed(() => [
     { key: 'total', label: t('All templates'), value: props.stats.total || 0, help: t('All templates saved for this WhatsApp account.'), color: 'text-slate-900' },
     { key: 'approved', label: t('Ready to use'), value: props.stats.approved || 0, help: t('Approved templates that can be selected for sending.'), color: 'text-emerald-700' },
