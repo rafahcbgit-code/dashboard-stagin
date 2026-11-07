@@ -1,15 +1,8 @@
 <template>
-    <div :class="rtlClass">
-        <MobileSidebar :user="user" :config="config" :organization="organization" :organizations="organizations"
-            :title="currentPageTitle" :displayCreateBtn="displayCreateBtn" :displayTopBar="viewTopBar"
-            :unreadNotifications="unreadNotifications"></MobileSidebar>
-
-        <div class="md:mt-0 md:pt-0 flex md:h-screen md:overflow-hidden w-full tracking-[0.3px] bg-slate-50/70"
-            :class="viewTopBar === false ? 'mt-0 pt-0' : ''">
-            <Sidebar :user="user" :config="config" :organization="organization" :organizations="organizations"
-                :unreadMessages="unreadMessages" :unreadNotifications="unreadNotifications"></Sidebar>
-
-            <div class="flex flex-col w-full min-w-0 md:h-screen md:min-h-0 md:overflow-hidden">
+    <div :class="[rtlClass, 'cb-user-app']">
+        <ThreadNavigation :user="user" :organization="organization" :organizations="organizations"
+            :unread-messages="unreadMessages" :unread-notifications="unreadNotifications"
+            :show-mobile-header="viewTopBar" :chat-page="isChatPage">
 
                 <div v-if="isTrialActive" 
                     class="fixed top-6 left-1/2 transform -translate-x-1/2 z-50 w-[90%] sm:w-auto">
@@ -44,11 +37,10 @@
                         </button>
                     </div>
                 </div>
-                <div class="flex-1 min-h-0 md:overflow-y-auto cb-scrollbar">
+                <div class="cb-thread-main-scroll cb-scrollbar" :class="{ 'cb-thread-chat-page': isChatPage }">
                     <slot :user="user" :toggleNavBar="toggleTopBar"></slot>
                 </div>
-            </div>
-        </div>
+        </ThreadNavigation>
 
         <audio ref="audioPlayer" allow="autoplay"></audio>
         <ManagedNotificationAlert v-if="isCurrentOwner" :key="organization?.id" />
@@ -56,17 +48,17 @@
 </template>
 <script setup>
     import { usePage } from "@inertiajs/vue3";
-    import Sidebar from "./Sidebar.vue";
-    import { ref, computed, watch, onMounted, onUnmounted } from 'vue';
+    import ThreadNavigation from "./ThreadNavigation.vue";
+    import { ref, computed, watch, onMounted, onUnmounted, provide } from 'vue';
     import { toast } from 'vue3-toastify';
     import axios from 'axios';
-    import MobileSidebar from "./MobileSidebar.vue";
     import ManagedNotificationAlert from "./ManagedNotificationAlert.vue";
     import 'vue3-toastify/dist/index.css';
     import { getEchoInstance } from '../../../echo';
     import { useRtl } from '@/Composables/useRtl';
 
     const { rtlClass, isRtl } = useRtl();
+    provide('chatberryThreadUI', true);
 
     const viewTopBar = ref(true);
     const user = computed(() => usePage().props.auth.user);
@@ -78,6 +70,7 @@
     ) ?? false);
     const organizations = computed(() => usePage().props.organizations);
     const currentPageTitle = computed(() => usePage().props.title);
+    const isChatPage = computed(() => usePage().url.startsWith('/chats'));
     const displayCreateBtn = computed(() => usePage().props.allowCreate);
     const unreadMessages = ref(Number(usePage().props.unreadMessages) || 0);
     const unreadNotifications = ref(0);
@@ -168,6 +161,7 @@
     };
 
     onMounted(() => {
+        document.body.classList.add('cb-user-modal-context');
         window.addEventListener('chat:unread-adjusted', adjustUnreadMessages);
         window.addEventListener('notification:received', incrementUnreadNotifications);
         window.addEventListener('notification:changed', refreshUnreadNotifications);
@@ -193,6 +187,7 @@
     });
 
     onUnmounted(() => {
+        document.body.classList.remove('cb-user-modal-context');
         window.removeEventListener('chat:unread-adjusted', adjustUnreadMessages);
         window.removeEventListener('notification:received', incrementUnreadNotifications);
         window.removeEventListener('notification:changed', refreshUnreadNotifications);

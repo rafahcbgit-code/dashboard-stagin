@@ -46,7 +46,7 @@
                 </div>
                 <button
                     @click="openCustomerSync"
-                    class="inline-flex items-center gap-2 px-4 py-2 bg-[#5C3A76] hover:bg-[#4a2f5f] text-white text-sm rounded-lg transition-colors">
+                    class="cb-primary-button gap-2">
                     {{ $t('Customer Sync') }}
                 </button>
             </div>
@@ -66,7 +66,7 @@
                     }}
                 </p>
                 <a href="/salla-auth"
-                    class="inline-flex items-center gap-2 px-6 py-3 bg-[#5C3A76] hover:bg-[#4a2f5f] text-white rounded-lg transition-colors">
+                    class="cb-primary-button gap-2">
                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"
                         fill="currentColor">
                         <path
@@ -219,7 +219,7 @@
                         {{ $t('Cancel') }}
                     </button>
                     <button @click="submitCustomerSync" :disabled="customerSyncLoading"
-                        class="px-4 py-2 text-sm rounded-lg text-white bg-[#5C3A76] hover:bg-[#4a2f5f] disabled:opacity-50">
+                        class="cb-primary-button disabled:opacity-50">
                         {{ customerSyncLoading ? $t('Saving...') : $t('Save') }}
                     </button>
                 </div>
@@ -241,7 +241,7 @@
             </p>
             <p class="text-sm text-gray-600 mb-6">{{ $t('Salla integration is currently disabled on this plan.') }}</p>
             <Link href="/billing"
-                class="inline-flex items-center justify-center gap-2 px-6 py-3 bg-[#5C3A76] hover:bg-[#4a2f5f] text-white rounded-lg transition-colors">
+                class="cb-primary-button gap-2">
                 {{ $t('Upgrade your package to unlock Salla integration') }}
             </Link>
         </div>

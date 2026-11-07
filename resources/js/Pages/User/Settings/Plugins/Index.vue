@@ -94,7 +94,7 @@
                                                 <button
                                                     type="button"
                                                     @click="connectShopify"
-                                                    class="bg-blue-600 text-white rounded-lg px-4 py-2 hover:bg-blue-700 transition"
+                                                    class="cb-primary-button"
                                                 >
                                                     {{ $t('Connect with Shopify') }}
                                                 </button>

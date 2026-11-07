@@ -31,7 +31,7 @@
                         type="button"
                         :disabled="isToggling === event.name || !isConnected"
                         @click="toggle(event.name)"
-                        class="px-4 py-2 text-sm font-semibold rounded-lg transition"
+                        class="min-h-10 rounded-xl px-4 py-2 text-sm font-semibold transition"
                         :class="statuses[event.name]?.enabled ? 'bg-amber-600 text-white hover:bg-amber-700' : 'bg-blue-600 text-white hover:bg-blue-700'"
                     >
                         <span v-if="isToggling === event.name" class="animate-spin inline-block w-4 h-4 border-2 border-white border-t-transparent rounded-full mr-1"></span>

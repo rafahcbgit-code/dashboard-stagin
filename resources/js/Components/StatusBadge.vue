@@ -1,5 +1,5 @@
 <template>
-    <span class="inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold" :class="toneClass">
+    <span class="cb-thread-status inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold" :data-tone="tone" :class="toneClass">
         {{ label }}
     </span>
 </template>

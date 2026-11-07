@@ -425,7 +425,7 @@
             </p>
             <p class="text-sm text-gray-600 mb-6">{{ $t('Shopify integration is currently disabled on this plan.') }}</p>
             <Link href="/billing"
-                  class="inline-flex items-center justify-center gap-2 px-6 py-3 bg-[#5C3A76] hover:bg-[#4a2f5f] text-white rounded-lg transition-colors">
+                  class="cb-primary-button gap-2">
                 {{ $t('Upgrade your plan to unlock Shopify integration') }}
             </Link>
         </div>

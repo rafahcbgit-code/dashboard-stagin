@@ -750,9 +750,9 @@ const cleanupNavigationBlockers = () => {
         </div>
         </div>
         <div class="min-h-0 flex-1 overflow-y-auto cb-scrollbar" ref="scrollContainer">
-        <Link :href="buildChatUrl(contact.uuid)" preserve-scroll class="block border-b border-slate-100 group-hover:pr-0 transition-colors" :class="{
-            'bg-emerald-50': contact.unread_messages > 0 && selectedContactUuid !== contact.uuid,
-            'bg-emerald-50 ring-1 ring-inset ring-emerald-200': selectedContactUuid === contact.uuid
+        <Link :href="buildChatUrl(contact.uuid)" preserve-scroll class="cb-thread-chat-row block border-b border-slate-100 group-hover:pr-0 transition-colors" :class="{
+             'cb-thread-chat-row-unread': contact.unread_messages > 0 && selectedContactUuid !== contact.uuid,
+             'cb-thread-chat-row-selected': selectedContactUuid === contact.uuid
         }" v-for="(contact, index) in rows.data" :key="index" @click="cleanupNavigationBlockers">
             <div class="flex gap-3 hover:bg-slate-50/80 cursor-pointer py-3.5 px-4">
                 <div class="w-[15%]">

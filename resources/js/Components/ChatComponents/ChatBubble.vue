@@ -446,8 +446,8 @@ const viewContactDetails = async (data) => {
 }
 </script>
 <template>
-    <div class="group min-w-0 rounded-2xl my-1 p-3 text-sm flex flex-col relative [overflow-wrap:anywhere] shadow-sm border border-black/5"
-        :class="props.type === 'outbound' ? 'ml-auto rounded-tr-md bg-[#1e293b] text-white speech-bubble-right' : 'mr-auto rounded-tl-md bg-white text-slate-900 speech-bubble-left'">
+    <div class="cb-thread-bubble group min-w-0 my-1 p-3 flex flex-col relative [overflow-wrap:anywhere]"
+        :class="props.type === 'outbound' ? 'cb-thread-bubble-out ml-auto speech-bubble-right' : 'cb-thread-bubble-in mr-auto speech-bubble-left'">
         <button
             v-if="canReply"
             type="button"

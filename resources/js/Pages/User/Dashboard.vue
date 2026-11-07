@@ -35,13 +35,13 @@
                 </div>
             </div>
             <PreSetupChecklist :steps="props.preSetup" :summary="props.preSetupSummary" :mandatory-ready="props.mandatoryReady" :dismissed="props.preSetupDismissed" />
-            <div v-if="props.role !== 'agent'" class="flex space-s-2 mb-8 text-xs md:text-sm">
-                <Link href="/contacts/add" class="bg-primary py-2 px-3 rounded-lg text-white">{{ $t('Add contact') }}</Link>
-                <Link href="/campaigns/create" class="bg-primary py-2 px-3 rounded-lg text-white">{{ $t('Create campaign') }}</Link>
-                <Link href="/templates/create" class="bg-primary py-2 px-3 rounded-lg text-white">{{ $t('Create template') }}</Link>
+            <div v-if="props.role !== 'agent'" class="cb-thread-dashboard-actions mb-8">
+                <Link href="/campaigns/create" class="cb-primary-button"><Plus :size="17" aria-hidden="true" />{{ $t('Create campaign') }}</Link>
+                <Link href="/contacts/add" class="cb-secondary-button"><UserPlus :size="17" aria-hidden="true" />{{ $t('Add contact') }}</Link>
+                <Link href="/templates/create" class="cb-thread-ghost-button"><FileText :size="17" aria-hidden="true" />{{ $t('Create template') }}</Link>
             </div>
-            <div class="grid grid-cols-2 md:grid-cols-4 gap-x-4 gap-y-4 md:space-y-0">
-                <div class="bg-slate-100 md:bg-white col-span-2 md:col-span-1 rounded-lg p-3">
+            <div class="cb-thread-kpi-band grid grid-cols-2 md:grid-cols-4 md:space-y-0">
+                <div class="cb-thread-kpi bg-slate-100 md:bg-white col-span-2 md:col-span-1 rounded-lg p-3">
                     <div class="flex justify-between items-center">
                         <div>
                             <Link href="/contacts" class="rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
@@ -63,7 +63,7 @@
                         </Link>
                     </div>
                 </div>
-                <div class="bg-slate-100 md:bg-white col-span-1 rounded-lg p-3" v-if="props.role !== 'agent'">
+                <div class="cb-thread-kpi bg-slate-100 md:bg-white col-span-1 rounded-lg p-3" v-if="props.role !== 'agent'">
                     <div class="flex justify-between items-center">
                         <div>
                             <Link href="/campaigns" class="rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
@@ -85,7 +85,7 @@
                         </Link>
                     </div>
                 </div>
-                <div class="bg-slate-100 md:bg-white rounded-lg p-3">
+                <div class="cb-thread-kpi bg-slate-100 md:bg-white rounded-lg p-3">
                     <div class="flex justify-between items-center">
                         <div>
                             <Link href="/templates" class="rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
@@ -107,7 +107,7 @@
                         </Link>
                     </div>
                 </div>
-                <div class="bg-slate-100 col-span-2 md:col-span-1 md:bg-white rounded-lg p-3">
+                <div class="cb-thread-kpi bg-slate-100 col-span-2 md:col-span-1 md:bg-white rounded-lg p-3">
                     <div class="flex justify-between items-center">
                         <div>
                             <Link href="/chats" class="rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary">
@@ -130,35 +130,20 @@
                     </div>
                 </div>
             </div>
-            <div class="md:grid md:grid-cols-2 gap-x-4 mt-4">
+            <div class="md:grid md:grid-cols-[minmax(0,2fr)_minmax(280px,1fr)] gap-5 mt-5">
                 <div class="min-w-0">
-                    <div id="chart" class="rounded-lg bg-white p-3 md:p-4">
-                        <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
-                            <h2 class="font-semibold">{{ $t('Message activity') }}</h2>
-                            <div class="flex gap-1" role="group" :aria-label="$t('Chart period')">
-                                <Link v-for="days in [7, 30, 90]" :key="days" :href="`/dashboard?days=${days}`" preserve-scroll class="rounded-md px-3 py-1.5 text-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-primary" :class="props.chartDays === days ? 'bg-primary text-white' : 'bg-slate-100 text-slate-700 hover:bg-slate-200'" :aria-current="props.chartDays === days ? 'page' : undefined">
-                                    {{ days }} {{ $t('days') }}
-                                </Link>
-                            </div>
-                        </div>
-                        <div v-if="chartIsEmpty" class="flex min-h-64 flex-col items-center justify-center gap-3 rounded-lg border border-dashed border-slate-300 p-6 text-center">
-                            <p class="text-slate-700">{{ $t('No messages in this period') }}</p>
-                            <Link v-if="props.chartDays < 30" href="/dashboard?days=30" preserve-scroll class="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">{{ $t('View 30 days') }}</Link>
-                            <Link v-else-if="props.chartDays < 90" href="/dashboard?days=90" preserve-scroll class="rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">{{ $t('View 90 days') }}</Link>
-                        </div>
-                        <apexchart v-else type="area" height="320" :options="chartOptions" :series="series"></apexchart>
-                    </div>
+                    <ConversationActivity :period="props.period" :inbound="props.inbound" :outbound="props.outbound" :days="props.chartDays" />
                 </div>
                 <div class="space-y-5">
                     
-                <div v-if="props.subscription?.status === 'trial'" class="bg-red-500 text-white rounded-lg p-4 shadow-sm">
+                <div v-if="props.subscription?.status === 'trial'" class="cb-thread-trial-card rounded-lg p-4 shadow-sm">
                  
                     <h2 class="font-bold text-lg mb-2">{{ $t('Schedule a Meeting') }}</h2>
                     <p class="text-sm mb-3">
                         {{ $t('To book an appointment click the following link') }}:
                     </p>
                     <div class="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-3">
-                        <a :href="calendly_url" target="_blank" class="bg-white text-red-500 px-4 py-2 rounded-lg font-bold text-sm inline-flex items-center justify-center hover:bg-gray-100 transition-colors">
+                        <a :href="calendly_url" target="_blank" class="cb-secondary-button">
                             {{ $t('Book Now') }}
                             <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 ms-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
@@ -167,7 +152,7 @@
                 
                         <a :href="whatsapp_link"
                         target="_blank"
-                        class="bg-[#25D366] text-white px-5 py-3 rounded-xl font-semibold text-base inline-flex items-center gap-3 hover:bg-[#1ebe5d] transition-all shadow-md hover:shadow-lg">
+                        class="cb-primary-button inline-flex items-center gap-3">
 
                             <span>{{ $t('Contact us') }}</span>
                             <svg xmlns="http://www.w3.org/2000/svg"
@@ -179,7 +164,7 @@
                     </div>
                 </div>
 
-                    <div class="flex justify-between rounded-lg py-4 px-4" :class="!subscriptionIsActive ? 'bg-red-500 text-white' : 'bg-slate-100 md:bg-white'">
+                    <div class="cb-thread-subscription-card flex justify-between rounded-lg py-4 px-4" :data-state="subscriptionIsActive ? 'active' : 'error'">
                         <div>
                             <h2 v-if="props.subscription?.status === 'trial' && !subscriptionIsActive">{{ $t('Your trial period is over') }}</h2>
                             <h2 v-if="props.subscription?.status === 'active' && !subscriptionIsActive">{{ $t('We were unable to autorenew your subscription') }}</h2>
@@ -192,7 +177,7 @@
                             <p v-if="props.subscription?.status === 'active' && subscriptionIsActive" class="text-sm">{{ $t('Your subscription expires on') }} {{ props.subscription?.valid_until }}</p>
 
                             
-                            <Link href="/billing" v-if="props.auth.user.teams[0].role === 'owner' && props.subscription?.status === 'active' && !subscriptionIsActive" type="button" class="bg-white text-gray-600 p-2 rounded-lg text-sm mt-5 flex px-3 w-fit">
+                            <Link href="/billing" v-if="props.auth.user.teams[0].role === 'owner' && props.subscription?.status === 'active' && !subscriptionIsActive" type="button" class="cb-secondary-button mt-5 w-fit">
                                 {{ $t('Add payment') }}
                                 <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20"><g fill="currentColor" fill-rule="evenodd" clip-rule="evenodd"><g opacity=".2"><path d="M12.206 5.848a1.5 1.5 0 0 1 2.113.192l3.333 4a1.5 1.5 0 1 1-2.304 1.92l-3.334-4a1.5 1.5 0 0 1 .192-2.112Z"/><path d="M12.206 16.152a1.5 1.5 0 0 1-.192-2.112l3.334-4a1.5 1.5 0 0 1 2.304 1.92l-3.333 4a1.5 1.5 0 0 1-2.113.192Z"/><path d="M16 11a1.5 1.5 0 0 1-1.5 1.5h-8a1.5 1.5 0 0 1 0-3h8A1.5 1.5 0 0 1 16 11Z"/></g><path d="M11.347 5.616a.5.5 0 0 1 .704.064l3.333 4a.5.5 0 0 1-.768.64l-3.333-4a.5.5 0 0 1 .064-.704Z"/><path d="M11.347 14.384a.5.5 0 0 1-.064-.704l3.333-4a.5.5 0 0 1 .768.64l-3.333 4a.5.5 0 0 1-.704.064Z"/><path d="M15.5 10a.5.5 0 0 1-.5.5H5a.5.5 0 0 1 0-1h20a.5.5 0 0 1 .5.5Z"/></g></svg>
                             </Link>
@@ -204,12 +189,12 @@
                             </span>
                         </div>
                     </div>
-                    <div v-if="props.auth.user.teams[0].role === 'owner' && props.setupWhatsapp === true" class="flex justify-between bg-slate-100 md:bg-white rounded-lg py-4 px-4">
+                    <div v-if="props.auth.user.teams[0].role === 'owner' && props.setupWhatsapp === true" class="cb-thread-setup-card flex justify-between rounded-lg py-4 px-4">
                       <div>
     <h2>{{ $t('Setup whatsapp') }}</h2>
     <p class="text-sm text-slate-600">{{ $t('Setup your whatsapp API to start using your instance') }}</p>
     
-    <Link href="/settings/whatsapp" class="bg-primary text-white p-2 rounded-lg text-sm mt-5 flex px-3 w-fit">
+    <Link href="/settings/whatsapp" class="cb-secondary-button mt-5 w-fit">
         {{ $t('Setup whatsapp') }}
         <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 20 20">
             <g fill="currentColor" fill-rule="evenodd" clip-rule="evenodd">
@@ -232,7 +217,7 @@
                             </span>
                         </div>
                     </div>
-                    <div class="bg-white rounded-lg py-4 md:px-4">
+                    <div class="cb-thread-campaign-summary bg-white rounded-lg py-4 md:px-4">
                         <div v-if="props.role !== 'agent'">
                             <h2>{{ $t('Campaigns') }}</h2>
                             <p class="text-sm">{{ $t('Below are your outgoing or scheduled campaigns') }}</p>
@@ -240,13 +225,13 @@
                     <p class="text-sm text-center">{{ $t('You do not have any outgoing or scheduled campaigns') }}</p>
                     
                     <div v-if="props.role !== 'agent'" class="flex justify-center items-center">
-                        <Link href="/campaigns/create" class="bg-primary text-white p-2 rounded-lg text-sm mt-5 flex px-3 w-fit">
+                        <Link href="/campaigns/create" class="cb-primary-button mt-5 w-fit">
                             {{ $t('Create campaign') }}
                         </Link>
                     </div>
                 </div>
                             <div v-else class="space-y-1">
-                                <div v-for="(item, index) in props.campaigns" :key="index" class="mt-4 border-l-4 bg-gray-50 flex justify-between gap-3 p-2 text-sm">
+                                <div v-for="(item, index) in props.campaigns" :key="index" class="cb-thread-campaign-row mt-4 flex justify-between gap-3 p-2 text-sm">
                                     <div class="min-w-0">
                                         <div class="capitalize break-words">{{ item.name }}</div>
                                         <div v-if="item.scheduled_at" class="mt-1 text-xs text-slate-500">
@@ -272,10 +257,10 @@
 <script setup>
     import AppLayout from "./Layout/App.vue";
     import { Link } from "@inertiajs/vue3";
-    import { computed } from 'vue';
-    import { trans } from 'laravel-vue-i18n';
+    import { FileText, Plus, UserPlus } from 'lucide-vue-next';
     import PreSetupChecklist from '@/Components/PreSetupChecklist.vue';
     import StatusBadge from '@/Components/StatusBadge.vue';
+    import ConversationActivity from '@/Components/UI/ConversationActivity.vue';
 
     const props = defineProps({ 
         user: Object, 
@@ -314,58 +299,4 @@
         role : String
     });
 
-    const chartIsEmpty = computed(() => [...(props.inbound || []), ...(props.outbound || [])].every((count) => Number(count) === 0));
-    const chartOptions = computed(() => ({
-        chart: {
-            height: 350,
-            type: 'area',
-            toolbar: {
-                show: false
-            },
-            zoom: {
-                enabled: false
-            },
-        },
-        colors: ['#418207'],
-        fill: {
-            type: 'gradient',
-            gradient: {
-                shadeIntensity: 1,
-                opacityFrom: 0.7,
-                opacityTo: 0.9,
-                stops: [0, 90, 100]
-            }
-        },
-        dataLabels: {
-            enabled: false
-        },
-        stroke: {
-            width: 1,
-            curve: 'smooth'
-        },
-        yaxis: {
-            title: { text: trans('Messages') },
-        },
-        xaxis: {
-            type: 'datetime',
-            categories: props.period,
-            labels: { datetimeUTC: false },
-        },
-        tooltip: {
-            x: {
-                format: 'dd/MM/yy HH:mm'
-            },
-        },
-    }));
-
-    const series = computed(() => [
-        {
-            name: trans('Inbound messages'),
-            data: props.inbound
-        }, 
-        {
-            name: trans('Outbound messages'),
-            data: props.outbound
-        }
-    ]);
 </script>

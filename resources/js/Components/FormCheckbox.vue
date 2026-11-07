@@ -1,5 +1,7 @@
 <script setup>
-    import { computed } from 'vue';
+    import { computed, useId } from 'vue';
+
+    const fieldId = useId();
 
     const props = defineProps({
         modelValue: [String, Number, Boolean],
@@ -27,14 +29,15 @@
                 <input 
                     v-model="model"
                     :value="value"
-                    :id="name"
+                    :id="fieldId"
                     :name="name"
+                    :disabled="disabled"
                     type="checkbox" 
-                    class="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-600"
+                    class="h-[18px] w-[18px] rounded border-slate-300 text-primary focus:ring-primary"
                 >
             </div>
             <div class="text-sm leading-6">
-                <label :for="name" class="text-gray-900 capitalize">{{ label }}</label>
+                <label :for="fieldId" class="text-gray-900 capitalize">{{ label }}</label>
             </div>
         </div>
     </div>

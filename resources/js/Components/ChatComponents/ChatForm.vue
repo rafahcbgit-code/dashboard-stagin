@@ -944,7 +944,7 @@ onBeforeUnmount(() => {
             </div>
         </div>
     </div>
-    <div v-if="!isContactBlocked && !props.chatLimitReached && !subscriptionExpiredState" class="w-full px-2 pb-2 md:px-10">
+    <div v-if="!isContactBlocked && !props.chatLimitReached && !subscriptionExpiredState" class="cb-thread-composer w-full px-2 pb-2 md:px-10">
         <section class="rounded-2xl border p-3 shadow-sm" :class="isInboundChatWithin24Hours ? (isReplyWindowExpiringSoon ? 'border-amber-300 bg-amber-50/80' : 'border-emerald-200 bg-emerald-50/70') : (!latestInboundAt ? 'border-blue-200 bg-blue-50/70' : 'border-slate-300 bg-slate-50')" :aria-label="$t('Free reply window')">
             <div class="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <div class="flex min-w-0 items-start gap-2">

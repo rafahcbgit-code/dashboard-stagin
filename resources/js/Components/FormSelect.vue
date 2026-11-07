@@ -1,5 +1,5 @@
 <script setup>
-    import { computed, ref } from 'vue';
+    import { computed, useId } from 'vue';
     import {
       Listbox,
       ListboxLabel,
@@ -27,6 +27,8 @@
       native: Boolean
     })
 
+    const fieldId = useId();
+
     const emit = defineEmits(['update:modelValue'])
 
     const label = computed(() => {
@@ -41,10 +43,11 @@
 </script>
 <template>
     <div :class="className">
-        <label for="name" class="block text-sm leading-6 text-gray-900">{{ name }}</label>
+        <label :for="fieldId" class="block text-sm leading-6 text-gray-900">{{ name }}</label>
         <div v-if="disabled == true">
             <input
-            class="block min-h-10 w-full rounded-md border bg-white px-3 py-2 text-slate-900 shadow-sm outline-none placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/15 sm:text-sm"
+            class="cb-thread-field block min-h-10 w-full rounded-md border bg-white px-3 py-2 text-slate-900 shadow-sm outline-none placeholder:text-slate-400 focus:border-primary focus:ring-2 focus:ring-primary/15 sm:text-sm"
+            :id="fieldId"
             :class="error ? 'border-red-400 ring-2 ring-red-500/10' : 'border-slate-300'"
             :type="'text'"
             :value="label"
@@ -55,7 +58,8 @@
         </div>
         <div v-else-if="native == true">
             <select
-            class="block min-h-10 w-full rounded-md border bg-white px-3 py-2 text-slate-900 shadow-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 sm:text-sm"
+            class="cb-thread-field block min-h-10 w-full rounded-md border bg-white px-3 py-2 text-slate-900 shadow-sm outline-none focus:border-primary focus:ring-2 focus:ring-primary/15 sm:text-sm"
+            :id="fieldId"
             :class="error ? 'border-red-400 ring-2 ring-red-500/10' : 'border-slate-300'"
             :value="props.modelValue ?? ''"
             :required="required"
@@ -79,7 +83,8 @@
                 :model-value="props.modelValue">
                 <div class="relative">
                     <ListboxButton
-                    class="relative min-h-10 w-full cursor-default rounded-md border bg-white py-2 ltr:pr-10 rtl:pl-10 px-3 text-start text-slate-900 shadow-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/15 sm:text-sm"
+                    class="cb-thread-field relative min-h-10 w-full cursor-default rounded-md border bg-white py-2 ltr:pr-10 rtl:pl-10 px-3 text-start text-slate-900 shadow-sm outline-none focus-visible:border-primary focus-visible:ring-2 focus-visible:ring-primary/15 sm:text-sm"
+                    :id="fieldId"
                     :class="error ? 'border-red-400 ring-2 ring-red-500/10' : 'border-slate-300'"
                     >
                     <span class="block truncate" v-if="label">{{ label }}</span>
@@ -109,10 +114,10 @@
                         :value="option.value"
                         as="template"
                         >
-                        <li :title="option.description || undefined" :class="[active ? 'bg-amber-100 text-amber-900' : 'text-gray-900','relative cursor-default select-none whitespace-normal break-words py-2 ltr:pl-10 ltr:pr-4 rtl:pl-4 rtl:pr-10 text-start']">
+                        <li :title="option.description || undefined" :class="[active ? 'bg-primary/10 text-ink' : 'text-gray-900','relative cursor-default select-none whitespace-normal break-words py-2 ltr:pl-10 ltr:pr-4 rtl:pl-4 rtl:pr-10 text-start']">
                             <span :class="[selected ? 'font-medium' : 'font-normal', 'block']">{{ option.label }}</span>
                             <span v-if="active && option.description" role="tooltip" class="mt-1 block text-xs leading-4 text-slate-600">{{ option.description }}</span>
-                            <span v-if="selected" class="absolute inset-y-0 ltr:left-0 rtl:right-0 flex items-center ltr:pl-3 rtl:pr-3 text-amber-600">
+                            <span v-if="selected" class="absolute inset-y-0 ltr:left-0 rtl:right-0 flex items-center ltr:pl-3 rtl:pr-3 text-primary">
                                 <CheckIcon class="h-5 w-5" aria-hidden="true" />
                             </span>
                         </li>

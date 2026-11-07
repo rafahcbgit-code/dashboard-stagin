@@ -1,5 +1,5 @@
 <template>
-  <span :class="['inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium', styles]">
+  <span :class="['cb-thread-status inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-medium', styles]" :data-tone="status">
     <span v-if="dot" class="h-1.5 w-1.5 rounded-full bg-current" aria-hidden="true" />
     <slot>{{ label }}</slot>
   </span>

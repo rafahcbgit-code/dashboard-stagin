@@ -1,13 +1,13 @@
 <template>
   <AppLayout v-slot:default="slotProps">
-    <div class="md:flex md:flex-grow md:min-h-0 md:h-full md:overflow-hidden bg-slate-50/70 p-0 md:p-3 gap-3">
-      <div class="md:w-[31%] md:flex md:min-h-0 flex-col h-full bg-white border rounded-2xl overflow-visible shadow-sm relative z-20" :class="contact ? 'hidden md:flex' : ''">
+    <div class="cb-thread-chat-layout md:flex md:flex-grow md:min-h-0 md:h-full md:overflow-hidden p-0 gap-0">
+      <div class="cb-thread-chat-list md:w-[31%] md:flex md:min-h-0 flex-col h-full bg-white border overflow-visible relative z-20" :class="contact ? 'hidden md:flex' : ''">
         <ChatTable :rows="rows" :filters="props.filters" :rowCount="props.rowCount"
           :ticketingIsEnabled="ticketingIsEnabled" :status="props?.status"
           :chatSortDirection="props.chat_sort_direction" :teamRole="props.teamRole"
                     :selectedContactUuid="contact?.uuid" :templates="templates" :contactFields="contactFields" />
       </div>
-      <div class="min-w-0 min-h-0 bg-white border rounded-2xl shadow-sm flex flex-col chat-bg md:h-full md:flex-1 overflow-hidden">
+      <div class="cb-thread-conversation min-w-0 min-h-0 bg-white flex flex-col chat-bg md:h-full md:flex-1 overflow-hidden">
         <ChatHeader v-if="contact" class="shrink-0" :ticketingIsEnabled="ticketingIsEnabled" :contact="contact"
           :displayContactInfo="displayContactInfo" :labelColors="labelColors" :ticket="ticket" :addon="addon"
           :teamRole="props.teamRole" :currentPage="rows.meta?.current_page" @toggleView="toggleContactView"
@@ -16,9 +16,9 @@
         <ChatSearchPanel v-if="contact && searchOpen && !displayTemplate && !displayContactInfo"
           :key="contact.uuid" :contact-uuid="contact.uuid" :refresh-token="searchRefreshToken"
           @close="closeConversationSearch" @select="selectSearchResult" @reset-selection="clearSearchSelection" />
-        <div v-if="contact && !displayTemplate" class="flex-1 min-h-0 overflow-hidden" ref="scrollContainer2" data-chat-scroll-container>
+        <div v-if="contact && !displayTemplate" class="flex-1 min-h-0 overflow-hidden">
           <div class="flex h-full min-h-0 flex-row">
-            <div class="min-w-0 min-h-0 flex-1 overflow-y-auto cb-scrollbar">
+            <div ref="scrollContainer2" data-chat-scroll-container class="cb-thread-message-scroll min-w-0 min-h-0 flex-1 overflow-y-auto cb-scrollbar">
               <ChatThread v-if="!loadingThread && !displayTemplate" :contactId="contact.id"
                 :contactUuid="contact.uuid" :searchTarget="searchTarget"
                 :initialMessages="chatThread" :hasMoreMessages="hasMoreMessages" :initialNextPage="nextPage"

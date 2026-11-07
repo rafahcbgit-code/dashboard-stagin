@@ -170,7 +170,7 @@ body { font-family: Outfit, Helvetica, sans-serif; }
     inset: 0;
     z-index: -1;
     border-radius: inherit;
-    background: linear-gradient(135deg, rgb(16 185 129 / 0.10), transparent 52%);
+    background: linear-gradient(135deg, rgb(var(--cb-primary-rgb, 16 185 129) / 0.10), transparent 52%);
     content: "";
     opacity: 0;
     transition: opacity var(--cb-motion-standard) var(--cb-motion-ease);
@@ -181,8 +181,8 @@ body { font-family: Outfit, Helvetica, sans-serif; }
 .cb-hover-lift:hover,
 .cb-hover-lift:focus-within {
     transform: translateY(-4px) scale(1.01);
-    border-color: rgb(16 185 129 / 0.45);
-    box-shadow: 0 14px 28px rgb(15 118 110 / 0.14);
+    border-color: rgb(var(--cb-primary-rgb, 16 185 129) / 0.45);
+    box-shadow: 0 14px 28px rgb(var(--cb-secondary-rgb, 15 118 110) / 0.14);
 }
 
 .cb-stat-card:hover::after,
@@ -213,7 +213,7 @@ body { font-family: Outfit, Helvetica, sans-serif; }
 }
 
 .cb-table-row-hover:hover > td {
-    background-color: rgb(236 253 245 / 0.85);
+    background-color: rgb(var(--cb-accent-50-rgb, 236 253 245) / 0.85);
 }
 
 /* One-time, low-cost entrances for page sections and overview cards. */
@@ -274,7 +274,7 @@ a[class*="rounded"][class*="bg-"]:focus-visible {
 :is(button, a).bg-slate-700,
 :is(button, a).bg-gray-600,
 :is(button, a).bg-gray-700 {
-    background-color: #10b981 !important;
+    background-color: rgb(var(--cb-primary-rgb, 16 185 129)) !important;
     color: #fff !important;
 }
 
@@ -309,19 +309,19 @@ a[class*="rounded"][class*="bg-"]:focus-visible {
 :is(button, a).hover\:bg-teal-600:hover,
 :is(button, a).hover\:bg-green-500:hover,
 :is(button, a).hover\:bg-green-600:hover {
-    background-color: #047857 !important;
+    background-color: rgb(var(--cb-primary-dark-rgb, 4 120 87)) !important;
     color: #fff !important;
 }
 
 .cb-primary-button:not(:disabled):hover {
-    box-shadow: 0 8px 18px rgb(5 150 105 / 0.20);
+    box-shadow: 0 8px 18px rgb(var(--cb-primary-rgb, 5 150 105) / 0.20);
     transform: translateY(-1px);
 }
 
 .cb-secondary-button:not(:disabled):hover {
-    border-color: rgb(16 185 129 / 0.45);
-    color: #047857;
-    box-shadow: 0 4px 12px rgb(15 118 110 / 0.08);
+    border-color: rgb(var(--cb-primary-rgb, 16 185 129) / 0.45);
+    color: rgb(var(--cb-primary-dark-rgb, 4 120 87));
+    box-shadow: 0 4px 12px rgb(var(--cb-secondary-rgb, 15 118 110) / 0.08);
     transform: translateY(-1px);
 }
 

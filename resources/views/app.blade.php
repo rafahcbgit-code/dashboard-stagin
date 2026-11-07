@@ -18,7 +18,10 @@
         <link rel="icon" href="{{ url($favicon) }}">
         @endif
         <link href="https://fonts.bunny.net/css2?family=Nunito:wght@400;600;700&display=swap" rel="stylesheet">
-        @vite(['resources/js/app.js', 'resources/css/app.css'])
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Almarai:wght@400;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+        @vite(['resources/js/app.js', 'resources/css/app.css', 'resources/css/thread.css'])
         @inertiaHead
         @if (!empty($google_analytics))
         <!-- Google tag (gtag.js) -->

@@ -6,7 +6,7 @@ import CampaignAudienceSelect from "@/Components/CampaignAudienceSelect.vue";
 import WhatsappTemplate from "@/Components/WhatsappTemplate.vue";
 import CarouselPreview from "@/Components/Template/CarouselPreview.vue";
 import { ref, computed, onMounted, nextTick, watch } from "vue";
-import { Link, useForm } from "@inertiajs/vue3";
+import { Link, router, useForm } from "@inertiajs/vue3";
 import "vue3-toastify/dist/index.css";
 import { trans } from "laravel-vue-i18n";
 import { useI18n } from "vue-i18n";
@@ -441,6 +441,11 @@ const continueToMessage = async () => {
       templateLoadError.value || t("Please wait for the template to finish loading."),
     );
     await focusFirstCampaignSetupError();
+    return;
+  }
+
+  if (!props.isCampaignFlow && !contactUuid.value) {
+    form.setError("template", t("Contact not found."));
     return;
   }
   campaignStep.value = 2;
@@ -1028,37 +1033,30 @@ const submitForm = async () => {
   }
 
   if (isCarouselTemplate.value && !props.isCampaignFlow) {
-    // ── CAROUSEL SEND (chat context only for now) ───────────────
-    // Hits the dedicated carousel endpoint. Only needs the template UUID.
-    axios
-      .post("/chat/" + contactUuid.value + "/send/carousel-template", {
-        template: form.template,
-      })
-      .then((response) => {
-        isLoading.value = false;
-        if (response.data && response.data.success === false) {
-          // Error handled by Laravel flash via redirect
-        }
-        emit("viewTemplate", false);
-      })
-      .catch(() => {
-        isLoading.value = false;
-      });
+    router.post("/chat/" + encodeURIComponent(contactUuid.value) + "/send/carousel-template", {
+      template: form.template,
+    }, {
+      preserveScroll: true,
+      onSuccess: (page) => {
+        if (page.props.flash?.status?.type === "success") emit("viewTemplate", false);
+      },
+      onFinish: () => { isLoading.value = false; },
+    });
     return;
   }
 
-  // ── STANDARD SEND (unchanged) ───────────────────────────────────
   form.post(
     props.isCampaignFlow
       ? "/campaigns"
-      : "/chat/" + contactUuid.value + "/send/template",
+      : "/chat/" + encodeURIComponent(contactUuid.value) + "/send/template",
     {
-      onFinish: () => {
-        isLoading.value = false;
-        if (!props.isCampaignFlow) {
+      preserveScroll: true,
+      onSuccess: (page) => {
+        if (!props.isCampaignFlow && page.props.flash?.status?.type === "success") {
           emit("viewTemplate", false);
         }
       },
+      onFinish: () => { isLoading.value = false; },
     },
   );
 };

@@ -1,5 +1,7 @@
 <script setup>
-    import { ref } from 'vue';
+    import { useId } from 'vue';
+
+    const fieldId = useId();
 
     const props = defineProps({
         modelValue: [String, Number],
@@ -23,19 +25,19 @@
 </script>
 <template>
     <div :class="className">
-        <label v-if="showLabel" for="name" class="block text-sm leading-6 text-gray-900">{{ name }}</label>
+        <label v-if="showLabel" :for="fieldId" class="block text-sm leading-6 text-gray-900">{{ name }}</label>
         <div class="mt-2">
             <textarea 
-                class="block w-full rounded-md border-0 py-1.5 px-4 text-gray-900 shadow-sm outline-none ring-1 ring-inset placeholder:text-gray-400 sm:text-sm sm:leading-6"
+                class="cb-thread-field block w-full rounded-md border-0 py-1.5 px-4 text-gray-900 shadow-sm outline-none ring-1 ring-inset placeholder:text-gray-400 sm:text-sm sm:leading-6"
+                :id="fieldId"
+                :name="name"
                 :class="error ? 'ring-[#b91c1c]' : 'ring-gray-300'"
                 :value="props.modelValue"
                 @input="updateValue"
                 :placeholder="placeholder"
                 :rows="textAreaRows"
                 :maxlength="maxLength"
-                >
-                {{ props.modelValue }}
-            </textarea>
+            ></textarea>
         </div>
         <div v-if="error" class="form-error text-[#b91c1c] text-xs">{{ error }}</div>
     </div>

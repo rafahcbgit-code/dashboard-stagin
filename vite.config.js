@@ -21,7 +21,7 @@ export default defineConfig({
             include: path.resolve(__dirname, 'lang/**')
         }),
         laravel({
-            input: ['resources/css/app.css', 'resources/js/app.js'],
+            input: ['resources/css/app.css', 'resources/css/thread.css', 'resources/js/app.js'],
             refresh: true,
         }),
         i18n(),

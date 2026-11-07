@@ -1006,8 +1006,21 @@ class ChatService
     {
         $userId = $request->user_id ?? $this->getUserId();
 
-        $template = Template::where('uuid', $request->template)->first();
-        $contact = Contact::where('uuid', $uuid)->first();
+        $template = Template::where('uuid', $request->template)
+            ->where('organization_id', $this->organizationId)
+            ->whereNull('deleted_at')
+            ->first();
+        $contact = Contact::where('uuid', $uuid)
+            ->where('organization_id', $this->organizationId)
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (! $template || ! $contact) {
+            return (object) [
+                'success' => false,
+                'message' => __('Template or contact not found.'),
+            ];
+        }
 
         // Extract media_id from request if already uploaded
         $mediaId = $request->media_id ?? null;
@@ -1064,7 +1077,8 @@ class ChatService
         $mediaId = $metadata['media'] ?? $mediaId;
 
         //Build Template to send
-        $template = $this->buildTemplate($template->name, $template->language, json_decode(json_encode($metadata)), $contact);
+        $templateModel = $template;
+        $template = $this->buildTemplate($templateModel->name, $templateModel->language, json_decode(json_encode($metadata)), $contact);
 
         return $this->getWhatsappService()->sendTemplateMessage(
             $contact->uuid,
@@ -1072,11 +1086,67 @@ class ChatService
             $userId,
             NULL,
             $mediaId,
+            $contact,
             null,
-            null,
-            null,
+            $templateModel,
             $request->billing_source ?? null,
             is_numeric($request->billing_source_id ?? null) ? (int) $request->billing_source_id : null
+        );
+    }
+
+    public function sendCarouselTemplateMessage(string $contactUuid, int $templateId): object
+    {
+        $contact = Contact::query()
+            ->where('uuid', $contactUuid)
+            ->where('organization_id', $this->organizationId)
+            ->whereNull('deleted_at')
+            ->first();
+        $template = Template::query()
+            ->whereKey($templateId)
+            ->where('organization_id', $this->organizationId)
+            ->where('status', 'APPROVED')
+            ->whereNull('deleted_at')
+            ->first();
+
+        if (! $contact || ! $template) {
+            return (object) [
+                'success' => false,
+                'message' => __('Template or contact not found.'),
+            ];
+        }
+
+        $metadata = json_decode($template->metadata, true) ?: [];
+        if (! $this->isCarouselTemplateMetadata($metadata)) {
+            return (object) [
+                'success' => false,
+                'message' => __('Invalid template type.'),
+            ];
+        }
+
+        try {
+            $payload = $this->buildCarouselTemplateRequest((int) $template->id, $contact, $template);
+        } catch (\Throwable $exception) {
+            Log::error('Carousel template payload failed', [
+                'template_id' => $template->id,
+                'contact_id' => $contact->id,
+                'error' => $exception->getMessage(),
+            ]);
+
+            return (object) [
+                'success' => false,
+                'message' => __('Unable to prepare carousel template.'),
+            ];
+        }
+
+        return $this->getWhatsappService()->sendTemplateMessage(
+            $contact->uuid,
+            $payload,
+            $this->getUserId(),
+            null,
+            null,
+            $contact,
+            null,
+            $template
         );
     }
 

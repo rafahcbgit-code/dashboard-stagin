@@ -231,6 +231,15 @@ class ChatController extends BaseController
 
     public function sendTemplateMessage(Request $request, $uuid)
     {
+        $request->validate(['template' => ['required', 'string']]);
+        $this->authorizeTemplateConversation($uuid);
+        if (! $this->approvedConversationTemplate($request->input('template'))) {
+            return redirect()->back()->with('status', [
+                'type' => 'error',
+                'message' => __('Template not found or not approved'),
+            ]);
+        }
+
         if ($request->input('header.parameters.0.selection') === 'upload') {
             $format = strtoupper((string) $request->input('header.format', ''));
 
@@ -325,26 +334,17 @@ class ChatController extends BaseController
      */
     public function sendCarouselTemplateMessage(Request $request, $uuid)
     {
+        $request->validate(['template' => ['required', 'string']]);
+        $this->authorizeTemplateConversation($uuid);
         $organizationId = session()->get('current_organization');
 
         // Resolve template UUID → model
-        $template = Template::where('uuid', $request->template)
-            ->where('organization_id', $organizationId)
-            ->first();
+        $template = $this->approvedConversationTemplate($request->template);
 
         if (! $template) {
             return redirect()->back()->with('status', [
                 'type'    => 'error',
                 'message' => __('Template not found'),
-            ]);
-        }
-
-        // Verify it's actually a carousel template
-        $metadata = json_decode($template->metadata, true);
-        if (($metadata['template_type'] ?? null) !== 'carousel') {
-            return redirect()->back()->with('status', [
-                'type'    => 'error',
-                'message' => __('Invalid template type. Use the standard send method for non-carousel templates.'),
             ]);
         }
 
@@ -356,6 +356,32 @@ class ChatController extends BaseController
             'message' => $res->success === true ? __('Message sent successfully!') : ($res->message ?? __('Something went wrong.')),
             'res'     => $res,
         ]);
+    }
+
+    private function authorizeTemplateConversation(string $uuid): Contact
+    {
+        $contact = Contact::query()
+            ->where('uuid', $uuid)
+            ->where('organization_id', session()->get('current_organization'))
+            ->whereNull('deleted_at')
+            ->firstOrFail();
+
+        abort_unless(
+            auth()->user() && app(ConversationAccessService::class)->canAccess(auth()->user(), $contact),
+            403
+        );
+
+        return $contact;
+    }
+
+    private function approvedConversationTemplate(string $uuid): ?Template
+    {
+        return Template::query()
+            ->where('uuid', $uuid)
+            ->where('organization_id', session()->get('current_organization'))
+            ->where('status', 'APPROVED')
+            ->whereNull('deleted_at')
+            ->first();
     }
 
     public function deleteChats($uuid)

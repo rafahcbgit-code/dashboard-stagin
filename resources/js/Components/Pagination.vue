@@ -46,7 +46,7 @@
                 :aria-label="$t('Page number')"
                 :class="validationError ? 'bg-red-50' : 'bg-white'"
                 class="h-7 w-12 rounded border-2 px-1 py-0.5 text-center text-[11px] shadow-sm outline-none hover:bg-gray-50 focus:ring-1 sm:w-14 sm:px-2 sm:text-xs"
-                :style="{ borderColor: validationError ? '#dc2626' : '#10b981', color: validationError ? '#dc2626' : '#047857', fontWeight: 500 }"
+                :style="{ borderColor: validationError ? '#dc2626' : 'rgb(var(--cb-primary-rgb, 16 185 129))', color: validationError ? '#dc2626' : 'rgb(var(--cb-primary-dark-rgb, 4 120 87))', fontWeight: 500 }"
                 :title="validationError || $t('Enter page number')"
             />
             <button

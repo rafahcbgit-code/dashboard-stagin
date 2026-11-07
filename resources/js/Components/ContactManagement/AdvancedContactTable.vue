@@ -1216,7 +1216,7 @@ const onImportCompleted = () => {
 <template>
     <div
         :dir="uiDirection"
-        class="-m-4 min-h-screen bg-[#F8FAFC] px-4 py-5 text-slate-950 md:-m-6 md:px-6 md:py-6"
+        class="cb-thread-contacts -m-4 min-h-screen bg-[#F8FAFC] px-4 py-5 text-slate-950 md:-m-6 md:px-6 md:py-6"
         :class="uiTextAlignmentClass"
         @pointerover="showHelpTooltip"
         @pointerout="handleHelpPointerOut"
@@ -1253,15 +1253,15 @@ const onImportCompleted = () => {
                             <Upload class="h-4 w-4" />
                             {{ $t('Export All') }}
                         </button>
-                        <Link href="/contacts/add" class="inline-flex items-center gap-2 rounded-full bg-slate-950 px-4 py-2.5 text-sm font-bold text-white shadow-lg shadow-slate-300 transition-all duration-300 hover:-translate-y-0.5 hover:bg-slate-800" :data-help-text="helpText.addContact" data-help-icon>
+                        <Link href="/contacts/add" class="cb-primary-button inline-flex items-center gap-2 px-4 py-2.5 text-sm font-bold text-white" :data-help-text="helpText.addContact" data-help-icon>
                             <UserPlus class="h-4 w-4" />
                             {{ $t('Add Contact') }}
                         </Link>
                     </div>
                 </div>
 
-                <div class="stats-container mt-5 grid grid-cols-1 gap-3 md:grid-cols-3">
-                    <div class="rounded-[1.5rem] border border-slate-100 bg-[#F8FAFC] p-4" :aria-label="helpText.totalContacts">
+                <div class="stats-container cb-thread-kpi-band mt-5 grid grid-cols-1 md:grid-cols-3">
+                    <div class="cb-thread-kpi border border-slate-100 p-4" :aria-label="helpText.totalContacts">
                         <p class="flex items-center gap-1.5 text-xs font-bold text-slate-500">
                             {{ $t('Total Contacts') }}
                             <span class="help-tooltip" tabindex="0" :aria-label="helpText.totalContacts">
@@ -1271,7 +1271,7 @@ const onImportCompleted = () => {
                         </p>
                         <p class="mt-2 text-2xl font-extrabold tracking-tight text-slate-950">{{ rowCount }}</p>
                     </div>
-                    <div class="rounded-[1.5rem] border border-slate-100 bg-[#F8FAFC] p-4" :aria-label="helpText.filteredContacts">
+                    <div class="cb-thread-kpi border border-slate-100 p-4" :aria-label="helpText.filteredContacts">
                         <p class="flex items-center gap-1.5 text-xs font-bold text-slate-500">
                             {{ $t('Filtered Contacts') }}
                             <span class="help-tooltip" tabindex="0" :aria-label="helpText.filteredContacts">
@@ -1281,7 +1281,7 @@ const onImportCompleted = () => {
                         </p>
                         <p class="mt-2 text-2xl font-extrabold tracking-tight text-slate-950">{{ filteredCount }}</p>
                     </div>
-                    <div class="rounded-[1.5rem] border border-slate-100 bg-[#F8FAFC] p-4" :aria-label="helpText.activeFilters">
+                    <div class="cb-thread-kpi border border-slate-100 p-4" :aria-label="helpText.activeFilters">
                         <p class="flex items-center gap-1.5 text-xs font-bold text-slate-500">
                             {{ $t('Active Filters') }}
                             <span class="help-tooltip" tabindex="0" :aria-label="helpText.activeFilters">
@@ -1495,7 +1495,7 @@ const onImportCompleted = () => {
 
                             <Link
                                 :href="contactChatUrl(contact)"
-                                class="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 py-3 text-sm font-extrabold text-white shadow-sm shadow-emerald-200 transition-all duration-300 hover:-translate-y-0.5 hover:bg-[#1fb85a] hover:shadow-lg hover:shadow-emerald-200"
+                                class="cb-primary-button mt-5 w-full gap-2"
                                 :aria-label="helpText.whatsappMessage"
                                 @click.stop
                             >
@@ -1568,7 +1568,7 @@ const onImportCompleted = () => {
                                 </div>
                             </div>
 
-                            <Link :href="contactChatUrl(contact)" class="inline-flex h-11 items-center justify-center gap-2 rounded-full bg-[#25D366] px-5 text-sm font-extrabold text-white transition-all duration-300 hover:bg-[#1fb85a]" :aria-label="helpText.whatsappMessage" @click.stop>
+                            <Link :href="contactChatUrl(contact)" class="cb-primary-button inline-flex h-11 items-center justify-center gap-2 px-5 text-sm font-bold text-white" :aria-label="helpText.whatsappMessage" @click.stop>
                                 <MessageCircle class="h-4 w-4" />
                                 {{ $t('Send WhatsApp Message') }}
                             </Link>
