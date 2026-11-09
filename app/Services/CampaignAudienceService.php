@@ -42,16 +42,19 @@ final class CampaignAudienceService
                     ->where('contact_contact_group.contact_group_id', $groupId);
             }));
 
-        $candidateCount = (clone $base)->count();
-        $excludedUnsubscribed = (clone $base)->where('contacts.is_subscribed', false)->count();
+        $counts = (clone $base)->selectRaw('COUNT(*) AS candidates,
+            SUM(CASE WHEN is_blocked = 1 THEN 1 ELSE 0 END) AS blocked,
+            SUM(CASE WHEN (is_blocked IS NULL OR is_blocked = 0) AND (is_subscribed IS NULL OR is_subscribed <> 1) THEN 1 ELSE 0 END) AS unsubscribed,
+            SUM(CASE WHEN (is_blocked IS NULL OR is_blocked = 0) AND is_subscribed = 1 AND (phone IS NULL OR phone = ?) THEN 1 ELSE 0 END) AS without_phone,
+            SUM(CASE WHEN (is_blocked IS NULL OR is_blocked = 0) AND is_subscribed = 1 AND phone IS NOT NULL AND phone <> ? THEN 1 ELSE 0 END) AS eligible', ['', ''])->first();
+        $candidateCount = (int) $counts->candidates;
+        $excludedBlocked = (int) $counts->blocked;
+        $excludedUnsubscribed = (int) $counts->unsubscribed;
         $subscribed = (clone $base)->where('contacts.is_subscribed', true);
-        $excludedBlocked = (clone $subscribed)->where('contacts.is_blocked', true)->count();
         $sendableAfterBlock = (clone $subscribed)->where(function ($query) {
             $query->whereNull('contacts.is_blocked')->orWhere('contacts.is_blocked', false);
         });
-        $excludedWithoutPhone = (clone $sendableAfterBlock)
-            ->where(fn ($query) => $query->whereNull('contacts.phone')->orWhere('contacts.phone', ''))
-            ->count();
+        $excludedWithoutPhone = (int) $counts->without_phone;
 
         $eligible = (clone $sendableAfterBlock)
             ->whereNotNull('contacts.phone')
@@ -82,7 +85,7 @@ final class CampaignAudienceService
 
         return [
             'candidate_count' => $candidateCount,
-            'recipient_count' => (clone $eligible)->count(),
+            'recipient_count' => (int) $counts->eligible,
             'excluded_unsubscribed' => $excludedUnsubscribed,
             'excluded_blocked' => $excludedBlocked,
             'excluded_without_phone' => $excludedWithoutPhone,

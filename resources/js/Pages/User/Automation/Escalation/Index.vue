@@ -1,35 +1,35 @@
 <template>
     <SettingLayout :aimodule="aimodule" :fbmodule="fbmodule">
-        <div class="md:h-[90vh]">
+        <div dir="rtl" class="md:h-[90vh] text-start">
             <div class="flex justify-center items-center">
                 <div class="md:w-[68em] w-full">
                     <div class="bg-white border border-slate-200 rounded-xl text-sm pb-6 px-6 mb-20">
                         <!-- Header -->
                         <div class="flex items-center justify-between pt-5 pb-4 border-b border-slate-100">
                             <div>
-                                <h4 class="text-lg font-semibold text-slate-800">{{ $t('Escalation Instructions') }}</h4>
-                                <p class="text-sm text-slate-500 mt-0.5">{{ $t('Rules that route conversations to human agents before AI answers. Drag to reorder priority.') }}</p>
+                                <h4 class="text-lg font-semibold text-slate-800">{{ $t('تعليمات التصعيد') }}</h4>
+                                <p class="text-sm text-slate-500 mt-0.5">{{ $t('قواعد تحوّل المحادثات إلى الموظفين قبل إجابة الذكاء الاصطناعي. اسحب لتغيير ترتيب الأولوية.') }}</p>
                             </div>
                             <button
                                 @click="showCreateModal = true"
                                 class="inline-flex items-center gap-1.5 rounded-lg bg-primary px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-[#045a47] transition-colors"
                             >
                                 <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14m7-7H5"/></svg>
-                                {{ $t('Add Rule') }}
+                                {{ $t('إضافة قاعدة') }}
                             </button>
                         </div>
 
                         <!-- Info Banner -->
                         <div class="mt-4 flex items-start gap-2 rounded-lg bg-amber-50 border border-amber-100 px-3.5 py-2.5 text-xs text-amber-800">
                             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 mt-0.5"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                            <span>{{ $t('When a message matches an escalation rule, it skips the AI answer and goes directly to a human agent.') }}</span>
+                            <span>{{ $t('عندما تتطابق الرسالة مع قاعدة تصعيد، تُحوّل مباشرةً إلى موظف دون إجابة الذكاء الاصطناعي.') }}</span>
                         </div>
 
                         <!-- Empty State -->
                         <div v-if="instructions.length === 0" class="flex flex-col items-center justify-center py-16 text-slate-400">
                             <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" class="mb-3 opacity-40"><path d="M16 21v3H8v-3"/><path d="M12 3v10"/><path d="m4.5 9.5 3-3"/><path d="M12 13a4 4 0 0 0 0-8"/></svg>
-                            <p class="text-sm font-medium text-slate-500">{{ $t('No escalation rules yet') }}</p>
-                            <p class="text-xs text-slate-400 mt-1">{{ $t('Add rules to automatically route specific messages to human agents.') }}</p>
+                            <p class="text-sm font-medium text-slate-500">{{ $t('لا توجد قواعد تصعيد بعد') }}</p>
+                            <p class="text-xs text-slate-400 mt-1">{{ $t('أضف قواعد لتحويل رسائل محددة تلقائيًا إلى الموظفين.') }}</p>
                         </div>
 
                         <!-- Instructions List -->
@@ -104,36 +104,36 @@
         </div>
 
         <!-- Create/Edit Modal -->
-        <Modal :isOpen="showCreateModal || showEditModal" @close="closeModal" :label="editingInstruction ? $t('Edit Rule') : $t('Add Escalation Rule')" :closeBtn="true">
+        <Modal :isOpen="showCreateModal || showEditModal" @close="closeModal" :label="editingInstruction ? $t('تعديل القاعدة') : $t('إضافة قاعدة تصعيد')" :closeBtn="true">
             <form @submit.prevent="submitForm" class="space-y-5 mt-1">
                 <!-- Name -->
                 <div>
-                    <label class="block text-sm font-semibold text-slate-700 mb-1.5">{{ $t('Rule Name') }}</label>
+                    <label class="block text-sm font-semibold text-slate-700 mb-1.5">{{ $t('اسم القاعدة') }}</label>
                     <input
                         v-model="form.name"
                         type="text"
                         class="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-primary focus:ring-1 focus:ring-primary/30 focus:outline-none transition-colors"
-                        :placeholder="$t('e.g., Price Inquiry')"
+                        :placeholder="$t('مثل: الاستفسار عن الأسعار')"
                         required
                     />
                 </div>
 
                 <!-- Description -->
                 <div>
-                    <label class="block text-sm font-semibold text-slate-700 mb-1.5">{{ $t('When should this escalate?') }}</label>
-                    <p class="text-xs text-slate-500 mb-1.5">{{ $t('Describe in natural language when to route to a human. AI will match messages against this description.') }}</p>
+                    <label class="block text-sm font-semibold text-slate-700 mb-1.5">{{ $t('متى يجب التصعيد؟') }}</label>
+                    <p class="text-xs text-slate-500 mb-1.5">{{ $t('صف متى يجب التحويل إلى موظف. سيطابق الذكاء الاصطناعي الرسائل مع هذا الوصف.') }}</p>
                     <textarea
                         v-model="form.description"
                         rows="3"
                         class="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 placeholder:text-slate-400 focus:border-primary focus:ring-1 focus:ring-primary/30 focus:outline-none transition-colors resize-none"
-                        :placeholder="$t('e.g., When customer asks about pricing, shows frustration about cost, or requests a quote')"
+                        :placeholder="$t('مثل: عندما يسأل العميل عن الأسعار أو يعترض على التكلفة أو يطلب عرض سعر')"
                         required
                     />
                 </div>
 
                 <!-- Target Type -->
                 <div>
-                    <label class="block text-sm font-semibold text-slate-700 mb-1.5">{{ $t('Route to') }}</label>
+                    <label class="block text-sm font-semibold text-slate-700 mb-1.5">{{ $t('التحويل إلى') }}</label>
                     <div class="grid grid-cols-2 gap-2">
                         <button
                             type="button"
@@ -143,8 +143,8 @@
                                 ? 'border-primary bg-primary/5 text-primary font-semibold ring-1 ring-primary/20'
                                 : 'border-slate-200 text-slate-600 hover:border-slate-300'"
                         >
-                            <div class="font-medium text-xs">{{ $t('Auto Queue') }}</div>
-                            <div class="text-[10px] mt-0.5 opacity-70">{{ $t('Round-robin') }}</div>
+                            <div class="font-medium text-xs">{{ $t('قائمة الانتظار التلقائية') }}</div>
+                            <div class="text-[10px] mt-0.5 opacity-70">{{ $t('التوزيع بالتناوب') }}</div>
                         </button>
                         <button
                             type="button"
@@ -155,7 +155,7 @@
                                 : 'border-slate-200 text-slate-600 hover:border-slate-300'"
                         >
                             <div class="font-medium text-xs">{{ $t('Specific Agent') }}</div>
-                            <div class="text-[10px] mt-0.5 opacity-70">{{ $t('Choose agent') }}</div>
+                            <div class="text-[10px] mt-0.5 opacity-70">{{ $t('اختر موظفًا') }}</div>
                         </button>
                     </div>
                 </div>
@@ -167,7 +167,7 @@
                         v-model="form.target_agent_id"
                         class="w-full rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-800 focus:border-primary focus:ring-1 focus:ring-primary/30 focus:outline-none transition-colors"
                     >
-                        <option :value="null">{{ $t('— Choose an agent —') }}</option>
+                        <option :value="null">{{ $t("— اختر موظفًا —") }}</option>
                         <option v-for="agent in agents" :key="agent.id" :value="agent.id">{{ agent.name }}</option>
                     </select>
                 </div>
@@ -178,7 +178,7 @@
                         {{ $t('Cancel') }}
                     </button>
                     <button type="submit" class="rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-[#045a47] transition-colors">
-                        {{ editingInstruction ? $t('Save Changes') : $t('Add Rule') }}
+                        {{ editingInstruction ? $t('Save Changes') : $t('إضافة قاعدة') }}
                     </button>
                 </div>
             </form>
@@ -226,7 +226,7 @@ function targetBadgeClass(type) {
 
 function formatTargetType(type) {
     const types = {
-        auto_assignment: 'Auto Queue',
+        auto_assignment: 'قائمة الانتظار التلقائية',
         specific_agent: 'Agent',
     };
     return types[type] || type;
@@ -272,7 +272,7 @@ function toggleInstruction(instruction) {
 }
 
 function deleteInstruction(instruction) {
-    if (!confirm(trans('Are you sure you want to delete this rule?'))) return;
+    if (!confirm('هل أنت متأكد من حذف هذه القاعدة؟')) return;
     router.delete(`/automation/escalation/${instruction.uuid}`, { preserveScroll: true });
 }
 

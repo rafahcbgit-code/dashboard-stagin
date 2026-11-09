@@ -4,7 +4,7 @@
     <div class="px-4 py-3 border-b border-gray-100">
       <div class="flex items-center gap-2 mb-2">
         <div class="w-1 h-4 rounded-full bg-slate-400"></div>
-        <div class="text-xs font-bold text-slate-500 uppercase tracking-wide">Master Controls</div>
+        <div class="text-xs font-bold text-slate-500 uppercase tracking-wide">{{ $t("Master Controls") }}</div>
       </div>
 
       <!-- Automation Master Switch -->
@@ -15,12 +15,12 @@
           </div>
           <div class="flex-1 min-w-0">
             <div class="flex items-center gap-1.5">
-              <span class="text-sm font-semibold text-slate-800">Automation</span>
-              <span v-if="isSettingOverridden('automation_enabled')" class="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">Override</span>
+              <span class="text-sm font-semibold text-slate-800">{{ $t("Automation") }}</span>
+              <span v-if="isSettingOverridden('automation_enabled')" class="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">{{ $t("Override") }}</span>
             </div>
             <p class="text-[11px] text-slate-500 mt-0.5">
-              <span v-if="effectiveAutomation">Your bot responds automatically to messages.</span>
-              <span v-else class="text-red-600 font-medium">All automation is paused. Nothing will respond.</span>
+              <span v-if="effectiveAutomation">{{ $t("Your bot responds automatically to messages.") }}</span>
+              <span v-else class="text-red-600 font-medium">{{ $t("All automation is paused. Nothing will respond.") }}</span>
             </p>
           </div>
           <button type="button" @click="toggleSetting('automation_enabled')"
@@ -42,15 +42,15 @@
             </div>
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-1.5">
-                <span class="text-sm font-semibold text-slate-800">AI Assistant</span>
-                <span v-if="isSettingOverridden('ai_enabled')" class="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">Override</span>
+                <span class="text-sm font-semibold text-slate-800">{{ $t("AI Assistant") }}</span>
+                <span v-if="isSettingOverridden('ai_enabled')" class="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">{{ $t("Override") }}</span>
               </div>
               <p class="text-[11px] text-slate-500 mt-0.5">
-                <span v-if="effectiveAiEnabled">AI can understand messages and answer from KB.</span>
-                <span v-else>AI is disabled. Only exact keyword matching works.</span>
+                <span v-if="effectiveAiEnabled">{{ $t("AI can understand messages and answer from KB.") }}</span>
+                <span v-else>{{ $t("AI is disabled. Only exact keyword matching works.") }}</span>
               </p>
             </div>
-            <button type="button" @click="toggleSetting('ai_enabled')"
+            <button type="button" :disabled="$page.props.automationAiSuspended" @click="toggleSetting('ai_enabled')"
               class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 focus:outline-none shrink-0"
               :class="effectiveAiEnabled ? 'bg-primary' : 'bg-slate-300'"
             >
@@ -66,11 +66,11 @@
               </div>
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-1.5">
-                  <span class="text-xs font-semibold text-slate-800">AI-Only Mode</span>
-                  <span v-if="isSettingOverridden('ai_only_mode')" class="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">Override</span>
+                  <span class="text-xs font-semibold text-slate-800">{{ $t("AI-Only Mode") }}</span>
+                  <span v-if="isSettingOverridden('ai_only_mode')" class="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">{{ $t("Override") }}</span>
                 </div>
               </div>
-              <button type="button" @click="toggleSetting('ai_only_mode')"
+              <button type="button" :disabled="$page.props.automationAiSuspended" @click="toggleSetting('ai_only_mode')"
                 class="relative inline-flex h-4 w-7 items-center rounded-full transition-colors duration-200 focus:outline-none shrink-0"
                 :class="effectiveAiOnlyMode ? 'bg-indigo-500' : 'bg-slate-300'"
               >
@@ -79,7 +79,7 @@
             </div>
             <div v-if="effectiveAiOnlyMode" class="mt-2 flex items-start gap-1.5 rounded bg-indigo-50 border border-indigo-100 px-2.5 py-1.5 text-[10px] text-indigo-700">
               <svg class="w-3 h-3 shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-              <span>AI-Only Mode is active. Triggers and flows are bypassed.</span>
+              <span>{{ $t("AI-Only Mode is active. Triggers and flows are bypassed.") }}</span>
             </div>
           </div>
         </div>
@@ -87,7 +87,7 @@
         <!-- Section: When No Trigger Matches -->
         <div class="flex items-center gap-2 mt-3 mb-2">
           <div class="w-1 h-4 rounded-full bg-violet-500"></div>
-          <div class="text-xs font-bold text-slate-500 uppercase tracking-wide">When No Trigger Matches</div>
+          <div class="text-xs font-bold text-slate-500 uppercase tracking-wide">{{ $t("When No Trigger Matches") }}</div>
         </div>
 
         <!-- AI Fallback (requires AI ON) -->
@@ -98,15 +98,15 @@
             </div>
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-1.5">
-                <span class="text-sm font-semibold text-slate-800">AI Fallback</span>
-                <span v-if="isSettingOverridden('ai_fallback_enabled')" class="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">Override</span>
+                <span class="text-sm font-semibold text-slate-800">{{ $t("AI Fallback") }}</span>
+                <span v-if="isSettingOverridden('ai_fallback_enabled')" class="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">{{ $t("Override") }}</span>
               </div>
               <p class="text-[11px] text-slate-500 mt-0.5">
-                <span v-if="effectiveAiFallback">AI searches Knowledge Base when no trigger matches.</span>
-                <span v-else>AI won't answer unmatched messages.</span>
+                <span v-if="effectiveAiFallback">{{ $t("AI searches Knowledge Base when no trigger matches.") }}</span>
+                <span v-else>{{ $t("AI won't answer unmatched messages.") }}</span>
               </p>
             </div>
-            <button type="button" @click="toggleSetting('ai_fallback_enabled')"
+            <button type="button" :disabled="$page.props.automationAiSuspended" @click="toggleSetting('ai_fallback_enabled')"
               class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors duration-200 focus:outline-none shrink-0"
               :class="effectiveAiFallback ? 'bg-primary' : 'bg-slate-300'"
             >
@@ -115,14 +115,14 @@
           </div>
 
           <!-- AI sub-settings (require AI Fallback ON) -->
-          <div v-if="effectiveAiFallback" class="mt-2 space-y-1.5 pl-2 border-l-2 border-violet-100">
+          <div v-if="effectiveAiFallback" class="mt-2 space-y-1.5 pl-2 border-s-2 border-violet-100">
             <!-- AI Escalation -->
             <div class="flex items-center justify-between py-1">
               <div class="flex items-center gap-1.5 min-w-0">
-                <span class="text-xs text-slate-700">AI Escalation Rules</span>
-                <span v-if="isSettingOverridden('ai_escalation_enabled')" class="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">Override</span>
+                <span class="text-xs text-slate-700">{{ $t("AI Escalation Rules") }}</span>
+                <span v-if="isSettingOverridden('ai_escalation_enabled')" class="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">{{ $t("Override") }}</span>
               </div>
-              <button type="button" @click="toggleSetting('ai_escalation_enabled')"
+              <button type="button" :disabled="$page.props.automationAiSuspended" @click="toggleSetting('ai_escalation_enabled')"
                 class="relative inline-flex h-4 w-7 items-center rounded-full transition-colors duration-200 focus:outline-none shrink-0"
                 :class="getEffectiveSetting('ai_escalation_enabled') ? 'bg-amber-500' : 'bg-slate-300'"
               >
@@ -132,10 +132,10 @@
             <!-- AI Follow-up -->
             <div class="flex items-center justify-between py-1">
               <div class="flex items-center gap-1.5 min-w-0">
-                <span class="text-xs text-slate-700">AI Follow-up</span>
-                <span v-if="isSettingOverridden('ai_followup_enabled')" class="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">Override</span>
+                <span class="text-xs text-slate-700">{{ $t("AI Follow-up") }}</span>
+                <span v-if="isSettingOverridden('ai_followup_enabled')" class="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">{{ $t("Override") }}</span>
               </div>
-              <button type="button" @click="toggleSetting('ai_followup_enabled')"
+              <button type="button" :disabled="$page.props.automationAiSuspended" @click="toggleSetting('ai_followup_enabled')"
                 class="relative inline-flex h-4 w-7 items-center rounded-full transition-colors duration-200 focus:outline-none shrink-0"
                 :class="getEffectiveSetting('ai_followup_enabled') ? 'bg-blue-500' : 'bg-slate-300'"
               >
@@ -148,13 +148,13 @@
         <!-- Section: Escalation & Other -->
         <div class="flex items-center gap-2 mt-3 mb-2">
           <div class="w-1 h-4 rounded-full bg-amber-500"></div>
-          <div class="text-xs font-bold text-slate-500 uppercase tracking-wide">Escalation & Other</div>
+          <div class="text-xs font-bold text-slate-500 uppercase tracking-wide">{{ $t("Escalation & Other") }}</div>
         </div>
         <div class="grid grid-cols-1 sm:grid-cols-2 gap-x-4 gap-y-1.5">
           <div class="flex items-center justify-between gap-2 py-1 px-1.5 rounded -mx-1.5" :class="{ 'bg-amber-50 ring-1 ring-amber-200': isSettingOverridden('escalation_transfer_enabled') }">
             <div class="flex items-center gap-1.5 min-w-0">
-              <span class="text-xs text-slate-700 truncate">Escalation Transfer</span>
-              <span v-if="isSettingOverridden('escalation_transfer_enabled')" class="shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">Override</span>
+              <span class="text-xs text-slate-700 truncate">{{ $t("Escalation Transfer") }}</span>
+              <span v-if="isSettingOverridden('escalation_transfer_enabled')" class="shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">{{ $t("Override") }}</span>
             </div>
             <button type="button" @click="toggleSetting('escalation_transfer_enabled')"
               class="relative inline-flex h-4 w-7 items-center rounded-full transition-colors duration-200 focus:outline-none shrink-0"
@@ -165,8 +165,8 @@
           </div>
           <div class="flex items-center justify-between gap-2 py-1 px-1.5 rounded -mx-1.5" :class="{ 'bg-amber-50 ring-1 ring-amber-200': isSettingOverridden('auto_escalation_enabled') }">
             <div class="flex items-center gap-1.5 min-w-0">
-              <span class="text-xs text-slate-700 truncate">Auto-Escalation</span>
-              <span v-if="isSettingOverridden('auto_escalation_enabled')" class="shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">Override</span>
+              <span class="text-xs text-slate-700 truncate">{{ $t("Auto-Escalation") }}</span>
+              <span v-if="isSettingOverridden('auto_escalation_enabled')" class="shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">{{ $t("Override") }}</span>
             </div>
             <button type="button" @click="toggleSetting('auto_escalation_enabled')"
               class="relative inline-flex h-4 w-7 items-center rounded-full transition-colors duration-200 focus:outline-none shrink-0"
@@ -177,8 +177,8 @@
           </div>
           <div class="flex items-center justify-between gap-2 py-1 px-1.5 rounded -mx-1.5" :class="{ 'bg-amber-50 ring-1 ring-amber-200': isSettingOverridden('flow_rejoin_enabled') }">
             <div class="flex items-center gap-1.5 min-w-0">
-              <span class="text-xs text-slate-700 truncate">Flow Rejoin</span>
-              <span v-if="isSettingOverridden('flow_rejoin_enabled')" class="shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">Override</span>
+              <span class="text-xs text-slate-700 truncate">{{ $t("Flow Rejoin") }}</span>
+              <span v-if="isSettingOverridden('flow_rejoin_enabled')" class="shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">{{ $t("Override") }}</span>
             </div>
             <button type="button" @click="toggleSetting('flow_rejoin_enabled')"
               class="relative inline-flex h-4 w-7 items-center rounded-full transition-colors duration-200 focus:outline-none shrink-0"
@@ -195,7 +195,7 @@
     <div v-if="triggers.length > 0" class="px-4 py-3 border-b border-gray-100" :class="{ 'opacity-50 pointer-events-none': !effectiveAutomation }">
       <div class="flex items-center gap-2 mb-2">
         <div class="w-1 h-4 rounded-full bg-emerald-500"></div>
-        <div class="text-xs font-bold text-slate-500 uppercase tracking-wide">Triggers</div>
+        <div class="text-xs font-bold text-slate-500 uppercase tracking-wide">{{ $t("Triggers") }}</div>
       </div>
       <div class="space-y-0.5 max-h-40 overflow-y-auto">
         <div
@@ -213,7 +213,7 @@
             </button>
             <span class="text-xs text-slate-700 truncate">{{ trigger.name }}</span>
             <span class="text-[10px] px-1.5 py-0.5 rounded bg-slate-100 text-slate-500 capitalize shrink-0">{{ trigger.type.replace('_', ' ') }}</span>
-            <span v-if="isTriggerOverridden(trigger.id)" class="shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">Override</span>
+            <span v-if="isTriggerOverridden(trigger.id)" class="shrink-0 text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-amber-100 text-amber-700">{{ $t("Override") }}</span>
           </div>
           <span v-if="trigger.flow_name" class="text-[10px] text-slate-400 truncate shrink-0">{{ trigger.flow_name }}</span>
         </div>
@@ -229,9 +229,7 @@
         :class="hasAnyOverride
           ? 'text-amber-700 border-amber-300 bg-amber-50 hover:bg-amber-100'
           : 'text-gray-400 border-gray-200 bg-gray-50 cursor-not-allowed'"
-      >
-        Reset All Overrides
-      </button>
+      > {{ $t("Reset All Overrides") }} </button>
     </div>
   </div>
 </template>

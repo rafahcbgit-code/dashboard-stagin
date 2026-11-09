@@ -137,11 +137,11 @@
                 </TableBodyRowItem>
                 <TableBodyRowItem>
                     <span class="px-2 py-1 text-xs rounded-md capitalize" :class="item.status === 'success' ? 'bg-green-700 text-white' : 'bg-red-400 text-white'">
-                        {{ item.status === 'success' ? item.chat.status : item.status }}
+                        {{ $t(item.status === 'success' ? item.chat.status : item.status) }}
                     </span>
                 </TableBodyRowItem>
                 <TableBodyRowItem>
-                    <div @click="openModal(item.chat.status,  item.chat?.logs)" class="flex items-center underline cursor-pointer">
+                    <div @click="openModal(item.chat?.status || item.status, item.chat?.logs)" class="flex items-center underline cursor-pointer">
                         <svg class="mr-1" xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"><g fill="currentColor"><path d="M11 10.98a1 1 0 1 1 2 0v6a1 1 0 1 1-2 0zm1-4.929a1 1 0 1 0 0 2a1 1 0 0 0 0-2"/><path fill-rule="evenodd" d="M12 2C6.477 2 2 6.477 2 12s4.477 10 10 10s10-4.477 10-10S17.523 2 12 2M4 12a8 8 0 1 0 16 0a8 8 0 0 0-16 0" clip-rule="evenodd"/></g></svg>
                         <span>{{ $t('More info') }}</span>
                     </div>

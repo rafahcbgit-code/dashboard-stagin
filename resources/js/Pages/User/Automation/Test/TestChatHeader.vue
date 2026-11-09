@@ -7,28 +7,18 @@
     </div>
     <div class="flex-1 min-w-0">
       <div class="text-white font-semibold truncate">{{ orgName }}</div>
-      <div class="text-green-200 text-xs">online</div>
+      <div class="text-green-200 text-xs">{{ $t("online") }}</div>
     </div>
     <div class="flex items-center gap-2">
       <span v-if="automationEnabled" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-green-500/20 text-green-200">
-        <span class="w-1.5 h-1.5 rounded-full bg-green-400"></span>
-        Automation On
-      </span>
+        <span class="w-1.5 h-1.5 rounded-full bg-green-400"></span> {{ $t("Automation On") }} </span>
       <span v-else class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-red-500/20 text-red-200">
-        <span class="w-1.5 h-1.5 rounded-full bg-red-400"></span>
-        Automation Off
-      </span>
+        <span class="w-1.5 h-1.5 rounded-full bg-red-400"></span> {{ $t("Automation Off") }} </span>
 
-      <span v-if="duringWorkingHours" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-green-500/20 text-green-200">
-        Working Hours
-      </span>
-      <span v-else class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-500/20 text-amber-200">
-        Outside Hours
-      </span>
+      <span v-if="duringWorkingHours" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-green-500/20 text-green-200"> {{ $t("Working Hours") }} </span>
+      <span v-else class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-amber-500/20 text-amber-200"> {{ $t("Outside Hours") }} </span>
 
-      <span v-if="aimodule && aiEnabled" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-purple-500/20 text-purple-200">
-        AI On
-      </span>
+      <span v-if="aimodule && aiEnabled" class="inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium bg-purple-500/20 text-purple-200"> {{ $t("AI On") }} </span>
     </div>
   </div>
 </template>

@@ -1,20 +1,20 @@
 <template>
   <Layout :fbmodule="fbmodule">
-    <div class="relative flex flex-col h-[calc(100vh-4rem)]">
+    <div dir="rtl" class="relative flex flex-col h-[calc(100vh-4rem)] text-start">
       <!-- Toolbar -->
       <div class="w-full flex items-center justify-between px-1 mb-3 shrink-0">
         <div>
-          <h3 class="text-lg font-semibold text-gray-900">Automation Test</h3>
-          <p class="text-sm text-gray-500 mt-0.5">Test how your automations respond. No real messages are sent.</p>
+          <h3 class="text-lg font-semibold text-gray-900">{{ $t("Automation Test") }}</h3>
+          <p class="text-sm text-gray-500 mt-0.5">{{ $t("Test how your automations respond. No real messages are sent.") }}</p>
         </div>
         <div class="flex items-center gap-2">
           <label class="flex items-center gap-1.5 text-sm cursor-pointer select-none">
             <input type="checkbox" v-model="isNewContact" class="rounded border-gray-300 text-[#034737] focus:ring-[#034737]" />
-            <span class="text-gray-700">New contact</span>
+            <span class="text-gray-700">{{ $t("New contact") }}</span>
           </label>
           <label class="flex items-center gap-1.5 text-sm cursor-pointer select-none">
             <input type="checkbox" v-model="duringWorkingHours" class="rounded border-gray-300 text-[#034737] focus:ring-[#034737]" />
-            <span class="text-gray-700">Working hours</span>
+            <span class="text-gray-700">{{ $t("Working hours") }}</span>
           </label>
           <button
             @click="showOverrides = !showOverrides"
@@ -24,9 +24,7 @@
             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <path d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.066 2.573c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.573 1.066c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.066-2.573c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z"/>
               <path d="M15 12a3 3 0 11-6 0 3 3 0 016 0z"/>
-            </svg>
-            Overrides
-            <span
+            </svg> {{ $t("Overrides") }} <span
               v-if="overrideCount > 0"
               class="inline-flex items-center justify-center min-w-[18px] h-[18px] text-[10px] font-bold rounded-full bg-amber-500 text-white px-1"
             >{{ overrideCount }}</span>
@@ -39,8 +37,7 @@
             <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <path d="M12 6V4m0 2a2 2 0 100 4m0-4a2 2 0 110 4m-6 8a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4m6 6v10m6-2a2 2 0 100-4m0 4a2 2 0 110-4m0 4v2m0-6V4"/>
             </svg>
-            {{ showDebug ? 'Hide' : 'Show' }} Debug
-          </button>
+            {{ showDebug ? 'إخفاء' : 'إظهار' }} {{ $t("Debug") }} </button>
           <button
             v-if="chatMessages.length > 0"
             @click="resetChat"
@@ -48,9 +45,7 @@
           >
             <svg class="w-3.5 h-3.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
               <path d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
-            </svg>
-            Reset
-          </button>
+            </svg> {{ $t("Reset") }} </button>
         </div>
       </div>
 

@@ -1,9 +1,9 @@
 <template>
     <AppLayout>
-        <div class="bg-white md:bg-inherit md:flex md:flex-grow md:overflow-y-hidden">
-            <div class="md:w-[60%] m-8">
+        <div :dir="isRtl ? 'rtl' : 'ltr'" class="bg-white text-start md:bg-inherit md:flex md:flex-grow md:overflow-y-hidden">
+            <div class="min-w-0 md:w-[60%] m-4 sm:m-8">
                 <Menu />
-                <div class="flex justify-between mt-8">
+                <div class="flex flex-wrap items-start justify-between gap-3 mt-8">
                     <div>
                         <h3 class="text-md mb-1">{{ $t('Webhooks') }}</h3>
                         <p class="mb-6 flex items-center text-sm leading-6 text-gray-600">
@@ -12,7 +12,7 @@
                                     stroke-linejoin="round" stroke-width="2"
                                     d="M12 11v5m0 5a9 9 0 1 1 0-18a9 9 0 0 1 0 18Zm.05-13v.1h-.1V8h.1Z" />
                             </svg>
-                            <span class="ml-1 mt-1">{{ $t('Manage webhook urls and events') }}</span>
+                            <span class="ms-1 mt-1">{{ $t('Manage webhook urls and events') }}</span>
                         </p>
                     </div>
                     <div>
@@ -24,12 +24,12 @@
                 </div>
                 <WebhookTable :rows="props.rows" :events="props.events" />
             </div>
-            <div class="md:w-[40%] border-l bg-black h-screen hidden md:block">
+            <div class="w-full min-w-0 md:w-[40%] border-s bg-black md:h-screen">
                 <Documentation :apirequests="apirequests"/>
             </div>
         </div>
 
-        <Modal :label="$t('Add Webhook')" :isOpen=isOpenModal>
+        <Modal :label="$t('Add Webhook')" :isOpen="isOpenModal" @close="isOpenModal = false">
             <div class="mt-5 grid grid-cols-1 gap-x-6">
                 <!-- Display top-level errors if any -->
         <div v-if="Object.keys(form.errors).length > 0" class="mb-4 p-4 bg-red-50 border border-red-200 rounded-md">
@@ -41,13 +41,13 @@
             </ul>
         </div>
                 <form @submit.prevent="submitForm()" class="grid gap-x-6 sm:grid-cols-6">
-                    <FormInput v-model="form.url" :error="form.errors.url" :name="$t('URL')" :type="'text'" :class="'sm:col-span-6'"/>
+                    <FormInput className="webhook-url-field sm:col-span-6" v-model="form.url" :error="form.errors.url" :name="$t('URL')" :type="'text'" :class="'sm:col-span-6'"/>
                     <h4 class="mt-4 text-sm">{{ $t('Events') }}</h4>
                     <FormCheckbox v-for="event in props.events" :key="event" v-model="form.events" :error="form.errors.events" :name="$t(event)" :label="$t(event)" :value="event" :type="'text'" :class="'sm:col-span-6'"/>
 
                     
                     <div class="mt-4 flex">
-                        <button type="button" @click.self="isOpenModal = false" class="inline-flex justify-center rounded-md border border-transparent bg-slate-50 px-4 py-2 text-sm text-slate-500 hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 mr-4">{{ $t('Cancel') }}</button>
+                        <button type="button" @click.self="isOpenModal = false" class="inline-flex justify-center rounded-md border border-transparent bg-slate-50 px-4 py-2 text-sm text-slate-500 hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 me-4">{{ $t('Cancel') }}</button>
                         <button 
                             :class="['inline-flex justify-center rounded-md border border-transparent bg-primary px-4 py-2 text-sm text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2', { 'opacity-50': form.processing }]"
                             :disabled="form.processing"
@@ -62,6 +62,8 @@
     </AppLayout>
 </template>
 <script setup>
+import { useRtl } from '@/Composables/useRtl';
+const { isRtl } = useRtl();
     import AppLayout from "../../../../resources/js/Pages/User/Layout/App.vue";
     import Documentation from "../../../../resources/js/Pages/User/Developer/Documentation.vue";
     import FormCheckbox from '@/Components/FormCheckbox.vue';
@@ -71,10 +73,11 @@
     import WebhookTable from './WebhookTable.vue';
     import { Link, useForm } from "@inertiajs/vue3";
     import { ref } from 'vue';
+    import { trans } from 'laravel-vue-i18n';
     import { toast } from 'vue3-toastify';
 
 
-    const props = defineProps({ rows: Object, url: String, apirequests: Object, events: Object });
+    const props = defineProps({ rows: Object, url: String, apirequests: [Array, Object], events: [Array, Object] });
 
     const isOpenModal = ref(false);
     const selectedEvents = ref([]);
@@ -97,7 +100,7 @@
                     errorMessage += value + '\n';
                 }
                 
-                toast(errorMessage || 'Error creating webhook', {
+                toast(errorMessage || trans('Error creating webhook'), {
                     autoClose: 5000,
                     type: 'error'
                 });
@@ -105,3 +108,6 @@
         })
     };
 </script>
+<style scoped>
+.webhook-url-field :deep(input) { direction: ltr; text-align: left; }
+</style>

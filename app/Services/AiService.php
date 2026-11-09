@@ -37,6 +37,10 @@ class AiService
      */
     public function chat(string $systemPrompt, string $userMessage, array $options = []): AiResponse
     {
+        if (config('ai.suspended', true)) {
+            return new AiResponse(content: '', confidence: 0, model: $this->model, success: false, error: 'Automation AI is temporarily suspended.');
+        }
+
         $cacheKey = md5($systemPrompt . '|' . $userMessage . '|' . json_encode($options));
 
         if (isset($this->cache[$cacheKey])) {

@@ -19,4 +19,15 @@ class UpdateWebhook extends FormRequest
     {
         return true; // Adjust as necessary for your authorization logic
     }
+    public function messages(): array
+    {
+        return [
+            'url.required' => __('This field is required.'),
+            'url.url' => __('Please enter a valid URL.'),
+            'url.unique' => __('This webhook URL already exists.'),
+            'events.required' => __('Please select at least one event.'),
+            'events.array' => __('Please select at least one event.'),
+            'events.*.string' => __('Invalid event.'),
+        ];
+    }
 }

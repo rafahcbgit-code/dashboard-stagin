@@ -16,14 +16,14 @@
             </svg>
           </div>
           <div>
-            <h3 class="font-medium text-gray-900 text-sm">{{ actionName }}</h3>
+            <h3 class="font-medium text-gray-900 text-sm">{{ $t(actionName) }}</h3>
           </div>
         </div>
-        <div class="flex items-center gap-1 ml-auto">
+        <div class="flex items-center gap-1 ms-auto">
           <button
             @click="toggleEdit"
             class="p-1 text-gray-400 hover:text-gray-600 rounded"
-            title="Edit Action"
+            :title='$t("Edit Action")'
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
@@ -33,7 +33,7 @@
           <button
             @click="deleteNode"
             class="p-1 text-red-400 hover:text-red-600 rounded"
-            title="Delete Action"
+            :title='$t("Delete Action")'
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M3 6h18"/>
@@ -52,13 +52,13 @@
       </div>
 
       <div class="flex items-center justify-between text-xs">
-        <span class="text-gray-500">Action</span>
+        <span class="text-gray-500">{{ $t("Action") }}</span>
         <div class="flex items-center gap-1">
           <span
             :class="isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'"
             class="px-2 py-1 rounded-full text-xs"
           >
-            {{ isActive ? 'Active' : 'Inactive' }}
+            {{ $t(isActive ? 'Active' : 'Inactive') }}
           </span>
         </div>
       </div>
@@ -75,14 +75,14 @@
     <div v-if="showEditModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" @wheel.stop>
       <div class="bg-white rounded-lg max-w-md w-full mx-4 max-h-[80vh] overflow-y-auto">
         <div class="px-6 py-4 border-b border-gray-200">
-          <h3 class="text-lg font-semibold text-gray-900">Edit Label Action</h3>
+          <h3 class="text-lg font-semibold text-gray-900">{{ $t("Edit Label Action") }}</h3>
         </div>
 
         <form @submit.prevent="saveAction" class="p-6">
           <div class="space-y-4">
             <!-- Action mode toggle -->
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-2">Action</label>
+              <label class="block text-sm font-medium text-gray-700 mb-2">{{ $t("Action") }}</label>
               <div class="flex rounded-lg border border-gray-200 overflow-hidden">
                 <button
                   type="button"
@@ -91,9 +91,7 @@
                   :class="editForm.config.action === 'add'
                     ? 'bg-purple-600 text-white'
                     : 'bg-white text-gray-600 hover:bg-gray-50'"
-                >
-                  Add Labels
-                </button>
+                > {{ $t("Add Labels") }} </button>
                 <button
                   type="button"
                   @click="editForm.config.action = 'remove'"
@@ -101,18 +99,14 @@
                   :class="editForm.config.action === 'remove'
                     ? 'bg-purple-600 text-white'
                     : 'bg-white text-gray-600 hover:bg-gray-50'"
-                >
-                  Remove Labels
-                </button>
+                > {{ $t("Remove Labels") }} </button>
               </div>
             </div>
 
             <!-- Label selection -->
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-2">Select Labels</label>
-              <div v-if="availableLabels.length === 0" class="text-xs text-red-500">
-                No labels available. Please create labels first.
-              </div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">{{ $t("Select Labels") }}</label>
+              <div v-if="availableLabels.length === 0" class="text-xs text-red-500"> {{ $t("No labels available. Please create labels first.") }} </div>
               <div v-else class="border border-gray-200 rounded-lg max-h-48 overflow-y-auto">
                 <label
                   v-for="label in availableLabels"
@@ -137,7 +131,7 @@
             <!-- Info callout -->
             <div class="bg-gray-50 border border-blue-200 rounded-lg p-3">
               <p class="text-xs text-gray-600 mb-1">
-                <strong>What happens:</strong>
+                <strong>{{ $t("What happens:") }}</strong>
                 {{ editForm.config.action === 'add'
                   ? 'The selected labels will be added to the contact. If a label is already attached, it will be skipped.'
                   : 'The selected labels will be removed from the contact. If a label is not attached, it will be skipped.'
@@ -149,26 +143,22 @@
             <div class="flex items-center">
               <FormCheckbox
                 v-model="editForm.is_active"
-                label="Active"
+                :label='$t("Active")'
                 class="h-4 w-4 text-purple-600 focus:ring-purple-500 border-gray-300 rounded"
               />
             </div>
           </div>
 
-          <div class="flex justify-end space-x-3 mt-6">
+          <div class="flex justify-end gap-3 mt-6">
             <button
               type="button"
               @click="closeEditModal"
               class="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-            >
-              Cancel
-            </button>
+            > {{ $t("Cancel") }} </button>
             <button
               type="submit"
               class="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors"
-            >
-              Save Changes
-            </button>
+            > {{ $t("Save Changes") }} </button>
           </div>
         </form>
       </div>
@@ -201,7 +191,7 @@ const showEditModal = ref(false)
 
 const selectedLabelNames = computed(() => {
   const ids = config.value.label_ids || []
-  if (ids.length === 0) return 'No labels selected'
+  if (ids.length === 0) return 'لم تُحدد وسوم'
   const names = ids.map(id => {
     const label = labels.value.find(l => l.value == id)
     return label ? label.label : `ID: ${id}`
@@ -211,10 +201,10 @@ const selectedLabelNames = computed(() => {
 
 const actionName = computed(() => {
   const action = config.value.action || 'add'
-  const mode = action === 'add' ? 'Add' : 'Remove'
+  const mode = action === 'add' ? 'إضافة' : 'إزالة'
   const count = (config.value.label_ids || []).length
-  if (count === 0) return `${mode} Labels`
-  return `${mode} ${count} Label${count > 1 ? 's' : ''}`
+  if (count === 0) return `${mode} وسوم`
+  return `${mode} ${count} من الوسوم`
 })
 
 const editForm = reactive({
@@ -247,7 +237,7 @@ const saveAction = () => {
 }
 
 const deleteNode = () => {
-  if (confirm('Are you sure you want to delete this action?')) {
+  if (confirm('هل أنت متأكد من حذف هذا الإجراء؟')) {
     removeNodes([props.id])
   }
 }

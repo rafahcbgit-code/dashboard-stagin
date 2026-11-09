@@ -165,7 +165,7 @@ export function useAutomationTest(props) {
 
   const evaluateAndStart = async (message) => {
     isTyping.value = true
-    addDebug('info', 'Evaluating triggers...', `Message: "${message}"`)
+    addDebug('info', "جارٍ تقييم المشغّلات...", `Message: "${message}"`)
 
     try {
       const response = await axios.post('/automation/test/trigger', {
@@ -188,7 +188,7 @@ export function useAutomationTest(props) {
       }
 
       if (data.working_hours_overridden) {
-        addDebug('info', 'Working hours overridden', `Simulating: ${duringWorkingHours.value ? 'During working hours' : 'Outside working hours'}`)
+        addDebug('info', "تم تعديل ساعات العمل مؤقتًا", `Simulating: ${duringWorkingHours.value ? "خلال ساعات العمل" : "خارج ساعات العمل"}`)
       }
 
       if (data.whatsapp) {
@@ -200,8 +200,8 @@ export function useAutomationTest(props) {
           || whatsappBody.includes('This would be escalated to a human agent')
 
         if (whatsappBody.includes('Automation is disabled')) {
-          addSystemMessage('Automation is disabled — no triggers or AI will respond to messages.')
-          addDebug('warning', 'Automation disabled', 'All auto-reply skipped (automation_enabled = false)')
+          addSystemMessage("الأتمتة معطّلة؛ لن تستجيب المشغّلات أو الذكاء الاصطناعي للرسائل.")
+          addDebug('warning', "الأتمتة معطّلة", "تم تجاوز جميع الردود التلقائية لأن الأتمتة معطّلة")
           // When automation is off, skip ALL further logic — no fallback counting, no escalation
           return
         } else if (!isTechnicalMessage) {
@@ -224,9 +224,9 @@ export function useAutomationTest(props) {
         await startFlow(data.flow.id)
       } else if (data.matched) {
         addDebug('success', `Trigger: "${data.trigger.name}"`, data.trigger.type)
-        addDebug('warning', 'No flow linked to this trigger')
+        addDebug('warning', "لا يوجد تدفق مرتبط بهذا المشغّل")
       } else {
-        addDebug('warning', 'No trigger matched')
+        addDebug('warning', 'لم يتطابق أي مشغّل')
 
         if (data.ai_result) {
           if (data.ai_result.type === 'answer') {
@@ -242,7 +242,7 @@ export function useAutomationTest(props) {
               // AI still answered — reset unmatched counter
               unmatchedMessageCount.value = 0
             } else {
-              addDebug('success', 'AI answered', data.ai_result.content)
+              addDebug('success', "أجاب الذكاء الاصطناعي", data.ai_result.content)
               aiDecisions.value.push({
                 type: 'answer',
                 content: data.ai_result.content,
@@ -251,11 +251,11 @@ export function useAutomationTest(props) {
               unmatchedMessageCount.value = 0
             }
           } else if (data.ai_result.type === 'escalation') {
-            addDebug('warning', 'Escalation triggered')
+            addDebug('warning', "تم تفعيل التصعيد")
             aiDecisions.value.push({
               type: 'escalation',
             })
-            addSystemMessage('This conversation would be transferred to a human agent.')
+            addSystemMessage("سيتم تحويل هذه المحادثة إلى موظف.")
             flowSessionId.value = null
             unmatchedMessageCount.value = 0
           }
@@ -266,11 +266,11 @@ export function useAutomationTest(props) {
           // Show fallback threshold info in debug only
           const threshold = data.bot_settings?.fallback_threshold || 3
           if (unmatchedMessageCount.value < threshold) {
-            addDebug('info', `Fallback threshold: ${unmatchedMessageCount.value}/${threshold} unanswered messages`)
+            addDebug('info', `حد الاستجابة الاحتياطية: ${unmatchedMessageCount.value}/${threshold} رسائل دون إجابة`)
           } else {
             addDebug('warning', `Fallback threshold reached: ${unmatchedMessageCount.value}/${threshold} — would auto-escalate`)
             // Show a clear system message in chat that escalation would happen
-            addSystemMessage(`No match found after ${threshold} messages — this conversation would be escalated to a human agent.`)
+            addSystemMessage(`لم يُعثر على تطابق بعد ${threshold} رسائل؛ سيتم تصعيد هذه المحادثة إلى موظف.`)
           }
         }
       }
@@ -282,14 +282,14 @@ export function useAutomationTest(props) {
       }
     } catch (error) {
       isTyping.value = false
-      addBotMessage({ type: 'text', body: 'Error evaluating triggers. Please try again.' })
-      addDebug('error', 'Request failed', error.response?.data?.message || error.message)
+      addBotMessage({ type: 'text', body: "تعذر تقييم المشغّلات. يرجى المحاولة مجددًا." })
+      addDebug('error', "فشل الطلب", error.response?.data?.message || error.message)
     }
   }
 
   const startFlow = async (flowId) => {
     isTyping.value = true
-    addDebug('info', 'Loading flow...')
+    addDebug('info', "جارٍ تحميل التدفق...")
 
     try {
       const response = await axios.post('/automation/test/flow/start', { flow_id: flowId })
@@ -299,13 +299,13 @@ export function useAutomationTest(props) {
 
       if (!data.success) {
         if (data.message && data.message.includes('expired')) {
-          addBotMessage({ type: 'text', body: 'Session expired. Please start a new test.' })
-          addDebug('error', 'Session expired', 'The flow simulation session has expired.')
+          addBotMessage({ type: 'text', body: "انتهت الجلسة. يرجى بدء اختبار جديد." })
+          addDebug('error', "انتهت الجلسة", "انتهت جلسة محاكاة التدفق.")
           flowSessionId.value = null
           return
         }
-        addBotMessage({ type: 'text', body: data.message || 'Failed to start flow.' })
-        addDebug('error', 'Failed', data.message)
+        addBotMessage({ type: 'text', body: data.message || "تعذر بدء التدفق." })
+        addDebug('error', "فشل", data.message)
         return
       }
 
@@ -329,8 +329,8 @@ export function useAutomationTest(props) {
       }
     } catch (error) {
       isTyping.value = false
-      addBotMessage({ type: 'text', body: 'Error starting flow.' })
-      addDebug('error', 'Request failed', error.response?.data?.message || error.message)
+      addBotMessage({ type: 'text', body: "حدث خطأ أثناء بدء التدفق." })
+      addDebug('error', "فشل الطلب", error.response?.data?.message || error.message)
     }
   }
 
@@ -350,8 +350,8 @@ export function useAutomationTest(props) {
       isTyping.value = false
 
       if (!data.success) {
-        addBotMessage({ type: 'text', body: data.message || 'Error.' })
-        addDebug('error', 'Error', data.message)
+        addBotMessage({ type: 'text', body: data.message || "حدث خطأ." })
+        addDebug('error', "خطأ", data.message)
         flowSessionId.value = null
         activeInputHint.value = null
         return
@@ -371,14 +371,14 @@ export function useAutomationTest(props) {
       } else if (botMessages.some(m => m.category === 'flow_ended')) {
         flowSessionId.value = null
         activeInputHint.value = null
-        addDebug('info', 'Flow complete')
+        addDebug('info', "اكتمل التدفق")
       } else {
         activeInputHint.value = null
       }
     } catch (error) {
       isTyping.value = false
-      addBotMessage({ type: 'text', body: 'Error processing input.' })
-      addDebug('error', 'Request failed', error.response?.data?.message || error.message)
+      addBotMessage({ type: 'text', body: "حدث خطأ أثناء معالجة الإدخال." })
+      addDebug('error', "فشل الطلب", error.response?.data?.message || error.message)
     }
   }
 
@@ -402,8 +402,8 @@ export function useAutomationTest(props) {
       isTyping.value = false
 
       if (!data.success) {
-        addBotMessage({ type: 'text', body: data.message || 'Error.' })
-        addDebug('error', 'Error', data.message)
+        addBotMessage({ type: 'text', body: data.message || "حدث خطأ." })
+        addDebug('error', "خطأ", data.message)
         flowSessionId.value = null
         return
       }
@@ -417,14 +417,14 @@ export function useAutomationTest(props) {
       } else if (botMessages.some(m => m.category === 'flow_ended')) {
         flowSessionId.value = null
         activeInputHint.value = null
-        addDebug('info', 'Flow complete')
+        addDebug('info', "اكتمل التدفق")
       } else {
         activeInputHint.value = null
       }
     } catch (error) {
       isTyping.value = false
-      addBotMessage({ type: 'text', body: 'Error.' })
-      addDebug('error', 'Request failed', error.response?.data?.message || error.message)
+      addBotMessage({ type: 'text', body: "حدث خطأ." })
+      addDebug('error', "فشل الطلب", error.response?.data?.message || error.message)
     }
   }
 
@@ -436,7 +436,7 @@ export function useAutomationTest(props) {
     inputMessage.value = ''
     isTyping.value = true
 
-    addDebug('info', 'Testing AI directly...', `Message: "${msg}"`)
+    addDebug('info', "جارٍ اختبار الذكاء الاصطناعي مباشرةً...", `Message: "${msg}"`)
 
     try {
       const response = await axios.post('/automation/test/ai', {
@@ -452,7 +452,7 @@ export function useAutomationTest(props) {
       }
 
       if (data.type === 'answer') {
-        addDebug('success', 'AI answered', data.answer || data.message)
+        addDebug('success', "أجاب الذكاء الاصطناعي", data.answer || data.message)
         aiDecisions.value.push({
           type: 'answer',
           content: data.answer || data.message,
@@ -460,7 +460,7 @@ export function useAutomationTest(props) {
           kb_source: data.kb_source,
         })
       } else if (data.type === 'escalation') {
-        addDebug('warning', 'AI escalated to human')
+        addDebug('warning', "حوّل الذكاء الاصطناعي المحادثة إلى موظف")
         aiDecisions.value.push({
           type: 'escalation',
           content: data.message,
@@ -468,18 +468,18 @@ export function useAutomationTest(props) {
           escalation_target: data.escalation?.target_type,
         })
       } else if (data.type === 'no_answer') {
-        addDebug('warning', 'AI could not find an answer')
+        addDebug('warning', "لم يجد الذكاء الاصطناعي إجابة")
         aiDecisions.value.push({
           type: 'no_answer',
           content: data.message,
         })
       } else if (!data.success) {
-        addDebug('error', 'AI test failed', data.message)
+        addDebug('error', "فشل اختبار الذكاء الاصطناعي", data.message)
       }
     } catch (error) {
       isTyping.value = false
-      addBotMessage({ type: 'text', body: 'Error testing AI.' })
-      addDebug('error', 'Request failed', error.response?.data?.message || error.message)
+      addBotMessage({ type: 'text', body: "حدث خطأ أثناء اختبار الذكاء الاصطناعي." })
+      addDebug('error', "فشل الطلب", error.response?.data?.message || error.message)
     }
   }
 
@@ -488,11 +488,11 @@ export function useAutomationTest(props) {
 
     messages.forEach(msg => {
       if (msg.node_type === 'start') {
-        addDebug('info', 'Flow started')
+        addDebug('info', "بدأ التدفق")
         flowSteps.value.push({
           node_type: msg.node_type,
           category: msg.category,
-          description: msg.description || 'Flow started',
+          description: msg.description || "بدأ التدفق",
         })
         return
       }
@@ -524,20 +524,20 @@ export function useAutomationTest(props) {
       if (msg.category === 'action_executed') {
         addDebug('info', msg.description || `Action: ${msg.node_type}`)
       } else if (msg.category === 'waiting_for_input') {
-        addDebug('warning', msg.description || 'Waiting for input')
+        addDebug('warning', msg.description || "بانتظار الإدخال")
       } else if (msg.category === 'flow_redirect') {
-        addDebug('info', msg.description || 'Redirecting')
+        addDebug('info', msg.description || "جارٍ التحويل")
       } else if (msg.category === 'flow_ended') {
-        addDebug('info', msg.description || 'Flow ended')
+        addDebug('info', msg.description || "انتهى التدفق")
       }
     })
 
     // After processing all messages, if human transfer happened,
     // show a clear indicator and reset the flow session
     if (hasHumanTransfer) {
-      addSystemMessage('Conversation handed off to a human agent — the bot is no longer responding.')
+      addSystemMessage("تم تسليم المحادثة إلى موظف؛ توقف البوت عن الرد.")
       flowSessionId.value = null
-      addDebug('info', 'Session ended — conversation transferred to human agent')
+      addDebug('info', "انتهت الجلسة؛ تم تحويل المحادثة إلى موظف")
     }
   }
 

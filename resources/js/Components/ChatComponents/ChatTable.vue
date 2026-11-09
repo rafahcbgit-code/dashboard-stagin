@@ -4,6 +4,7 @@ import { ref, watch, onMounted } from 'vue';
 import debounce from 'lodash/debounce';
 import { Link, router } from "@inertiajs/vue3";
 import Pagination from '@/Components/Pagination.vue';
+import ConversationEmptyState from '@/Components/UI/ConversationEmptyState.vue';
 import SortDirectionToggle from '@/Components/SortDirectionToggle.vue';
 import SendTemplateToPhone from '@/Components/ChatComponents/SendTemplateToPhone.vue';
 import { parseChatMetadata as parseMetadata, documentExtension } from '@/Components/ChatComponents/chatPreview.js';
@@ -750,6 +751,8 @@ const cleanupNavigationBlockers = () => {
         </div>
         </div>
         <div class="min-h-0 flex-1 overflow-y-auto cb-scrollbar" ref="scrollContainer">
+        <ConversationEmptyState v-if="!rows.data?.length" class="h-full" :title="$t('No conversations here')"
+            :description="$t('Try another tab or status.')" />
         <Link :href="buildChatUrl(contact.uuid)" preserve-scroll class="cb-thread-chat-row block border-b border-slate-100 group-hover:pr-0 transition-colors" :class="{
              'cb-thread-chat-row-unread': contact.unread_messages > 0 && selectedContactUuid !== contact.uuid,
              'cb-thread-chat-row-selected': selectedContactUuid === contact.uuid
@@ -909,7 +912,7 @@ const cleanupNavigationBlockers = () => {
             </div>
         </Link>
         </div>
-        <div class="shrink-0 px-3 pb-2 pt-1">
+        <div v-if="rows.data?.length" class="shrink-0 px-3 pb-2 pt-1">
             <Pagination :pagination="rows.meta" :compact="true" />
         </div>
     </div>

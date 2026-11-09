@@ -158,45 +158,40 @@ body { font-family: Outfit, Helvetica, sans-serif; }
 
 /* Interactive metric cards: enough movement to signal interactivity, without shifting page layout. */
 .cb-stat-card,
-.cb-hover-lift {
+.cb-hover-lift,
+.cb-user-app :is(article, .cb-card, [class*='rounded'][class*='border'][class*='bg-white']):not(:has(input, select, textarea, [role='dialog'])):has(> a[href], > button, > div > a[href], > div > button) {
     position: relative;
     transition: transform var(--cb-motion-standard) var(--cb-motion-ease), border-color var(--cb-motion-standard) var(--cb-motion-ease), box-shadow var(--cb-motion-standard) var(--cb-motion-ease), background-color var(--cb-motion-standard) var(--cb-motion-ease);
-}
-
-.cb-stat-card { isolation: isolate; }
-
-.cb-stat-card::after {
-    position: absolute;
-    inset: 0;
-    z-index: -1;
-    border-radius: inherit;
-    background: linear-gradient(135deg, rgb(var(--cb-primary-rgb, 16 185 129) / 0.10), transparent 52%);
-    content: "";
-    opacity: 0;
-    transition: opacity var(--cb-motion-standard) var(--cb-motion-ease);
 }
 
 .cb-stat-card:hover,
 .cb-stat-card:focus-within,
 .cb-hover-lift:hover,
-.cb-hover-lift:focus-within {
+.cb-hover-lift:focus-within,
+.cb-user-app :is(article, .cb-card, [class*='rounded'][class*='border'][class*='bg-white']):not(:has(input, select, textarea, [role='dialog'])):has(> a[href], > button, > div > a[href], > div > button):hover,
+.cb-user-app :is(article, .cb-card, [class*='rounded'][class*='border'][class*='bg-white']):not(:has(input, select, textarea, [role='dialog'])):has(> a[href], > button, > div > a[href], > div > button):focus-within {
     transform: translateY(-4px) scale(1.01);
     border-color: rgb(var(--cb-primary-rgb, 16 185 129) / 0.45);
     box-shadow: 0 14px 28px rgb(var(--cb-secondary-rgb, 15 118 110) / 0.14);
 }
 
-.cb-stat-card:hover::after,
-.cb-stat-card:focus-within::after {
-    opacity: 1;
+/* Apply the same motion to interactive rows without affecting form tables. */
+.cb-user-app tbody tr:has(> td a[href], > td button) {
+    position: relative;
+    transition: transform var(--cb-motion-standard) var(--cb-motion-ease), box-shadow var(--cb-motion-standard) var(--cb-motion-ease);
 }
-
-.cb-stat-card:hover [class*="rounded-full"],
-.cb-stat-card:focus-within [class*="rounded-full"] {
-    transform: scale(1.08);
+.cb-user-app tbody tr:has(> td a[href], > td button) > td {
+    transition: background-color var(--cb-motion-standard) var(--cb-motion-ease);
 }
-
-.cb-stat-card [class*="rounded-full"] {
-    transition: transform var(--cb-motion-standard) var(--cb-motion-ease);
+.cb-user-app tbody tr:has(> td a[href], > td button):hover,
+.cb-user-app tbody tr:has(> td a[href], > td button):focus-within {
+    z-index: 1;
+    transform: translateY(-4px) scale(1.01);
+    box-shadow: 0 14px 28px rgb(var(--cb-secondary-rgb, 15 118 110) / 0.14);
+}
+.cb-user-app tbody tr:has(> td a[href], > td button):hover > td,
+.cb-user-app tbody tr:has(> td a[href], > td button):focus-within > td {
+    background-color: var(--brand-50, #f2f7f3);
 }
 
 /* Saved replies: make searching and scanning feel responsive without moving table content. */
@@ -347,6 +342,15 @@ a[class*="rounded"][class*="bg-"]:focus-visible {
 
     .cb-reveal {
         opacity: 1;
+        transform: none;
+    }
+
+    .cb-stat-card:hover, .cb-stat-card:focus-within,
+    .cb-hover-lift:hover, .cb-hover-lift:focus-within,
+    .cb-user-app :is(article, .cb-card, [class*='rounded'][class*='border'][class*='bg-white']):hover,
+    .cb-user-app :is(article, .cb-card, [class*='rounded'][class*='border'][class*='bg-white']):focus-within,
+    .cb-user-app tbody tr:hover,
+    .cb-user-app tbody tr:focus-within {
         transform: none;
     }
 }

@@ -378,6 +378,11 @@ class CampaignController extends BaseController
             $campaign['total_failed_count'] = $counts->total_failed_count ?? 0;
             $campaign['total_read_count'] = $counts->total_read_count ?? 0;
             $campaign['rate_limited_failed_count'] = $this->rateLimitedCampaignLogsQuery($campaign->id)->count();
+            // An interrupted send cannot safely be retried until its provider outcome is verified.
+            $campaign['uncertain_delivery_count'] = \App\Models\CampaignLog::where('campaign_id', $campaign->id)
+                ->where('status', 'ongoing')
+                ->where('updated_at', '<=', now()->subMinutes(20))
+                ->count();
             $data['campaign'] = $campaign;
 
             $data['filters'] = request()->all(['search']);

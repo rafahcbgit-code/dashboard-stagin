@@ -1,6 +1,7 @@
 <?php
 
 return [
+  require __DIR__.'/conversation_api_guide.php',
   [
     'title' => 'contacts',
     'value' => [

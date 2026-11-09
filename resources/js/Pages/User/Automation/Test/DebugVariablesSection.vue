@@ -9,7 +9,7 @@
           <path d="M4 7V4a1 1 0 011-1h14a1 1 0 011 1v3M4 7v10a2 2 0 002 2h12a2 2 0 002-2V7M4 7h16"/>
           <path d="M10 11h4"/>
         </svg>
-        <span>Variables</span>
+        <span>{{ $t("Variables") }}</span>
         <span v-if="variables.length > 0" class="inline-flex items-center justify-center min-w-[18px] h-[18px] px-1 rounded-full text-[10px] font-medium bg-amber-100 text-amber-700">
           {{ variables.length }}
         </span>
@@ -24,9 +24,7 @@
     </button>
 
     <div v-if="expanded" class="px-3 pb-2">
-      <div v-if="variables.length === 0" class="text-xs text-gray-400 text-center py-2">
-        No variables set yet
-      </div>
+      <div v-if="variables.length === 0" class="text-xs text-gray-400 text-center py-2"> {{ $t("No variables set yet") }} </div>
       <div v-else class="space-y-1">
         <div
           v-for="(variable, idx) in variables"
@@ -38,7 +36,7 @@
         </div>
       </div>
       <div v-if="contactContext" class="mt-2 pt-2 border-t border-gray-100">
-        <div class="text-[10px] font-medium text-gray-400 uppercase tracking-wider mb-1">Contact Context</div>
+        <div class="text-[10px] font-medium text-gray-400 uppercase tracking-wider mb-1">{{ $t("Contact Context") }}</div>
         <div class="space-y-1">
           <div v-for="(value, key) in contactContext" :key="key" class="flex items-center justify-between">
             <span class="text-xs font-mono text-gray-600">{{ key }}</span>

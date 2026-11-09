@@ -65,7 +65,7 @@
             :required="required"
             @change="event => emit('update:modelValue', event.target.value || null)"
             >
-                <option value="" disabled>{{ props.placeholder }}</option>
+                <option value="" disabled>{{ $t(props.placeholder === 'Select an option' ? 'Select option' : props.placeholder) }}</option>
                 <option
                 v-for="option in props.options"
                 :key="option.value"
@@ -88,7 +88,7 @@
                     :class="error ? 'border-red-400 ring-2 ring-red-500/10' : 'border-slate-300'"
                     >
                     <span class="block truncate" v-if="label">{{ label }}</span>
-                    <span v-else class="text-gray-500">{{ props.placeholder }}</span>
+                    <span v-else class="text-gray-500">{{ $t(props.placeholder === 'Select an option' ? 'Select option' : props.placeholder) }}</span>
                     <span
                         class="pointer-events-none absolute inset-y-0 ltr:right-0 rtl:left-0 flex items-center ltr:pr-2 rtl:pl-2"
                     >

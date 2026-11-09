@@ -32,6 +32,10 @@ class AiFallbackService
      */
     public function attemptAnswer(int $organizationId, string $message, $contact, array $settingOverrides = []): ?array
     {
+        if (config('ai.suspended', true)) {
+            return null;
+        }
+
         // 1. Check if AI is globally enabled for this org
         $aiEnabled = $settingOverrides['ai_enabled'] ?? $this->aiSettingsService->isEnabled($organizationId);
         if (!$aiEnabled) {

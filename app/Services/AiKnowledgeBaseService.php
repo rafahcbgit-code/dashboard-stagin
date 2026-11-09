@@ -58,6 +58,10 @@ class AiKnowledgeBaseService
      */
     public function getEnabledForContext(int $organizationId): string
     {
+        if (config('ai.suspended', true)) {
+            return '';
+        }
+
         $entries = AiKnowledgeBase::forOrganization($organizationId)
             ->enabled()
             ->orderBy('id')

@@ -361,6 +361,7 @@
                             </button>
                             <button
                                 type="button"
+                                :disabled="$page.props.automationAiSuspended"
                                 @click="form.match_mode = 'ai'"
                                 class="rounded-lg border px-3 py-3 text-left transition-all duration-150"
                                 :class="form.match_mode === 'ai'

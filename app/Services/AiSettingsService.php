@@ -15,6 +15,10 @@ class AiSettingsService
 
     public function get(int $organizationId): array
     {
+        if (config('ai.suspended', true)) {
+            return self::DEFAULTS;
+        }
+
         $org = Organization::find($organizationId);
         if (!$org) {
             return self::DEFAULTS;
@@ -28,6 +32,10 @@ class AiSettingsService
 
     public function update(int $organizationId, array $settings): array
     {
+        if (config('ai.suspended', true)) {
+            return self::DEFAULTS;
+        }
+
         $org = Organization::find($organizationId);
         if (!$org) {
             return self::DEFAULTS;

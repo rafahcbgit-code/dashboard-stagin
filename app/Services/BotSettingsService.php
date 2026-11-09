@@ -48,6 +48,12 @@ class BotSettingsService
             $settings['flow_rejoin_enabled'] = false;
         }
 
+        if (config('ai.suspended', true)) {
+            $settings['ai_fallback_enabled'] = false;
+            $settings['ai_followup_enabled'] = false;
+            $settings['ai_escalation_enabled'] = false;
+        }
+
         return $settings;
     }
 
@@ -81,6 +87,10 @@ class BotSettingsService
      */
     public function getSetting(int $organizationId, string $key, $default = null)
     {
+        if (config('ai.suspended', true) && in_array($key, ['ai_fallback_enabled', 'ai_followup_enabled', 'ai_escalation_enabled'], true)) {
+            return false;
+        }
+
         $settings = $this->get($organizationId);
         return $settings[$key] ?? $default ?? self::DEFAULTS[$key] ?? null;
     }

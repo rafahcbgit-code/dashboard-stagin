@@ -41,7 +41,7 @@
           class="relative w-full cursor-default rounded-lg bg-white py-2 px-5 pr-10 shadow-sm text-left ring-1 ring-inset ring-gray-300 focus:outline-none focus-visible:border-indigo-500 focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-opacity-75 focus-visible:ring-offset-2 focus-visible:ring-offset-orange-300 sm:text-sm"
         >
           <span class="block truncate" v-if="label">{{ label }}</span>
-          <span v-else class="text-gray-500">{{ props.placeholder }}</span>
+          <span v-else class="text-gray-500">{{ $t(props.placeholder) }}</span>
           <span
             class="pointer-events-none absolute inset-y-0 right-0 flex items-center pr-2"
           >

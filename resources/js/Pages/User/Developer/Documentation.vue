@@ -1,6 +1,6 @@
 <template>
     <TabGroup>
-        <TabList class="flex space-s-1 backdrop-blur-xl bg-white/20 p-1">
+        <TabList dir="ltr" class="flex gap-1 backdrop-blur-xl bg-white/20 p-1">
             <Tab as="template" v-slot="{ selected }">
                 <button :class="[
                     'w-full py-2.5 text-sm leading-5 text-[#ffffffcc]',
@@ -74,11 +74,11 @@
                 <div class="code-block">
                     <div v-for="(item1, index1) in props.apirequests">
                         <h3 class="text-white mb-2 capitalize" :class="index1 != 0 ? 'mt-4' : ''">{{ $t(item1.title) }}</h3>
-                        <div v-for="(item, index) in item1.value" @click="changeTab('curl' + item1.title + index + 1)" class="mb-2 bg-white cursor-pointer py-1 px-2 rounded">
-                            <div class="flex items-center gap-x-2">
+                        <div v-for="(item, index) in item1.value" class="mb-2 bg-white py-1 px-2 rounded">
+                            <button type="button" @click="changeTab('curl' + item1.title + index + 1)" :aria-expanded="tab === 'curl' + item1.title + index + 1" class="flex w-full items-center gap-x-2 text-start cursor-pointer">
                                 <span class="rounded-md bg-primary px-2 text-[10px] uppercase">{{ item.method }}</span>
                                 <span class="text-black">{{ $t(item.title) }}</span>
-                            </div>
+                            </button>
                             <div class="text-black mt-2 mb-2" :class="tab === 'curl' + item1.title + index + 1 ? '' : 'hidden'">
                                 <div class="flex items-center gap-x-2 mb-2">
                                     <span>
@@ -90,11 +90,12 @@
                                                 d="m15.889 11.646l2.121-2.12a2.5 2.5 0 0 0-3.535-3.536l-2.829 2.828a2.5 2.5 0 0 0 0 3.536l-1.06 1.06a4 4 0 0 1 0-5.657l2.828-2.828a4 4 0 0 1 5.657 5.657l-2.121 2.121z" />
                                         </svg>
                                     </span>
-                                    <span>{{ item.route }}</span>
+                                    <span dir="ltr" class="inline-block break-all">{{ item.route }}</span>
                                 </div>
                                 <hr />
+                                <p v-if="item.description" class="mt-2 text-xs leading-relaxed">{{ $t(item.description) }}</p>
                                 <h4 class="mt-2 uppercase">{{ $t('Request') }}</h4>
-                                <div class="text-[10px] mt-2">
+                                <div dir="ltr" class="text-left text-[10px] mt-2">
                                     <VCodeBlock 
                                         :code=item.request.curl 
                                         highlightjs lang="bash" 
@@ -116,11 +117,11 @@
                 <div class="code-block">
                     <div v-for="(item1, index1) in props.apirequests">
                         <h3 class="text-white mb-2 capitalize" :class="index1 != 0 ? 'mt-4' : ''">{{ $t(item1.title) }}</h3>
-                        <div v-for="(item, index) in item1.value" @click="changeTab('php' + item1.title + index + 1)" class="mb-2 bg-white cursor-pointer py-1 px-2 rounded">
-                            <div class="flex items-center gap-x-2">
+                        <div v-for="(item, index) in item1.value" class="mb-2 bg-white py-1 px-2 rounded">
+                            <button type="button" @click="changeTab('php' + item1.title + index + 1)" :aria-expanded="tab === 'php' + item1.title + index + 1" class="flex w-full items-center gap-x-2 text-start cursor-pointer">
                                 <span class="rounded-md bg-primary px-2 text-[10px] uppercase">{{ item.method }}</span>
                                 <span class="text-black">{{ $t(item.title) }}</span>
-                            </div>
+                            </button>
                             <div class="text-black mt-2 mb-2" :class="tab === 'php' + item1.title + index + 1 ? '' : 'hidden'">
                                 <div class="flex items-center gap-x-2 mb-2">
                                     <span>
@@ -132,11 +133,12 @@
                                                 d="m15.889 11.646l2.121-2.12a2.5 2.5 0 0 0-3.535-3.536l-2.829 2.828a2.5 2.5 0 0 0 0 3.536l-1.06 1.06a4 4 0 0 1 0-5.657l2.828-2.828a4 4 0 0 1 5.657 5.657l-2.121 2.121z" />
                                         </svg>
                                     </span>
-                                    <span>{{ item.route }}</span>
+                                    <span dir="ltr" class="inline-block break-all">{{ item.route }}</span>
                                 </div>
                                 <hr />
+                                <p v-if="item.description" class="mt-2 text-xs leading-relaxed">{{ $t(item.description) }}</p>
                                 <h4 class="mt-2 uppercase">{{ $t('Request') }}</h4>
-                                <div class="text-[10px] mt-2">
+                                <div dir="ltr" class="text-left text-[10px] mt-2">
                                     <VCodeBlock 
                                         :code=item.request.php 
                                         highlightjs lang="bash" 
@@ -158,11 +160,11 @@
                 <div class="code-block">
                     <div v-for="(item1, index1) in props.apirequests">
                         <h3 class="text-white mb-2 capitalize" :class="index1 != 0 ? 'mt-4' : ''">{{ $t(item1.title) }}</h3>
-                        <div v-for="(item, index) in item1.value" @click="changeTab('nodejs' + item1.title + index + 1)" class="mb-2 bg-white cursor-pointer py-1 px-2 rounded">
-                            <div class="flex items-center gap-x-2">
+                        <div v-for="(item, index) in item1.value" class="mb-2 bg-white py-1 px-2 rounded">
+                            <button type="button" @click="changeTab('nodejs' + item1.title + index + 1)" :aria-expanded="tab === 'nodejs' + item1.title + index + 1" class="flex w-full items-center gap-x-2 text-start cursor-pointer">
                                 <span class="rounded-md bg-primary px-2 text-[10px] uppercase">{{ item.method }}</span>
                                 <span class="text-black">{{ $t(item.title) }}</span>
-                            </div>
+                            </button>
                             <div class="text-black mt-2 mb-2" :class="tab === 'nodejs' + item1.title + index + 1 ? '' : 'hidden'">
                                 <div class="flex items-center gap-x-2 mb-2">
                                     <span>
@@ -174,11 +176,12 @@
                                                 d="m15.889 11.646l2.121-2.12a2.5 2.5 0 0 0-3.535-3.536l-2.829 2.828a2.5 2.5 0 0 0 0 3.536l-1.06 1.06a4 4 0 0 1 0-5.657l2.828-2.828a4 4 0 0 1 5.657 5.657l-2.121 2.121z" />
                                         </svg>
                                     </span>
-                                    <span>{{ item.route }}</span>
+                                    <span dir="ltr" class="inline-block break-all">{{ item.route }}</span>
                                 </div>
                                 <hr />
+                                <p v-if="item.description" class="mt-2 text-xs leading-relaxed">{{ $t(item.description) }}</p>
                                 <h4 class="mt-2 uppercase">{{ $t('Request') }}</h4>
-                                <div class="text-[10px] mt-2">
+                                <div dir="ltr" class="text-left text-[10px] mt-2">
                                     <VCodeBlock 
                                         :code=item.request.nodejs 
                                         highlightjs lang="bash" 
@@ -200,11 +203,11 @@
                 <div class="code-block">
                     <div v-for="(item1, index1) in props.apirequests">
                         <h3 class="text-white mb-2 capitalize" :class="index1 != 0 ? 'mt-4' : ''">{{ $t(item1.title) }}</h3>
-                        <div v-for="(item, index) in item1.value" @click="changeTab('python' + item1.title + index + 1)" class="mb-2 bg-white cursor-pointer py-1 px-2 rounded">
-                            <div class="flex items-center gap-x-2">
+                        <div v-for="(item, index) in item1.value" class="mb-2 bg-white py-1 px-2 rounded">
+                            <button type="button" @click="changeTab('python' + item1.title + index + 1)" :aria-expanded="tab === 'python' + item1.title + index + 1" class="flex w-full items-center gap-x-2 text-start cursor-pointer">
                                 <span class="rounded-md bg-primary px-2 text-[10px] uppercase">{{ item.method }}</span>
                                 <span class="text-black">{{ $t(item.title) }}</span>
-                            </div>
+                            </button>
                             <div class="text-black mt-2 mb-2" :class="tab === 'python' + item1.title + index + 1 ? '' : 'hidden'">
                                 <div class="flex items-center gap-x-2 mb-2">
                                     <span>
@@ -216,11 +219,12 @@
                                                 d="m15.889 11.646l2.121-2.12a2.5 2.5 0 0 0-3.535-3.536l-2.829 2.828a2.5 2.5 0 0 0 0 3.536l-1.06 1.06a4 4 0 0 1 0-5.657l2.828-2.828a4 4 0 0 1 5.657 5.657l-2.121 2.121z" />
                                         </svg>
                                     </span>
-                                    <span>{{ item.route }}</span>
+                                    <span dir="ltr" class="inline-block break-all">{{ item.route }}</span>
                                 </div>
                                 <hr />
+                                <p v-if="item.description" class="mt-2 text-xs leading-relaxed">{{ $t(item.description) }}</p>
                                 <h4 class="mt-2 uppercase">{{ $t('Request') }}</h4>
-                                <div class="text-[10px] mt-2">
+                                <div dir="ltr" class="text-left text-[10px] mt-2">
                                     <VCodeBlock 
                                         :code=item.request.python 
                                         highlightjs lang="bash" 
@@ -242,11 +246,11 @@
                 <div class="code-block">
                     <div v-for="(item1, index1) in props.apirequests">
                         <h3 class="text-white mb-2 capitalize" :class="index1 != 0 ? 'mt-4' : ''">{{ $t(item1.title) }}</h3>
-                        <div v-for="(item, index) in item1.value" @click="changeTab('java' + item1.title + index + 1)" class="mb-2 bg-white cursor-pointer py-1 px-2 rounded">
-                            <div class="flex items-center gap-x-2">
+                        <div v-for="(item, index) in item1.value" class="mb-2 bg-white py-1 px-2 rounded">
+                            <button type="button" @click="changeTab('java' + item1.title + index + 1)" :aria-expanded="tab === 'java' + item1.title + index + 1" class="flex w-full items-center gap-x-2 text-start cursor-pointer">
                                 <span class="rounded-md bg-primary px-2 text-[10px] uppercase">{{ item.method }}</span>
                                 <span class="text-black">{{ $t(item.title) }}</span>
-                            </div>
+                            </button>
                             <div class="text-black mt-2 mb-2" :class="tab === 'java' + item1.title + index + 1 ? '' : 'hidden'">
                                 <div class="flex items-center gap-x-2 mb-2">
                                     <span>
@@ -258,11 +262,12 @@
                                                 d="m15.889 11.646l2.121-2.12a2.5 2.5 0 0 0-3.535-3.536l-2.829 2.828a2.5 2.5 0 0 0 0 3.536l-1.06 1.06a4 4 0 0 1 0-5.657l2.828-2.828a4 4 0 0 1 5.657 5.657l-2.121 2.121z" />
                                         </svg>
                                     </span>
-                                    <span>{{ item.route }}</span>
+                                    <span dir="ltr" class="inline-block break-all">{{ item.route }}</span>
                                 </div>
                                 <hr />
+                                <p v-if="item.description" class="mt-2 text-xs leading-relaxed">{{ $t(item.description) }}</p>
                                 <h4 class="mt-2 uppercase">{{ $t('Request') }}</h4>
-                                <div class="text-[10px] mt-2">
+                                <div dir="ltr" class="text-left text-[10px] mt-2">
                                     <VCodeBlock 
                                         :code=item.request.java 
                                         highlightjs lang="bash" 
@@ -284,11 +289,11 @@
                 <div class="code-block">
                     <div v-for="(item1, index1) in props.apirequests">
                         <h3 class="text-white mb-2 capitalize" :class="index1 != 0 ? 'mt-4' : ''">{{ $t(item1.title) }}</h3>
-                        <div v-for="(item, index) in item1.value" @click="changeTab('ruby' + item1.title + index + 1)" class="mb-2 bg-white cursor-pointer py-1 px-2 rounded">
-                            <div class="flex items-center gap-x-2">
+                        <div v-for="(item, index) in item1.value" class="mb-2 bg-white py-1 px-2 rounded">
+                            <button type="button" @click="changeTab('ruby' + item1.title + index + 1)" :aria-expanded="tab === 'ruby' + item1.title + index + 1" class="flex w-full items-center gap-x-2 text-start cursor-pointer">
                                 <span class="rounded-md bg-primary px-2 text-[10px] uppercase">{{ item.method }}</span>
                                 <span class="text-black">{{ $t(item.title) }}</span>
-                            </div>
+                            </button>
                             <div class="text-black mt-2 mb-2" :class="tab === 'ruby' + item1.title + index + 1 ? '' : 'hidden'">
                                 <div class="flex items-center gap-x-2 mb-2">
                                     <span>
@@ -300,11 +305,12 @@
                                                 d="m15.889 11.646l2.121-2.12a2.5 2.5 0 0 0-3.535-3.536l-2.829 2.828a2.5 2.5 0 0 0 0 3.536l-1.06 1.06a4 4 0 0 1 0-5.657l2.828-2.828a4 4 0 0 1 5.657 5.657l-2.121 2.121z" />
                                         </svg>
                                     </span>
-                                    <span>{{ item.route }}</span>
+                                    <span dir="ltr" class="inline-block break-all">{{ item.route }}</span>
                                 </div>
                                 <hr />
+                                <p v-if="item.description" class="mt-2 text-xs leading-relaxed">{{ $t(item.description) }}</p>
                                 <h4 class="mt-2 uppercase">{{ $t('Request') }}</h4>
-                                <div class="text-[10px] mt-2">
+                                <div dir="ltr" class="text-left text-[10px] mt-2">
                                     <VCodeBlock 
                                         :code=item.request.ruby 
                                         highlightjs lang="bash" 
@@ -333,7 +339,7 @@ import { ref } from 'vue';
 import { TabGroup, TabList, Tab, TabPanels, TabPanel } from '@headlessui/vue';
 import VCodeBlock from '@wdns/vue-code-block';
 
-const props = defineProps({ rows: Object, url: String, apirequests: Object });
+const props = defineProps({ rows: Object, url: String, apirequests: [Array, Object] });
 const tab = ref(null);
 const code = ref(`const foo = 'bar';`);
 
@@ -344,7 +350,7 @@ const form = useForm({
 });
 
 const changeTab = (id) => {
-    tab.value = id;
+    tab.value = tab.value === id ? null : id;
 }
 
 const generateToken = () => {

@@ -20,6 +20,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
@@ -27,6 +28,11 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
     use Dispatchable, InteractsWithQueue, Queueable, SerializesModels, TemplateTrait;
 
     public $timeout = 300;
+
+    public function retryUntil(): \DateTimeInterface
+    {
+        return now()->addMinutes(30);
+    }
 
     private $organizationId;
 
@@ -50,15 +56,34 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
 
     public function handle()
     {
+        $lock = Cache::store('redis')->lock("campaign:log:{$this->campaignLogId}:sending", $this->timeout + 60);
+        if (! $lock->get()) {
+            $this->release(15);
+            return;
+        }
+        try {
+            $this->processRetry();
+        } finally {
+            $lock->release();
+        }
+    }
+
+    private function processRetry()
+    {
+        $canSend = CampaignLog::query()->whereKey($this->campaignLogId)
+            ->where('status', 'failed')
+            ->whereHas('campaign', fn ($query) => $query->where('organization_id', $this->organizationId)->where('status', 'ongoing'))
+            ->exists();
+        if (! $canSend) return;
         $log = CampaignLog::with('campaign', 'campaign.organization', 'campaign.template', 'contact')->find($this->campaignLogId);
 
-        if (! $log || $log->status !== 'failed' || ! $log->contact || empty($log->contact->phone) || (bool) ($log->contact->is_blocked ?? false)) {
-            if ($log && $log->status === 'failed' && (empty($log->contact) || empty($log->contact->phone) || (bool) ($log->contact->is_blocked ?? false))) {
+        if (! $log || $log->status !== 'failed' || ! $log->contact || empty($log->contact->phone) || (bool) ($log->contact->is_blocked ?? false) || ! $log->contact->is_subscribed) {
+            if ($log && $log->status === 'failed' && (empty($log->contact) || empty($log->contact->phone) || (bool) ($log->contact->is_blocked ?? false) || ! $log->contact->is_subscribed)) {
                 $log->status = 'permanently_failed';
                 $log->metadata = $this->failureMetadata(
                     empty($log->contact)
                         ? 'Contact not found.'
-                        : ((bool) ($log->contact->is_blocked ?? false) ? 'Contact is blocked.' : 'Contact phone is missing.'),
+                        : ((bool) ($log->contact->is_blocked ?? false) ? 'Contact is blocked.' : (! $log->contact->is_subscribed ? 'Contact is unsubscribed.' : 'Contact phone is missing.')),
                     'CAMPAIGN_RETRY_CONTACT_NOT_SENDABLE',
                     ['contact_id' => $log->contact_id]
                 );
@@ -86,8 +111,8 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
         // Task 2.8: AC-2.8.5 - Load retry count efficiently for single model
         $log->loadCount('retries');
 
-        if ($log->campaign->status == 'completed') {
-            return; // Don't process if the campaign has been marked as completed
+        if (! $log->campaign || $log->campaign->status !== 'ongoing' || (int) $log->campaign->organization_id !== (int) $this->organizationId) {
+            return;
         }
 
         // Task 2.4: Use cached metadata with config fallback (AC-2.4.1)
@@ -109,6 +134,7 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
         // Initialize WhatsApp service using cached metadata
         $this->initializeWhatsappService($metadata);
 
+        $sendStarted = false;
         DB::beginTransaction();
 
         try {
@@ -126,6 +152,24 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
                 $this->whatsappService->getPhoneNumberIdProperty()
             );
 
+            if (! \App\Models\Campaign::whereKey($log->campaign_id)->where('organization_id', $this->organizationId)->where('status', 'ongoing')->exists()) {
+                DB::rollBack();
+                return;
+            }
+
+            $log->contact->refresh();
+            if ($log->contact->is_blocked || ! $log->contact->is_subscribed || empty($log->contact->phone)) {
+                DB::rollBack();
+                return;
+            }
+
+            // Persist the in-flight state before contacting the provider. A worker
+            // crash must not roll it back to a retryable failed state.
+            $log->status = 'ongoing';
+            $log->save();
+            DB::commit();
+            $sendStarted = true;
+
             $response = $this->whatsappService->sendTemplateMessage(
                 $log->contact->uuid,
                 $template,
@@ -137,6 +181,7 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
                 $log->campaign->template ?? null
             );
 
+            DB::beginTransaction();
             $status = ($response->success === true)
                 ? 'success'
                 : (CampaignFailureClassifier::isTerminal($response->data ?? null) ? 'permanently_failed' : 'failed');
@@ -173,13 +218,14 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
             }
 
             DB::commit();
+            $sendStarted = false;
 
             // Retry processing is the last state transition for a failed log.
             // Check only after committing so the completion query sees the
             // final success/permanently_failed state.
             CampaignCompletionService::completeIfFinished($log->campaign_id);
         } catch (\Exception $e) {
-            DB::rollBack();
+            if (DB::transactionLevel() > 0) DB::rollBack();
             Log::error("Retry failed for campaign_log {$this->campaignLogId}: ".$e->getMessage());
 
             $oldSnapshot = CampaignLog::where('id', $this->campaignLogId)
@@ -188,8 +234,8 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
                 ->all();
 
             CampaignLog::where('id', $this->campaignLogId)->update([
-                'status' => 'failed',
-                'metadata' => $this->failureMetadata($e->getMessage(), 'CAMPAIGN_RETRY_JOB_FAILED', [
+                'status' => $sendStarted ? 'ongoing' : 'failed',
+                'metadata' => $this->failureMetadata($e->getMessage(), $sendStarted ? 'CAMPAIGN_DELIVERY_UNKNOWN' : 'CAMPAIGN_RETRY_JOB_FAILED', [
                     'exception' => get_class($e),
                     'retry_index' => $this->retryIndex,
                 ]),
@@ -197,7 +243,7 @@ class RetryCampaignLogJob implements ShouldBeUnique, ShouldQueue
             ]);
 
             $newSnapshot = collect($oldSnapshot)
-                ->map(fn (array $row): array => array_merge($row, ['status' => 'failed']))
+                ->map(fn (array $row): array => array_merge($row, ['status' => $sendStarted ? 'ongoing' : 'failed']))
                 ->all();
 
             CampaignStatsService::recordSnapshotsChanged($oldSnapshot, $newSnapshot);

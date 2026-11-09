@@ -42,6 +42,9 @@
 
             <div class="md:flex md:space-s-4">
                 <div class="md:w-[70%] capitalize">
+                    <div v-if="props.campaign.uncertain_delivery_count > 0" class="mb-6 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-950" role="alert">
+                        {{ $t('Campaign delivery outcome needs review', { count: props.campaign.uncertain_delivery_count }) }}
+                    </div>
                     <!-- Story 2.5: AC-2.5.4 - Real-time progress bar for ongoing campaigns -->
                     <div v-if="isOngoing" class="mb-6 bg-white rounded-lg border p-4">
                         <div class="flex justify-between items-center mb-2">
@@ -68,7 +71,7 @@
                     <!-- Story 2.5: AC-2.5.6 - Campaign completion success message -->
                     <div v-if="campaignCompleted" class="mb-6 bg-green-50 border border-green-200 rounded-lg p-4">
                         <div class="flex items-center">
-                            <svg class="w-5 h-5 text-green-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                            <svg class="w-5 h-5 text-green-600 me-2" fill="currentColor" viewBox="0 0 20 20">
                                 <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z" clip-rule="evenodd"/>
                             </svg>
                             <span class="text-green-700 font-medium">{{ $t('Campaign completed successfully!') }}</span>
@@ -78,12 +81,12 @@
                     <!-- Story 2.6: AC-2.6.5 - Campaign cancelled message with final stats -->
                     <div v-if="campaignCancelled" class="mb-6 bg-yellow-50 border border-yellow-200 rounded-lg p-4">
                         <div class="flex items-center mb-2">
-                            <svg class="w-5 h-5 text-yellow-600 mr-2" fill="currentColor" viewBox="0 0 20 20">
+                            <svg class="w-5 h-5 text-yellow-600 me-2" fill="currentColor" viewBox="0 0 20 20">
                                 <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd"/>
                             </svg>
                             <span class="text-yellow-700 font-medium">{{ $t('Campaign cancelled') }}</span>
                         </div>
-                        <div v-if="cancelStats" class="text-sm text-yellow-600 ml-7">
+                        <div v-if="cancelStats" class="text-sm text-yellow-600 ms-7">
                             <p>{{ $t('Sent') }}: {{ cancelStats.sent }} | {{ $t('Cancelled') }}: {{ cancelStats.cancelled }} | {{ $t('Failed') }}: {{ cancelStats.failed }}</p>
                         </div>
                     </div>
@@ -93,14 +96,14 @@
                         <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
                             <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="showCancelConfirmation = false"></div>
                             <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
-                            <div class="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
+                            <div class="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-start overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
                                 <div class="sm:flex sm:items-start">
                                     <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-red-100 sm:mx-0 sm:h-10 sm:w-10">
                                         <svg class="h-6 w-6 text-red-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"/>
                                         </svg>
                                     </div>
-                                    <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+                                    <div class="mt-3 text-center sm:mt-0 sm:ms-4 sm:text-start">
                                         <h3 class="text-lg leading-6 font-medium text-gray-900" id="modal-title">{{ $t('Cancel Campaign') }}</h3>
                                         <div class="mt-2">
                                             <p class="text-sm text-gray-500">{{ $t('Are you sure you want to cancel this campaign? All pending messages will be cancelled. Messages already sent will not be affected.') }}</p>
@@ -111,7 +114,7 @@
                                     <button
                                         type="button"
                                         @click="cancelCampaign"
-                                        class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ml-3 sm:w-auto sm:text-sm"
+                                        class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500 sm:ms-3 sm:w-auto sm:text-sm"
                                     >
                                         {{ $t('Yes, Cancel Campaign') }}
                                     </button>
@@ -132,14 +135,14 @@
                         <div class="flex items-end justify-center min-h-screen pt-4 px-4 pb-20 text-center sm:block sm:p-0">
                             <div class="fixed inset-0 bg-gray-500 bg-opacity-75 transition-opacity" @click="showResendConfirmation = false"></div>
                             <span class="hidden sm:inline-block sm:align-middle sm:h-screen">&#8203;</span>
-                            <div class="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-left overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
+                            <div class="inline-block align-bottom bg-white rounded-lg px-4 pt-5 pb-4 text-start overflow-hidden shadow-xl transform transition-all sm:my-8 sm:align-middle sm:max-w-lg sm:w-full sm:p-6">
                                 <div class="sm:flex sm:items-start">
                                     <div class="mx-auto flex-shrink-0 flex items-center justify-center h-12 w-12 rounded-full bg-amber-100 sm:mx-0 sm:h-10 sm:w-10">
                                         <svg class="h-6 w-6 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15"/>
                                         </svg>
                                     </div>
-                                    <div class="mt-3 text-center sm:mt-0 sm:ml-4 sm:text-left">
+                                    <div class="mt-3 text-center sm:mt-0 sm:ms-4 sm:text-start">
                                         <h3 class="text-lg leading-6 font-medium text-gray-900" id="resend-modal-title">{{ $t('Resend Rate-Limited Messages') }}</h3>
                                         <div class="mt-2">
                                             <p class="text-sm text-gray-500">{{ $t('This will resend messages that failed due to WhatsApp rate limits. The campaign will restart and only rate-limited messages will be retried. Other failed messages are not affected.') }}</p>
@@ -150,7 +153,7 @@
                                     <button
                                         type="button"
                                         @click="resendFailed"
-                                        class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-amber-500 text-base font-medium text-white hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500 sm:ml-3 sm:w-auto sm:text-sm"
+                                        class="w-full inline-flex justify-center rounded-md border border-transparent shadow-sm px-4 py-2 bg-amber-500 text-base font-medium text-white hover:bg-amber-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-amber-500 sm:ms-3 sm:w-auto sm:text-sm"
                                     >
                                         {{ $t('Yes, Resend Rate-Limited') }}
                                     </button>
@@ -200,7 +203,7 @@
                                     <h2 class="text-base font-semibold text-slate-900 leading-6 normal-case">{{ props.campaign?.name }}</h2>
                                 </div>
                                 <span class="shrink-0 rounded-full px-2.5 py-1 text-xs font-medium capitalize" :class="statusBadgeClass">
-                                    {{ props.campaign.status }}
+                                    {{ $t(props.campaign.status) }}
                                 </span>
                             </div>
                         </div>
@@ -264,6 +267,8 @@
 
     import { Link, router } from "@inertiajs/vue3";
     import { ref, computed, onMounted, onUnmounted } from 'vue';
+    import { useI18n } from 'vue-i18n';
+    const { t } = useI18n();
     import Echo from 'laravel-echo';
     import Pusher from 'pusher-js';
 
@@ -333,7 +338,7 @@
 
     const recipientsLabel = computed(() => {
         return String(props.campaign.contact_group_id) === '0'
-            ? 'All Contacts'
+            ? t('All Contacts')
             : props.campaign?.contact_group?.name;
     });
 
@@ -409,11 +414,11 @@
                 }, 1500);
             } else {
                 // Error - show error message
-                cancelError.value = data.error || 'Failed to cancel campaign';
+                cancelError.value = data.error || 'تعذر إلغاء الحملة';
                 alert(cancelError.value);
             }
         } catch (error) {
-            cancelError.value = 'Network error occurred while cancelling campaign';
+            cancelError.value = 'حدث خطأ في الاتصال أثناء إلغاء الحملة';
             alert(cancelError.value);
         } finally {
             isCancelling.value = false;
@@ -441,10 +446,10 @@
                 campaignCancelled.value = false;
                 router.reload({ only: ['campaign', 'rows'] });
             } else {
-                alert(data.error || 'Failed to resend messages');
+                alert(data.error || 'تعذرت إعادة إرسال الرسائل');
             }
         } catch (error) {
-            alert('Network error occurred while resending messages');
+            alert('حدث خطأ في الاتصال أثناء إعادة إرسال الرسائل');
         } finally {
             isResending.value = false;
         }

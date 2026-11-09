@@ -85,7 +85,7 @@
                                 <div v-else-if="comp.type === 'Dropdown'">
                                     <p class="text-[9px] text-gray-500 mb-0.5">{{ comp.label }}</p>
                                     <div class="border border-gray-200 rounded-md px-2 py-1 text-[9px] text-gray-300 bg-gray-50 flex items-center justify-between">
-                                        <span>Select option</span>
+                                        <span>{{ $t('Select option') }}</span>
                                         <svg xmlns="http://www.w3.org/2000/svg" width="10" height="10" viewBox="0 0 24 24" fill="#9ca3af"><path d="m7 10 5 5 5-5z"/></svg>
                                     </div>
                                 </div>

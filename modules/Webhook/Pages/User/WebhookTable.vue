@@ -19,6 +19,9 @@
     import Dropdown from '@/Components/Dropdown.vue';
     import DropdownItemGroup from '@/Components/DropdownItemGroup.vue';
     import DropdownItem from '@/Components/DropdownItem.vue';
+    import { useRtl } from '@/Composables/useRtl';
+    import { trans } from 'laravel-vue-i18n';
+    const { isRtl } = useRtl();
     import { toast } from 'vue3-toastify';
 
 
@@ -28,7 +31,7 @@
             required: true,
         },
         events:{
-            type: Object
+            type: [Array, Object]
         }
     });
 
@@ -137,7 +140,7 @@
                     errorMessage += value + '\n';
                 }
                 
-                toast(errorMessage || 'Error updating webhook', {
+                toast(errorMessage || trans('Error updating webhook'), {
                     autoClose: 5000,
                     type: 'error'
                 });
@@ -158,20 +161,20 @@
             <TableBodyRow v-for="(item, index) in rows.data" :key="index" :class="!isLastRow(index) ? 'border-b' : ''">
                 <TableBodyRowItem :position="'first'" >
                     <div class="flex">
-                        <div class="text-left mr-3 text-sm relative w-[10em] truncate">
-                            <span>{{ item.url }}</span> 
+                        <div class="text-start me-3 text-sm relative w-[10em] truncate">
+                            <span dir="ltr" class="inline-block">{{ item.url }}</span>
                         </div> 
                     </div>
                 </TableBodyRowItem>
                 <TableBodyRowItem class="hidden sm:table-cell">
-                    <div class="py-1 px-2 bg-gray-50 rounded-[5px] border border-dashed w-[20em] truncate text-xs capitalize">
-                        <span v-for="event in item.events">{{ event.event }}, </span>
+                    <div class="py-1 px-2 bg-gray-50 rounded-[5px] border border-dashed max-w-[20em] whitespace-normal break-words text-xs capitalize">
+                        <span v-for="event in item.events">{{ $t(event.event) }}, </span>
                     </div>
                 </TableBodyRowItem>
                 <TableBodyRowItem :position="'last'">
                     <div class="flex items-center">
-                        <button @click="openTestModal(item)" class="bg-slate-100 border rounded-md py-1 px-4 h-[fit-content]">Test</button>
-                        <Dropdown v-if="item.role != 'admin'" :align="'right'" class="mt-2">
+                        <button @click="openTestModal(item)" class="bg-slate-100 border rounded-md py-1 px-4 h-[fit-content]">{{ $t('Test') }}</button>
+                        <Dropdown v-if="item.role != 'admin'" :align="isRtl ? 'left' : 'right'" class="mt-2">
                             <button class="inline-flex w-full justify-center rounded-md text-sm font-medium text-black hover:bg-opacity-30 focus:outline-none focus-visible:ring-2 focus-visible:ring-white focus-visible:ring-opacity-75">
                                 <span class="hover:bg-[#F6F7F9] hover:rounded-full w-[fit-content] p-2">
                                     <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24">
@@ -192,15 +195,15 @@
         </TableBody>
     </Table>
 
-    <Modal :label="$t('Edit/View Webhook')" :isOpen=isOpenModal>
+    <Modal :label="$t('Edit/View Webhook')" :isOpen="isOpenModal" @close="isOpenModal = false">
         <div class="mt-5 grid grid-cols-1 gap-x-6">
             <form @submit.prevent="submitForm()" class="grid gap-x-6 sm:grid-cols-6">
-                <FormInput v-model="form2.url" :error="form2.errors.url" :name="$t('URL')" :type="'text'" :class="'sm:col-span-6'"/>
+                <FormInput className="webhook-url-field sm:col-span-6" v-model="form2.url" :error="form2.errors.url" :name="$t('URL')" :type="'text'" :class="'sm:col-span-6'"/>
                 <h4 class="mt-4 text-sm">{{ $t('Events') }}</h4>
                 <FormCheckbox v-for="event in props.events" :key="event" v-model="form2.events" :error="form2.errors.events" :name="$t(event)" :label="$t(event)" :value="event" :type="'text'" :class="'sm:col-span-6'"/>
                 
                 <div class="mt-4 flex">
-                    <button type="button" @click.self="isOpenModal = false" class="inline-flex justify-center rounded-md border border-transparent bg-slate-50 px-4 py-2 text-sm text-slate-500 hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 mr-4">{{ $t('Cancel') }}</button>
+                    <button type="button" @click.self="isOpenModal = false" class="inline-flex justify-center rounded-md border border-transparent bg-slate-50 px-4 py-2 text-sm text-slate-500 hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 me-4">{{ $t('Cancel') }}</button>
                     <button 
                         :class="['inline-flex justify-center rounded-md border border-transparent bg-primary px-4 py-2 text-sm text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2', { 'opacity-50': form.processing }]"
                         :disabled="form2.processing"
@@ -213,22 +216,22 @@
         </div>
     </Modal>
 
-    <Modal :label="$t('Test Webhook Notifications')" :isOpen=isOpenTestModal>
+    <Modal :label="$t('Test Webhook Notifications')" :isOpen="isOpenTestModal" @close="isOpenTestModal = false">
         <div class="mt-5 grid grid-cols-1 gap-x-6">
             <div>
-                <h4 class="mb-2">Webhook URL</h4>
-                <h5 class="text-sm bg-slate-100 py-1 rounded-md px-2">{{ form2.url }}</h5>
+                <h4 class="mb-2">{{ $t('Webhook URL') }}</h4>
+                <h5 dir="ltr" class="text-start break-all text-sm bg-slate-100 py-1 rounded-md px-2">{{ form2.url }}</h5>
             </div>
             <div class="mt-4">
-                <h4 class="mb-2">Events</h4>
+                <h4 class="mb-2">{{ $t('Events') }}</h4>
                 <div v-for="event in form2.events">
                     <div class="flex items-center justify-between border-b py-1 text-sm">
                         <div>
-                            <span class="capitalize">{{ event }}</span>
+                            <span class="capitalize">{{ $t(event) }}</span>
                         </div>
                         <div>
                             <button @click="triggerTest(form2.url, event)" class="bg-slate-100 border rounded-md py-1 px-4 h-[fit-content]">
-                                {{ loadingEvent === event ? 'Sending...' : 'Test' }}
+                                {{ loadingEvent === event ? $t('Sending...') : $t('Test') }}
                             </button>
                         </div>
                     </div>
@@ -236,7 +239,7 @@
             </div>
             <div class="grid gap-x-6 sm:grid-cols-6">
                 <div class="mt-4 flex">
-                    <button type="button" @click.self="isOpenTestModal = false" class="inline-flex justify-center rounded-md border border-transparent bg-slate-50 px-4 py-2 text-sm text-slate-500 hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 mr-4">{{ $t('Cancel') }}</button>
+                    <button type="button" @click.self="isOpenTestModal = false" class="inline-flex justify-center rounded-md border border-transparent bg-slate-50 px-4 py-2 text-sm text-slate-500 hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 me-4">{{ $t('Cancel') }}</button>
                 </div>
             </div>
         </div>
@@ -246,7 +249,11 @@
     <AlertModal 
         v-model="isOpenAlert" 
         @confirm="() => confirmAlert(deleteAction)"
+        :confirmButtonText="$t('Confirm')"
         :label = "$t('Delete row')" 
         :description = "$t('Are you sure you want to delete this row? This action can not be undone')"
     />
 </template>
+<style scoped>
+.webhook-url-field :deep(input) { direction: ltr; text-align: left; }
+</style>

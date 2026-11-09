@@ -1923,11 +1923,14 @@ onMounted(() => {
                 </div>
               </div>
               <div class="mt-3 flex flex-wrap gap-2 border-t border-blue-200 pt-3 text-xs">
+                <span class="rounded-full bg-white px-2.5 py-1 text-slate-800">إجمالي جهات الاتصال في الجمهور المختار: {{ (preflight?.audience?.candidate_count || 0).toLocaleString() }}</span>
                 <span class="rounded-full bg-slate-100 px-2.5 py-1 text-slate-700">{{ $t("Excluded") }}: {{ ((preflight?.audience?.excluded_unsubscribed || 0) + (preflight?.audience?.excluded_blocked || 0) + (preflight?.audience?.excluded_without_phone || 0)).toLocaleString() }}</span>
                 <span class="rounded-full bg-amber-100 px-2.5 py-1 text-amber-900">{{ (preflight?.audience?.excluded_unsubscribed?.toLocaleString?.() || 0) }} {{ $t("unsubscribed") }}</span>
                 <span class="rounded-full bg-rose-100 px-2.5 py-1 text-rose-900">{{ (preflight?.audience?.excluded_blocked?.toLocaleString?.() || 0) }} {{ $t("blocked") }}</span>
                 <span class="rounded-full bg-slate-100 px-2.5 py-1 text-slate-700">{{ (preflight?.audience?.excluded_without_phone?.toLocaleString?.() || 0) }} {{ $t("without a phone number") }}</span>
               </div>
+              <p class="mt-2 text-xs leading-5 text-slate-600">تُستبعد الجهات المحظورة أولًا، ثم غير المشتركة من الجهات المتبقية، ثم الجهات دون رقم هاتف. تُحسب كل جهة مرة واحدة فقط ضمن المستبعدين.</p>
+              <p class="mt-2 font-semibold text-blue-900">الإجمالي الذي سيُرسل إليه: {{ (preflight?.audience?.recipient_count || 0).toLocaleString() }}</p>
               <p v-if="preflight?.audience?.preview?.length" class="mt-2 text-xs leading-5 text-slate-700"><span class="font-medium">{{ $t("First recipients") }}:</span> {{ preflight.audience.preview.map((contact) => contact.name).join('، ') }}</p>
             </div>
           </dl>

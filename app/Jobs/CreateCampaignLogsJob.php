@@ -14,6 +14,7 @@ use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Cache;
+use Illuminate\Support\Facades\DB;
 
 class CreateCampaignLogsJob implements ShouldQueue
 {
@@ -36,7 +37,7 @@ class CreateCampaignLogsJob implements ShouldQueue
                 ->with('organization')
                 ->whereNull('deleted_at')
                 ->when($this->campaignId !== null, fn ($query) => $query->where('id', $this->campaignId))
-                ->cursor();
+                ->lazyById(100);
 
             foreach ($campaigns as $campaign) {
                 $timezone = $this->getOrganizationTimezone($campaign->organization);
@@ -77,22 +78,33 @@ class CreateCampaignLogsJob implements ShouldQueue
         }
 
         try {
+            $campaign->refresh();
+            if ($campaign->status !== 'scheduled') {
+                return;
+            }
             $contacts = $this->getContactsForCampaign($campaign);
 
             if ($this->createCampaignLogs($campaign, $contacts)) {
-                Campaign::where('uuid', $campaign->uuid)->update([
+                $started = Campaign::where('id', $campaign->id)->where('status', 'scheduled')->update([
                     'status' => 'ongoing',
                     'started_at' => $campaign->started_at ?? now(),
                     'completed_at' => null,
                 ]);
+                if (! $started) {
+                    return;
+                }
                 Log::info("Campaign {$campaign->uuid} marked ongoing.");
 
                 // Dispatch ProcessCampaignMessagesJob for this org (Story 2.1: AC-2.1.1)
                 ProcessCampaignMessagesJob::dispatchForOrganization($campaign->organization_id)
                     ->onQueue(config('campaigns.queues.dispatchers', 'campaign-dispatchers'));
                 Log::info("ProcessCampaignMessagesJob dispatched for org {$campaign->organization_id}.");
+            } elseif (CampaignLog::where('campaign_id', $campaign->id)->exists()) {
+                // Resume after a worker restart that inserted logs before changing the campaign state.
+                Campaign::where('id', $campaign->id)->where('status', 'scheduled')->update(['status' => 'ongoing', 'started_at' => $campaign->started_at ?? now()]);
+                ProcessCampaignMessagesJob::dispatchForOrganization($campaign->organization_id);
             } else {
-                Log::info("Campaign {$campaign->uuid} not marked ongoing.");
+                Campaign::where('id', $campaign->id)->where('status', 'scheduled')->update(['status' => 'completed', 'completed_at' => now()]);
             }
         } finally {
             optional($lock)->release();
@@ -109,8 +121,7 @@ class CreateCampaignLogsJob implements ShouldQueue
                     $query->whereNull('is_blocked')->orWhere('is_blocked', false);
                 })
                 ->whereNotNull('phone')
-                ->where('phone', '<>', '')
-                ->get();
+                ->where('phone', '<>', '');
         }
 
         return Contact::whereHas('contactGroups', function ($query) use ($campaign) {
@@ -123,53 +134,29 @@ class CreateCampaignLogsJob implements ShouldQueue
                 $query->whereNull('is_blocked')->orWhere('is_blocked', false);
             })
             ->whereNotNull('phone')
-            ->where('phone', '<>', '')
-            ->get();
+            ->where('phone', '<>', '');
     }
 
     protected function createCampaignLogs(Campaign $campaign, $contacts)
     {
-        $contactIds = $contacts->pluck('id');
-
-        // Fetch existing logs
-        $existingLogs = CampaignLog::where('campaign_id', $campaign->id)
-            ->whereIn('contact_id', $contactIds)
-            ->pluck('contact_id')
-            ->toArray();
-
-        // Filter out contacts that already have logs and contacts without phone
-        $contactsWithoutPhone = $contacts->filter(fn($c) => empty($c->phone))->pluck('id');
-        $newContacts = $contactIds->diff($existingLogs)->diff($contactsWithoutPhone);
-
-        if ($newContacts->isEmpty()) {
-            return false; // nothing new
-        }
-
-        // Log skipped contacts
-        if ($contactsWithoutPhone->isNotEmpty()) {
-            Log::warning('Skipped contacts without phone for campaign', [
-                'campaign_id' => $campaign->id,
-                'skipped_contact_ids' => $contactsWithoutPhone->values()->toArray(),
-            ]);
-        }
-
-        // Prepare new campaign logs
-        $campaignLogs = $newContacts->map(function ($contactId) use ($campaign) {
-            return [
-                'campaign_id' => $campaign->id,
-                'contact_id' => $contactId,
-                'status' => 'pending',
-                'created_at' => now(),
-                'updated_at' => now(),
-            ];
-        })->toArray();
-
-        // Insert new logs in chunks
-        foreach (array_chunk($campaignLogs, 1000) as $chunk) {
-            CampaignLog::insert($chunk);
-            CampaignStatsService::recordInsertedPending((int) $campaign->id, count($chunk));
-        }
-
-        return true;
+        $inserted = false;
+        $contacts->select('contacts.id')->chunkById(1000, function ($batch) use ($campaign, &$inserted) {
+            DB::transaction(function () use ($batch, $campaign, &$inserted) {
+                $existing = CampaignLog::where('campaign_id', $campaign->id)
+                    ->whereIn('contact_id', $batch->pluck('id'))->pluck('contact_id')->all();
+                $now = now();
+                $rows = $batch->whereNotIn('id', $existing)->map(fn ($contact) => [
+                    'campaign_id' => $campaign->id, 'contact_id' => $contact->id,
+                    'status' => 'pending', 'created_at' => $now, 'updated_at' => $now,
+                ])->all();
+                if ($rows) {
+                    CampaignLog::insert($rows);
+                    CampaignStatsService::recordInsertedPending((int) $campaign->id, count($rows));
+                    $inserted = true;
+                }
+            });
+        }, 'contacts.id', 'id');
+        return $inserted;
     }
+
 }

@@ -77,7 +77,7 @@
     });
 </script>
 <template>
-    <Menu as="div" class="relative inline-block text-left">
+    <Menu as="div" class="relative inline-block text-start">
         <div ref="triggerRef" @click="scheduleMenuPosition">
             <MenuButton as="template">
                 <slot />

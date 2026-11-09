@@ -44,6 +44,8 @@ Route::get('/translations/{locale}', function ($locale) {
 });
 
 Route::middleware([AuthenticateBearerToken::class])->group(function () {
+    Route::get('/agents', [App\Http\Controllers\Api\OrganizationTicketController::class, 'agents']);
+    Route::put('/chats/{contact_uuid}/assign', [App\Http\Controllers\Api\OrganizationTicketController::class, 'assign']);
     Route::post('/send', [App\Http\Controllers\ApiController::class, 'sendMessage']);
     Route::post('/send/template', [App\Http\Controllers\ApiController::class, 'sendTemplateMessage']);
     Route::post('/send/media', [App\Http\Controllers\ApiController::class, 'sendMediaMessage']);

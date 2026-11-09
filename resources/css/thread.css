@@ -129,6 +129,15 @@ html[lang='ar'] .cb-user-app,
 .cb-user-app .cb-thread-page-header h1 { font-size: 26px; font-weight: 700; line-height: 1.45; }
 .cb-user-app .cb-thread-empty { color: var(--ink-900); }
 .cb-user-app .cb-thread-empty-icon { border-radius: 16px; background: var(--brand-50); color: var(--brand-500); }
+.flow-builder-page { direction: rtl; text-align: start; }
+.flow-builder-page [dir='ltr'], .flow-builder-page textarea.font-mono { direction: ltr; text-align: left; }
+.flow-builder-page .vue-flow { direction: ltr; }
+.flow-builder-page .vue-flow__node { direction: rtl; text-align: start; }
+.flow-builder-page .vue-flow__node input, .flow-builder-page .vue-flow__node textarea { text-align: start; }
+.flow-builder-page .vue-flow__node input[type='url'], .flow-builder-page .vue-flow__node input[type='email'], .flow-builder-page .vue-flow__node .font-mono { direction: ltr; text-align: left; }
+.cb-user-app .cb-conversation-empty-icon { background: var(--brand-100); color: var(--ink-900); }
+.cb-user-app .cb-conversation-empty-title { color: var(--ink-900); font-size: 16px; font-weight: 700; line-height: 1.5; }
+.cb-user-app .cb-conversation-empty-description { color: var(--ink-500); font-size: 16px; line-height: 1.5; }
 .cb-user-app :where(.cb-muted, .text-slate-500, .text-gray-500) { color: var(--ink-500); }
 .cb-user-app .cb-primary-button {
     min-height: 42px;

@@ -84,11 +84,11 @@
             <TableBodyRow v-for="(item, index) in rows.data" :key="index" :class="!isLastRow(index) ? 'border-b' : ''">
                 <TableBodyRowItem :position="'first'" class="capitalize">
                     <div class="flex">
-                        <div class="text-left mr-3 text-sm relative">
-                            <span>{{ maskToken(item.token) }}</span>
+                        <div class="text-start me-3 text-sm relative">
+                            <span dir="ltr" class="inline-block normal-case">{{ maskToken(item.token) }}</span>
                             <span class="bg-gray-50 text-xs p-1 border border-dashed rounded-[5px] absolute top-1/2 transform -translate-y-1/2" :class="copiedRef === item.token ? '' : 'hidden'">{{ $t('Copied') }}</span>
                         </div>
-                        <span class="cursor-pointer mr-1" @click="unMask(item.token)">
+                        <span class="cursor-pointer me-1" @click="unMask(item.token)">
                             <svg v-if="unMaskedRef != item.token" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><g fill="currentColor" fill-rule="evenodd" clip-rule="evenodd"><path d="M12 8.25a3.75 3.75 0 1 0 0 7.5a3.75 3.75 0 0 0 0-7.5M9.75 12a2.25 2.25 0 1 1 4.5 0a2.25 2.25 0 0 1-4.5 0"/><path d="M12 3.25c-4.514 0-7.555 2.704-9.32 4.997l-.031.041c-.4.519-.767.996-1.016 1.56c-.267.605-.383 1.264-.383 2.152c0 .888.116 1.547.383 2.152c.25.564.617 1.042 1.016 1.56l.032.041C4.445 18.046 7.486 20.75 12 20.75c4.514 0 7.555-2.704 9.32-4.997l.031-.041c.4-.518.767-.996 1.016-1.56c.267-.605.383-1.264.383-2.152c0-.888-.116-1.547-.383-2.152c-.25-.564-.617-1.041-1.016-1.56l-.032-.041C19.555 5.954 16.514 3.25 12 3.25M3.87 9.162C5.498 7.045 8.15 4.75 12 4.75c3.85 0 6.501 2.295 8.13 4.412c.44.57.696.91.865 1.292c.158.358.255.795.255 1.546s-.097 1.188-.255 1.546c-.169.382-.426.722-.864 1.292C18.5 16.955 15.85 19.25 12 19.25c-3.85 0-6.501-2.295-8.13-4.412c-.44-.57-.696-.91-.865-1.292c-.158-.358-.255-.795-.255-1.546s.097-1.188.255-1.546c.169-.382.426-.722.864-1.292"/></g></svg>
                             <svg v-else xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><g fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M9.88 9.88a3 3 0 1 0 4.24 4.24m-3.39-9.04A10 10 0 0 1 12 5c7 0 10 7 10 7a13.2 13.2 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.5 13.5 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61M2 2l20 20"/></g></svg>
                         </span>
@@ -119,6 +119,7 @@
     <AlertModal 
         v-model="isOpenAlert" 
         @confirm="() => confirmAlert(deleteAction)"
+        :confirmButtonText="$t('Confirm')"
         :label = "$t('Delete row')" 
         :description = "$t('Are you sure you want to delete this row? This action can not be undone')"
     />

@@ -2,6 +2,22 @@
 import AppLayout from '../Layout/App.vue'
 import { ref, computed, onMounted } from 'vue'
 import { Link, router } from '@inertiajs/vue3'
+import { useI18n } from 'vue-i18n'
+
+const { locale, t } = useI18n()
+const isArabic = computed(() => locale.value.startsWith('ar'))
+const notificationMessage = (notification) => {
+    const payload = notification.payload || {}
+    const message = payload.message || ''
+    if (!isArabic.value) return message || t('New notification')
+    const assigned = message.match(/^New conversation from (.+) assigned to you$/)
+    if (assigned) return `تم تعيين محادثة من ${assigned[1]} إليك`
+    const incoming = message.match(/^New message from (.+)$/)
+    if (incoming) return `رسالة جديدة من ${incoming[1]}`
+    const template = message.match(/^WhatsApp template (.+) was disabled\.$/)
+    if (template) return `تم تعطيل قالب واتساب ${template[1]}.`
+    return message ? t(message) : t('New notification')
+}
 
 const props = defineProps({
     notifications: Object,
@@ -16,10 +32,12 @@ const formatDate = (dateStr) => {
     const now = new Date()
     const diff = now - date
 
-    if (diff < 60000) return 'Just now'
-    if (diff < 3600000) return `${Math.floor(diff / 60000)}m ago`
-    if (diff < 86400000) return `${Math.floor(diff / 3600000)}h ago`
-    return date.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
+    const language = isArabic.value ? 'ar' : 'en'
+    const relative = new Intl.RelativeTimeFormat(language, { numeric: 'auto' })
+    if (diff < 60000) return relative.format(0, 'second')
+    if (diff < 3600000) return relative.format(-Math.floor(diff / 60000), 'minute')
+    if (diff < 86400000) return relative.format(-Math.floor(diff / 3600000), 'hour')
+    return date.toLocaleDateString(language, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })
 }
 
 const getNotificationIcon = (type) => {
@@ -75,9 +93,9 @@ const markAllRead = async () => {
 
 <template>
     <AppLayout>
-        <div class="cb-page-shell">
+        <div class="cb-page-shell text-start" :dir="isArabic ? 'rtl' : 'ltr'">
             <div class="mx-auto w-full max-w-3xl space-y-5">
-                <div class="flex items-center justify-between mb-6">
+                <div class="flex flex-wrap items-center justify-between gap-3 mb-6">
                     <div>
                         <h2 class="text-xl font-semibold text-gray-900">{{ $t('Notifications') }}</h2>
                         <p class="text-sm text-gray-500 mt-1">{{ $t('View and manage your notifications') }}</p>
@@ -116,7 +134,7 @@ const markAllRead = async () => {
                             />
                             <div class="flex-1 min-w-0">
                                 <p class="text-sm text-gray-900" :class="notification.clicked ? 'font-normal' : 'font-medium'">
-                                    {{ notification.payload?.message || $t('New notification') }}
+                                    {{ notificationMessage(notification) }}
                                 </p>
                                 <p class="text-xs text-gray-500 mt-0.5">
                                     {{ formatDate(notification.sent_at) }}

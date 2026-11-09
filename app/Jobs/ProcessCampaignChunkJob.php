@@ -54,13 +54,39 @@ class ProcessCampaignChunkJob implements ShouldQueue
 
     public function handle(): void
     {
+        $locks = [];
+        try {
+            $ids = array_unique($this->logIds);
+            sort($ids, SORT_NUMERIC);
+            foreach ($ids as $id) {
+                $lock = Cache::store('redis')->lock("campaign:log:{$id}:sending", $this->timeout + 60);
+                if ($lock->get()) {
+                    $locks[$id] = $lock;
+                }
+            }
+            // Overlapping records belong to the worker already processing them.
+            $this->logIds = array_keys($locks);
+            if ($this->logIds === []) {
+                return;
+            }
+            $this->processChunk();
+        } finally {
+            foreach ($locks as $lock) {
+                $lock->release();
+            }
+        }
+    }
+
+    private function processChunk(): void
+    {
         $startTime = microtime(true);
         $isLoadTest = config('campaigns.load_test_mode', false);
 
-        // 1. Bulk-lock all logs for this chunk
+        // An ongoing record may already have reached WhatsApp; never send it again
+        // just because a queue delivery or a dispatch reservation was repeated.
         $logs = CampaignLog::whereIn('id', $this->logIds)
-            ->whereIn('status', ['pending', 'failed', 'ongoing'])
-            ->lockForUpdate()
+            ->where('campaign_id', $this->campaignId)
+            ->whereIn('status', ['pending', 'failed'])
             ->get();
 
         if ($logs->isEmpty()) {
@@ -149,10 +175,10 @@ class ProcessCampaignChunkJob implements ShouldQueue
 
         foreach ($logs as $log) {
             $contact = $contacts->get($log->contact_id);
-            if (!$contact || ($contact->is_blocked ?? false) || empty($contact->phone)) {
+            if (!$contact || ($contact->is_blocked ?? false) || ! $contact->is_subscribed || empty($contact->phone)) {
                 $reason = !$contact
                     ? 'Contact not found.'
-                    : (($contact->is_blocked ?? false) ? 'Contact is blocked.' : 'Contact phone is missing.');
+                    : (($contact->is_blocked ?? false) ? 'Contact is blocked.' : (! $contact->is_subscribed ? 'Contact is unsubscribed.' : 'Contact phone is missing.'));
 
                 $this->markLogPermanentlyFailed($log, $reason, 'CAMPAIGN_CONTACT_NOT_SENDABLE', [
                     'contact_id' => $log->contact_id,
@@ -263,6 +289,16 @@ class ProcessCampaignChunkJob implements ShouldQueue
             return;
         }
 
+        // Cancellation may have occurred while preparing the payloads.
+        if (! Campaign::whereKey($this->campaignId)->where('organization_id', $this->organizationId)->where('status', 'ongoing')->exists()) {
+            $ids = array_map(fn ($payload) => $payload['log']->id, $payloads);
+            $old = CampaignLog::whereIn('id', $ids)->where('status', 'ongoing')
+                ->get(['id', 'campaign_id', 'status', 'chat_id'])->map(fn ($log) => CampaignStatsService::snapshot($log))->all();
+            CampaignLog::whereIn('id', $ids)->where('status', 'ongoing')->update(['status' => 'cancelled']);
+            CampaignStatsService::recordSnapshotsChanged($old, collect($old)->map(fn ($row) => array_merge($row, ['status' => 'cancelled']))->all());
+            return;
+        }
+
         // 8. Send concurrently via Guzzle Pool (or skip in load test mode)
         if ($isLoadTest) {
             $results = [];
@@ -290,12 +326,12 @@ class ProcessCampaignChunkJob implements ShouldQueue
             $result = $results[$idx] ?? null;
 
             if (!$result) {
-                $failedUpdates[] = [
-                    'id' => $log->id,
-                    'status' => 'failed',
-                    'metadata' => json_encode(['success' => false, 'message' => 'No response from API']),
+                // Without a response the provider may have accepted the request.
+                // Leave it ongoing for reconciliation; retrying could duplicate it.
+                CampaignLog::whereKey($log->id)->where('status', 'ongoing')->update([
+                    'metadata' => $this->failureMetadata('No response from provider; delivery outcome requires review.', 'CAMPAIGN_DELIVERY_UNKNOWN'),
                     'updated_at' => now(),
-                ];
+                ]);
                 continue;
             }
 
@@ -332,7 +368,12 @@ class ProcessCampaignChunkJob implements ShouldQueue
                     ];
                 }
             } else {
-                if ($this->isWhatsAppRateLimitResponse($result->data ?? null)) {
+                if (! empty($result->deliveryUnknown)) {
+                    CampaignLog::whereKey($log->id)->where('status', 'ongoing')->update([
+                        'metadata' => $this->failureMetadata('Provider response unavailable; delivery outcome requires review.', 'CAMPAIGN_DELIVERY_UNKNOWN'),
+                        'updated_at' => now(),
+                    ]);
+                } elseif ($this->isWhatsAppRateLimitResponse($result->data ?? null)) {
                     $pendingUpdates[] = [
                         'id' => $log->id,
                         'status' => 'pending',
@@ -547,6 +588,7 @@ class ProcessCampaignChunkJob implements ShouldQueue
                 ]);
 
                 if ($reason instanceof ConnectException) {
+                    $responseObject->deliveryUnknown = true;
                     $responseObject->data = new \stdClass();
                     $responseObject->data->error = new \stdClass();
                     $responseObject->data->error->message = $reason->getMessage();
@@ -570,6 +612,7 @@ class ProcessCampaignChunkJob implements ShouldQueue
                         ?? $responseObject->data->error->message
                         ?? 'Unknown error';
                 } else {
+                    $responseObject->deliveryUnknown = true;
                     $responseObject->data = new \stdClass();
                     $responseObject->data->error = new \stdClass();
                     $responseObject->data->error->message = $reason->getMessage();
@@ -660,10 +703,7 @@ class ProcessCampaignChunkJob implements ShouldQueue
 
     protected function getCampaignCached(): ?Campaign
     {
-        if (!isset(self::$campaignCache[$this->campaignId])) {
-            self::$campaignCache[$this->campaignId] = Campaign::find($this->campaignId);
-        }
-        return self::$campaignCache[$this->campaignId];
+        return Campaign::where('organization_id', $this->organizationId)->find($this->campaignId);
     }
 
     protected function getTemplateCached(): ?Template
@@ -826,6 +866,27 @@ class ProcessCampaignChunkJob implements ShouldQueue
 
     public function failed(\Throwable $exception): void
     {
+        $locks = [];
+        try {
+            foreach (array_unique($this->logIds) as $id) {
+                $lock = Cache::store('redis')->lock("campaign:log:{$id}:sending", 60);
+                if ($lock->get()) {
+                    $locks[$id] = $lock;
+                }
+            }
+            $this->logIds = array_keys($locks);
+            if ($this->logIds !== []) {
+                $this->markFailedAfterRetries($exception);
+            }
+        } finally {
+            foreach ($locks as $lock) {
+                $lock->release();
+            }
+        }
+    }
+
+    private function markFailedAfterRetries(\Throwable $exception): void
+    {
         Log::error('ProcessCampaignChunkJob failed after retries', [
             'campaign_id' => $this->campaignId,
             'log_ids' => $this->logIds,
@@ -841,18 +902,15 @@ class ProcessCampaignChunkJob implements ShouldQueue
         CampaignLog::whereIn('id', $this->logIds)
             ->where('status', 'ongoing')
             ->update([
-                'status' => 'failed',
                 'metadata' => $this->failureMetadata(
-                    $exception->getMessage(),
-                    'CAMPAIGN_CHUNK_JOB_FAILED',
+                    'Worker stopped before recording the provider response; delivery outcome requires review.',
+                    'CAMPAIGN_DELIVERY_UNKNOWN',
                     ['exception' => get_class($exception)]
                 ),
                 'updated_at' => now(),
             ]);
 
-        $newSnapshots = collect($oldSnapshots)
-            ->map(fn (array $row): array => array_merge($row, ['status' => 'failed']))
-            ->all();
+        $newSnapshots = $oldSnapshots;
 
         CampaignStatsService::recordSnapshotsChanged($oldSnapshots, $newSnapshots);
 

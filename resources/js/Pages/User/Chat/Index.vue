@@ -7,7 +7,9 @@
           :chatSortDirection="props.chat_sort_direction" :teamRole="props.teamRole"
                     :selectedContactUuid="contact?.uuid" :templates="templates" :contactFields="contactFields" />
       </div>
-      <div class="cb-thread-conversation min-w-0 min-h-0 bg-white flex flex-col chat-bg md:h-full md:flex-1 overflow-hidden">
+      <div class="cb-thread-conversation min-w-0 min-h-0 bg-white flex-col chat-bg md:h-full md:flex-1 overflow-hidden" :class="contact ? 'flex' : 'hidden md:flex'">
+        <ConversationEmptyState v-if="!contact" class="flex-1" :title="rows.data?.length ? $t('Select a conversation') : $t('No conversations here')"
+          :description="rows.data?.length ? $t('Choose a conversation from the list to see its messages.') : $t('Try another tab or status.')" />
         <ChatHeader v-if="contact" class="shrink-0" :ticketingIsEnabled="ticketingIsEnabled" :contact="contact"
           :displayContactInfo="displayContactInfo" :labelColors="labelColors" :ticket="ticket" :addon="addon"
           :teamRole="props.teamRole" :currentPage="rows.meta?.current_page" @toggleView="toggleContactView"
@@ -93,6 +95,7 @@ import CampaignForm from "@/Components/CampaignForm.vue";
 import ChatForm from "@/Components/ChatComponents/ChatForm.vue";
 import ChatHeader from "@/Components/ChatComponents/ChatHeader.vue";
 import ChatTable from "@/Components/ChatComponents/ChatTable.vue";
+import ConversationEmptyState from "@/Components/UI/ConversationEmptyState.vue";
 import ChatThread from "@/Components/ChatComponents/ChatThread.vue";
 import ChatSearchPanel from "@/Components/ChatComponents/ChatSearchPanel.vue";
 import ChatContact from "@/Components/ChatComponents/ChatContact.vue";

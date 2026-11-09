@@ -737,6 +737,10 @@ class AutoReplyService
      */
     private function handleAiHelpfulButton(int $organizationId, Chat $chat, string $buttonId): bool
     {
+        if (config('ai.suspended', true)) {
+            return true; // Consume old AI feedback without changing flow or routing state.
+        }
+
         try {
             $contact = Contact::where('id', $chat->contact_id)->first();
             if (!$contact) {

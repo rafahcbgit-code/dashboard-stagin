@@ -1,14 +1,14 @@
 <template>
     <SettingLayout :aimodule="aimodule" :fbmodule="fbmodule">
-        <div class="md:h-[90vh]">
+        <div class="md:h-[90vh] text-start">
             <div class="flex justify-center items-center">
                 <div class="md:w-[68em] w-full">
                     <div class="bg-white border border-slate-200 rounded-xl text-sm pb-6 px-6 mb-20">
                         <!-- Header -->
                         <div class="flex items-center justify-between pt-5 pb-4 border-b border-slate-100">
                             <div>
-                                <h4 class="text-lg font-semibold text-slate-800">{{ $t('Behavior & AI') }}</h4>
-                                <p class="text-sm text-slate-500 mt-0.5">{{ $t('Control how your bot responds, escalates, and uses AI.') }}</p>
+                                <h4 class="text-lg font-semibold text-slate-800">{{ $t('Bot Behavior') }}</h4>
+                                <p class="text-sm text-slate-500 mt-0.5">{{ $t('Control how your bot responds and escalates.') }}</p>
                             </div>
                         </div>
 
@@ -20,7 +20,7 @@
                                 <div class="w-1 h-5 rounded-full bg-slate-400"></div>
                                 <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wide">{{ $t('Master Controls') }}</h3>
                             </div>
-                            <p class="text-xs text-slate-400 -mt-4 mb-4">{{ $t('Enable or disable automation and AI for your workspace.') }}</p>
+                            <p class="text-xs text-slate-400 -mt-4 mb-4">{{ $t('Enable or disable automation for your workspace.') }}</p>
 
                             <!-- Automation Master Switch -->
                             <div class="rounded-lg border-2 p-5" :class="form.automation_enabled ? 'border-primary/30 bg-primary/[0.02]' : 'border-red-200 bg-red-50/30'">
@@ -31,8 +31,8 @@
                                     <div class="flex-1">
                                         <label class="block text-sm font-semibold text-slate-800">{{ $t('Automation') }}</label>
                                         <p class="text-xs text-slate-500 mt-0.5">
-                                            <span v-if="form.automation_enabled">{{ $t('Your bot responds automatically to messages using triggers, flows, and AI.') }}</span>
-                                            <span v-else class="text-red-600">{{ $t('All automation is paused. Incoming messages won\'t trigger any flows or AI responses.') }}</span>
+                                            <span v-if="form.automation_enabled">{{ $t('Your bot responds automatically to messages using triggers and flows.') }}</span>
+                                            <span v-else class="text-red-600">{{ $t('All automation is paused. Incoming messages will not trigger any flows.') }}</span>
                                         </p>
                                     </div>
                                     <!-- Toggle -->
@@ -51,7 +51,7 @@
                             </div>
 
                             <!-- AI Enabled -->
-                            <div :class="{ 'opacity-50 pointer-events-none': !form.automation_enabled }">
+                            <div v-if="!$page.props.automationAiSuspended" :class="{ 'opacity-50 pointer-events-none': !form.automation_enabled }">
                                 <div class="rounded-lg border border-slate-200 p-5">
                                     <div class="flex items-start gap-3">
                                         <div class="flex-shrink-0 w-9 h-9 rounded-lg bg-violet-100 flex items-center justify-center">
@@ -134,7 +134,7 @@
                                 <p class="text-xs text-slate-400 mb-4">{{ $t('What happens when a customer message doesn\'t match any trigger.') }}</p>
 
                                 <!-- AI Fallback -->
-                                <div class="rounded-lg border border-slate-200 p-5" :class="!form.ai_enabled ? 'opacity-50 pointer-events-none' : ''">
+                                <div v-if="!$page.props.automationAiSuspended" class="rounded-lg border border-slate-200 p-5" :class="!form.ai_enabled ? 'opacity-50 pointer-events-none' : ''">
                                     <div class="flex items-start gap-3">
                                         <div class="flex-shrink-0 w-9 h-9 rounded-lg bg-violet-100 flex items-center justify-center">
                                             <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-violet-600"><path d="M12 3c.132 0 .263 0 .393 0a7.5 7.5 0 0 0 7.92 12.446A9 9 0 1 1 12 3z"/><path d="M17 4a2 2 0 0 0 2 2a2 2 0 0 0-2 2a2 2 0 0 0-2-2a2 2 0 0 0 2-2"/></svg>
@@ -473,12 +473,13 @@
                                             <div v-for="day in scheduleSummary" :key="day.label" class="flex items-center justify-between text-xs">
                                                 <span class="text-slate-600">{{ $t(day.label) }}</span>
                                                 <span :class="day.active ? 'text-slate-800 font-medium' : 'text-slate-400'">
-                                                    {{ day.active ? day.time : $t('Off') }}
+                                                    <bdi v-if="day.active" dir="ltr">{{ day.time }}</bdi>
+                                                    <template v-else>{{ $t('Off') }}</template>
                                                 </span>
                                             </div>
                                         </div>
                                         <div v-if="workingHours.timezone" class="mt-2 pt-2 border-t border-slate-200 text-xs text-slate-400">
-                                            {{ $t('Timezone') }}: {{ workingHours.timezone }}
+                                            {{ $t('Timezone') }}: <bdi dir="ltr">{{ workingHours.timezone }}</bdi>
                                         </div>
                                     </div>
                                     <div v-else-if="!workingHours.enabled" class="mt-3 text-xs text-slate-400">
@@ -497,7 +498,7 @@
                             <!-- ============================================ -->
                             <!-- SECTION 5: AI Matching Defaults (now managed by site admin) -->
                             <!-- ============================================ -->
-                            <div :class="{ 'opacity-50 pointer-events-none': !form.automation_enabled, 'hidden': true } ">
+                            <div v-if="!$page.props.automationAiSuspended" :class="{ 'opacity-50 pointer-events-none': !form.automation_enabled, 'hidden': true } ">
                                 <div class="flex items-center gap-2 mt-4 mb-2">
                                     <div class="w-1 h-5 rounded-full bg-emerald-500"></div>
                                     <h3 class="text-xs font-bold text-slate-500 uppercase tracking-wide">{{ $t('AI Matching Defaults') }}</h3>
@@ -517,6 +518,7 @@
                                 </div>
                             </div>
 
+                            <p v-if="$page.props.automationAiSuspended" class="text-sm text-slate-500">{{ $t('AI, Knowledge Base, and AI escalation are temporarily suspended. Triggers and flows remain available.') }}</p>
                             <!-- Save -->
                             <div class="flex justify-end pt-2">
                                 <button type="submit" :disabled="saving" class="inline-flex items-center gap-1.5 rounded-lg bg-primary px-5 py-2.5 text-sm font-medium text-white shadow-sm hover:bg-[#045a47] transition-colors disabled:opacity-50 disabled:cursor-not-allowed">

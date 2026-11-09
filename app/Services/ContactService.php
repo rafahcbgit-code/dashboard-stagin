@@ -49,9 +49,9 @@ class ContactService
      * older contact may have been stored with spaces, punctuation, or without
      * the leading plus sign.
      */
-    public function findOrCreateFromChatView(string $phone, ?string $name = null): Contact
+    public function findOrCreateFromChatView(string $phone, ?string $name = null, int $createdBy = 0): Contact
     {
-        return $this->findOrCreateByPhone($phone, $name, 'platform', false)['contact'];
+        return $this->findOrCreateByPhone($phone, $name, 'platform', false, $createdBy)['contact'];
     }
 
     /**
@@ -61,7 +61,7 @@ class ContactService
      *
      * @return array{contact: Contact, isNew: bool}
      */
-    private function findOrCreateByPhone(string $phone, ?string $name, string $source, bool $triggerWebhookEvent): array
+    private function findOrCreateByPhone(string $phone, ?string $name, string $source, bool $triggerWebhookEvent, int $createdBy = 0): array
     {
         $normalizedPhone = $this->normalizePhone($phone);
         $contact = $this->findExistingByPhone($normalizedPhone, $phone);
@@ -85,7 +85,7 @@ class ContactService
                 'contact_source' => $source,
                 'is_subscribed' => 1,
                 'bot_enable' => 1,
-                'created_by' => 0, // System created
+                'created_by' => $createdBy,
                 'created_at' => now(),
                 'updated_at' => now(),
             ]);

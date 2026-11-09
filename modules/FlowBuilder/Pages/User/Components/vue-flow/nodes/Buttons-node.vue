@@ -13,7 +13,7 @@ import type { NodeProps } from '@vue-flow/core'
 
 const props = defineProps<NodeProps>()
 
-const title = ref('Interactive Buttons')
+const title = ref('أزرار تفاعلية')
 const uuid = ref(props.data.uuid)
 const fields = ref({
   type: 'interactive buttons',
@@ -35,17 +35,17 @@ const fields = ref({
 })
 
 const options = ref([
-  { label: 'Reply Buttons', value: 'buttons' },
-  { label: 'CTA URL Button', value: 'cta_url' },
+  { label: 'أزرار الرد', value: 'buttons' },
+  { label: 'زر إجراء برابط', value: 'cta_url' },
 ]);
 
 const options2 = ref([
-  { value: 'none', label: 'None' },
-  { value: 'text', label: 'Text' },
-  { value: 'image', label: 'Image' },
-  { value: 'video', label: 'Video' },
-  { value: 'audio', label: 'Audio' },
-  { value: 'document', label: 'Document' },
+  { value: 'none', label: 'بدون' },
+  { value: 'text', label: 'نص' },
+  { value: 'image', label: 'صورة' },
+  { value: 'video', label: 'فيديو' },
+  { value: 'audio', label: 'صوت' },
+  { value: 'document', label: 'مستند' },
 ]);
 
 // WhatsApp limits button labels, including CTA display text, to 20 characters.
@@ -159,7 +159,7 @@ function getCharsCount(input: string): number {
           <img src="~@/assets/images/icon_LLM.png" class="mt-1 h-4 w-4" alt="LLM icon" />
           <div class="flex flex-col gap-y-1">
             <FormInput v-if="isEditTitle" v-model="title" :name="''" :type="'text'" :class="'col-span-4'" @blur="() => (isEditTitle = false)"/>
-            <h3 class="text-base" v-else>{{ title }}</h3>
+            <h3 class="text-base" v-else>{{ $t(title) }}</h3>
           </div>
         </div>
 
@@ -169,9 +169,9 @@ function getCharsCount(input: string): number {
               <more-horizontal-icon />
             </menubar-trigger>
             <menubar-content>
-              <menubar-item @click="handleClickDuplicateBtn"> Duplicated </menubar-item>
-              <menubar-item @click="handleClickDeleteBtn"> Delete </menubar-item>
-              <menubar-item @click="isEditTitle = true"> Rename </menubar-item>
+              <menubar-item @click="handleClickDuplicateBtn"> {{ $t("Duplicated") }} </menubar-item>
+              <menubar-item @click="handleClickDeleteBtn"> {{ $t("Delete") }} </menubar-item>
+              <menubar-item @click="isEditTitle = true"> {{ $t("Rename") }} </menubar-item>
             </menubar-content>
           </menubar-menu>
         </Menubar>
@@ -181,40 +181,40 @@ function getCharsCount(input: string): number {
         <span>
           <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none"><path d="m12.593 23.258l-.011.002l-.071.035l-.02.004l-.014-.004l-.071-.035q-.016-.005-.024.005l-.004.01l-.017.428l.005.02l.01.013l.104.074l.015.004l.012-.004l.104-.074l.012-.016l.004-.017l-.017-.427q-.004-.016-.017-.018m.265-.113l-.013.002l-.185.093l-.01.01l-.003.011l.018.43l.005.012l.008.007l.201.093q.019.005.029-.008l.004-.014l-.034-.614q-.005-.018-.02-.022m-.715.002a.02.02 0 0 0-.027.006l-.006.014l-.034.614q.001.018.017.024l.015-.002l.201-.093l.01-.008l.004-.011l.017-.43l-.003-.012l-.01-.01z"/><path fill="currentColor" d="m13.299 3.148l8.634 14.954a1.5 1.5 0 0 1-1.299 2.25H3.366a1.5 1.5 0 0 1-1.299-2.25l8.634-14.954c.577-1 2.02-1 2.598 0M12 15a1 1 0 1 0 0 2a1 1 0 0 0 0-2m0-7a1 1 0 0 0-.993.883L11 9v4a1 1 0 0 0 1.993.117L13 13V9a1 1 0 0 0-1-1"/></g></svg>
         </span>
-        <span class="text-sm">Please fill all the required fields</span>
+        <span class="text-sm">{{ $t("Please fill all the required fields") }}</span>
       </div>
 
       <span class="text-sm text-gray-500"
-        >Send interactive buttons or a call to action button to your recipients.</span
+        >{{ $t("Send interactive buttons or a call to action button to your recipients.") }}</span
       >
 
       <div class="mb-4">
-          <label class="text-sm mb-2">Header (Optional)</label>
+          <label class="text-sm mb-2">{{ $t("Header (Optional)") }}</label>
           <FormSelect v-model="fields.headerType" :name="''" :type="'text'" :optionClassName="'h-32'"  :options="options2" :class="'col-span-4'"/>
       </div>
 
       <div v-if="fields.headerType == 'text'" class="mb-4">
-        <label class="text-sm mb-2"><span class="text-red-500">*</span> Header Text</label>
-        <FormInput v-model="fields.headerText" :name="''" :placeholder="'Enter header text'" :type="'text'" :maxLength="maxHeaderLength" :class="'col-span-4'"/>
+        <label class="text-sm mb-2"><span class="text-red-500">*</span> {{ $t("Header Text") }}</label>
+        <FormInput v-model="fields.headerText" :name="''" :placeholder="$t('Enter header text')" :type="'text'" :maxLength="maxHeaderLength" :class="'col-span-4'"/>
         <span class="text-xs text-gray-500">{{ getCharsCount(fields.headerText) }}/{{ maxHeaderLength }}</span>
       </div>
       
       <FlowMedia v-if="fields.headerType != 'text' && fields.headerType != 'none'" v-model="fields.headerMedia" :type="fields.headerType" :uuid="uuid" :nodeId="node.id"/>
 
       <div class="mb-4">
-        <label class="text-sm mb-2"><span class="text-red-500">*</span> Body</label>
-        <FormTextArea v-model="fields.body" :placeholder="'Enter the main message for this message type'" :name="''" :type="'text'" :class="'col-span-4'" :maxLength="maxBodyLength"/>
+        <label class="text-sm mb-2"><span class="text-red-500">*</span> {{ $t("Body") }}</label>
+        <FormTextArea v-model="fields.body" :placeholder="$t('Enter the main message for this message type')" :name="''" :type="'text'" :class="'col-span-4'" :maxLength="maxBodyLength"/>
         <span class="text-xs text-gray-500">{{ getCharsCount(fields.body) }}/{{ maxBodyLength }}</span>
       </div>
 
       <div class="mb-4">
-        <label class="text-sm mb-2">Footer Text (Optional)</label>
-        <FormInput v-model="fields.footer" :name="''" :placeholder="'Enter footer text'" :type="'text'" :maxLength="maxFooterLength" :class="'col-span-4'"/>
+        <label class="text-sm mb-2">{{ $t("Footer Text (Optional)") }}</label>
+        <FormInput v-model="fields.footer" :name="''" :placeholder="$t('Enter footer text')" :type="'text'" :maxLength="maxFooterLength" :class="'col-span-4'"/>
         <span class="text-xs text-gray-500">{{ getCharsCount(fields.footer) }}/{{ maxFooterLength }}</span>
       </div>
 
       <div class="mb-4">
-        <label class="text-sm mb-2">Button type:</label>
+        <label class="text-sm mb-2">{{ $t("Button type:") }}</label>
         
         <!-- Radio Group -->
         <div class="flex space-x-4">
@@ -225,29 +225,29 @@ function getCharsCount(input: string): number {
               v-model="fields.buttonType" 
               class="form-radio text-blue-500 focus:ring-0 transition duration-150 ease-in-out"
             />
-            <span class="ml-2 text-gray-700">{{ option.label }}</span>
+            <span class="ms-2 text-gray-700">{{ option.label }}</span>
           </label>
         </div>
       </div>
 
       <div v-if="fields.buttonType == 'buttons'" class="border rounded p-3">
-        <label class="mb-2"><span class="text-red-500">*</span> Reply Buttons (atleast 1 button)</label>
+        <label class="mb-2"><span class="text-red-500">*</span> {{ $t("Reply Buttons (atleast 1 button)") }}</label>
         <div class="mb-4 relative">
-          <label class="text-sm mb-2">Button 1 Label</label>
+          <label class="text-sm mb-2">{{ $t("Button 1 Label") }}</label>
           <FormInput v-model="fields.buttons.button1" :maxLength="maxButtonLength" :type="'text'" :class="'col-span-4'"/>
           <span class="text-xs text-gray-500">{{ getCharsCount(fields.buttons.button1) }} / {{ maxButtonLength }}</span>
           <Handle v-if="fields.buttons.button1" id="a" type="source" :position="Position.Right" style="right: -25px;" :connectable="handleConnectable"/>
         </div>
 
         <div class="mb-4 relative">
-          <label class="text-sm mb-2">Button 2 Label</label>
+          <label class="text-sm mb-2">{{ $t("Button 2 Label") }}</label>
           <FormInput v-model="fields.buttons.button2" :maxLength="maxButtonLength" :type="'text'" :class="'col-span-4'"/>
           <span class="text-xs text-gray-500">{{ getCharsCount(fields.buttons.button2) }} / {{ maxButtonLength }}</span>
           <Handle v-if="fields.buttons.button2" id="b" type="source" :position="Position.Right" style="right: -25px;" :connectable="handleConnectable"/>
         </div>
 
         <div class="mb-2 relative">
-          <label class="text-sm mb-2">Button 3 Label</label>
+          <label class="text-sm mb-2">{{ $t("Button 3 Label") }}</label>
           <FormInput v-model="fields.buttons.button3" :maxLength="maxButtonLength" :type="'text'" :class="'col-span-4'"/>
           <span class="text-xs text-gray-500">{{ getCharsCount(fields.buttons.button3) }} / {{ maxButtonLength }}</span>
           <Handle v-if="fields.buttons.button3" id="c" type="source" :position="Position.Right" style="right: -25px;" :connectable="handleConnectable"/>
@@ -255,9 +255,9 @@ function getCharsCount(input: string): number {
       </div>
 
       <div v-if="fields.buttonType == 'cta_url'" class="border rounded p-3">
-        <label class="text-sm mb-2">CTA Button</label>
+        <label class="text-sm mb-2">{{ $t("CTA Button") }}</label>
         <div class="mb-4">
-          <label class="text-sm mb-2">Display text</label>
+          <label class="text-sm mb-2">{{ $t("Display text") }}</label>
           <FormInput v-model="fields.ctaUrlButton.displayText" :type="'text'" :maxLength="maxCtaDisplayLength" :class="'col-span-4'"/>
           <span
             class="text-xs"
@@ -265,13 +265,11 @@ function getCharsCount(input: string): number {
           >
             {{ getCharsCount(fields.ctaUrlButton.displayText) }}/{{ maxCtaDisplayLength }}
           </span>
-          <p v-if="getCharsCount(fields.ctaUrlButton.displayText) > maxCtaDisplayLength" class="mt-1 text-xs text-red-600">
-            Display text must not exceed {{ maxCtaDisplayLength }} characters.
-          </p>
+          <p v-if="getCharsCount(fields.ctaUrlButton.displayText) > maxCtaDisplayLength" class="mt-1 text-xs text-red-600"> {{ $t("Display text must not exceed") }} {{ maxCtaDisplayLength }} {{ $t("characters.") }} </p>
         </div>
 
         <div class="mb-4">
-          <label class="text-sm mb-2">Button URL</label>
+          <label class="text-sm mb-2">{{ $t("Button URL") }}</label>
           <FormInput v-model="fields.ctaUrlButton.url" :type="'url'" :class="'col-span-4'"/>
         </div>
 

@@ -25,7 +25,7 @@
 <template>
     <div :class="className">
         <div class="relative flex mb-2">
-            <div class="flex h-6 items-center mr-2">
+            <div class="flex h-6 items-center me-2">
                 <input 
                     v-model="model"
                     :value="value"

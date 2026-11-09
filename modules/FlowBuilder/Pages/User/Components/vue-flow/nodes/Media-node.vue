@@ -21,10 +21,10 @@ const characterLimit = ref('1024');
 const characterCount = ref('0');
 const isEditTitle = ref(false)
 const options = ref([
-  { value: 'image', label: 'Image' },
-  { value: 'video', label: 'Video' },
-  { value: 'audio', label: 'Audio' },
-  { value: 'document', label: 'Document' },
+  { value: 'image', label: 'صورة' },
+  { value: 'video', label: 'فيديو' },
+  { value: 'audio', label: 'صوت' },
+  { value: 'document', label: 'مستند' },
 ]);
 const node = useNode()
 const { removeNodes, nodes, addNodes, removeEdges, edges } = useVueFlow()
@@ -163,7 +163,7 @@ onMounted(() => {
           <img src="~@/assets/images/icon_LLM.png" class="mt-1 h-4 w-4" alt="LLM icon" />
           <div class="flex flex-col gap-y-1">
             <FormInput v-if="isEditTitle" v-model="title" :name="''" :type="'text'" :class="'col-span-4'" @blur="() => (isEditTitle = false)"/>
-            <h3 class="text-base capitalize" v-else>{{ title }}</h3>
+            <h3 class="text-base capitalize" v-else>{{ $t(title) }}</h3>
           </div>
         </div>
 
@@ -173,9 +173,9 @@ onMounted(() => {
               <more-horizontal-icon />
             </menubar-trigger>
             <menubar-content>
-              <menubar-item @click="handleClickDuplicateBtn"> Duplicated </menubar-item>
-              <menubar-item @click="handleClickDeleteBtn"> Delete </menubar-item>
-              <menubar-item @click="isEditTitle = true"> Rename </menubar-item>
+              <menubar-item @click="handleClickDuplicateBtn"> {{ $t("Duplicated") }} </menubar-item>
+              <menubar-item @click="handleClickDeleteBtn"> {{ $t("Delete") }} </menubar-item>
+              <menubar-item @click="isEditTitle = true"> {{ $t("Rename") }} </menubar-item>
             </menubar-content>
           </menubar-menu>
         </Menubar>
@@ -185,34 +185,34 @@ onMounted(() => {
         <span>
           <svg xmlns="http://www.w3.org/2000/svg" width="1em" height="1em" viewBox="0 0 24 24"><g fill="none"><path d="m12.593 23.258l-.011.002l-.071.035l-.02.004l-.014-.004l-.071-.035q-.016-.005-.024.005l-.004.01l-.017.428l.005.02l.01.013l.104.074l.015.004l.012-.004l.104-.074l.012-.016l.004-.017l-.017-.427q-.004-.016-.017-.018m.265-.113l-.013.002l-.185.093l-.01.01l-.003.011l.018.43l.005.012l.008.007l.201.093q.019.005.029-.008l.004-.014l-.034-.614q-.005-.018-.02-.022m-.715.002a.02.02 0 0 0-.027.006l-.006.014l-.034.614q.001.018.017.024l.015-.002l.201-.093l.01-.008l.004-.011l.017-.43l-.003-.012l-.01-.01z"/><path fill="currentColor" d="m13.299 3.148l8.634 14.954a1.5 1.5 0 0 1-1.299 2.25H3.366a1.5 1.5 0 0 1-1.299-2.25l8.634-14.954c.577-1 2.02-1 2.598 0M12 15a1 1 0 1 0 0 2a1 1 0 0 0 0-2m0-7a1 1 0 0 0-.993.883L11 9v4a1 1 0 0 0 1.993.117L13 13V9a1 1 0 0 0-1-1"/></g></svg>
         </span>
-        <span class="text-sm">Please fill all the required fields</span>
+        <span class="text-sm">{{ $t("Please fill all the required fields") }}</span>
       </div>
 
-      <span class="text-sm text-gray-500">Respond with an image, video, audio or document.</span>
+      <span class="text-sm text-gray-500">{{ $t("Respond with an image, video, audio or document.") }}</span>
 
-        <div class="rounded-md bg-muted">
+        <div class="rounded-md bg-white">
         <div class="mb-4">
-          <label class="text-sm mb-2"><span class="text-red-500">*</span>  Media Type</label>
-          <FormSelect v-model="input1" :name="''" :type="'text'" :optionClassName="'h-32'"  :options="options" :class="'col-span-4'"/>
+          <label class="text-sm mb-2"><span class="text-red-500">*</span> {{ $t("Media Type") }}</label>
+          <FormSelect v-model="input1" :name="''" :type="'text'" :placeholder="$t('Select option')" :optionClassName="'h-32'"  :options="options" :class="'col-span-4'"/>
         </div>
         <div v-if="input1 !== 'audio'">
-          <label class="text-sm mb-2">Caption (Optional)</label>
+          <label class="text-sm mb-2">{{ $t("Caption (Optional)") }}</label>
           <textarea
               ref="textAreaRef"
               class="block w-full rounded-md border-0 py-1.5 px-4 text-gray-900 shadow-sm outline-none ring-1 ring-inset placeholder:text-gray-400 sm:text-sm sm:leading-6 ring-gray-300"
               v-model="textInput"
               @input="updateText"
               :rows="'1'"
-              placeholder="Enter text"
+              :placeholder='$t("Enter text")'
               >
           </textarea>
         </div>
         <div v-else class="rounded-md bg-amber-50 border border-amber-200 px-3 py-2">
-          <p class="text-xs text-amber-700">WhatsApp does not support captions on audio messages.</p>
+          <p class="text-xs text-amber-700">{{ $t("WhatsApp does not support captions on audio messages.") }}</p>
         </div>
         <div class="flex items-center justify-between mt-2 mb-2 space-x-4">
             <span class="text-xs">{{ $t('Characters') }}: {{ characterCount + '/' + characterLimit }}</span>
-            <div class="flex items-center space-x-3">
+            <div class="flex items-center gap-3">
                 <button @click="format('bold')" class="hover:bg-slate-100 rounded p-1">
                     <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M5 3h8c1.06 0 2.078.474 2.828 1.318C16.578 5.162 17 6.307 17 7.5c0 1.193-.421 2.338-1.172 3.182C15.078 11.526 14.061 12 13 12H5zm0 9h10.039a4.44 4.44 0 0 1 3.154 1.318A4.52 4.52 0 0 1 19.5 16.5a4.52 4.52 0 0 1-1.307 3.182A4.442 4.442 0 0 1 15.038 21H5z"/></svg>
                 </button>

@@ -101,6 +101,7 @@
                         <ComboboxInput
                         class="w-full border-none py-2 ltr:pl-3 rtl:pr-3 ltr:pr-10 rtl:pl-10 text-start text-sm leading-5 text-gray-900 focus:outline-none focus:ring-0"
                         :displayValue="option => option?.label"
+                        :placeholder="$t(props.placeholder === 'Select an option' ? 'Select option' : props.placeholder)"
                         dir="auto"
                         @change="query = $event.target.value"
                         />

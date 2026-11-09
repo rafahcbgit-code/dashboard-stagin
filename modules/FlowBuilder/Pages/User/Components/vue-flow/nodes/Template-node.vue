@@ -19,11 +19,11 @@
             <h3 class="font-medium text-gray-900 text-sm">{{ displayName }}</h3>
           </div>
         </div>
-        <div class="flex items-center gap-1 ml-auto">
+        <div class="flex items-center gap-1 ms-auto">
           <button
             @click="toggleEdit"
             class="p-1 text-gray-400 hover:text-gray-600 rounded"
-            title="Edit Template"
+            :title='$t("Edit Template")'
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
@@ -33,7 +33,7 @@
           <button
             @click="deleteNode"
             class="p-1 text-red-400 hover:text-red-600 rounded"
-            title="Delete Template"
+            :title='$t("Delete Template")'
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M3 6h18"/>
@@ -46,20 +46,20 @@
 
       <div class="text-xs text-gray-600 mb-2">
         <div v-if="fields.template_uuid">
-          <span class="font-medium">Template:</span> {{ fields.template_name || 'Unknown' }}
+          <span class="font-medium">{{ $t("Template:") }}</span> {{ fields.template_name || 'Unknown' }}
           <span class="text-gray-400 ml-1">({{ fields.template_language || '?' }})</span>
         </div>
-        <div v-else class="text-gray-400 italic">No template selected</div>
+        <div v-else class="text-gray-400 italic">{{ $t("No template selected") }}</div>
       </div>
 
       <div class="flex items-center justify-between text-xs">
-        <span class="text-gray-500">Message</span>
+        <span class="text-gray-500">{{ $t("Message") }}</span>
         <div class="flex items-center gap-1">
           <span
             :class="isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'"
             class="px-2 py-1 rounded-full text-xs"
           >
-            {{ isActive ? 'Active' : 'Inactive' }}
+            {{ $t(isActive ? 'Active' : 'Inactive') }}
           </span>
         </div>
       </div>
@@ -76,28 +76,26 @@
     <div v-if="showEditModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" @wheel.stop>
       <div class="bg-white rounded-lg max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto" @wheel.stop>
         <div class="px-6 py-4 border-b border-gray-200">
-          <h3 class="text-lg font-semibold text-gray-900">Edit Template Message</h3>
+          <h3 class="text-lg font-semibold text-gray-900">{{ $t("Edit Template Message") }}</h3>
         </div>
 
         <form @submit.prevent="saveAction" class="p-6">
           <div class="space-y-4">
             <!-- Template selector -->
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Select Template</label>
+              <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t("Select Template") }}</label>
               <select
                 v-model="editForm.template_uuid"
                 @change="onTemplateSelected"
                 class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-800 focus:border-primary focus:ring-1 focus:ring-primary/30 focus:outline-none"
                 required
               >
-                <option value="">Choose a template...</option>
+                <option value="">{{ $t("Choose a template...") }}</option>
                 <option v-for="tpl in availableTemplates" :key="tpl.uuid" :value="tpl.uuid">
                   {{ tpl.name }} ({{ tpl.language }})
                 </option>
               </select>
-              <div v-if="availableTemplates.length === 0" class="text-xs text-red-500 mt-1">
-                No approved templates available. Please create and approve templates first.
-              </div>
+              <div v-if="availableTemplates.length === 0" class="text-xs text-red-500 mt-1"> {{ $t("No approved templates available. Please create and approve templates first.") }} </div>
             </div>
 
             <!-- Loading state -->
@@ -106,16 +104,16 @@
                 <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                 <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
               </svg>
-              <span class="ml-2 text-sm text-gray-500">Loading template details...</span>
+              <span class="ms-2 text-sm text-gray-500">{{ $t("Loading template details...") }}</span>
             </div>
 
             <!-- Template parameters -->
             <div v-if="!loadingTemplate && templateDetails && hasParameters" class="space-y-3">
-              <label class="block text-sm font-medium text-gray-700">Template Parameters</label>
+              <label class="block text-sm font-medium text-gray-700">{{ $t("Template Parameters") }}</label>
 
               <!-- Header parameters -->
               <div v-if="headerParamCount > 0" class="space-y-2">
-                <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Header</p>
+                <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">{{ $t("Header") }}</p>
                 <div v-for="(_, index) in headerParamCount" :key="'h'+index" class="flex items-center gap-2">
                   <span class="text-xs text-gray-400 w-6">{{ paramLabel(index + 1) }}</span>
                   <input
@@ -129,7 +127,7 @@
 
               <!-- Body parameters -->
               <div v-if="bodyParamCount > 0" class="space-y-2">
-                <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">Body</p>
+                <p class="text-xs font-medium text-gray-500 uppercase tracking-wide">{{ $t("Body") }}</p>
                 <div v-for="(_, index) in bodyParamCount" :key="'b'+index" class="flex items-center gap-2">
                   <span class="text-xs text-gray-400 w-6">{{ paramLabel(headerParamCount + index + 1) }}</span>
                   <input
@@ -145,15 +143,13 @@
               <div class="rounded-md bg-gray-50 border border-gray-200 px-3 py-2 text-xs text-gray-500">
                 <div class="flex items-start gap-2">
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 mt-0.5 text-gray-400"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                  <p>Use <code class="bg-gray-100 px-1 rounded">{first_name}</code>, <code class="bg-gray-100 px-1 rounded">{email}</code>, or <code class="bg-gray-100 px-1 rounded">{{ flowVarExample }}</code> to personalize.</p>
+                  <p>{{ $t("Use") }} <code class="bg-gray-100 px-1 rounded">{first_name}</code>, <code class="bg-gray-100 px-1 rounded">{email}</code>{{ $t(", or") }} <code class="bg-gray-100 px-1 rounded">{{ flowVarExample }}</code> {{ $t("to personalize.") }}</p>
                 </div>
               </div>
             </div>
 
             <!-- No parameters message -->
-            <div v-if="!loadingTemplate && templateDetails && !hasParameters" class="text-xs text-gray-400">
-              This template has no parameters to fill in.
-            </div>
+            <div v-if="!loadingTemplate && templateDetails && !hasParameters" class="text-xs text-gray-400"> {{ $t("This template has no parameters to fill in.") }} </div>
 
             <!-- Template info -->
             <div v-if="templateDetails" class="rounded-md bg-blue-50 border border-blue-200 px-3 py-2 text-xs text-blue-700">
@@ -164,7 +160,7 @@
             <div class="rounded-md bg-slate-50 border border-slate-200 px-3 py-2 text-xs text-slate-500">
               <div class="flex items-start gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 mt-0.5 text-slate-400"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                <p>Template messages are approved by WhatsApp. The flow continues to the next step after sending.</p>
+                <p>{{ $t("Template messages are approved by WhatsApp. The flow continues to the next step after sending.") }}</p>
               </div>
             </div>
 
@@ -172,26 +168,22 @@
             <div class="flex items-center">
               <FormCheckbox
                 v-model="editForm.is_active"
-                label="Active"
+                :label='$t("Active")'
                 class="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
               />
             </div>
           </div>
 
-          <div class="flex justify-end space-x-3 mt-6">
+          <div class="flex justify-end gap-3 mt-6">
             <button
               type="button"
               @click="closeEditModal"
               class="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-            >
-              Cancel
-            </button>
+            > {{ $t("Cancel") }} </button>
             <button
               type="submit"
               class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-            >
-              Save Changes
-            </button>
+            > {{ $t("Save Changes") }} </button>
           </div>
         </form>
       </div>
@@ -232,7 +224,7 @@ const displayName = computed(() => {
   if (fields.value.template_name) {
     return fields.value.template_name
   }
-  return 'Send Template'
+  return 'إرسال قالب'
 })
 
 const headerParamCount = computed(() => {
@@ -374,7 +366,7 @@ const saveAction = () => {
 }
 
 const deleteNode = () => {
-  if (confirm('Are you sure you want to delete this template node?')) {
+  if (confirm('هل أنت متأكد من حذف عقدة القالب؟')) {
     removeNodes([props.id])
   }
 }

@@ -286,7 +286,7 @@ function handleOnDrop(event: DragEvent) {
         type: 'metaflow',
         metaflow_uuid: '',
         metaflow_name: '',
-        body: 'Please complete the form.',
+        body: 'يرجى إكمال النموذج.',
         cta: 'Open',
       }
     } else if (type === 'portal') {

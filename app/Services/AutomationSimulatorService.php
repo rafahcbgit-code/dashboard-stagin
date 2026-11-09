@@ -40,6 +40,14 @@ class AutomationSimulatorService
      */
     public function simulateTriggerEvaluation(int $organizationId, string $message, bool $isNewContact, bool $duringWorkingHours, array $settingOverrides = [], array $triggerOverrides = []): array
     {
+        if (config('ai.suspended', true)) {
+            $settingOverrides = array_replace($settingOverrides, [
+                'ai_enabled' => false, 'ai_only_mode' => false,
+                'ai_fallback_enabled' => false, 'ai_escalation_enabled' => false,
+                'ai_followup_enabled' => false,
+            ]);
+        }
+
         // Compute effective settings (overrides take precedence over DB)
         $effectiveAutomationEnabled = $settingOverrides['automation_enabled'] ?? $this->botSettings->isAutomationEnabled($organizationId);
         $effectiveAiEnabled = $settingOverrides['ai_enabled'] ?? $this->aiSettingsService->isEnabled($organizationId);
@@ -363,7 +371,7 @@ class AutomationSimulatorService
             case 'new_message':
                 if (!$tg->hasKeywords()) return null;
                 if (!$tg->hasFlowLinked()) return null;
-                if (($tg->match_mode ?? '') === 'ai' && !$this->aiSettingsService->isEnabled($organizationId)) return null;
+                if (($tg->match_mode ?? '') === 'ai' && !config('ai.suspended', true) && !$this->aiSettingsService->isEnabled($organizationId)) return null;
 
                 $keywords = $tg->keywords ?? [];
                 $matchMode = $tg->match_mode ?? 'exact';
@@ -387,6 +395,12 @@ class AutomationSimulatorService
                         }
                     }
                     return null;
+                }
+
+                if ($matchMode === 'ai' && config('ai.suspended', true)) {
+                    $classifier = app(AiIntentClassifier::class);
+                    $match = $classifier->classify($message, $tg->keywords ?? [], 'exact');
+                    return $match ? ['reason' => 'Exact keyword matched (AI suspended)', 'matched_keyword' => $match->matchedKeyword] : null;
                 }
 
                 if ($matchMode === 'ai') {
@@ -436,13 +450,13 @@ class AutomationSimulatorService
             case 'new_message':
                 if (!$tg->hasKeywords()) return 'No keywords configured';
                 if (!$tg->hasFlowLinked()) return 'No flow linked';
-                if (($tg->match_mode ?? '') === 'ai' && !$this->aiSettingsService->isEnabled($organizationId)) return 'AI mode requires AI to be enabled';
+                if (($tg->match_mode ?? '') === 'ai' && !config('ai.suspended', true) && !$this->aiSettingsService->isEnabled($organizationId)) return 'AI mode requires AI to be enabled';
 
                 $keywords = $tg->keywords ?? [];
                 $matchMode = $tg->match_mode ?? 'exact';
                 $msg = mb_strtolower(trim($message), 'UTF-8');
 
-                if ($matchMode === 'ai') return 'AI did not classify this message';
+                if ($matchMode === 'ai') return config('ai.suspended', true) ? 'No exact keyword matched (AI suspended)' : 'AI did not classify this message';
                 return "No keyword matched (mode: {$matchMode})";
 
             default:
@@ -776,6 +790,10 @@ class AutomationSimulatorService
      */
     public function simulateAiResponse(int $organizationId, string $message, array $settingOverrides = []): array
     {
+        if (config('ai.suspended', true)) {
+            return ['success' => false, 'ai_enabled' => false, 'message' => 'Automation AI is temporarily suspended.', 'whatsapp' => null];
+        }
+
         $aiEnabled = $settingOverrides['ai_enabled'] ?? $this->aiSettingsService->isEnabled($organizationId);
         $aiFallbackEnabled = $settingOverrides['ai_fallback_enabled'] ?? (bool) $this->botSettings->getSetting($organizationId, 'ai_fallback_enabled', false);
         $confidenceThreshold = $this->aiSettingsService->getDefaultConfidence($organizationId);
@@ -1074,8 +1092,8 @@ class AutomationSimulatorService
                         nodeId: $nodeId,
                         nodeType: 'ai_response',
                         category: 'action_executed',
-                        description: 'AI generates response',
-                        whatsapp: ['type' => 'ai_action', 'body' => 'AI will generate a response'],
+                        description: config('ai.suspended', true) ? 'AI suspended: action skipped, flow continues' : 'AI generates response',
+                        whatsapp: config('ai.suspended', true) ? null : ['type' => 'ai_action', 'body' => 'AI will generate a response'],
                     ))->toArray();
                 }
 

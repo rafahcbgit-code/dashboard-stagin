@@ -35,6 +35,10 @@ class AiIntentClassifier
             return null;
         }
 
+        if ($matchMode === 'ai' && config('ai.suspended', true)) {
+            $matchMode = 'exact';
+        }
+
         if ($matchMode === 'ai') {
             return $this->matchAi($message, $keywords, $aiConfidenceThreshold);
         }

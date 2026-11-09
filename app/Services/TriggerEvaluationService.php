@@ -300,7 +300,7 @@ class TriggerEvaluationService
         }
 
         // AI mode triggers require AI to be enabled org-wide
-        if ($triggerGroup->match_mode === 'ai' && !$this->aiSettingsService->isEnabled($organizationId)) {
+        if ($triggerGroup->match_mode === 'ai' && !config('ai.suspended', true) && !$this->aiSettingsService->isEnabled($organizationId)) {
             return null;
         }
 

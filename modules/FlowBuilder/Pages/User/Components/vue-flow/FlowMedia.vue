@@ -61,7 +61,7 @@ const removeMedia = () => {
 }
 </script>
 <template>
-    <label class="mb-2 text-sm"><span class="text-red-500">*</span>  Upload media</label>
+    <label class="mb-2 text-sm"><span class="text-red-500">*</span> {{ $t("Upload media") }}</label>
     <div class="flex justify-center px-6 pt-5 pb-6 border-2 border-gray-300 border-dashed rounded-md">
         <input @change="handleFileChange($event)" v-if="props.type == 'image'" type="file" class="sr-only" accept=".jpg, .png" :id="'file-upload' + props.nodeId">
         <input @change="handleFileChange($event)" v-if="props.type == 'video'" type="file" class="sr-only" accept=".mp4, .3gp" :id="'file-upload' + props.nodeId">
@@ -77,24 +77,22 @@ const removeMedia = () => {
             </label>
             <div class="flex text-sm text-gray-600">
             <label :for="'file-upload' + props.nodeId" class="text-center relative cursor-pointer bg-white rounded-md font-medium hover:text-indigo-500 focus-within:outline-none focus-within:ring-2 focus-within:ring-offset-2 focus-within:ring-indigo-500">
-                <span v-if="props.type == 'image'">Upload image file</span>
-                <span v-if="props.type == 'video'">Upload video file</span>
-                <span v-if="props.type == 'audio'">Upload audio file</span>
-                <span v-if="props.type == 'document'">Upload document file</span>
+                <span v-if="props.type == 'image'">{{ $t("Upload image file") }}</span>
+                <span v-if="props.type == 'video'">{{ $t("Upload video file") }}</span>
+                <span v-if="props.type == 'audio'">{{ $t("Upload audio file") }}</span>
+                <span v-if="props.type == 'document'">{{ $t("Upload document file") }}</span>
             </label>
             </div>
-            <p v-if="props.type == 'image'" class="text-xs text-gray-500">PNG or JPG (max 5MB)</p>
-            <p v-if="props.type == 'video'" class="text-xs text-gray-500">MP4 or 3GPP (max 16MB)</p>
-            <p v-if="props.type == 'audio'" class="text-xs text-gray-500">MP3/AAC/AMR or MP4 (max 16MB)</p>
-            <p v-if="props.type == 'document'" class="text-xs text-gray-500">PDF/TXT/XLS/XLSX/DOC/DOCX/PPT/PPTX (max 25MB)</p>
+            <p v-if="props.type == 'image'" class="text-xs text-gray-500">{{ $t("PNG or JPG (max 5MB)") }}</p>
+            <p v-if="props.type == 'video'" class="text-xs text-gray-500">{{ $t("MP4 or 3GPP (max 16MB)") }}</p>
+            <p v-if="props.type == 'audio'" class="text-xs text-gray-500">{{ $t("MP3/AAC/AMR or MP4 (max 16MB)") }}</p>
+            <p v-if="props.type == 'document'" class="text-xs text-gray-500">{{ $t("PDF/TXT/XLS/XLSX/DOC/DOCX/PPT/PPTX (max 25MB)") }}</p>
         </div>
         <div v-else class="flex text-sm text-gray-600">
             <div class="">
                 <div class="text-sm">{{ JSON.parse(props.modelValue.metadata)?.name }}</div>
                 <button @click="removeMedia()" class="flex items-center gap-x-1 bg-slate-50 rounded-md px-2 py-1">
-                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M17.707 7.707a1 1 0 0 0-1.414-1.414L12 10.586L7.707 6.293a1 1 0 0 0-1.414 1.414L10.586 12l-4.293 4.293a1 1 0 1 0 1.414 1.414L12 13.414l4.293 4.293a1 1 0 1 0 1.414-1.414L13.414 12l4.293-4.293Z" clip-rule="evenodd"/></svg>
-                    Remove
-                </button>
+                    <svg xmlns="http://www.w3.org/2000/svg" width="15" height="15" viewBox="0 0 24 24"><path fill="currentColor" fill-rule="evenodd" d="M17.707 7.707a1 1 0 0 0-1.414-1.414L12 10.586L7.707 6.293a1 1 0 0 0-1.414 1.414L10.586 12l-4.293 4.293a1 1 0 1 0 1.414 1.414L12 13.414l4.293 4.293a1 1 0 1 0 1.414-1.414L13.414 12l4.293-4.293Z" clip-rule="evenodd"/></svg> {{ $t("Remove") }} </button>
             </div>
         </div>
         </div>

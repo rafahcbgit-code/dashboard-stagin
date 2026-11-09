@@ -18,14 +18,14 @@
             </svg>
           </div>
           <div>
-            <h3 class="font-medium text-gray-900 text-sm">{{ actionName }}</h3>
+            <h3 class="font-medium text-gray-900 text-sm">{{ $t(actionName) }}</h3>
           </div>
         </div>
-        <div class="flex items-center gap-1 ml-auto">
+        <div class="flex items-center gap-1 ms-auto">
           <button
             @click="toggleEdit"
             class="p-1 text-gray-400 hover:text-gray-600 rounded"
-            title="Edit Action"
+            :title='$t("Edit Action")'
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
@@ -35,7 +35,7 @@
           <button
             @click="deleteNode"
             class="p-1 text-red-400 hover:text-red-600 rounded"
-            title="Delete Action"
+            :title='$t("Delete Action")'
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M3 6h18"/>
@@ -48,22 +48,22 @@
       
       <div class="text-xs text-gray-600 mb-2">
         <div v-if="config.assignment_type === 'auto_assignment'">
-          <span class="font-medium">Auto-Assign</span>
-          <span class="text-gray-400 ml-1">(system selects agent)</span>
+          <span class="font-medium">{{ $t("Auto-Assign") }}</span>
+          <span class="text-gray-400 ml-1">{{ $t("(system selects agent)") }}</span>
         </div>
         <div v-else>
-          <span class="font-medium">Assign to:</span> {{ getAgentName(config.agent_id) }}
+          <span class="font-medium">{{ $t("Assign to:") }}</span> {{ getAgentName(config.agent_id) }}
         </div>
       </div>
       
       <div class="flex items-center justify-between text-xs">
-        <span class="text-gray-500">Action</span>
+        <span class="text-gray-500">{{ $t("Action") }}</span>
         <div class="flex items-center gap-1">
           <span 
             :class="isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'"
             class="px-2 py-1 rounded-full text-xs"
           >
-            {{ isActive ? 'Active' : 'Inactive' }}
+            {{ $t(isActive ? 'Active' : 'Inactive') }}
           </span>
         </div>
       </div>
@@ -80,23 +80,23 @@
     <div v-if="showEditModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" @wheel.stop>
       <div class="bg-white rounded-lg max-w-md w-full mx-4 max-h-[80vh] overflow-y-auto">
         <div class="px-6 py-4 border-b border-gray-200">
-          <h3 class="text-lg font-semibold text-gray-900">Edit Assign to Agent Action</h3>
+          <h3 class="text-lg font-semibold text-gray-900">{{ $t("Edit Assign to Agent Action") }}</h3>
         </div>
         
         <form @submit.prevent="saveAction" class="p-6">
           <div class="space-y-4">
             <!-- Configuration Fields -->
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-2">Configuration</label>
+              <label class="block text-sm font-medium text-gray-700 mb-2">{{ $t("Configuration") }}</label>
               <div class="space-y-3">
                 <!-- Assignment Type Toggle -->
                 <div>
                   <FormSelect
                     v-model="editForm.config.assignment_type"
-                    name="Assignment Type"
+                    :name='$t("Assignment Type")'
                     :options="[
-                      { value: 'specific_agent', label: 'Specific Agent' },
-                      { value: 'auto_assignment', label: 'Auto-Assign' }
+                      { value: 'specific_agent', label: 'موظف محدد' },
+                      { value: 'auto_assignment', label: 'تعيين تلقائي' }
                     ]"
                     required
                   />
@@ -104,50 +104,34 @@
 
                 <!-- Specific Agent: agent dropdown -->
                 <div v-if="editForm.config.assignment_type === 'specific_agent'">
-                  <label class="block text-sm font-medium text-gray-700">Select Agent</label>
+                  <label class="block text-sm font-medium text-gray-700">{{ $t("Select Agent") }}</label>
                   <FormSelect
                     v-model="editForm.config.agent_id"
                     :options="availableAgents"
-                    placeholder="Select an agent"
+                    :placeholder='$t("Select an agent")'
                     required
                   />
-                  <div v-if="availableAgents.length === 0" class="text-xs text-red-500 mt-1">
-                    No agents available. Please add team members first.
-                  </div>
+                  <div v-if="availableAgents.length === 0" class="text-xs text-red-500 mt-1"> {{ $t("No agents available. Please add team members first.") }} </div>
                 </div>
 
                 <!-- Auto-Assign: info message -->
                 <div v-if="editForm.config.assignment_type === 'auto_assignment'">
                   <div class="bg-gray-50 border border-teal-200 rounded-lg p-3">
                     <p class="text-xs text-gray-600 mb-1">
-                      <strong>Auto-Assign:</strong> The system will automatically select the best available agent.
-                    </p>
-                    <p class="text-xs text-gray-500 mb-2">
-                      &bull; Uses your organization's routing rules (round-robin or least-loaded)
-                    </p>
-                    <p class="text-xs text-gray-500 mb-2">
-                      &bull; Ticket will be created/updated with the assigned agent
-                    </p>
-                    <p class="text-xs text-gray-500">
-                      &bull; Agent will receive a push notification
-                    </p>
+                      <strong>{{ $t("Auto-Assign:") }}</strong> {{ $t("The system will automatically select the best available agent.") }} </p>
+                    <p class="text-xs text-gray-500 mb-2"> {{ $t("• Uses your organization's routing rules (round-robin or least-loaded)") }} </p>
+                    <p class="text-xs text-gray-500 mb-2"> {{ $t("• Ticket will be created/updated with the assigned agent") }} </p>
+                    <p class="text-xs text-gray-500"> {{ $t("• Agent will receive a push notification") }} </p>
                   </div>
                 </div>
 
                 <!-- What happens explanation (specific_agent mode only) -->
                 <div v-if="editForm.config.assignment_type === 'specific_agent'" class="bg-gray-50 border border-blue-200 rounded-lg p-3">
                   <p class="text-xs text-gray-600 mb-1">
-                    <strong>What happens:</strong> The conversation will be assigned to the selected agent.
-                  </p>
-                  <p class="text-xs text-gray-500 mb-2">
-                    &bull; Chat ticket will be created/updated with the selected agent
-                  </p>
-                  <p class="text-xs text-gray-500 mb-2">
-                    &bull; Ticket status will be set to "open"
-                  </p>
-                  <p class="text-xs text-gray-500">
-                    &bull; Agent will receive a push notification (if enabled)
-                  </p>
+                    <strong>{{ $t("What happens:") }}</strong> {{ $t("The conversation will be assigned to the selected agent.") }} </p>
+                  <p class="text-xs text-gray-500 mb-2"> {{ $t("• Chat ticket will be created/updated with the selected agent") }} </p>
+                  <p class="text-xs text-gray-500 mb-2"> {{ $t("• Ticket status will be set to \"open\"") }} </p>
+                  <p class="text-xs text-gray-500"> {{ $t("• Agent will receive a push notification (if enabled)") }} </p>
                 </div>
               </div>
             </div>
@@ -156,26 +140,22 @@
             <div class="flex items-center">
               <FormCheckbox
                 v-model="editForm.is_active"
-                label="Active"
+                :label='$t("Active")'
                 class="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded"
               />
             </div>
           </div>
 
-          <div class="flex justify-end space-x-3 mt-6">
+          <div class="flex justify-end gap-3 mt-6">
             <button 
               type="button"
               @click="closeEditModal"
               class="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-            >
-              Cancel
-            </button>
+            > {{ $t("Cancel") }} </button>
             <button 
               type="submit"
               class="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
-            >
-              Save Changes
-            </button>
+            > {{ $t("Save Changes") }} </button>
           </div>
         </form>
       </div>
@@ -210,14 +190,14 @@ const actionName = computed(() => {
   const actionConfig = config.value
 
   if (actionConfig.assignment_type === 'auto_assignment') {
-    return 'Auto-Assign to Agent'
+    return 'تعيين تلقائي إلى موظف'
   }
 
   if (actionConfig.agent_id) {
     const agent = availableAgents.value.find(a => a.value == actionConfig.agent_id)
     return agent ? `Assign to ${agent.label}` : `Assign to Agent (ID: ${actionConfig.agent_id})`
   }
-  return 'Assign to Agent'
+  return 'تعيين إلى موظف'
 })
 
 const editForm = reactive({
@@ -226,7 +206,7 @@ const editForm = reactive({
 })
 
 const getAgentName = (agentId) => {
-  if (!agentId) return 'No agent selected'
+  if (!agentId) return 'لم يُحدد موظف'
   const agent = availableAgents.value.find(a => a.value == agentId)
   return agent ? agent.label : `Agent ID: ${agentId}`
 }
@@ -279,7 +259,7 @@ const saveAction = () => {
 }
 
 const deleteNode = () => {
-  if (confirm('Are you sure you want to delete this action?')) {
+  if (confirm('هل أنت متأكد من حذف هذا الإجراء؟')) {
     removeNodes([props.id])
   }
 }

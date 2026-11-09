@@ -1,6 +1,10 @@
 <?php
 
 return [
+    // Temporary suspension for Automation AI, knowledge base and AI escalation.
+    // Set to false to restore saved organization settings.
+    'suspended' => true,
+
     /*
     |--------------------------------------------------------------------------
     | AI Service Configuration

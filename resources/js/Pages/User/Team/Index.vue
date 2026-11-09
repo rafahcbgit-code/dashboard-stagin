@@ -17,7 +17,7 @@
             <TeamTable :rows="props.rows" @edit="openModal"/>
         </div>
 
-        <Modal :label="label" :isOpen="isOpenFormModal" :closeBtn="true" @close="closeFormModal">
+        <Modal :label="$t(label)" :isOpen="isOpenFormModal" :closeBtn="true" @close="closeFormModal">
             <div class="mt-5 grid grid-cols-1 gap-x-6 gap-y-4">
                 <form @submit.prevent="submitForm()" class="grid gap-x-6 gap-y-4 sm:grid-cols-6">
                     <FormInput v-model="form.email" :error="form.errors.email" :name="$t('Email')" :type="'email'" :class="'sm:col-span-6'" :disabled="formMethod === 'put' ? true : false"/>
@@ -47,10 +47,10 @@
                         </div>
                         <div v-if="generatedPassword" class="sm:col-span-6 rounded-md border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-700">
                             <span class="font-medium text-slate-900">{{ $t('Generated password') }}:</span>
-                            <span class="ml-2 font-mono">{{ generatedPassword }}</span>
+                            <bdi dir="ltr" class="ms-2 font-mono">{{ generatedPassword }}</bdi>
                         </div>
                     </template>
-                    <div class="mt-4 flex">
+                    <div class="mt-4 flex gap-3">
                         <button type="button" @click="closeFormModal" class="inline-flex justify-center rounded-md border border-transparent bg-slate-50 px-4 py-2 text-sm text-slate-500 hover:bg-slate-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 mr-4">{{ $t('Cancel') }}</button>
                         <button :class="['inline-flex justify-center rounded-md border border-transparent bg-primary px-4 py-2 text-sm text-white focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2', { 'opacity-50': form.processing }]" :disabled="form.processing">
                             <svg v-if="form.processing" xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24"><path fill="currentColor" d="M12 2A10 10 0 1 0 22 12A10 10 0 0 0 12 2Zm0 18a8 8 0 1 1 8-8A8 8 0 0 1 12 20Z" opacity=".5"/><path fill="currentColor" d="M20 12h2A10 10 0 0 0 12 2V4A8 8 0 0 1 20 12Z"><animateTransform attributeName="transform" dur="1s" from="0 12 12" repeatCount="indefinite" to="360 12 12" type="rotate"/></path></svg>
@@ -72,6 +72,8 @@
     import FormPhoneInput from '@/Components/FormPhoneInput.vue';
     import FormSelect from '@/Components/FormSelect.vue';
     import { trans } from 'laravel-vue-i18n';
+    import { useI18n } from 'vue-i18n';
+    const { t } = useI18n();
 
     const props = defineProps({ rows: Object, filters: Object });
     const user = computed(() => usePage().props.auth.user);
@@ -92,10 +94,10 @@
         password_confirmation: null,
     });
 
-    const roleOptions = [
-        { value: 'manager', label: trans('Manager') },
-        { value: 'agent', label: trans('Agent') },
-    ]
+    const roleOptions = computed(() => [
+        { value: 'manager', label: t('Manager') },
+        { value: 'agent', label: t('Agent') },
+    ])
 
     const randomFrom = (characters) => {
         const values = new Uint32Array(1);
@@ -155,14 +157,14 @@
     }
 
     const openModal = (key, formData = {}) => {
-        label.value = trans('Invite user');
+        label.value = 'Invite user';
         formUrl.value = '/team/invite';
         formMethod.value = 'post';
         form.clearErrors();
         generatedPassword.value = null;
 
         if (key) {
-            label.value = trans('Update user');
+            label.value = 'Update user';
             formUrl.value = '/team/' + key.id;
             formMethod.value = 'put';
             form.email = key.email;

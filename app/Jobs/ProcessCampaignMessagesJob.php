@@ -186,10 +186,10 @@ class ProcessCampaignMessagesJob implements ShouldQueue
         $ttl = max(60, (int) config('campaigns.dispatch.reservation_ttl_seconds', 900));
         $cache = Cache::store('redis');
 
-        return $logs
+        return $logs->lazy()
             ->filter(fn (CampaignLog $log): bool => $cache->add($this->reservationKey($log->id), 1, $ttl))
             ->take($limit)
-            ->values();
+            ->values()->collect();
     }
 
     private function dispatchRoundRobinChunks(array $chunksByCampaign, int $concurrency, int $requestDelayMs, string $queue): int
@@ -317,18 +317,10 @@ class ProcessCampaignMessagesJob implements ShouldQueue
 
         if ($retryEnabled) {
             // Task 2.8: AC-2.8.3 - Use withCount('retries') to avoid N+1 query pattern
-            $failedLogs = CampaignLog::where('campaign_id', $campaignId)
+            $failedLogsCanRetry = CampaignLog::where('campaign_id', $campaignId)
                 ->where('status', 'failed')
-                ->withCount('retries')
-                ->get();
-
-            foreach ($failedLogs as $log) {
-                // Task 2.8: AC-2.8.1 - Use pre-loaded retries_count instead of N+1 query
-                if ($log->retries_count < $maxRetries) {
-                    $failedLogsCanRetry = true;
-                    break;
-                }
-            }
+                ->whereRaw('(select count(*) from campaign_log_retries where campaign_log_retries.campaign_log_id = campaign_logs.id) < ?', [$maxRetries])
+                ->exists();
         }
 
         if (! $failedLogsCanRetry) {

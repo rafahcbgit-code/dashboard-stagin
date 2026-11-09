@@ -22,6 +22,7 @@ use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Queue\InteractsWithQueue;
 use Illuminate\Queue\SerializesModels;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 
 class SendCampaignJob implements ShouldQueue
@@ -98,6 +99,7 @@ class SendCampaignJob implements ShouldQueue
            $contacts = Contact::where('organization_id', $campaign->organization_id)
             ->whereNull('deleted_at')
             ->where('is_subscribed', 1)
+            ->where(fn ($query) => $query->whereNull('is_blocked')->orWhere('is_blocked', false))
             ->get();
             Log::info("contacts", $contacts->toArray());
             return $contacts;
@@ -108,6 +110,8 @@ class SendCampaignJob implements ShouldQueue
         })
         ->whereNull('deleted_at')
         ->where('is_subscribed', 1)
+        ->where('organization_id', $campaign->organization_id)
+        ->where(fn ($query) => $query->whereNull('is_blocked')->orWhere('is_blocked', false))
         ->get();
     }
 
@@ -269,6 +273,17 @@ class SendCampaignJob implements ShouldQueue
 
     protected function sendTemplateMessage(CampaignLog $campaignLog)
     {
+        $lock = Cache::store('redis')->lock("campaign:log:{$campaignLog->id}:sending", 660);
+        if (! $lock->get()) return;
+        try {
+            $this->sendTemplateMessageLocked($campaignLog);
+        } finally {
+            $lock->release();
+        }
+    }
+
+    private function sendTemplateMessageLocked(CampaignLog $campaignLog)
+    {
         DB::transaction(function() use ($campaignLog) {
             //Update log to ongoing, prevents this message from being sent out again
             $log = CampaignLog::where('id', $campaignLog->id)
@@ -277,7 +292,9 @@ class SendCampaignJob implements ShouldQueue
                               ->first();
                    
             if ($log) {  
-                if (!$campaignLog->contact || empty($campaignLog->contact->phone)) {
+                if (! Campaign::whereKey($log->campaign_id)->where('status', 'ongoing')->exists()) return;
+                $campaignLog->unsetRelation('contact');
+                if (!$campaignLog->contact || empty($campaignLog->contact->phone) || $campaignLog->contact->is_blocked || ! $campaignLog->contact->is_subscribed) {
                     $log->status = 'failed';
                     $log->save();
                     
@@ -324,6 +341,17 @@ class SendCampaignJob implements ShouldQueue
 
     protected function sendRetryLogTemplateMessage(CampaignLog $campaignLog)
     {
+        $lock = Cache::store('redis')->lock("campaign:log:{$campaignLog->id}:sending", 660);
+        if (! $lock->get()) return;
+        try {
+            $this->sendRetryLogTemplateMessageLocked($campaignLog);
+        } finally {
+            $lock->release();
+        }
+    }
+
+    private function sendRetryLogTemplateMessageLocked(CampaignLog $campaignLog)
+    {
         DB::transaction(function() use ($campaignLog) {
             //Update log to ongoing, prevents this message from being sent out again
             $log = CampaignLog::where('id', $campaignLog->id)
@@ -332,7 +360,9 @@ class SendCampaignJob implements ShouldQueue
                               ->first();
                    
             if ($log) {  
-                if (!$campaignLog->contact || empty($campaignLog->contact->phone)) {
+                if (! Campaign::whereKey($log->campaign_id)->where('status', 'ongoing')->exists()) return;
+                $campaignLog->unsetRelation('contact');
+                if (!$campaignLog->contact || empty($campaignLog->contact->phone) || $campaignLog->contact->is_blocked || ! $campaignLog->contact->is_subscribed) {
                     $log->status = 'failed';
                     $log->save();
                     

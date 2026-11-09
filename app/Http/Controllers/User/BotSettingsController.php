@@ -41,12 +41,12 @@ class BotSettingsController extends BaseController
         ];
 
         // Count enabled KB entries for the AI fallback warning
-        $kbEntryCount = AiKnowledgeBase::forOrganization($organizationId)
+        $kbEntryCount = config('ai.suspended', true) ? 0 : AiKnowledgeBase::forOrganization($organizationId)
             ->enabled()
             ->count();
 
         return Inertia::render('User/Automation/BotSettings/Index', [
-            'title' => __('Behavior & AI'),
+            'title' => __('Bot Behavior'),
             'settings' => $settings,
             'aiSettings' => $aiSettings,
             'workingHours' => $workingHours,
@@ -105,6 +105,10 @@ class BotSettingsController extends BaseController
 
         $botSettings = array_intersect_key($validated, array_flip($botKeys));
         $aiSettings = array_intersect_key($validated, array_flip($aiKeys));
+
+        if (config('ai.suspended', true)) {
+            $botSettings = array_filter($botSettings, fn ($key) => !str_starts_with($key, 'ai_'), ARRAY_FILTER_USE_KEY);
+        }
 
         $this->botSettingsService->update($organizationId, $botSettings);
         $this->aiSettingsService->update($organizationId, $aiSettings);

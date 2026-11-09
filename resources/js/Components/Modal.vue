@@ -1,4 +1,6 @@
 <script setup>
+    import { useRtl } from '@/Composables/useRtl';
+    const { isRtl } = useRtl();
     import { inject } from 'vue';
     import { TransitionRoot, TransitionChild, Dialog, DialogPanel, DialogTitle } from '@headlessui/vue';
 
@@ -21,7 +23,7 @@
 </script>
 <template>
     <TransitionRoot appear :show="props.isOpen" as="template">
-        <Dialog as="div" :class="['relative z-[100]', threadUI ? 'cb-thread-modal' : '']" @close="closeModal">
+        <Dialog :dir="isRtl ? 'rtl' : 'ltr'" as="div" :class="['relative z-[100]', threadUI ? 'cb-thread-modal' : '']" @close="closeModal">
             <TransitionChild
                 as="template"
                 enter="duration-300 ease-out"
@@ -56,7 +58,7 @@
                             {{ props.label }}
                         </DialogTitle>
 
-                        <button type="button" @click="closeModal" v-if="closeBtn === true" :aria-label="props.label ? `Close ${props.label}` : 'Close'" class="cb-thread-modal-close bg-slate-100 rounded-full p-1 hover:shadow cursor-pointer">
+                        <button type="button" @click="closeModal" v-if="closeBtn === true" :aria-label="$t('Close')" class="cb-thread-modal-close bg-slate-100 rounded-full p-1 hover:shadow cursor-pointer">
                             <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" aria-hidden="true"><path fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" d="M17 7L7 17M7 7l10 10"/></svg>
                         </button>
                     </div>

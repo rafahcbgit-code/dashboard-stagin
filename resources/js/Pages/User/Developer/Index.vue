@@ -1,9 +1,9 @@
 <template>
     <AppLayout>
-        <div class="bg-white md:bg-inherit md:flex md:flex-grow md:overflow-y-hidden">
-            <div class="md:w-[60%] m-8">
+        <div :dir="isRtl ? 'rtl' : 'ltr'" class="bg-white text-start md:bg-inherit md:flex md:flex-grow md:overflow-y-hidden">
+            <div class="min-w-0 md:w-[60%] m-4 sm:m-8">
                 <Menu v-if="webhookModule" />
-                <div class="flex justify-between mt-8">
+                <div class="flex flex-wrap items-start justify-between gap-3 mt-8">
                     <div>
                         <h3 class="text-md mb-1">{{ $t('Access Tokens') }}</h3>
                         <p class="mb-6 flex items-center text-sm leading-6 text-gray-600">
@@ -12,7 +12,7 @@
                                     stroke-linejoin="round" stroke-width="2"
                                     d="M12 11v5m0 5a9 9 0 1 1 0-18a9 9 0 0 1 0 18Zm.05-13v.1h-.1V8h.1Z" />
                             </svg>
-                            <span class="ml-1 mt-1">{{ $t('Create and manage your API keys') }}</span>
+                            <span class="ms-1 mt-1">{{ $t('Create and manage your API keys') }}</span>
                         </p>
                     </div>
                     <div>
@@ -37,14 +37,28 @@
                 </div>
                 <!-- Table Component-->
                 <TokenTable :rows="props.rows" />
+                <section class="mt-6 rounded-lg border border-gray-200 bg-white p-4">
+                    <h3 class="font-semibold text-gray-900">{{ $t('Conversation assignment') }}</h3>
+                    <p class="mt-2 text-sm text-gray-600">{{ $t('Assign conversations from external platforms using your organization API key.') }}</p>
+                    <div class="mt-3 space-y-2 text-sm" dir="ltr">
+                        <p><code>GET /api/agents</code></p>
+                        <p><code>PUT /api/chats/{contact_uuid}/assign</code></p>
+                        <p><code>Authorization: Bearer YOUR_ORGANIZATION_API_KEY</code></p>
+                        <p><code>{"user_id": 5}</code></p>
+                    </div>
+                    <p class="mt-3 text-sm text-gray-600">{{ $t('Use a contact UUID from GET /api/contacts and a user_id from GET /api/agents. Send user_id as null to unassign.') }}</p>
+                    <a href="#api-documentation" class="mt-3 inline-block text-sm font-medium text-primary underline">{{ $t('API documentation') }}</a>
+                </section>
             </div>
-            <div class="md:w-[40%] border-l bg-black h-screen hidden md:block">
-                <Documentation :apirequests="apirequests"/>
+            <div id="api-documentation" class="w-full min-w-0 md:w-[40%] border-s bg-black md:h-screen">
+                <Documentation :apirequests="props.apirequests"/>
             </div>
         </div>
     </AppLayout>
 </template>
 <script setup>
+import { useRtl } from '@/Composables/useRtl';
+const { isRtl } = useRtl();
 import AppLayout from "./../Layout/App.vue";
 import Documentation from "./Documentation.vue";
 import Menu from "./Menu.vue";

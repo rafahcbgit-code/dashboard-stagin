@@ -4,9 +4,7 @@
     <div v-if="messages.length === 0 && !isTyping" class="flex items-center justify-center h-full">
       <div class="text-center py-8 px-4">
         <div class="inline-block bg-white/80 rounded-xl px-4 py-3 text-sm text-gray-500 shadow-sm backdrop-blur-sm">
-          <div class="text-2xl mb-1">&#128172;</div>
-          Type a message to test your automations
-        </div>
+          <div class="text-2xl mb-1">&#128172;</div> {{ $t("Type a message to test your automations") }} </div>
       </div>
     </div>
 
@@ -22,7 +20,7 @@
       </div>
 
       <!-- Bot message -->
-      <div v-if="msg.sender === 'bot'" class="mr-auto max-w-[70%]">
+      <div v-if="msg.sender === 'bot'" class="me-auto max-w-[70%]">
         <div class="rounded-lg rounded-tl-none bg-white p-2.5 text-sm text-gray-800 relative speech-bubble-left shadow-sm">
           <!-- Text -->
           <div v-if="msg.whatsapp?.type === 'text'" class="whitespace-pre-wrap">{{ msg.whatsapp.body }}</div>
@@ -44,8 +42,7 @@
           <!-- Question -->
           <div v-else-if="msg.whatsapp?.type === 'question'">
             <div class="whitespace-pre-wrap">{{ msg.whatsapp.body }}</div>
-            <div v-if="msg.whatsapp.input_type && msg.whatsapp.input_type !== 'text'" class="text-[11px] text-gray-400 mt-1 border-t border-gray-100 pt-1">
-              Expects: {{ msg.whatsapp.input_type }}
+            <div v-if="msg.whatsapp.input_type && msg.whatsapp.input_type !== 'text'" class="text-[11px] text-gray-400 mt-1 border-t border-gray-100 pt-1"> {{ $t("Expects:") }} {{ msg.whatsapp.input_type }}
             </div>
           </div>
 
@@ -53,7 +50,7 @@
           <div v-else-if="msg.whatsapp?.type === 'template'">
             <div class="flex items-center gap-1.5 mb-1">
               <span class="text-xs">&#128203;</span>
-              <span class="text-[11px] font-medium text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded">Template</span>
+              <span class="text-[11px] font-medium text-teal-700 bg-teal-50 px-1.5 py-0.5 rounded">{{ $t("Template") }}</span>
               <span class="text-[11px] text-gray-400">{{ msg.whatsapp.name }}</span>
               <span v-if="msg.whatsapp.language" class="text-[10px] text-gray-400">({{ msg.whatsapp.language }})</span>
             </div>
@@ -65,7 +62,7 @@
             <div class="mt-2 bg-[#034737] text-white text-center py-2 rounded-lg text-sm font-medium opacity-60 cursor-default">
               {{ msg.whatsapp.cta }}
             </div>
-            <div class="text-[11px] text-gray-400 mt-1">WhatsApp Flow: {{ msg.whatsapp.name }}</div>
+            <div class="text-[11px] text-gray-400 mt-1">{{ $t("WhatsApp Flow:") }} {{ msg.whatsapp.name }}</div>
           </div>
 
           <!-- Portal redirect -->
@@ -85,13 +82,11 @@
                 </svg>
               </div>
               <div>
-                <div class="text-sm font-semibold text-amber-700">Transfer to Human Agent</div>
+                <div class="text-sm font-semibold text-amber-700">{{ $t("Transfer to Human Agent") }}</div>
                 <div class="text-xs text-gray-500">{{ msg.whatsapp.body }}</div>
               </div>
             </div>
-            <div class="text-[11px] text-gray-400 border-t border-gray-200 pt-1.5 w-full text-center">
-              Bot session ended — agent is now handling this conversation
-            </div>
+            <div class="text-[11px] text-gray-400 border-t border-gray-200 pt-1.5 w-full text-center"> {{ $t("Bot session ended — agent is now handling this conversation") }} </div>
           </div>
 
           <!-- Delay -->
@@ -121,19 +116,19 @@
           <!-- Media labels -->
           <div v-else-if="msg.whatsapp?.type === 'image'" class="flex items-center gap-1.5">
             <span class="text-sm">&#128247;</span>
-            <span>Image{{ msg.whatsapp.caption ? ': ' + msg.whatsapp.caption : '' }}</span>
+            <span>{{ $t("Image") }}{{ msg.whatsapp.caption ? ': ' + msg.whatsapp.caption : '' }}</span>
           </div>
           <div v-else-if="msg.whatsapp?.type === 'video'" class="flex items-center gap-1.5">
             <span class="text-sm">&#127916;</span>
-            <span>Video{{ msg.whatsapp.caption ? ': ' + msg.whatsapp.caption : '' }}</span>
+            <span>{{ $t("Video") }}{{ msg.whatsapp.caption ? ': ' + msg.whatsapp.caption : '' }}</span>
           </div>
           <div v-else-if="msg.whatsapp?.type === 'document'" class="flex items-center gap-1.5">
             <span class="text-sm">&#128206;</span>
-            <span>Document{{ msg.whatsapp.caption ? ': ' + msg.whatsapp.caption : '' }}</span>
+            <span>{{ $t("Document") }}{{ msg.whatsapp.caption ? ': ' + msg.whatsapp.caption : '' }}</span>
           </div>
           <div v-else-if="msg.whatsapp?.type === 'audio'" class="flex items-center gap-1.5">
             <span class="text-sm">&#127925;</span>
-            <span>Audio</span>
+            <span>{{ $t("Audio") }}</span>
           </div>
 
           <!-- Fallback -->
@@ -145,7 +140,7 @@
       </div>
 
       <!-- User message -->
-      <div v-if="msg.sender === 'user'" class="ml-auto max-w-[70%]">
+      <div v-if="msg.sender === 'user'" class="ms-auto max-w-[70%]">
         <div class="rounded-lg rounded-tr-none bg-[#d8fad4] p-2.5 text-sm text-gray-800 relative speech-bubble-right shadow-sm">
           <div class="whitespace-pre-wrap">{{ msg.text }}</div>
           <div class="text-[11px] text-[#8c8c8c] text-right mt-0.5">{{ msg.time }}</div>
@@ -198,7 +193,7 @@
     </template>
 
     <!-- Typing indicator -->
-    <div v-if="isTyping" class="mr-auto max-w-[70%]">
+    <div v-if="isTyping" class="me-auto max-w-[70%]">
       <div class="rounded-lg rounded-tl-none bg-white p-3 speech-bubble-left shadow-sm">
         <div class="flex gap-1.5">
           <span class="w-2 h-2 bg-gray-400 rounded-full animate-bounce" style="animation-delay: 0ms"></span>

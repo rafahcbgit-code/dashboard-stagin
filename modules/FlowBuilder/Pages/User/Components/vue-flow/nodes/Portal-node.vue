@@ -21,7 +21,7 @@
             <p v-if="fields.target_flow_name" class="text-xs text-teal-600">-> {{ fields.target_flow_name }}</p>
           </div>
         </div>
-        <div class="flex items-center gap-1 ml-auto">
+        <div class="flex items-center gap-1 ms-auto">
           <span
             class="px-2 py-0.5 rounded-full text-xs font-medium"
             :class="fields.connection_mode === 'simple' ? 'bg-gray-100 text-gray-600' : 'bg-teal-100 text-teal-700'"
@@ -31,7 +31,7 @@
           <button
             @click="toggleEdit"
             class="p-1 text-gray-400 hover:text-gray-600 rounded"
-            title="Edit Portal"
+            :title='$t("Edit Portal")'
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
@@ -41,7 +41,7 @@
           <button
             @click="deleteNode"
             class="p-1 text-red-400 hover:text-red-600 rounded"
-            title="Delete Portal"
+            :title='$t("Delete Portal")'
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M3 6h18"/>
@@ -54,25 +54,24 @@
 
       <div class="text-xs text-gray-600 mb-2">
         <div v-if="fields.target_flow_uuid">
-          <span class="font-medium">Target:</span> {{ fields.target_flow_name || 'Unknown' }}
+          <span class="font-medium">{{ $t("Target:") }}</span> {{ fields.target_flow_name || 'Unknown' }}
         </div>
-        <div v-else class="text-gray-400 italic">No target flow selected</div>
+        <div v-else class="text-gray-400 italic">{{ $t("No target flow selected") }}</div>
       </div>
 
-      <div v-if="fields.connection_mode !== 'simple' && fields.trigger_keyword" class="text-xs text-gray-500 mb-2">
-        Keyword: <span class="font-mono bg-gray-100 px-1 rounded">{{ fields.trigger_keyword }}</span>
-        <span v-if="fields.trigger_created" class="text-green-500 ml-1">(trigger created)</span>
-        <span v-if="keywordDuplicate" class="text-red-500 ml-1 font-medium">(duplicate!)</span>
+      <div v-if="fields.connection_mode !== 'simple' && fields.trigger_keyword" class="text-xs text-gray-500 mb-2"> {{ $t("Keyword:") }} <span class="font-mono bg-gray-100 px-1 rounded">{{ fields.trigger_keyword }}</span>
+        <span v-if="fields.trigger_created" class="text-green-500 ml-1">{{ $t("(trigger created)") }}</span>
+        <span v-if="keywordDuplicate" class="text-red-500 ml-1 font-medium">{{ $t("(duplicate!)") }}</span>
       </div>
 
       <div class="flex items-center justify-between text-xs">
-        <span class="text-gray-500">Terminal Node</span>
+        <span class="text-gray-500">{{ $t("Terminal Node") }}</span>
         <div class="flex items-center gap-1">
           <span
             :class="isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'"
             class="px-2 py-1 rounded-full text-xs"
           >
-            {{ isActive ? 'Active' : 'Inactive' }}
+            {{ $t(isActive ? 'Active' : 'Inactive') }}
           </span>
         </div>
       </div>
@@ -82,45 +81,43 @@
     <div v-if="showEditModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" @wheel.stop>
       <div class="bg-white rounded-lg max-w-lg w-full mx-4 max-h-[80vh] overflow-y-auto" @wheel.stop>
         <div class="px-6 py-4 border-b border-gray-200">
-          <h3 class="text-lg font-semibold text-gray-900">Edit Portal Node</h3>
+          <h3 class="text-lg font-semibold text-gray-900">{{ $t("Edit Portal Node") }}</h3>
         </div>
 
         <form @submit.prevent="saveAction" class="p-6">
           <div class="space-y-4">
             <!-- Target flow selector -->
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Target Flow</label>
+              <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t("Target Flow") }}</label>
               <select
                 v-model="editForm.target_flow_uuid"
                 @change="onFlowSelected"
                 class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-800 focus:border-teal-500 focus:ring-1 focus:ring-teal-500/30 focus:outline-none"
                 required
               >
-                <option value="">Choose a flow...</option>
+                <option value="">{{ $t("Choose a flow...") }}</option>
                 <option v-for="flow in availableFlowsList" :key="flow.uuid" :value="flow.uuid">
                   {{ flow.name }}
                 </option>
               </select>
-              <div v-if="availableFlowsList.length === 0" class="text-xs text-red-500 mt-1">
-                No active flows available. Please publish a flow first.
-              </div>
+              <div v-if="availableFlowsList.length === 0" class="text-xs text-red-500 mt-1"> {{ $t("No active flows available. Please publish a flow first.") }} </div>
             </div>
 
             <!-- Connection mode dropdown -->
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Connection Mode</label>
+              <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t("Connection Mode") }}</label>
               <select
                 v-model="editForm.connection_mode"
                 @change="onConnectionModeChange"
                 class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-800 focus:border-teal-500 focus:ring-1 focus:ring-teal-500/30 focus:outline-none"
               >
-                <option value="simple">Connect to a flow</option>
-                <option value="with_trigger">Connect to a flow with creating trigger and trigger keyword</option>
+                <option value="simple">{{ $t("Connect to a flow") }}</option>
+                <option value="with_trigger">{{ $t("Connect to a flow with creating trigger and trigger keyword") }}</option>
               </select>
               <p class="text-xs text-gray-500 mt-1">
                 {{ editForm.connection_mode === 'simple'
-                    ? 'Transitions to the target flow without creating a reusable trigger keyword.'
-                    : 'Creates a trigger keyword (auto-detected from button/list title) so the keyword also works outside this flow.' }}
+                    ? 'ينتقل إلى التدفق المستهدف دون إنشاء كلمة مفتاحية قابلة لإعادة الاستخدام.'
+                    : 'ينشئ كلمة مفتاحية للمشغّل تلقائيًا من عنوان الزر أو صف القائمة، لتعمل أيضًا خارج هذا التدفق.' }}
               </p>
             </div>
 
@@ -130,7 +127,7 @@
               <div v-if="!detectedSourceTitle" class="rounded-md bg-amber-50 border border-amber-200 px-3 py-2 text-xs text-amber-700">
                 <div class="flex items-start gap-2">
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 mt-0.5 text-amber-400"><path d="M10.29 3.86L1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
-                  <p>No button or list connection detected. Connect this portal to a button or list row to auto-generate a keyword, or use "Connect to a flow" mode instead.</p>
+                  <p>{{ $t("No button or list connection detected. Connect this portal to a button or list row to auto-generate a keyword, or use \"Connect to a flow\" mode instead.") }}</p>
                 </div>
               </div>
 
@@ -138,44 +135,42 @@
               <div v-if="detectedSourceTitle" class="rounded-md bg-teal-50 border border-teal-200 px-3 py-2 text-xs text-teal-700">
                 <div class="flex items-start gap-2">
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 mt-0.5 text-teal-400"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                  <p>Auto-detected from {{ detectedSourceType }}: <strong>{{ detectedSourceTitle }}</strong></p>
+                  <p>{{ $t("Auto-detected from") }} {{ detectedSourceType }}: <strong>{{ detectedSourceTitle }}</strong></p>
                 </div>
               </div>
 
               <!-- Trigger name (editable) -->
               <div>
-                <label class="block text-sm font-medium text-gray-700 mb-1">Trigger Name</label>
+                <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t("Trigger Name") }}</label>
                 <input
                   v-model="editForm.trigger_name"
                   type="text"
                   class="w-full rounded-lg border border-gray-200 bg-white px-3 py-2.5 text-sm text-gray-800 focus:border-teal-500 focus:ring-1 focus:ring-teal-500/30 focus:outline-none"
                   maxlength="255"
-                  placeholder="e.g. Sales, Support"
+                  :placeholder='$t("e.g. Sales, Support")'
                 />
               </div>
 
               <!-- Trigger keyword (read-only, auto-populated) -->
               <div v-if="detectedSourceTitle">
-                <label class="block text-sm font-medium text-gray-700 mb-1">Trigger Keyword</label>
+                <label class="block text-sm font-medium text-gray-700 mb-1">{{ $t("Trigger Keyword") }}</label>
                 <div class="w-full rounded-lg border border-gray-200 bg-gray-50 px-3 py-2.5 text-sm text-gray-600 flex items-center gap-2">
                   <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="text-gray-400 shrink-0"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
                   <span class="font-mono">{{ editForm.trigger_keyword }}</span>
                 </div>
-                <p class="text-xs text-gray-400 mt-1">Keyword is auto-generated from the connected {{ detectedSourceType }} title and cannot be edited.</p>
+                <p class="text-xs text-gray-400 mt-1">{{ $t("Keyword is auto-generated from the connected") }} {{ detectedSourceType }} {{ $t("title and cannot be edited.") }}</p>
                 <!-- Keyword availability indicator -->
                 <div v-if="keywordChecking" class="mt-1">
                   <svg class="animate-spin h-4 w-4 text-gray-400 inline" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
                   </svg>
-                  <span class="text-xs text-gray-400 ml-1">Checking...</span>
+                  <span class="text-xs text-gray-400 ml-1">{{ $t("Checking...") }}</span>
                 </div>
                 <div v-else-if="keywordError" class="text-xs text-red-500 mt-1">
                   {{ keywordError }}
                 </div>
-                <div v-else-if="keywordAvailable === true" class="text-xs text-green-500 mt-1">
-                  Keyword is available
-                </div>
+                <div v-else-if="keywordAvailable === true" class="text-xs text-green-500 mt-1"> {{ $t("Keyword is available") }} </div>
               </div>
             </template>
 
@@ -183,7 +178,7 @@
             <div class="rounded-md bg-slate-50 border border-slate-200 px-3 py-2 text-xs text-slate-500">
               <div class="flex items-start gap-2">
                 <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="shrink-0 mt-0.5 text-slate-400"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                <p>When a contact reaches this node, the current flow ends and the selected flow starts from the beginning. This is a terminal node — no nodes can follow it.</p>
+                <p>{{ $t("When a contact reaches this node, the current flow ends and the selected flow starts from the beginning. This is a terminal node — no nodes can follow it.") }}</p>
               </div>
             </div>
 
@@ -191,27 +186,23 @@
             <div class="flex items-center">
               <FormCheckbox
                 v-model="editForm.is_active"
-                label="Active"
+                :label='$t("Active")'
                 class="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded"
               />
             </div>
           </div>
 
-          <div class="flex justify-end space-x-3 mt-6">
+          <div class="flex justify-end gap-3 mt-6">
             <button
               type="button"
               @click="closeEditModal"
               class="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-            >
-              Cancel
-            </button>
+            > {{ $t("Cancel") }} </button>
             <button
               type="submit"
               :disabled="isSaveDisabled"
               class="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              Save Changes
-            </button>
+            > {{ $t("Save Changes") }} </button>
           </div>
         </form>
       </div>
@@ -254,9 +245,9 @@ let keywordCheckTimeout = null
 
 const displayName = computed(() => {
   if (fields.value.target_flow_name) {
-    return 'Portal: ' + fields.value.target_flow_name
+    return 'بوابة: ' + fields.value.target_flow_name
   }
-  return 'Portal'
+  return 'بوابة'
 })
 
 const editForm = reactive({
@@ -323,7 +314,7 @@ const detectSourceTitle = () => {
       const handleId = edge.sourceHandle
       const buttonKey = handleMap[handleId]
       if (buttonKey && buttons[buttonKey]) {
-        detectedSourceType.value = 'button'
+        detectedSourceType.value = 'الزر'
         return buttons[buttonKey]
       }
     }
@@ -340,7 +331,7 @@ const detectSourceTitle = () => {
             if (handleId === 'a' + si + ri) {
               const rowTitle = sections[si].rows[ri].title
               if (rowTitle) {
-                detectedSourceType.value = 'list row'
+                detectedSourceType.value = 'صف القائمة'
                 return rowTitle
               }
             }
@@ -586,7 +577,7 @@ const saveAction = async () => {
 }
 
 const deleteNode = () => {
-  if (confirm('Are you sure you want to delete this Portal node?')) {
+  if (confirm('هل أنت متأكد من حذف عقدة البوابة؟')) {
     removeNodes([props.id])
   }
 }

@@ -11,6 +11,7 @@ use Illuminate\Bus\Batchable;
 use Illuminate\Bus\Queueable;
 use App\Services\WhatsappService;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Log;
 use App\Events\CampaignProgressEvent;
 use App\Services\OrganizationService;
@@ -49,6 +50,11 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
 
     public $tries = 3;
 
+    public function retryUntil(): \DateTimeInterface
+    {
+        return now()->addMinutes(30);
+    }
+
     public function __construct(
         int $campaignLogId,
         int $organizationId,
@@ -69,6 +75,20 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
     }
 
     public function handle()
+    {
+        $lock = Cache::store('redis')->lock("campaign:log:{$this->campaignLogId}:sending", $this->timeout + 60);
+        if (! $lock->get()) {
+            $this->release(15);
+            return;
+        }
+        try {
+            $this->processLog();
+        } finally {
+            $lock->release();
+        }
+    }
+
+    private function processLog()
     {
         try {
             $lockedLog = DB::transaction(function () {
@@ -105,8 +125,8 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
                     $jobStartTime = microtime(true);
 
                     $contact = Contact::find($this->contactId);
-                    if (!$contact) {
-                        $this->markLogFailed($lockedLog, 'Contact not found.', 'CAMPAIGN_CONTACT_NOT_FOUND', [
+                    if (!$contact || $contact->is_blocked || ! $contact->is_subscribed) {
+                        $this->markLogFailed($lockedLog, 'Contact is missing, blocked or unsubscribed.', 'CAMPAIGN_CONTACT_NOT_SENDABLE', [
                             'contact_id' => $this->contactId,
                         ]);
                         return;
@@ -333,10 +353,7 @@ class ProcessSingleCampaignLogJob implements ShouldQueue
 
     private function getCampaignCached(): ?Campaign
     {
-        if (!isset(self::$campaignCache[$this->campaignId])) {
-            self::$campaignCache[$this->campaignId] = Campaign::find($this->campaignId);
-        }
-        return self::$campaignCache[$this->campaignId];
+        return Campaign::where('organization_id', $this->organizationId)->find($this->campaignId);
     }
 
     private function getTemplateCached(): ?Template

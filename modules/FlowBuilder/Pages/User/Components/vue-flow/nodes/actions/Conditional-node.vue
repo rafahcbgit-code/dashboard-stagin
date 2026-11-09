@@ -16,14 +16,14 @@
             </svg>
           </div>
           <div>
-            <h3 class="font-medium text-gray-900 text-sm">{{ actionName }}</h3>
+            <h3 class="font-medium text-gray-900 text-sm">{{ $t(actionName) }}</h3>
           </div>
         </div>
-        <div class="flex items-center gap-1 ml-auto">
+        <div class="flex items-center gap-1 ms-auto">
           <button
             @click="toggleEdit"
             class="p-1 text-gray-400 hover:text-gray-600 rounded"
-            title="Edit Action"
+            :title='$t("Edit Action")'
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
@@ -33,7 +33,7 @@
           <button
             @click="deleteNode"
             class="p-1 text-red-400 hover:text-red-600 rounded"
-            title="Delete Action"
+            :title='$t("Delete Action")'
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M3 6h18"/>
@@ -73,7 +73,7 @@
           <div class="relative border-b border-gray-200 pt-2">
             <div class="flex items-center justify-between py-2">
               <div class="flex-1">
-                <span class="text-xs text-gray-500">Default: No conditions match</span>
+                <span class="text-xs text-gray-500">{{ $t("Default: No conditions match") }}</span>
               </div>
             </div>
 
@@ -89,13 +89,13 @@
       </div>
       
       <div class="flex items-center justify-between text-xs">
-        <span class="text-gray-500">Action</span>
+        <span class="text-gray-500">{{ $t("Action") }}</span>
         <div class="flex items-center gap-1">
           <span 
             :class="isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'"
             class="px-2 py-1 rounded-full text-xs"
           >
-            {{ isActive ? 'Active' : 'Inactive' }}
+            {{ $t(isActive ? 'Active' : 'Inactive') }}
           </span>
         </div>
       </div>
@@ -105,26 +105,26 @@
     <div v-if="showEditModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" @wheel.stop>
       <div class="bg-white rounded-lg max-w-md w-full mx-4 max-h-[80vh] overflow-y-auto">
         <div class="px-6 py-4 border-b border-gray-200">
-          <h3 class="text-lg font-semibold text-gray-900">Edit Conditional Action</h3>
+          <h3 class="text-lg font-semibold text-gray-900">{{ $t("Edit Conditional Action") }}</h3>
         </div>
         
         <form @submit.prevent="saveAction" class="p-6">
           <div class="space-y-4">
             <!-- Configuration Fields -->
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-2">Configuration</label>
+              <label class="block text-sm font-medium text-gray-700 mb-2">{{ $t("Configuration") }}</label>
               <div class="space-y-3">
                 <!-- Conditional -->
                 <div class="space-y-4">
                   <div>
                     <FormSelect
                       v-model="editForm.config.condition_type"
-                      name="Condition Type"
+                      :name='$t("Condition Type")'
                       :options="[
-                        { value: 'message_contains', label: 'Message Contains' },
-                        { value: 'message_equals', label: 'Message Equals' },
-                        { value: 'contact_field', label: 'Contact Field' },
-                        { value: 'flow_variable', label: 'Flow Variable' }
+                        { value: 'message_contains', label: 'تحتوي الرسالة على' },
+                        { value: 'message_equals', label: 'تساوي الرسالة' },
+                        { value: 'contact_field', label: 'حقل جهة الاتصال' },
+                        { value: 'flow_variable', label: 'متغير التدفق' }
                       ]"
                       required
                     />
@@ -135,21 +135,21 @@
                     <div class="space-y-3">
                       <FormSelect
                         v-model="editForm.config.field_name"
-                        name="Contact Field"
+                        :name='$t("Contact Field")'
                         :options="availableContactFields"
                         required
                       />
                       <FormSelect
                         v-model="editForm.config.field_operator"
-                        name="Operator"
+                        :name='$t("Operator")'
                         :options="[
-                          { value: 'equals', label: 'Equals' },
-                          { value: 'contains', label: 'Contains' },
-                          { value: 'not_equals', label: 'Not Equals' },
-                          { value: 'is_empty', label: 'Is Empty' },
-                          { value: 'is_not_empty', label: 'Is Not Empty' },
-                          { value: 'greater_than', label: 'Greater Than' },
-                          { value: 'less_than', label: 'Less Than' }
+                          { value: 'equals', label: 'يساوي' },
+                          { value: 'contains', label: 'يحتوي على' },
+                          { value: 'not_equals', label: 'لا يساوي' },
+                          { value: 'is_empty', label: 'فارغ' },
+                          { value: 'is_not_empty', label: 'غير فارغ' },
+                          { value: 'greater_than', label: 'أكبر من' },
+                          { value: 'less_than', label: 'أصغر من' }
                         ]"
                         required
                       />
@@ -161,21 +161,21 @@
                     <div class="space-y-3">
                       <FormInput
                         v-model="editForm.config.field_name"
-                        placeholder="Variable name (e.g. order_status)"
+                        :placeholder='$t("Variable name (e.g. order_status)")'
                         required
                       />
-                      <span class="text-xs text-gray-400">Use the variable name from an earlier Question node</span>
+                      <span class="text-xs text-gray-400">{{ $t("Use the variable name from an earlier Question node") }}</span>
                       <FormSelect
                         v-model="editForm.config.field_operator"
-                        name="Operator"
+                        :name='$t("Operator")'
                         :options="[
-                          { value: 'equals', label: 'Equals' },
-                          { value: 'contains', label: 'Contains' },
-                          { value: 'not_equals', label: 'Not Equals' },
-                          { value: 'is_empty', label: 'Is Empty' },
-                          { value: 'is_not_empty', label: 'Is Not Empty' },
-                          { value: 'greater_than', label: 'Greater Than' },
-                          { value: 'less_than', label: 'Less Than' }
+                          { value: 'equals', label: 'يساوي' },
+                          { value: 'contains', label: 'يحتوي على' },
+                          { value: 'not_equals', label: 'لا يساوي' },
+                          { value: 'is_empty', label: 'فارغ' },
+                          { value: 'is_not_empty', label: 'غير فارغ' },
+                          { value: 'greater_than', label: 'أكبر من' },
+                          { value: 'less_than', label: 'أصغر من' }
                         ]"
                         required
                       />
@@ -185,14 +185,12 @@
                   <!-- Values List -->
                   <div class="space-y-3">
                     <div class="flex items-center justify-between">
-                      <h4 class="text-xs font-medium text-gray-600 uppercase tracking-wide">Values</h4>
+                      <h4 class="text-xs font-medium text-gray-600 uppercase tracking-wide">{{ $t("Values") }}</h4>
                       <button
                         type="button"
                         @click="addCondition"
                         class="text-xs bg-teal-600 text-white px-2 py-1 rounded hover:bg-teal-700"
-                      >
-                        Add Value
-                      </button>
+                      > {{ $t("Add Value") }} </button>
                     </div>
                     
                     <div v-if="editForm.config.conditions && editForm.config.conditions.length > 0" class="space-y-2">
@@ -202,20 +200,18 @@
                         class="border border-gray-200 rounded-lg p-3 bg-gray-50"
                       >
                         <div class="flex items-center justify-between mb-2">
-                          <span class="text-xs font-medium text-gray-700">Value {{ index + 1 }}</span>
+                          <span class="text-xs font-medium text-gray-700">{{ $t("Value") }} {{ index + 1 }}</span>
                           <button
                             type="button"
                             @click="removeCondition(index)"
                             class="text-red-500 hover:text-red-700 text-xs"
-                          >
-                            Remove
-                          </button>
+                          > {{ $t("Remove") }} </button>
                         </div>
                         
                         <div>
                           <FormInput
                             v-model="condition.value"
-                            name="Value"
+                            :name='$t("Value")'
                             type="text"
                             :placeholder="getValuePlaceholder(editForm.config.condition_type)"
                             required
@@ -224,21 +220,17 @@
                       </div>
                     </div>
                     
-                    <div v-else class="text-center py-4 text-gray-500 text-sm">
-                      No values added yet. Click "Add Value" to create your first condition.
-                    </div>
+                    <div v-else class="text-center py-4 text-gray-500 text-sm"> {{ $t("No values added yet. Click \"Add Value\" to create your first condition.") }} </div>
                   </div>
                   
                   <!-- Explanation -->
                   <div class="bg-blue-50 border border-blue-200 rounded-lg p-4">
-                    <p class="text-sm font-medium text-blue-800 mb-3">
-                      How Conditional Flow Works:
-                    </p>
+                    <p class="text-sm font-medium text-blue-800 mb-3"> {{ $t("How Conditional Flow Works:") }} </p>
                     <div class="space-y-2 text-sm text-blue-700">
-                      <p class="text-xs">• Each value will be evaluated against the selected condition type</p>
-                      <p class="text-xs">• When a value matches, flow will branch to that value's connected node</p>
-                      <p class="text-xs">• If no values match, flow will continue to the default path</p>
-                      <p class="text-xs">• You can connect multiple nodes to different values</p>
+                      <p class="text-xs">{{ $t("• Each value will be evaluated against the selected condition type") }}</p>
+                      <p class="text-xs">{{ $t("• When a value matches, flow will branch to that value's connected node") }}</p>
+                      <p class="text-xs">{{ $t("• If no values match, flow will continue to the default path") }}</p>
+                      <p class="text-xs">{{ $t("• You can connect multiple nodes to different values") }}</p>
                     </div>
                   </div>
                 </div>
@@ -249,26 +241,22 @@
             <div class="flex items-center">
               <FormCheckbox
                 v-model="editForm.is_active"
-                label="Active"
+                :label='$t("Active")'
                 class="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded"
               />
             </div>
           </div>
 
-          <div class="flex justify-end space-x-3 mt-6">
+          <div class="flex justify-end gap-3 mt-6">
             <button 
               type="button"
               @click="closeEditModal"
               class="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-            >
-              Cancel
-            </button>
+            > {{ $t("Cancel") }} </button>
             <button 
               type="submit"
               class="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
-            >
-              Save Changes
-            </button>
+            > {{ $t("Save Changes") }} </button>
           </div>
         </form>
       </div>
@@ -306,18 +294,18 @@ const availableContactFields = computed(() => {
   
   // Standard fields
   fields.push(
-    { value: 'first_name', label: 'First Name' },
-    { value: 'last_name', label: 'Last Name' },
-    { value: 'email', label: 'Email' }
+    { value: 'first_name', label: 'الاسم الأول' },
+    { value: 'last_name', label: 'اسم العائلة' },
+    { value: 'email', label: 'البريد الإلكتروني' }
   )
   
   // Address fields
   fields.push(
-    { value: 'address.street', label: 'Street' },
-    { value: 'address.city', label: 'City' },
-    { value: 'address.state', label: 'State' },
-    { value: 'address.zip', label: 'Zip Code' },
-    { value: 'address.country', label: 'Country' }
+    { value: 'address.street', label: 'الشارع' },
+    { value: 'address.city', label: 'المدينة' },
+    { value: 'address.state', label: 'المنطقة' },
+    { value: 'address.zip', label: 'الرمز البريدي' },
+    { value: 'address.country', label: 'الدولة' }
   )
   
   // Custom fields
@@ -334,7 +322,7 @@ const availableContactFields = computed(() => {
 const actionName = computed(() => {
   const actionConfig = config.value
   const conditionCount = actionConfig.conditions?.length || 0
-  return conditionCount > 0 ? `Conditional (${conditionCount} conditions)` : 'Conditional'
+  return conditionCount > 0 ? `شرط (${conditionCount} شروط)` : 'Conditional'
 })
 
 const editForm = reactive({
@@ -372,7 +360,7 @@ const saveAction = () => {
 }
 
 const deleteNode = () => {
-  if (confirm('Are you sure you want to delete this action?')) {
+  if (confirm('هل أنت متأكد من حذف هذا الإجراء؟')) {
     removeNodes([props.id])
   }
 }
@@ -462,19 +450,19 @@ const getDefaultHandleStyle = () => {
 const getConditionTypeLabel = (type) => {
   switch (type) {
     case 'message_contains':
-      return 'Message Contains';
+      return 'تحتوي الرسالة على';
     case 'message_equals':
-      return 'Message Equals';
+      return 'تساوي الرسالة';
     case 'contact_field':
-      return 'Contact Field';
+      return 'حقل جهة الاتصال';
 
     default:
-      return 'Unknown Condition Type';
+      return 'نوع شرط غير معروف';
   }
 };
 
 const getConditionValue = (condition) => {
-  if (!condition || !condition.value) return 'No value set';
+  if (!condition || !condition.value) return 'لم تُحدد قيمة';
   
   const conditionType = config.value.condition_type;
   
@@ -484,7 +472,7 @@ const getConditionValue = (condition) => {
     case 'message_equals':
       return `Message equals "${condition.value}"`;
     case 'contact_field':
-      if (!config.value.field_name) return 'Contact field (no field selected)';
+      if (!config.value.field_name) return 'حقل جهة الاتصال (لم يُحدد حقل)';
       const fieldLabel = availableContactFields.value.find(f => f.value === config.value.field_name)?.label || config.value.field_name;
       const operator = config.value.field_operator;
       if (operator === 'is_empty') return `${fieldLabel} is empty`;
@@ -499,14 +487,14 @@ const getConditionValue = (condition) => {
 const getValuePlaceholder = (type) => {
   switch (type) {
     case 'message_contains':
-      return 'Enter text to search for...';
+      return 'أدخل النص المطلوب البحث عنه...';
     case 'message_equals':
-      return 'Enter exact message...';
+      return 'أدخل نص الرسالة المطابق...';
     case 'contact_field':
-      return 'Enter value to compare...';
+      return 'أدخل قيمة المقارنة...';
 
     default:
-      return 'Enter value...';
+      return 'أدخل القيمة...';
   }
 };
 

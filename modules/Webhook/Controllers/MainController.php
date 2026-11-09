@@ -350,7 +350,7 @@ class MainController extends BaseController
             ]);
         }
 
-        return response()->json(['message' => 'Notifications sent!'], 200);
+        return response()->json(['message' => __('Notifications sent!')], 200);
     }
 
     protected function sendNotification($url, $payload)
@@ -376,11 +376,11 @@ class MainController extends BaseController
                 'url' => $url,
                 'error' => $e->getMessage()
             ]);
-            return response()->json(['error' => 'Notification failed due to timeout'], 500);
+            return response()->json(['error' => __('Notification failed due to timeout')], 500);
         } catch (\Exception $e) {
             // Log the error or handle it as needed
             Log::error('Webhook notification error: ' . $e->getMessage());
-            return response()->json(['error' => 'Notification failed'], 500);
+            return response()->json(['error' => __('Notification failed')], 500);
         }
     }
 }

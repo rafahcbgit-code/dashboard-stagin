@@ -8,7 +8,7 @@ return [
     'send_email'        => true,
     'delay'             => true,
     'webhook'           => true,
-    'ai_response'       => true,
+    'ai_response'       => !config('ai.suspended', true),
     'conditional'       => true,
     'assign_to_agent'   => true,
     'label'             => true,

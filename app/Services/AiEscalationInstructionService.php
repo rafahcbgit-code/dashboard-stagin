@@ -87,6 +87,10 @@ class AiEscalationInstructionService
      */
     public function evaluate(int $organizationId, string $message): ?AiEscalationInstruction
     {
+        if (config('ai.suspended', true)) {
+            return null;
+        }
+
         // Check if AI is enabled org-wide
         if (!$this->aiSettingsService->isEnabled($organizationId)) {
             return null;

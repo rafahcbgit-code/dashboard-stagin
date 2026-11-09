@@ -1,6 +1,6 @@
 <template>
     <AppLayout>
-        <div class="cb-page-shell h-full capitalize">
+        <div class="cb-page-shell cb-general-reports h-full">
             <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
                 <div>
                     <h2 class="text-2xl font-semibold">{{ $t('General Reports') }}</h2>
@@ -21,11 +21,11 @@
 
             <div class="cb-section mt-6 p-4">
                 <div class="flex items-center justify-between">
-                    <h4 class="text-sm text-slate-600">{{ $t('Conversations over time') }}</h4>
+                    <h4 class="text-sm text-slate-600">{{ $t('Conversation activity') }}</h4>
                     <div class="text-xs text-slate-400">{{ $t('Daily conversations created') }}</div>
                 </div>
                 <div class="mt-3">
-                    <apexchart type="area" height="220" :options="conversationsAreaOptions"
+                    <apexchart type="bar" height="260" :options="conversationsAreaOptions"
                         :series="conversationsAreaSeries"></apexchart>
                 </div>
             </div>
@@ -36,7 +36,7 @@
                     <div class="text-xs text-slate-400">{{ $t('Daily contacts assigned to labels') }}</div>
                 </div>
                 <div class="mt-3">
-                    <apexchart type="area" height="220" :options="labelsAreaOptions" :series="labelsAreaSeries">
+                    <apexchart type="bar" height="260" :options="labelsAreaOptions" :series="labelsAreaSeries">
                     </apexchart>
                 </div>
             </div>
@@ -141,7 +141,7 @@
                 </div>
                 <div class="mt-3">
                     <!-- Fallback: simple area chart placeholder; frontend can later feed series data -->
-                    <apexchart type="area" height="220" :options="areaOptions" :series="areaSeries"></apexchart>
+                    <apexchart type="bar" height="260" :options="areaOptions" :series="areaSeries"></apexchart>
                 </div>
             </div>
 
@@ -274,7 +274,8 @@ const donutSeries = computed(() => [props.subscribed.count || 0, props.unsubscri
 
 const donutOptions = computed(() => ({
     labels: [t('Subscribed'), t('Unsubscribed')],
-    colors: ['#16a34a', '#ef4444'],
+    chart: { fontFamily: 'inherit', foreColor: '#526557', toolbar: { show: false } },
+    colors: ['#35784b', '#a7c7b2'],
     legend: { position: 'bottom' },
     dataLabels: { enabled: false },
 }));
@@ -326,29 +327,15 @@ const newContactsPct = computed(() => {
 // Area chart: use datetime points when provided, otherwise fallback to placeholder
 const areaSeries = computed(() => {
     if (props.area_series && props.area_series.length) {
-        return [{ name: 'New contacts', data: props.area_series }];
+        return [{ name: t('New contacts'), data: props.area_series }];
     }
-    return [{ name: 'New contacts', data: [10, 20, 12, 25, 18, props.new_contacts || 0] }];
+    return [{ name: t('New contacts'), data: [] }];
 });
 
-const areaOptions = computed(() => {
-    return {
-        chart: { height: 350, type: 'area', toolbar: { show: false }, zoom: { enabled: false } },
-        colors: ['#418207'],
-        fill: {
-            type: 'gradient',
-            gradient: { shadeIntensity: 1, opacityFrom: 0.7, opacityTo: 0.9, stops: [0, 90, 100] }
-        },
-        dataLabels: { enabled: false },
-        stroke: { width: 1, curve: 'smooth' },
-        xaxis: { type: 'datetime' },
-        tooltip: { x: { format: 'dd/MM/yy HH:mm' } },
-    };
-});
 
 const barSeries = computed(() => {
     const counts = (props.labels || []).map(l => l.count || 0);
-    return [{ name: 'Contacts', data: counts }];
+    return [{ name: t('Contacts'), data: counts }];
 });
 const maxLabelCount = computed(() => {
     const counts = (props.labels || []).map(l => l.count || 0);
@@ -371,11 +358,14 @@ const barOptions = computed(() => {
     const xMax = Math.ceil((maxLabelCount.value || 1) * 1.05);
 
     return {
-        chart: { toolbar: { show: false } },
+        ...threadChartOptions(),
+        chart: { ...threadChartOptions().chart, type: 'bar' },
         plotOptions: { bar: { distributed: true, borderRadius: 4, columnWidth: columnWidthPercent, horizontal: true } },
         dataLabels: { enabled: true, formatter: (val) => `${val}`, style: { fontSize: '12px' } },
-        colors: colors,
+        colors: ['#35784b'],
         xaxis: {
+            ...threadChartOptions().xaxis,
+            categories: labels,
             // for horizontal charts xaxis is the numeric axis
             labels: {
                 formatter: (val) => `${val}`
@@ -414,7 +404,7 @@ const chartWidth = computed(() => {
 // Mirror dashboard's messages area chart style and show inbound/outbound series when available
 const conversationsAreaSeries = computed(() => {
     // if chats_series provided (inbound/outbound arrays), use two series similar to dashboard
-    if (props.chats_series && Array.isArray(props.chats_series.categories)) {
+    if (props.chats_series && props.chats_series.categories?.length) {
         return [
             { name: t('Inbound chats'), data: props.chats_series.inbound || [] },
             { name: t('Outbound chats'), data: props.chats_series.outbound || [] },
@@ -430,21 +420,6 @@ const conversationsAreaSeries = computed(() => {
     return [{ name: t('Conversations'), data: [] }];
 });
 
-const conversationsAreaOptions = computed(() => {
-    // dashboard style
-    return {
-        chart: { height: 350, type: 'area', toolbar: { show: false }, zoom: { enabled: false } },
-        colors: ['#418207'],
-        fill: {
-            type: 'gradient',
-            gradient: { shadeIntensity: 1, opacityFrom: 0.7, opacityTo: 0.9, stops: [0, 90, 100] }
-        },
-        dataLabels: { enabled: false },
-        stroke: { width: 1, curve: 'smooth' },
-        xaxis: { type: 'datetime', categories: props.chats_series && props.chats_series.categories ? props.chats_series.categories : props.conversations_series.categories },
-        tooltip: { x: { format: 'dd/MM/yy HH:mm' } },
-    };
-});
 
 const labelsAreaSeries = computed(() => {
     if (props.labels_series && Array.isArray(props.labels_series.series)) {
@@ -453,17 +428,35 @@ const labelsAreaSeries = computed(() => {
     return [];
 });
 
-const labelsAreaOptions = computed(() => {
-    return {
-        chart: { height: 350, type: 'area', toolbar: { show: false }, zoom: { enabled: false } },
-        fill: {
-            type: 'gradient',
-            gradient: { shadeIntensity: 1, opacityFrom: 0.5, opacityTo: 0.8, stops: [0, 90, 100] }
-        },
-        dataLabels: { enabled: false },
-        stroke: { width: 1, curve: 'smooth' },
-        xaxis: { type: 'datetime', categories: props.labels_series ? props.labels_series.categories : [] },
-        tooltip: { x: { format: 'dd/MM/yy' } },
-    };
+// The Thread: solid paired columns, quiet axes, horizontal grid and two brand tones.
+const threadChartOptions = () => ({
+    chart: { type: 'bar', fontFamily: 'inherit', foreColor: '#526557', toolbar: { show: false }, zoom: { enabled: false }, parentHeightOffset: 0 },
+    colors: ['#a7c7b2', '#35784b', '#8fb99a', '#234f32'],
+    plotOptions: { bar: { columnWidth: '54%', borderRadius: 4, borderRadiusApplication: 'end' } },
+    fill: { type: 'solid', opacity: 1 },
+    stroke: { show: true, width: 3, colors: ['transparent'] },
+    dataLabels: { enabled: false },
+    grid: { borderColor: '#e6ede8', strokeDashArray: 0, xaxis: { lines: { show: false } }, yaxis: { lines: { show: true } } },
+    xaxis: { type: 'datetime', axisBorder: { show: false }, axisTicks: { show: false }, labels: { style: { fontSize: '12px', colors: '#687b6d' }, datetimeUTC: false } },
+    yaxis: { min: 0, forceNiceScale: true, decimalsInFloat: 0, tickAmount: 3, labels: { style: { fontSize: '12px', colors: '#687b6d' } } },
+    legend: { position: 'top', horizontalAlign: 'right', fontSize: '13px', markers: { width: 9, height: 9, radius: 2 }, itemMargin: { horizontal: 10, vertical: 8 } },
+    tooltip: { shared: true, intersect: false, x: { format: 'dd/MM/yyyy' } },
+    noData: { text: t('No data available') },
 });
+const areaOptions = computed(() => ({ ...threadChartOptions(), colors: ['#35784b'] }));
+const conversationsAreaOptions = computed(() => ({
+    ...threadChartOptions(),
+    xaxis: { ...threadChartOptions().xaxis, categories: props.chats_series?.categories?.length ? props.chats_series.categories : props.conversations_series.categories },
+}));
+const labelsAreaOptions = computed(() => ({
+    ...threadChartOptions(),
+    xaxis: { ...threadChartOptions().xaxis, categories: props.labels_series?.categories || [] },
+}));
 </script>
+
+<style scoped>
+.cb-general-reports :deep(.apexcharts-canvas) { direction: ltr; }
+.cb-general-reports :deep(.apexcharts-tooltip) { direction: rtl; text-align: start; border-radius: 12px; border-color: #dce5de; box-shadow: 0 6px 20px #1f272114; }
+.cb-general-reports .cb-section { background: #fff; border: 1px solid #e0e8e2; border-radius: 15px; padding: 20px; box-shadow: none; }
+.cb-general-reports .cb-section h4 { font-size: 19px; font-weight: 700; color: #1f2721; }
+</style>

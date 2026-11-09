@@ -16,14 +16,14 @@
             </svg>
           </div>
           <div>
-            <h3 class="font-medium text-gray-900 text-sm">{{ actionName }}</h3>
+            <h3 class="font-medium text-gray-900 text-sm">{{ $t(actionName) }}</h3>
           </div>
         </div>
-        <div class="flex items-center gap-1 ml-auto">
+        <div class="flex items-center gap-1 ms-auto">
           <button
             @click="toggleEdit"
             class="p-1 text-gray-400 hover:text-gray-600 rounded"
-            title="Edit Action"
+            :title='$t("Edit Action")'
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
@@ -33,7 +33,7 @@
           <button
             @click="deleteNode"
             class="p-1 text-red-400 hover:text-red-600 rounded"
-            title="Delete Action"
+            :title='$t("Delete Action")'
           >
             <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
               <path d="M3 6h18"/>
@@ -46,18 +46,18 @@
 
       <div class="text-xs text-gray-600 mb-2">
         <div>
-          <span class="font-medium">Delay:</span> {{ displayDuration }}
+          <span class="font-medium">{{ $t("التأخير:") }}</span> {{ displayDuration }}
         </div>
       </div>
 
       <div class="flex items-center justify-between text-xs">
-        <span class="text-gray-500">Action</span>
+        <span class="text-gray-500">{{ $t("Action") }}</span>
         <div class="flex items-center gap-1">
           <span
             :class="isActive ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'"
             class="px-2 py-1 rounded-full text-xs"
           >
-            {{ isActive ? 'Active' : 'Inactive' }}
+            {{ $t(isActive ? 'Active' : 'Inactive') }}
           </span>
         </div>
       </div>
@@ -74,14 +74,14 @@
     <div v-if="showEditModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50" @wheel.stop>
       <div class="bg-white rounded-lg max-w-md w-full mx-4 max-h-[80vh] overflow-y-auto">
         <div class="px-6 py-4 border-b border-gray-200">
-          <h3 class="text-lg font-semibold text-gray-900">Edit Delay Action</h3>
+          <h3 class="text-lg font-semibold text-gray-900">{{ $t("Edit Delay Action") }}</h3>
         </div>
 
         <form @submit.prevent="saveAction" class="p-6">
           <div class="space-y-4">
             <!-- Duration and Unit -->
             <div>
-              <label class="block text-sm font-medium text-gray-700 mb-2">Duration</label>
+              <label class="block text-sm font-medium text-gray-700 mb-2">{{ $t("Duration") }}</label>
               <div class="flex gap-3">
                 <div class="flex-1">
                   <FormInput
@@ -94,11 +94,11 @@
                 <div class="w-32">
                   <FormSelect
                     v-model="editForm.config.duration_unit"
-                    name="Unit"
+                    :name='$t("Unit")'
                     :options="[
-                      { value: 'seconds', label: 'Seconds' },
-                      { value: 'minutes', label: 'Minutes' },
-                      { value: 'hours', label: 'Hours' }
+                      { value: 'seconds', label: 'ثوانٍ' },
+                      { value: 'minutes', label: 'دقائق' },
+                      { value: 'hours', label: 'ساعات' }
                     ]"
                     required
                   />
@@ -109,37 +109,30 @@
             <!-- What happens explanation -->
             <div class="bg-gray-50 border border-blue-200 rounded-lg p-3">
               <p class="text-xs text-gray-600 mb-1">
-                <strong>What happens:</strong> The flow will pause for the specified duration before continuing to the next action.
-              </p>
-              <p class="text-xs text-gray-500">
-                Minimum: 1 second. Maximum: 24 hours. The flow resumes automatically after the delay.
-              </p>
+                <strong>{{ $t("What happens:") }}</strong> {{ $t("The flow will pause for the specified duration before continuing to the next action.") }} </p>
+              <p class="text-xs text-gray-500"> {{ $t("Minimum: 1 second. Maximum: 24 hours. The flow resumes automatically after the delay.") }} </p>
             </div>
 
             <!-- Active Status -->
             <div class="flex items-center">
               <FormCheckbox
                 v-model="editForm.is_active"
-                label="Active"
+                :label='$t("Active")'
                 class="h-4 w-4 text-teal-600 focus:ring-teal-500 border-gray-300 rounded"
               />
             </div>
           </div>
 
-          <div class="flex justify-end space-x-3 mt-6">
+          <div class="flex justify-end gap-3 mt-6">
             <button
               type="button"
               @click="closeEditModal"
               class="px-4 py-2 text-gray-700 bg-gray-100 rounded-lg hover:bg-gray-200 transition-colors"
-            >
-              Cancel
-            </button>
+            > {{ $t("Cancel") }} </button>
             <button
               type="submit"
               class="px-4 py-2 bg-teal-600 text-white rounded-lg hover:bg-teal-700 transition-colors"
-            >
-              Save Changes
-            </button>
+            > {{ $t("Save Changes") }} </button>
           </div>
         </form>
       </div>
@@ -169,22 +162,22 @@ const isActive = computed(() => props.data?.is_active !== false)
 const showEditModal = ref(false)
 
 const unitLabels = {
-  seconds: 'second(s)',
-  minutes: 'minute(s)',
-  hours: 'hour(s)',
+  seconds: 'ثانية',
+  minutes: 'دقيقة',
+  hours: 'ساعة',
 }
 
 const actionName = computed(() => {
   const duration = config.value.duration
   const unit = config.value.duration_unit || 'minutes'
-  if (!duration) return 'Delay'
-  return `Delay: ${duration} ${unitLabels[unit] || unit}`
+  if (!duration) return 'تأخير'
+  return `التأخير: ${duration} ${unitLabels[unit] || unit}`
 })
 
 const displayDuration = computed(() => {
   const duration = config.value.duration
   const unit = config.value.duration_unit || 'minutes'
-  if (!duration) return 'Not set'
+  if (!duration) return 'غير محدد'
   return `${duration} ${unitLabels[unit] || unit}`
 })
 
@@ -219,7 +212,7 @@ const saveAction = () => {
 }
 
 const deleteNode = () => {
-  if (confirm('Are you sure you want to delete this action?')) {
+  if (confirm('هل أنت متأكد من حذف هذا الإجراء؟')) {
     removeNodes([props.id])
   }
 }

@@ -1162,21 +1162,12 @@ class ChatService
             ];
         }
 
-        // Try to find existing contact, otherwise create new one
-        $contact = Contact::where('organization_id', $this->organizationId)
-            ->where(function ($query) use ($phone) {
-                $query->where('contacts.phone', $phone)
-                    ->orWhereRaw("REPLACE(REPLACE(REPLACE(REPLACE(phone, '+', ''), '-', ''), ' ', ''), '(', '') = ?", [$phone]);
-            })
-            ->first();
-
-        if (! $contact) {
-            $contact = Contact::create([
-                'organization_id' => $this->organizationId,
-                'phone' => $phone,
-                'created_by' => $this->getUserId() ?: 0,
-            ]);
-        }
+        // Reuse canonical, organization-scoped lookup and duplicate-key recovery.
+        $contact = (new ContactService($this->organizationId))->findOrCreateFromChatView(
+            (string) $request->phone,
+            'name',
+            $this->getUserId() ?: 0
+        );
 
         // Load the template
         $templateRef = (string) $request->template;

@@ -447,6 +447,11 @@ class ActionExecutionService
      */
     private function executeAIResponse($config, $contact, $userMessage, $flowData = null)
     {
+        if (config('ai.suspended', true)) {
+            Log::info('AI response action skipped: temporarily suspended', ['contact_id' => $contact->id]);
+            return true;
+        }
+
         $lowConfidenceMessage = $config['low_confidence_message'] ?? '';
         $confidenceThreshold = 0.75;
 

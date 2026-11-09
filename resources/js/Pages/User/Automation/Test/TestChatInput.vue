@@ -1,8 +1,6 @@
 <template>
   <div class="bg-[#F0F0F0] px-4 py-3 border-t border-gray-200 shrink-0">
-    <div v-if="hint && hint !== 'text'" class="text-[11px] text-gray-400 mb-1 px-1">
-      Expects {{ hint }} input
-    </div>
+    <div v-if="hint && hint !== 'text'" class="text-[11px] text-gray-400 mb-1 px-1"> {{ $t("Expects") }} {{ $t(hint) }} </div>
     <div class="flex items-center gap-2">
       <input
         :value="modelValue"
@@ -10,7 +8,7 @@
         @keyup.enter="$emit('send')"
         @keyup.escape="$emit('update:modelValue', '')"
         :disabled="disabled"
-        :placeholder="hint && hint !== 'text' ? `Type your ${hint}...` : 'Type a message...'"
+        :placeholder="hint && hint !== 'text' ? 'أدخل الإجابة المطلوبة...' : 'اكتب رسالة...'"
         class="flex-1 bg-white rounded-full px-4 py-2.5 text-sm text-gray-800 focus:outline-none focus:ring-2 focus:ring-[#034737]/30 placeholder:text-gray-400"
       />
       <button

@@ -133,6 +133,7 @@ class HandleInertiaRequests extends Middleware
         }
 
         return array_merge(parent::share($request), [
+            'automationAiSuspended' => (bool) config('ai.suspended', true),
             'csrf_token' => csrf_token(),
             'applicationVersion' => fn() => Config::get('version.version'),
             'applicationReleaseDate' => fn() => Config::get('version.release_date'),
